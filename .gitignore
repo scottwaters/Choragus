@@ -1,0 +1,28 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserdata
+*.xcworkspace
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+Packages/SonosKit/.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# App data
+*.app
+
+# Cache
+topology_cache.json
