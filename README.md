@@ -2,6 +2,8 @@
 
 A native macOS controller for Sonos speakers, built entirely in Swift and SwiftUI for Apple Silicon.
 
+![SonosController](screenshots/main.png)
+
 ## Why This Exists
 
 Sonos shipped a macOS desktop controller for years, but it was an Intel-only (x86_64) binary that relied on Apple's Rosetta 2 translation layer. Apple is discontinuing Rosetta, which means the official Sonos desktop app will stop working on modern Macs — and Sonos appears to have no plans to release a native replacement.
