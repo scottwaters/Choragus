@@ -293,6 +293,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                     album: parsed.album,
                     albumArtURI: artURI.isEmpty ? nil : artURI
                 )
+                metadata.trackURI = event.currentTrackURI
 
                 if let durStr = event.currentTrackDuration {
                     metadata.duration = TrackMetadata.parseTimeString(durStr)
@@ -302,6 +303,34 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                 }
 
                 delegate?.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: metadata)
+            }
+        } else if event.currentTrackURI != nil || event.currentTrackDuration != nil {
+            // Event has URI/duration but no DIDL — trigger a position refresh
+            // This happens on some radio stations when tracks change
+            Task {
+                guard let delegate = await self.delegate else { return }
+                let avTransport = await delegate.getAVTransportService()
+                guard let device = currentDevices[deviceID] else { return }
+                if let position = try? await avTransport.getPositionInfo(device: device) {
+                    var enriched = position
+                    enriched.trackURI = event.currentTrackURI ?? position.trackURI
+                    // Enrich with station name
+                    if let mediaInfo = try? await avTransport.getMediaInfo(device: device),
+                       let rawDIDL = mediaInfo["CurrentURIMetaData"], !rawDIDL.isEmpty,
+                       rawDIDL != "NOT_IMPLEMENTED" {
+                        let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
+                        if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
+                            let currentURI = mediaInfo["CurrentURI"] ?? ""
+                            let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
+                                          currentURI.contains(URIPrefix.sonosApiRadio) ||
+                                          currentURI.contains(URIPrefix.rinconMP3Radio)
+                            if isRadio && !parsed.title.isEmpty {
+                                enriched.stationName = parsed.title
+                            }
+                        }
+                    }
+                    await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enriched)
+                }
             }
         }
     }
@@ -359,10 +388,39 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
                 let (state, position, mode) = try await (stateResult, positionResult, modeResult)
 
+                // Enrich with station name for radio/streaming
+                var enrichedPosition = position
+                if state.isActive {
+                    if let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator),
+                       let rawDIDL = mediaInfo["CurrentURIMetaData"], !rawDIDL.isEmpty,
+                       rawDIDL != "NOT_IMPLEMENTED" {
+                        let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
+                        if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
+                            let currentURI = mediaInfo["CurrentURI"] ?? ""
+                            let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
+                                          currentURI.contains(URIPrefix.sonosApiRadio) ||
+                                          currentURI.contains(URIPrefix.rinconMP3Radio)
+                            if isRadio && !parsed.title.isEmpty {
+                                enrichedPosition.stationName = parsed.title
+                            }
+                            if enrichedPosition.title.isEmpty {
+                                enrichedPosition.title = parsed.title
+                            }
+                            if !parsed.albumArtURI.isEmpty {
+                                var artURI = parsed.albumArtURI
+                                if artURI.hasPrefix("/") {
+                                    artURI = "http://\(coordinator.ip):\(coordinator.port)\(artURI)"
+                                }
+                                enrichedPosition.albumArtURI = artURI
+                            }
+                        }
+                    }
+                }
+
                 await delegate.transportDidUpdateState(group.coordinatorID, state: state)
-                await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: position)
+                await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition)
                 await delegate.transportDidUpdatePlayMode(group.coordinatorID, mode: mode)
-                await delegate.transportDidUpdatePosition(group.coordinatorID, position: position.position, duration: position.duration)
+                await delegate.transportDidUpdatePosition(group.coordinatorID, position: enrichedPosition.position, duration: enrichedPosition.duration)
 
                 for member in group.members {
                     let vol = try await renderingControl.getVolume(device: member)
@@ -399,10 +457,39 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
                 let (state, position, mode) = try await (stateResult, positionResult, modeResult)
 
+                // Enrich metadata with station name from GetMediaInfo for radio/streaming
+                var enrichedPosition = position
+                if state.isActive {
+                    if let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator),
+                       let rawDIDL = mediaInfo["CurrentURIMetaData"], !rawDIDL.isEmpty,
+                       rawDIDL != "NOT_IMPLEMENTED" {
+                        let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
+                        if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
+                            let currentURI = mediaInfo["CurrentURI"] ?? ""
+                            let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
+                                          currentURI.contains(URIPrefix.sonosApiRadio) ||
+                                          currentURI.contains(URIPrefix.rinconMP3Radio)
+                            if isRadio && !parsed.title.isEmpty {
+                                enrichedPosition.stationName = parsed.title
+                            }
+                            if enrichedPosition.title.isEmpty {
+                                enrichedPosition.title = parsed.title
+                            }
+                            if !parsed.albumArtURI.isEmpty {
+                                var artURI = parsed.albumArtURI
+                                if artURI.hasPrefix("/") {
+                                    artURI = "http://\(coordinator.ip):\(coordinator.port)\(artURI)"
+                                }
+                                enrichedPosition.albumArtURI = artURI
+                            }
+                        }
+                    }
+                }
+
                 await delegate.transportDidUpdateState(group.coordinatorID, state: state)
-                await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: position)
+                await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition)
                 await delegate.transportDidUpdatePlayMode(group.coordinatorID, mode: mode)
-                await delegate.transportDidUpdatePosition(group.coordinatorID, position: position.position, duration: position.duration)
+                await delegate.transportDidUpdatePosition(group.coordinatorID, position: enrichedPosition.position, duration: enrichedPosition.duration)
 
                 // Fetch volume and mute for each member
                 for member in group.members {

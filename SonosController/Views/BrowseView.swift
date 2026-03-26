@@ -159,19 +159,13 @@ struct BrowseSectionsView: View {
                 }
             }
 
-            // Connected music services (SMAPI)
-            if smapiManager.isEnabled && !smapiManager.authenticatedServiceList.isEmpty {
-                Section("Music Services") {
-                    ForEach(smapiManager.authenticatedServiceList, id: \.id) { service in
-                        Button {
-                            onNavigate(BrowseDestination(title: service.name, objectID: "SMAPI:\(service.id)"))
-                        } label: {
-                            Label(service.name, systemImage: "music.note.tv")
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
+            // TODO: SMAPI music services browsing is not working reliably yet.
+            // Re-enable this section once SMAPI auth and browse are stable.
+            // if smapiManager.isEnabled && !smapiManager.authenticatedServiceList.isEmpty {
+            //     Section("Music Services") {
+            //         ForEach(smapiManager.authenticatedServiceList, id: \.id) { service in ... }
+            //     }
+            // }
 
             if isLoading && sonosManager.browseSections.isEmpty {
                 Section {
@@ -219,12 +213,11 @@ struct BrowseSectionsView: View {
             Task {
                 await sonosManager.loadBrowseSections()
                 isLoading = false
-                // Load SMAPI services if enabled and not already loaded
-                if smapiManager.isEnabled && smapiManager.availableServices.isEmpty,
-                   let speaker = sonosManager.groups.first?.coordinator {
-                    await smapiManager.loadServices(speakerIP: speaker.ip, musicServicesList: sonosManager.musicServicesList)
-                    await smapiManager.discoverSerialNumbers(using: sonosManager)
-                }
+                // TODO: SMAPI service loading disabled — not working reliably yet.
+                // if smapiManager.isEnabled && smapiManager.availableServices.isEmpty,
+                //    let speaker = sonosManager.groups.first?.coordinator {
+                //     await smapiManager.loadServices(...)
+                // }
             }
         }
     }
@@ -470,33 +463,7 @@ struct BrowseItemRow: View {
     @State private var didAttemptArtLoad = false
 
     private var sourceLabel: String? {
-        // 1. Check URI content first — most reliable for identifying the actual service
-        //    (SA_RINCON/sid numbers can map to wrong services)
-        if let uri = item.resourceURI,
-           let name = sonosManager.detectServiceName(fromURI: uri) {
-            return name
-        }
-
-        // 2. Check serviceDescriptor (SA_RINCON from desc element)
-        if let desc = item.serviceDescriptor {
-            if let name = sonosManager.musicServiceName(fromDescriptor: desc) {
-                return name
-            }
-        }
-
-        // 3. Check resourceMetadata for SA_RINCON references
-        if let meta = item.resourceMetadata {
-            if let name = sonosManager.musicServiceName(fromDescriptor: meta) {
-                return name
-            }
-        }
-
-        // 4. Check objectID for known container types
-        if item.objectID.hasPrefix("SQ:") { return ServiceName.sonosPlaylist }
-        if item.objectID.hasPrefix("A:") || item.objectID.hasPrefix("S:") { return ServiceName.musicLibrary }
-        if item.objectID.hasPrefix("R:") { return ServiceName.radio }
-
-        return nil
+        sonosManager.serviceLabel(for: item)
     }
 
     private var artURL: URL? {

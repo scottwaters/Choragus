@@ -43,17 +43,14 @@ struct SonosControllerApp: App {
         .windowStyle(.titleBar)
         .defaultSize(width: 900, height: 550)
         .commands {
-            CommandGroup(before: .windowList) {
-                Button("Play History") {
-                    WindowManager.shared.openPlayHistory()
-                }
-                .keyboardShortcut("H", modifiers: [.command, .shift])
-                Button("Home Theater EQ") {
-                    WindowManager.shared.openHomeTheaterEQ()
-                }
-                .keyboardShortcut("E", modifiers: [.command, .shift])
-                Divider()
-            }
+            // Hide default menus — only the system app menu ("SonosController") remains
+            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .undoRedo) {}
+            CommandGroup(replacing: .pasteboard) {}
+            CommandGroup(replacing: .textEditing) {}
+            CommandGroup(replacing: .windowSize) {}
+            CommandGroup(replacing: .windowList) {}
+            CommandGroup(replacing: .help) {}
         }
     }
 

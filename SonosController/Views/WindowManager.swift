@@ -18,11 +18,23 @@ final class WindowManager {
             existing.makeKeyAndOrderFront(nil)
             return
         }
+        showPlayHistoryWindow()
+    }
+
+    func togglePlayHistory() {
+        if let existing = playHistoryWindow, existing.isVisible {
+            existing.close()
+            return
+        }
+        showPlayHistoryWindow()
+    }
+
+    private func showPlayHistoryWindow() {
         guard let manager = playHistoryManager else { return }
         let view = PlayHistoryView()
             .environmentObject(manager)
             .preferredColorScheme(colorScheme)
-        let window = createWindow(title: "Play History", content: view, width: 800, height: 550)
+        let window = createWindow(title: "Listening Stats", content: view, width: 960, height: 720)
         playHistoryWindow = window
     }
 

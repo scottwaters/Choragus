@@ -239,11 +239,11 @@ struct SettingsView: View {
                     }
                 }
 
-                    // ─── MUSIC SERVICES ───
-                    settingsSection("Music Services") {
-                        MusicServicesSettingsSection()
-                            .environmentObject(smapiManager)
-                    }
+                    // TODO: SMAPI music services not working reliably yet. Hidden until stable.
+                    // settingsSection("Music Services") {
+                    //     MusicServicesSettingsSection()
+                    //         .environmentObject(smapiManager)
+                    // }
                 }
                 .padding(32)
             }

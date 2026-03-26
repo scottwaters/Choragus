@@ -66,22 +66,7 @@ final class BrowseViewModel {
     }
 
     func serviceLabel(for item: BrowseItem) -> String? {
-        if let uri = item.resourceURI,
-           let name = sonosManager.detectServiceName(fromURI: uri) {
-            return name
-        }
-        if let desc = item.serviceDescriptor,
-           let name = sonosManager.musicServiceName(fromDescriptor: desc) {
-            return name
-        }
-        if let meta = item.resourceMetadata,
-           let name = sonosManager.musicServiceName(fromDescriptor: meta) {
-            return name
-        }
-        if item.objectID.hasPrefix("SQ:") { return ServiceName.sonosPlaylist }
-        if item.objectID.hasPrefix("A:") || item.objectID.hasPrefix("S:") { return ServiceName.musicLibrary }
-        if item.objectID.hasPrefix("R:") { return ServiceName.radio }
-        return nil
+        sonosManager.serviceLabel(for: item)
     }
 
     // MARK: - Data Loading

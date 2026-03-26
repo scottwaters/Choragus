@@ -24,17 +24,53 @@ struct ContentView: View {
         return sonosManager.groups.first { $0.id == id }
     }
 
+    private let nowPlayingMinWidth: CGFloat = 400
+    private let browseMinWidth: CGFloat = 280
+    private let queueMinWidth: CGFloat = 250
+    private let sidebarWidth: CGFloat = 200
+
     /// Calculates browse panel width — takes ~40% of available space
     private func browseWidth(totalWidth: CGFloat) -> CGFloat {
-        let nowPlayingMin: CGFloat = 350
-        let available = totalWidth - nowPlayingMin - (showQueue ? 300 : 0)
-        return max(280, min(available, totalWidth * 0.35))
+        let available = totalWidth - nowPlayingMinWidth - (showQueue ? queueMinWidth : 0)
+        return max(browseMinWidth, min(available, totalWidth * 0.35))
     }
 
     /// Calculates queue panel width — takes ~30% of available space
     private func queueWidth(totalWidth: CGFloat) -> CGFloat {
         let available = totalWidth * 0.3
-        return max(250, min(available, 400))
+        return max(queueMinWidth, min(available, 400))
+    }
+
+    /// Minimum window width needed for current panel configuration
+    private var requiredMinWidth: CGFloat {
+        var width = sidebarWidth + nowPlayingMinWidth
+        if showBrowse { width += browseMinWidth }
+        if showQueue { width += queueMinWidth }
+        return width
+    }
+
+    /// Ensures the window is wide enough for the current panels
+    private func ensureWindowFits() {
+        guard let window = NSApp.mainWindow else { return }
+        let needed = requiredMinWidth
+        if window.frame.width < needed {
+            var frame = window.frame
+            let growth = needed - frame.width
+            frame.size.width = needed
+            // Grow from center
+            frame.origin.x -= growth / 2
+            // Keep on screen
+            if let screen = window.screen {
+                let screenFrame = screen.visibleFrame
+                if frame.origin.x < screenFrame.minX {
+                    frame.origin.x = screenFrame.minX
+                }
+                if frame.maxX > screenFrame.maxX {
+                    frame.origin.x = screenFrame.maxX - frame.width
+                }
+            }
+            window.setFrame(frame, display: true, animate: true)
+        }
     }
 
     @ObservedObject private var errorHandler = ErrorHandler.shared
@@ -119,7 +155,7 @@ struct ContentView: View {
                             }
 
                             NowPlayingView(group: group, sonosManager: sonosManager)
-                                .frame(maxWidth: .infinity)
+                                .frame(minWidth: nowPlayingMinWidth, maxWidth: .infinity)
 
                             if showQueue {
                                 Divider()
@@ -172,6 +208,9 @@ struct ContentView: View {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
                         showBrowse.toggle()
+                        if showBrowse {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
+                        }
                     } label: {
                         Image(systemName: "square.grid.2x2")
                     }
@@ -180,6 +219,9 @@ struct ContentView: View {
 
                     Button {
                         showQueue.toggle()
+                        if showQueue {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
+                        }
                     } label: {
                         Image(systemName: "list.bullet")
                     }
@@ -233,6 +275,13 @@ struct ContentView: View {
                             .environmentObject(sonosManager)
                             .environmentObject(presetManager)
                     }
+
+                    Button {
+                        WindowManager.shared.togglePlayHistory()
+                    } label: {
+                        Image(systemName: "chart.bar.xaxis")
+                    }
+                    .help("Listening Stats")
 
                     Button {
                         sonosManager.rescan()

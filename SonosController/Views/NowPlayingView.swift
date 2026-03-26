@@ -41,6 +41,7 @@ struct NowPlayingView: View {
     @State private var showSleepTimer = false
     @State private var showEQ = false
     @State private var showCopied = false
+    @State private var showExpandedArt = false
 
     // MARK: - Derived State (from ViewModel)
 
@@ -61,6 +62,7 @@ struct NowPlayingView: View {
                     if hasTrack {
                         albumArtView
                             .frame(width: 180, height: 180)
+                            .onTapGesture { showExpandedArt = true }
                     } else if awaitingPlayback {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(.quaternary)
@@ -251,28 +253,33 @@ struct NowPlayingView: View {
                         .frame(height: 12)
                 }
 
-                // Transport controls
+                // Transport controls — play/pause centered above volume slider center
                 HStack(spacing: 24) {
-                    if UserDefaults.standard.bool(forKey: UDKey.classicShuffleEnabled) {
-                        transportButton("shuffle", icon: "shuffle", size: .body,
-                                        tint: playMode.isShuffled ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
-                            toggleShuffle()
+                    // Left side: shuffle + previous
+                    HStack(spacing: 24) {
+                        if UserDefaults.standard.bool(forKey: UDKey.classicShuffleEnabled) {
+                            transportButton("shuffle", icon: "shuffle", size: .body,
+                                            tint: playMode.isShuffled ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
+                                toggleShuffle()
+                            }
+                            .tooltip(L10n.shuffle)
+                        } else {
+                            Image(systemName: "shuffle")
+                                .font(.body)
+                                .foregroundStyle(.tertiary)
+                                .frame(minWidth: 32, minHeight: 32)
+                                .contentShape(Rectangle())
+                                .tooltip("Use the queue shuffle button, or enable Classic Shuffle in Settings")
                         }
-                        .tooltip(L10n.shuffle)
-                    } else {
-                        Image(systemName: "shuffle")
-                            .font(.body)
-                            .foregroundStyle(.tertiary)
-                            .frame(minWidth: 32, minHeight: 32)
-                            .contentShape(Rectangle())
-                            .tooltip("Use the queue shuffle button, or enable Classic Shuffle in Settings")
-                    }
 
-                    transportButton("previous", icon: "backward.fill", size: .title2) {
-                        performAction("previous") { try await sonosManager.previous(group: group) }
+                        transportButton("previous", icon: "backward.fill", size: .title2) {
+                            performAction("previous") { try await sonosManager.previous(group: group) }
+                        }
+                        .tooltip("Previous")
                     }
-                    .tooltip("Previous")
+                    .frame(maxWidth: .infinity, alignment: .trailing)
 
+                    // Center: play/pause
                     transportButton("playPause",
                                     icon: transportState.isPlaying ? "pause.circle.fill" : "play.circle.fill",
                                     size: .system(size: 44)) {
@@ -281,24 +288,29 @@ struct NowPlayingView: View {
                     .tooltip(transportState.isPlaying ? "Pause" : "Play")
                     .keyboardShortcut(.space, modifiers: [])
 
-                    transportButton("next", icon: "forward.fill", size: .title2) {
-                        performAction("next") { try await sonosManager.next(group: group) }
-                    }
-                    .tooltip("Next")
+                    // Right side: next + repeat + crossfade
+                    HStack(spacing: 24) {
+                        transportButton("next", icon: "forward.fill", size: .title2) {
+                            performAction("next") { try await sonosManager.next(group: group) }
+                        }
+                        .tooltip("Next")
 
-                    transportButton("repeat", icon: repeatIcon, size: .body,
-                                    tint: playMode.repeatMode != .off ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
-                        cycleRepeat()
-                    }
-                    .tooltip(L10n.repeat_)
+                        transportButton("repeat", icon: repeatIcon, size: .body,
+                                        tint: playMode.repeatMode != .off ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
+                            cycleRepeat()
+                        }
+                        .tooltip(L10n.repeat_)
 
-                    transportButton("crossfade", icon: "arrow.triangle.swap", size: .caption,
-                                    tint: crossfadeOn ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
-                        toggleCrossfade()
+                        transportButton("crossfade", icon: "arrow.triangle.swap", size: .caption,
+                                        tint: crossfadeOn ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
+                            toggleCrossfade()
+                        }
+                        .tooltip("Crossfade")
                     }
-                    .tooltip("Crossfade")
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.vertical, 16)
+                .padding(.horizontal, 24)
 
                 // Volume
                 HStack(spacing: 12) {
@@ -346,6 +358,9 @@ struct NowPlayingView: View {
         }
         .onDisappear { stopProgressTimer() }
         .onChange(of: group.id) {
+            vm.group = group
+            vm.displayedArtURL = nil
+            vm.radioTrackArtURL = nil
             startProgressTimer()
             syncFromManager()
             Task { await fetchCurrentState() }
@@ -363,6 +378,15 @@ struct NowPlayingView: View {
         .sheet(isPresented: $showSleepTimer) {
             SleepTimerView(group: group)
                 .environmentObject(sonosManager)
+        }
+        .sheet(isPresented: $showExpandedArt) {
+            ExpandedArtView(
+                artURL: vm.radioTrackArtURL ?? vm.displayedArtURL,
+                title: trackMetadata.title,
+                artist: trackMetadata.artist,
+                album: trackMetadata.album,
+                stationName: trackMetadata.stationName
+            )
         }
     }
 
@@ -450,7 +474,7 @@ struct NowPlayingView: View {
                         let searchTerm = !trackMetadata.title.isEmpty ? trackMetadata.title :
                                          !trackMetadata.stationName.isEmpty ? trackMetadata.stationName : ""
                         if !searchTerm.isEmpty {
-                            UserDefaults.standard.removeObject(forKey: "artOverride:\(searchTerm.lowercased())")
+                            UserDefaults.standard.removeObject(forKey: "\(UDKey.artOverridePrefix)\(searchTerm.lowercased())")
                         }
                         vm.webArtURL = nil
                         vm.lastArtSearchKey = ""
@@ -501,4 +525,74 @@ struct NowPlayingView: View {
     private func syncVolumeFromManager() { vm.syncVolumeFromManager() }
     private func syncMuteFromManager() { vm.syncMuteFromManager() }
     private func syncMasterMuteFromSpeakers() { vm.syncMasterMuteFromSpeakers() }
+}
+
+// MARK: - Expanded Art View
+
+struct ExpandedArtView: View {
+    let artURL: URL?
+    let title: String
+    let artist: String
+    let album: String
+    let stationName: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 16) {
+            if let url = artURL {
+                CachedAsyncImage(url: url, cornerRadius: 12)
+                    .frame(width: 400, height: 400)
+                    .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(
+                        LinearGradient(
+                            colors: [.purple.opacity(0.3), .blue.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 400, height: 400)
+                    .overlay {
+                        Image(systemName: !stationName.isEmpty ? "radio.fill" : "music.note")
+                            .font(.system(size: 80))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+            }
+
+            VStack(spacing: 6) {
+                if !stationName.isEmpty {
+                    Text(stationName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if !title.isEmpty {
+                    Text(title)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                }
+                if !artist.isEmpty {
+                    Text(artist)
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                if !album.isEmpty {
+                    Text(album)
+                        .font(.callout)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            Button("Close") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .padding(30)
+        .frame(width: 460, height: 560)
+    }
 }

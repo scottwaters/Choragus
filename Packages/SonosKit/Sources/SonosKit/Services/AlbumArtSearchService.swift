@@ -102,6 +102,27 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
             }
         }
 
+        // Strategy 4: Cleaned title/artist fallback — strips source suffixes, special chars, multi-artist
+        let cleanedTitle = cleanForSearch(title)
+        let cleanedArtist = cleanArtist(artist)
+        let titleChanged = cleanedTitle != title.lowercased().trimmingCharacters(in: .whitespaces)
+        let artistChanged = cleanedArtist != artist.lowercased().trimmingCharacters(in: .whitespaces)
+
+        if titleChanged || artistChanged {
+            if !cleanedArtist.isEmpty && !cleanedTitle.isEmpty {
+                if let url = await verifiedSongSearch(query: "\(cleanedArtist) \(cleanedTitle)", expectedTitle: cleanedTitle) {
+                    cacheSet(cacheKey, url)
+                    return url
+                }
+            }
+            if !cleanedTitle.isEmpty {
+                if let url = await verifiedSongSearch(query: cleanedTitle, expectedTitle: cleanedTitle) {
+                    cacheSet(cacheKey, url)
+                    return url
+                }
+            }
+        }
+
         cacheSet(cacheKey, nil)
         return nil
     }
@@ -157,6 +178,55 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
         } catch {
             return nil
         }
+    }
+
+    // MARK: - Text Cleaning for Search
+
+    /// Cleans a track title for search: strips source suffixes (e.g. " - Musicfire.in"),
+    /// normalizes special characters, removes non-alphanumeric noise.
+    private func cleanForSearch(_ text: String) -> String {
+        var cleaned = text
+
+        // Strip " - <source>" suffix (text after last " - ")
+        if let dashRange = cleaned.range(of: " - ", options: .backwards) {
+            let suffix = String(cleaned[dashRange.upperBound...])
+            // Only strip if suffix looks like a source (contains dot or is short)
+            if suffix.contains(".") || suffix.count < 20 {
+                cleaned = String(cleaned[..<dashRange.lowerBound])
+            }
+        }
+
+        // Normalize curly quotes/apostrophes to ASCII
+        cleaned = cleaned
+            .replacingOccurrences(of: "\u{2018}", with: "'")  // '
+            .replacingOccurrences(of: "\u{2019}", with: "'")  // '
+            .replacingOccurrences(of: "\u{201C}", with: "\"") // "
+            .replacingOccurrences(of: "\u{201D}", with: "\"") // "
+
+        // Strip non-alphanumeric except spaces and basic apostrophe
+        cleaned = cleaned.unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) || $0 == " " || $0 == "'" }
+            .map { String($0) }
+            .joined()
+
+        // Collapse whitespace
+        cleaned = cleaned.components(separatedBy: .whitespaces)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        return cleaned.lowercased().trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Cleans an artist string: takes first artist from slash-separated lists,
+    /// strips source names (containing dots), normalizes characters.
+    private func cleanArtist(_ text: String) -> String {
+        // Split on "/" and filter out source-like entries (contain dots like "Musicfire.in")
+        let parts = text.components(separatedBy: "/")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.contains(".") }
+
+        let artist = parts.first ?? text
+        return cleanForSearch(artist)
     }
 
     /// Verified song search — checks that the result's track name loosely matches the search title

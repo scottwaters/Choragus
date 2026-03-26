@@ -37,6 +37,8 @@
 		A10033 /* QueueViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10033; };
 		A10034 /* SliderPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10034; };
 		A10035 /* BrowseViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10035; };
+		A10036 /* PlayHistoryDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10036; };
+		A10037 /* AlarmsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10037; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -72,6 +74,8 @@
 		B10035 /* BrowseViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseViewModel.swift; sourceTree = "<group>"; };
 		B10032 /* NowPlayingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingViewModel.swift; sourceTree = "<group>"; };
 		B10033 /* QueueViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueViewModel.swift; sourceTree = "<group>"; };
+		B10036 /* PlayHistoryDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayHistoryDashboard.swift; sourceTree = "<group>"; };
+		B10037 /* AlarmsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmsViewModel.swift; sourceTree = "<group>"; };
 		B10020 /* SonosController.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonosController.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -115,6 +119,7 @@
 				B10032 /* NowPlayingViewModel.swift */,
 				B10033 /* QueueViewModel.swift */,
 				B10035 /* BrowseViewModel.swift */,
+				B10037 /* AlarmsViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -146,6 +151,7 @@
 				B10030 /* MenuBarController.swift */,
 				B10031 /* MusicServicesView.swift */,
 				B10034 /* SliderPopup.swift */,
+				B10036 /* PlayHistoryDashboard.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -258,6 +264,8 @@
 				A10033 /* QueueViewModel.swift in Sources */,
 				A10034 /* SliderPopup.swift in Sources */,
 				A10035 /* BrowseViewModel.swift in Sources */,
+				A10036 /* PlayHistoryDashboard.swift in Sources */,
+				A10037 /* AlarmsViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

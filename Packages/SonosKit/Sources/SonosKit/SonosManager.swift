@@ -1215,6 +1215,17 @@ public class SonosManager: ObservableObject {
         return nil
     }
 
+    /// Detects the service label for a BrowseItem based on URI, descriptor, metadata, and objectID.
+    public func serviceLabel(for item: BrowseItem) -> String? {
+        if let uri = item.resourceURI, let name = detectServiceName(fromURI: uri) { return name }
+        if let desc = item.serviceDescriptor, let name = musicServiceName(fromDescriptor: desc) { return name }
+        if let meta = item.resourceMetadata, let name = musicServiceName(fromDescriptor: meta) { return name }
+        if item.objectID.hasPrefix("SQ:") { return ServiceName.sonosPlaylist }
+        if item.objectID.hasPrefix("A:") || item.objectID.hasPrefix("S:") { return ServiceName.musicLibrary }
+        if item.objectID.hasPrefix("R:") { return ServiceName.radio }
+        return nil
+    }
+
     /// Returns a reliable device for SOAP calls — prefers a group coordinator
     /// over an arbitrary device from the dictionary, since coordinators are
     /// always full speakers (never subs or satellites)

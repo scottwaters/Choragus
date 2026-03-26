@@ -155,7 +155,13 @@ public enum UDKey {
     public static let imageCacheMaxSizeMB = "imageCacheMaxSizeMB"
     public static let imageCacheMaxAgeDays = "imageCacheMaxAgeDays"
     public static let classicShuffleEnabled = "classicShuffleEnabled"
+    public static let chartTheme = "chartTheme"
+    public static let customPrimaryColor = "customPrimary"
+    public static let customSecondaryColor = "customSecondary"
+    public static let customAccentColor = "customAccent"
+    public static let artOverridePrefix = "artOverride:"
 }
+
 
 // MARK: - Notifications
 

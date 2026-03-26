@@ -12,7 +12,7 @@ import SonosKit
 @Observable
 final class NowPlayingViewModel {
     let sonosManager: SonosManager
-    let group: SonosGroup
+    var group: SonosGroup
 
     // MARK: - Transport State
 
@@ -548,6 +548,10 @@ final class NowPlayingViewModel {
                 artist: artist, title: searchTitle
             ) {
                 radioTrackArtURL = URL(string: artURL)
+                // Update history entry with resolved artwork
+                sonosManager.playHistoryManager?.updateArtwork(
+                    forTitle: trackMetadata.title, artist: trackMetadata.artist, artURL: artURL
+                )
             } else {
                 radioTrackArtURL = nil
             }
@@ -604,6 +608,10 @@ final class NowPlayingViewModel {
             ) {
                 sonosDebugLog("[ART-SEARCH] Found: \(artURL.prefix(80))")
                 webArtURL = URL(string: artURL)
+                // Update history entry with resolved artwork
+                sonosManager.playHistoryManager?.updateArtwork(
+                    forTitle: trackMetadata.title, artist: trackMetadata.artist, artURL: artURL
+                )
             } else {
                 sonosDebugLog("[ART-SEARCH] No result from iTunes")
                 webArtURL = nil
@@ -625,7 +633,7 @@ final class NowPlayingViewModel {
             ) {
                 webArtURL = URL(string: artURL)
                 forceWebArt = true
-                let key = "artOverride:\(searchTerm.lowercased())"
+                let key = "\(UDKey.artOverridePrefix)\(searchTerm.lowercased())"
                 UserDefaults.standard.set(artURL, forKey: key)
                 updateDisplayedArt()
             }
@@ -636,7 +644,7 @@ final class NowPlayingViewModel {
         let searchTerm = !trackMetadata.title.isEmpty ? trackMetadata.title :
                          !trackMetadata.stationName.isEmpty ? trackMetadata.stationName : ""
         guard !searchTerm.isEmpty else { return }
-        let key = "artOverride:\(searchTerm.lowercased())"
+        let key = "\(UDKey.artOverridePrefix)\(searchTerm.lowercased())"
         if let saved = UserDefaults.standard.string(forKey: key) {
             webArtURL = URL(string: saved)
             forceWebArt = true

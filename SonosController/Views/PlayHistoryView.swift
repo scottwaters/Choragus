@@ -6,75 +6,119 @@ import UniformTypeIdentifiers
 struct PlayHistoryView: View {
     @EnvironmentObject var historyManager: PlayHistoryManager
 
+    @State private var searchText = ""
     @State private var filterRoom: String?
     @State private var filterSource: String?
-    @State private var filterArtist = ""
-    @State private var sortOrder = [KeyPathComparator(\PlayHistoryEntry.timestamp, order: .reverse)]
+    @State private var filterDateRange: DateRange = .all
+    @State private var sortNewestFirst = true
     @State private var showClearConfirm = false
-    @State private var showExporter = false
-    @State private var selectedTab = 0
+    @State private var selectedTab = 1
+    @State private var selectedEntryID: UUID?
+    @State private var hoveredEntryID: UUID?
+    @State private var expandedArtEntry: PlayHistoryEntry?
+
+    enum DateRange: String, CaseIterable {
+        case all = "All Time"
+        case today = "Today"
+        case week = "This Week"
+        case month = "This Month"
+        case quarter = "3 Months"
+    }
 
     private func sourceLabel(for entry: PlayHistoryEntry) -> String {
-        if !entry.stationName.isEmpty { return entry.stationName }
-        if let uri = entry.sourceURI {
-            if URIPrefix.isLocal(uri) { return ServiceName.localLibrary }
-            if URIPrefix.isRadio(uri) { return ServiceName.radio }
-            // Try SID extraction
-            let decoded = (uri.removingPercentEncoding ?? uri).replacingOccurrences(of: "&amp;", with: "&")
-            if let range = decoded.range(of: "sid=") {
-                let numStr = String(decoded[range.upperBound...].prefix(while: { $0.isNumber }))
-                if let sid = Int(numStr), let name = ServiceID.knownNames[sid] {
-                    return name
-                }
-            }
-            if decoded.contains("spotify") { return ServiceName.spotify }
-            if decoded.hasPrefix(URIPrefix.sonosHTTP) { return ServiceName.streaming }
-        }
-        return ServiceName.local
+        historyManager.sourceServiceName(for: entry)
     }
 
     private var uniqueSources: [String] {
         Array(Set(historyManager.entries.map { sourceLabel(for: $0) })).sorted()
     }
 
-    private var filteredEntries: [PlayHistoryEntry] {
+    /// Entries filtered by date/room/source/search but NOT sorted (for dashboard)
+    private var filteredEntriesUnsorted: [PlayHistoryEntry] {
         var result = historyManager.entries
+
+        if filterDateRange != .all {
+            let calendar = Calendar.current
+            let now = Date()
+            let cutoff: Date
+            switch filterDateRange {
+            case .today: cutoff = calendar.startOfDay(for: now)
+            case .week: cutoff = calendar.date(byAdding: .day, value: -7, to: now)!
+            case .month: cutoff = calendar.date(byAdding: .month, value: -1, to: now)!
+            case .quarter: cutoff = calendar.date(byAdding: .month, value: -3, to: now)!
+            case .all: cutoff = .distantPast
+            }
+            result = result.filter { $0.timestamp >= cutoff }
+        }
+
         if let room = filterRoom {
             result = result.filter { $0.groupName == room }
         }
         if let source = filterSource {
             result = result.filter { sourceLabel(for: $0) == source }
         }
-        if !filterArtist.isEmpty {
-            let query = filterArtist.lowercased()
+        if !searchText.isEmpty {
+            let query = searchText.lowercased()
             result = result.filter {
                 $0.artist.lowercased().contains(query) ||
                 $0.title.lowercased().contains(query) ||
-                sourceLabel(for: $0).lowercased().contains(query)
+                $0.album.lowercased().contains(query) ||
+                $0.stationName.lowercased().contains(query) ||
+                $0.groupName.lowercased().contains(query)
             }
         }
-        return result.sorted(using: sortOrder)
+        return result
+    }
+
+    /// Sorted for history list display
+    private var filteredEntries: [PlayHistoryEntry] {
+        sortNewestFirst ? filteredEntriesUnsorted.sorted { $0.timestamp > $1.timestamp }
+                        : filteredEntriesUnsorted.sorted { $0.timestamp < $1.timestamp }
+    }
+
+    private var hasActiveFilters: Bool {
+        filterRoom != nil || filterSource != nil || filterDateRange != .all || !searchText.isEmpty
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            // Info banner
+            HStack(spacing: 6) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 10))
+                Text("Listening activity is tracked across all speakers and zones while SonosController is running.")
+                    .font(.system(size: 11))
+                Spacer()
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .background(.quaternary.opacity(0.3))
+
+            // Shared filter bar
+            filterBar
+            activeFilterChips
+
+            Divider()
+
             // Tab picker
             Picker("", selection: $selectedTab) {
+                Text("Dashboard").tag(1)
                 Text("History").tag(0)
-                Text("Stats").tag(1)
             }
             .pickerStyle(.segmented)
             .padding(.horizontal)
-            .padding(.top, 12)
+            .padding(.top, 8)
             .padding(.bottom, 8)
 
             if selectedTab == 0 {
-                historyTab
+                historyContent
             } else {
-                statsTab
+                PlayHistoryDashboard(entries: filteredEntriesUnsorted, expandedArtEntry: $expandedArtEntry)
+                    .environmentObject(historyManager)
             }
         }
-        .frame(minWidth: 600, minHeight: 400)
+        .frame(minWidth: 700, minHeight: 500)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
@@ -100,224 +144,358 @@ struct PlayHistoryView: View {
         } message: {
             Text("This will permanently remove all \(historyManager.totalEntries) entries.")
         }
+        .onDisappear {
+            NSColorPanel.shared.close()
+        }
+        .sheet(item: $expandedArtEntry) { entry in
+            ExpandedArtView(
+                artURL: entry.albumArtURI.flatMap { URL(string: $0) },
+                title: entry.title,
+                artist: entry.artist,
+                album: entry.album,
+                stationName: entry.stationName
+            )
+        }
     }
 
-    // MARK: - History Tab
+    // MARK: - Filter Bar
 
-    private var historyTab: some View {
-        VStack(spacing: 0) {
-            // Filters
-            HStack(spacing: 12) {
-                HStack(spacing: 4) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                    TextField("Filter by artist or track...", text: $filterArtist)
-                        .textFieldStyle(.plain)
-                        .font(.caption)
+    private var filterBar: some View {
+        HStack(spacing: 10) {
+            // Search field
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+                TextField("Search tracks, artists, albums...", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                if !searchText.isEmpty {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.15)) { searchText = "" }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(nsColor: .quaternaryLabelColor).opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-                .frame(maxWidth: 250)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            .frame(maxWidth: 280)
 
-                Picker("Room", selection: $filterRoom) {
-                    Text("All Rooms").tag(String?.none)
-                    ForEach(historyManager.uniqueRooms, id: \.self) { room in
-                        Text(room).tag(Optional(room))
+            // Date range
+            Picker("", selection: $filterDateRange) {
+                ForEach(DateRange.allCases, id: \.self) { range in
+                    Text(range.rawValue).tag(range)
+                }
+            }
+            .fixedSize()
+
+            // Room
+            Picker("", selection: $filterRoom) {
+                Label("All Rooms", systemImage: "hifispeaker.2").tag(String?.none)
+                Divider()
+                ForEach(historyManager.uniqueRooms, id: \.self) { room in
+                    Text(room).tag(Optional(room))
+                }
+            }
+            .fixedSize()
+
+            // Source
+            Picker("", selection: $filterSource) {
+                Label("All Sources", systemImage: "dot.radiowaves.left.and.right").tag(String?.none)
+                Divider()
+                ForEach(uniqueSources, id: \.self) { source in
+                    HStack {
+                        Circle().fill(ServiceColor.color(for: source)).frame(width: 6, height: 6)
+                        Text(source)
+                    }
+                    .tag(Optional(source))
+                }
+            }
+            .fixedSize()
+
+            Spacer()
+
+            // Count
+            Text("\(filteredEntriesUnsorted.count)")
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            + Text(" tracks")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: - Active Filter Chips
+
+    @ViewBuilder
+    private var activeFilterChips: some View {
+        if hasActiveFilters {
+            HStack(spacing: 6) {
+                if filterDateRange != .all {
+                    filterChip(label: filterDateRange.rawValue, icon: "calendar") {
+                        withAnimation { filterDateRange = .all }
                     }
                 }
-                .frame(maxWidth: 150)
-
-                Picker("Source", selection: $filterSource) {
-                    Text("All Sources").tag(String?.none)
-                    ForEach(uniqueSources, id: \.self) { source in
-                        Text(source).tag(Optional(source))
+                if let room = filterRoom {
+                    filterChip(label: room, icon: "hifispeaker") {
+                        withAnimation { filterRoom = nil }
                     }
                 }
-                .frame(maxWidth: 150)
+                if let source = filterSource {
+                    filterChip(label: source, icon: "music.note", color: ServiceColor.color(for: source)) {
+                        withAnimation { filterSource = nil }
+                    }
+                }
+                if !searchText.isEmpty {
+                    filterChip(label: "\"\(searchText)\"", icon: "magnifyingglass") {
+                        withAnimation { searchText = "" }
+                    }
+                }
 
                 Spacer()
 
-                Text("\(filteredEntries.count) entries")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-
-            // Table
-            if filteredEntries.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "clock")
-                        .font(.title)
-                        .foregroundStyle(.secondary)
-                    Text(historyManager.entries.isEmpty ? "No play history yet" : "No matching entries")
-                        .foregroundStyle(.secondary)
+                Button("Clear All") {
+                    withAnimation {
+                        filterDateRange = .all
+                        filterRoom = nil
+                        filterSource = nil
+                        searchText = ""
+                    }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                Table(filteredEntries, sortOrder: $sortOrder) {
-                    TableColumn("Date", value: \.timestamp) { entry in
-                        Text(entry.timestamp, format: .dateTime.month(.abbreviated).day().hour().minute())
-                            .font(.caption)
-                    }
-                    .width(min: 100, ideal: 140)
-
-                    TableColumn("Title", value: \.title) { entry in
-                        Text(entry.title).font(.caption).lineLimit(1)
-                            .contextMenu { copyEntryMenu(entry) }
-                    }
-                    .width(min: 120, ideal: 180)
-
-                    TableColumn("Artist", value: \.artist) { entry in
-                        Text(entry.artist).font(.caption).lineLimit(1)
-                            .contextMenu { copyEntryMenu(entry) }
-                    }
-                    .width(min: 100, ideal: 150)
-
-                    TableColumn("Album", value: \.album) { entry in
-                        Text(entry.album).font(.caption).lineLimit(1).foregroundStyle(.secondary)
-                            .contextMenu { copyEntryMenu(entry) }
-                    }
-                    .width(min: 80, ideal: 130)
-
-                    TableColumn("Source") { entry in
-                        Text(sourceLabel(for: entry)).font(.caption).lineLimit(1)
-                            .contextMenu { copyEntryMenu(entry) }
-                    }
-                    .width(min: 60, ideal: 100)
-
-                    TableColumn("Room", value: \.groupName) { entry in
-                        Text(entry.groupName).font(.caption).lineLimit(1).foregroundStyle(.secondary)
-                    }
-                    .width(min: 60, ideal: 100)
-                }
-            }
-        }
-    }
-
-    // MARK: - Stats Tab
-
-    private var statsTab: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Summary
-                HStack(spacing: 40) {
-                    statBox(title: "Total Plays", value: "\(historyManager.totalEntries)")
-                    statBox(title: "Listening Hours", value: String(format: "%.1f", historyManager.totalListeningHours))
-                    statBox(title: "Unique Artists", value: "\(historyManager.uniqueArtists.count)")
-                    statBox(title: "Rooms Used", value: "\(historyManager.uniqueRooms.count)")
-                }
-                .padding(.horizontal)
-
-                Divider()
-
-                HStack(alignment: .top, spacing: 40) {
-                    // Most played artists
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Top Artists")
-                            .font(.headline)
-                        ForEach(Array(historyManager.mostPlayedArtists.prefix(10).enumerated()), id: \.offset) { idx, item in
-                            HStack {
-                                Text("\(idx + 1).")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 20)
-                                Text(item.0)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                Spacer()
-                                Text("\(item.1)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                            .contextMenu {
-                                Button("Copy Artist") { copyToClipboard(item.0) }
-                            }
-                        }
-                        if historyManager.mostPlayedArtists.isEmpty {
-                            Text("No data yet").font(.caption).foregroundStyle(.tertiary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    // Most played tracks
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Top Tracks")
-                            .font(.headline)
-                        ForEach(Array(historyManager.mostPlayedTracks.prefix(10).enumerated()), id: \.offset) { idx, item in
-                            HStack {
-                                Text("\(idx + 1).")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 20)
-                                VStack(alignment: .leading) {
-                                    Text(item.0).font(.caption).lineLimit(1)
-                                    Text(item.1).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                                }
-                                Spacer()
-                                Text("\(item.2)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                            .contextMenu {
-                                Button("Copy Track") { copyToClipboard("\(item.0) — \(item.1)") }
-                            }
-                        }
-                        if historyManager.mostPlayedTracks.isEmpty {
-                            Text("No data yet").font(.caption).foregroundStyle(.tertiary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    // Most played stations
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Top Sources")
-                            .font(.headline)
-                        ForEach(Array(historyManager.mostPlayedStations.prefix(10).enumerated()), id: \.offset) { idx, item in
-                            HStack {
-                                Text("\(idx + 1).")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 20)
-                                Text(item.0)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                Spacer()
-                                Text("\(item.1)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                            .contextMenu {
-                                Button("Copy Source") { copyToClipboard(item.0) }
-                            }
-                        }
-                        if historyManager.mostPlayedStations.isEmpty {
-                            Text("No data yet").font(.caption).foregroundStyle(.tertiary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal)
-            }
-            .padding(.vertical)
-        }
-    }
-
-    private func statBox(title: String, value: String) -> some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.title)
-                .fontWeight(.semibold)
-                .monospacedDigit()
-            Text(title)
-                .font(.caption)
+                .font(.system(size: 11))
+                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 6)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
+    }
+
+    private func filterChip(label: String, icon: String, color: Color = .accentColor, onRemove: @escaping () -> Void) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 9))
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .buttonStyle(.plain)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.85), in: Capsule())
+    }
+
+    // MARK: - History Content
+
+    @ViewBuilder
+    private var historyContent: some View {
+        if filteredEntries.isEmpty {
+            emptyState
+        } else {
+            // Sort toggle row
+            HStack {
+                Spacer()
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { sortNewestFirst.toggle() }
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: sortNewestFirst ? "arrow.down" : "arrow.up")
+                            .font(.system(size: 9, weight: .bold))
+                        Text(sortNewestFirst ? "Newest First" : "Oldest First")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+
+            historyList
+        }
+    }
+
+    // MARK: - Empty State
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: hasActiveFilters ? "line.3.horizontal.decrease.circle" : "clock")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            Text(hasActiveFilters ? "No matching entries" : "No play history yet")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+            if hasActiveFilters {
+                Text("Try adjusting your filters")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Button("Clear Filters") {
+                    withAnimation {
+                        filterDateRange = .all
+                        filterRoom = nil
+                        filterSource = nil
+                        searchText = ""
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            } else {
+                Text("Play some music and your history will appear here")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - History List
+
+    private var historyList: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(filteredEntries) { entry in
+                    historyRow(entry)
+                        .id(entry.id)
+                }
+            }
+        }
+    }
+
+    private func historyRow(_ entry: PlayHistoryEntry) -> some View {
+        let isSelected = selectedEntryID == entry.id
+        let isHovered = hoveredEntryID == entry.id
+        let source = sourceLabel(for: entry)
+
+        return HStack(spacing: 12) {
+            // Album art
+            CachedAsyncImage(url: entry.albumArtURI.flatMap { URL(string: $0) }, cornerRadius: 6)
+                .frame(width: 40, height: 40)
+                .onTapGesture { expandedArtEntry = entry }
+
+            // Track info
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    if !entry.artist.isEmpty {
+                        Text(entry.artist)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    if !entry.album.isEmpty {
+                        Text("—")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.quaternary)
+                        Text(entry.album)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                    if !entry.stationName.isEmpty {
+                        Text("—")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.quaternary)
+                        Text(entry.stationName)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.orange.opacity(0.8))
+                            .lineLimit(1)
+                    }
+                }
+            }
+
+            Spacer()
+
+            // Source badge
+            Text(source)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(ServiceColor.color(for: source), in: Capsule())
+
+            // Room
+            if !entry.groupName.isEmpty {
+                HStack(spacing: 3) {
+                    Image(systemName: "hifispeaker")
+                        .font(.system(size: 9))
+                    Text(entry.groupName)
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(.tertiary)
+                .frame(width: 90, alignment: .leading)
+            }
+
+            // Duration
+            if entry.duration > 0 {
+                Text(formatDuration(entry.duration))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 40, alignment: .trailing)
+            }
+
+            // Timestamp
+            Text(entry.timestamp, format: .relative(presentation: .named))
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .frame(width: 80, alignment: .trailing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? Color.accentColor.opacity(0.15)
+                      : isHovered ? Color.primary.opacity(0.04)
+                      : Color.clear)
+                .padding(.horizontal, 8)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                selectedEntryID = selectedEntryID == entry.id ? nil : entry.id
+            }
+        }
+        .onHover { hovering in
+            hoveredEntryID = hovering ? entry.id : nil
+        }
+        .contextMenu {
+            copyEntryMenu(entry)
+            Divider()
+            if !entry.artist.isEmpty {
+                Button("Filter by \"\(entry.artist)\"") {
+                    searchText = entry.artist
+                }
+            }
+            if !entry.groupName.isEmpty {
+                Button("Filter by Room: \(entry.groupName)") {
+                    filterRoom = entry.groupName
+                }
+            }
+            Button("Filter by Source: \(source)") {
+                filterSource = source
+            }
+        }
+    }
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", mins, secs)
     }
 
     // MARK: - Copy
@@ -331,6 +509,12 @@ struct PlayHistoryView: View {
             if !entry.album.isEmpty { lines.append("\(L10n.albumLabel): \(entry.album)") }
             if !entry.title.isEmpty { lines.append("\(L10n.trackLabel): \(entry.title)") }
             copyToClipboard(lines.joined(separator: "\n"))
+        }
+        if !entry.title.isEmpty {
+            Button("Copy Title") { copyToClipboard(entry.title) }
+        }
+        if !entry.artist.isEmpty {
+            Button("Copy Artist") { copyToClipboard(entry.artist) }
         }
     }
 

@@ -1,10 +1,11 @@
+/// AlarmsView.swift — Alarm list with toggle, delete, and refresh.
+/// Thin view layer — all business logic lives in AlarmsViewModel.
 import SwiftUI
 import SonosKit
 
 struct AlarmsView: View {
     @EnvironmentObject var sonosManager: SonosManager
-    @State private var alarms: [SonosAlarm] = []
-    @State private var isLoading = true
+    @State private var vm: AlarmsViewModel?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,7 +14,7 @@ struct AlarmsView: View {
                     .font(.headline)
                 Spacer()
                 Button {
-                    Task { await loadAlarms() }
+                    Task { await vm?.loadAlarms() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.caption)
@@ -25,67 +26,39 @@ struct AlarmsView: View {
 
             Divider()
 
-            if isLoading {
-                ProgressView()
+            if let vm {
+                if vm.isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if vm.alarms.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "alarm")
+                            .font(.title)
+                            .foregroundStyle(.secondary)
+                        Text(L10n.noAlarmsSet)
+                            .foregroundStyle(.secondary)
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if alarms.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "alarm")
-                        .font(.title)
-                        .foregroundStyle(.secondary)
-                    Text(L10n.noAlarmsSet)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List {
-                    ForEach(alarms) { alarm in
-                        AlarmRow(alarm: alarm, onToggle: { enabled in
-                            Task { await toggleAlarm(alarm, enabled: enabled) }
-                        })
-                        .contextMenu {
-                            Button(L10n.delete, role: .destructive) {
-                                Task { await deleteAlarm(alarm) }
+                } else {
+                    List {
+                        ForEach(vm.alarms) { alarm in
+                            AlarmRow(alarm: alarm, onToggle: { enabled in
+                                Task { await vm.toggleAlarm(alarm, enabled: enabled) }
+                            })
+                            .contextMenu {
+                                Button(L10n.delete, role: .destructive) {
+                                    Task { await vm.deleteAlarm(alarm) }
+                                }
                             }
                         }
                     }
+                    .listStyle(.plain)
                 }
-                .listStyle(.plain)
             }
         }
-        .onAppear { Task { await loadAlarms() } }
-    }
-
-    private func loadAlarms() async {
-        isLoading = true
-        do {
-            alarms = try await sonosManager.getAlarms()
-            alarms.sort { $0.startTime < $1.startTime }
-        } catch {
-            sonosDebugLog("[ALARM] Load alarms failed: \(error)")
-        }
-        isLoading = false
-    }
-
-    private func toggleAlarm(_ alarm: SonosAlarm, enabled: Bool) async {
-        var updated = alarm
-        updated.enabled = enabled
-        do {
-            try await sonosManager.updateAlarm(updated)
-            if let idx = alarms.firstIndex(where: { $0.id == alarm.id }) {
-                alarms[idx].enabled = enabled
-            }
-        } catch {
-            sonosDebugLog("[ALARM] Toggle alarm failed: \(error)")
-        }
-    }
-
-    private func deleteAlarm(_ alarm: SonosAlarm) async {
-        do {
-            try await sonosManager.deleteAlarm(alarm)
-            alarms.removeAll { $0.id == alarm.id }
-        } catch {
-            sonosDebugLog("[ALARM] Delete alarm failed: \(error)")
+        .onAppear {
+            if vm == nil { vm = AlarmsViewModel(sonosManager: sonosManager) }
+            Task { await vm?.loadAlarms() }
         }
     }
 }

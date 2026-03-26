@@ -1,8 +1,7 @@
 /// VolumeControlView.swift — Per-speaker volume sliders for grouped speakers.
 ///
 /// Shown below the master volume when a group has multiple members.
-/// Each speaker's volume is independently controllable. The pending spinner
-/// uses a 300ms delay to avoid flashing on fast network responses.
+/// Layout: [mute] [name] [slider] [value] — all inline, slider fills remaining space.
 import SwiftUI
 import SonosKit
 
@@ -37,15 +36,16 @@ struct VolumeControlView: View {
                         Task { await toggleMute(device: member) }
                     } label: {
                         Image(systemName: (speakerMutes[member.id] ?? false) ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                            .frame(width: 16)
+                            .frame(width: 20)
                             .font(.caption)
                     }
                     .buttonStyle(.plain)
 
                     Text(member.roomName)
                         .font(.caption)
-                        .frame(width: 80, alignment: .leading)
                         .lineLimit(1)
+                        .frame(minWidth: 60, alignment: .leading)
+                        .layoutPriority(-1)
 
                     SliderWithPopup(
                         value: Binding(
@@ -65,7 +65,7 @@ struct VolumeControlView: View {
                     Text("\(Int(speakerVolumes[member.id] ?? 0))")
                         .font(.caption)
                         .monospacedDigit()
-                        .frame(width: 24, alignment: .trailing)
+                        .frame(width: 28, alignment: .trailing)
                 }
                 .padding(.horizontal, 24)
             }
