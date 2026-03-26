@@ -152,10 +152,8 @@ struct QueueView: View {
         }
         .onChange(of: vm.currentTrack) {
             guard vm.currentTrack > 0, !vm.isPlayingStation else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    proxy.scrollTo(vm.currentTrack, anchor: .center)
-                }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                proxy.scrollTo(vm.currentTrack, anchor: .center)
             }
         }
         }
