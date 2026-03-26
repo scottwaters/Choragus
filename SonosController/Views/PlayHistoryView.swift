@@ -17,8 +17,8 @@ struct PlayHistoryView: View {
     private func sourceLabel(for entry: PlayHistoryEntry) -> String {
         if !entry.stationName.isEmpty { return entry.stationName }
         if let uri = entry.sourceURI {
-            if URIPrefix.isLocal(uri) { return "Local Library" }
-            if URIPrefix.isRadio(uri) { return "Radio" }
+            if URIPrefix.isLocal(uri) { return ServiceName.localLibrary }
+            if URIPrefix.isRadio(uri) { return ServiceName.radio }
             // Try SID extraction
             let decoded = (uri.removingPercentEncoding ?? uri).replacingOccurrences(of: "&amp;", with: "&")
             if let range = decoded.range(of: "sid=") {
@@ -27,10 +27,10 @@ struct PlayHistoryView: View {
                     return name
                 }
             }
-            if decoded.contains("spotify") { return "Spotify" }
-            if decoded.hasPrefix(URIPrefix.sonosHTTP) { return "Streaming" }
+            if decoded.contains("spotify") { return ServiceName.spotify }
+            if decoded.hasPrefix(URIPrefix.sonosHTTP) { return ServiceName.streaming }
         }
-        return "Local"
+        return ServiceName.local
     }
 
     private var uniqueSources: [String] {

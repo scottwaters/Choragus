@@ -65,7 +65,7 @@ public final class PlaylistServiceScanner: ObservableObject {
         }.value
 
         // Update published state on main actor
-        playlistServices[objectID] = services.isEmpty ? ["Unknown"] : services
+        playlistServices[objectID] = services.isEmpty ? [ServiceName.unknown] : services
         scanning.remove(objectID)
         save()
     }
@@ -105,8 +105,8 @@ public final class PlaylistServiceScanner: ObservableObject {
 
         // Direct URI pattern matching as fallback
         if let uri = item.resourceURI {
-            if URIPrefix.isLocal(uri) { return "Music Library" }
-            if URIPrefix.isRadio(uri) { return "Radio" }
+            if URIPrefix.isLocal(uri) { return ServiceName.musicLibrary }
+            if URIPrefix.isRadio(uri) { return ServiceName.radio }
 
             // Detect service by SID in URI (e.g. sid=202) — may be disconnected
             if let sidRange = uri.range(of: "sid=") {
@@ -116,7 +116,7 @@ public final class PlaylistServiceScanner: ObservableObject {
                 if let sid = Int(sidStr), let name = manager.musicServiceName(for: sid) {
                     // Check if sn=0 (no account connected)
                     if uri.contains("sn=0") {
-                        return "\(name) (Unavailable)"
+                        return "\(name) (\(ServiceName.unavailable))"
                     }
                     return name
                 }
@@ -124,14 +124,14 @@ public final class PlaylistServiceScanner: ObservableObject {
 
             // x-sonos-http with unknown SID
             if uri.contains(URIPrefix.sonosHTTP) {
-                if uri.contains("sn=0") { return "Unavailable" }
-                return "Streaming"
+                if uri.contains("sn=0") { return ServiceName.unavailable }
+                return ServiceName.streaming
             }
         }
 
         // Track exists but has no playable URI — likely from a disconnected service
         if item.resourceURI == nil || item.resourceURI?.isEmpty == true {
-            return "Unavailable"
+            return ServiceName.unavailable
         }
 
         return nil

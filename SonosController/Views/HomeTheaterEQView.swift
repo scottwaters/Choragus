@@ -290,7 +290,9 @@ struct HomeTheaterEQView: View {
             surroundLevel = Double((try? await sonosManager.getEQ(device: d, eqType: "SurroundLevel")) ?? 0)
             musicSurroundLevel = Double((try? await sonosManager.getEQ(device: d, eqType: "MusicSurroundLevel")) ?? 0)
             surroundMode = (try? await sonosManager.getEQ(device: d, eqType: "SurroundMode")) ?? 1
-        } catch {}
+        } catch {
+            sonosDebugLog("[EQ] Home theater EQ load failed: \(error)")
+        }
         isLoading = false
     }
 

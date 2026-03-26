@@ -132,16 +132,16 @@ public final class PlayHistoryManager: ObservableObject {
     /// Determines service name from a history entry's source URI
     public func sourceServiceName(for entry: PlayHistoryEntry) -> String {
         if !entry.stationName.isEmpty { return entry.stationName }
-        guard let uri = entry.sourceURI else { return "Local" }
-        if URIPrefix.isLocal(uri) { return "Music Library" }
-        if URIPrefix.isRadio(uri) { return "Radio" }
+        guard let uri = entry.sourceURI else { return ServiceName.local }
+        if URIPrefix.isLocal(uri) { return ServiceName.musicLibrary }
+        if URIPrefix.isRadio(uri) { return ServiceName.radio }
         let decoded = (uri.removingPercentEncoding ?? uri).replacingOccurrences(of: "&amp;", with: "&")
         if let range = decoded.range(of: "sid=") {
             let numStr = String(decoded[range.upperBound...].prefix(while: { $0.isNumber }))
             if let sid = Int(numStr), let name = ServiceID.knownNames[sid] { return name }
         }
-        if decoded.contains("spotify") { return "Spotify" }
-        return "Streaming"
+        if decoded.contains("spotify") { return ServiceName.spotify }
+        return ServiceName.streaming
     }
 
     public var mostPlayedArtists: [(String, Int)] {

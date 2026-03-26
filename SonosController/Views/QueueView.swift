@@ -140,7 +140,9 @@ struct QueueView: View {
                         _ = try await sonosManager.saveQueueAsPlaylist(group: group, title: name)
                         saveMessage = "Saved as \"\(name)\""
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { saveMessage = nil }
-                    } catch {}
+                    } catch {
+                        sonosDebugLog("[QUEUE] Save as playlist failed: \(error)")
+                    }
                 }
             }
         }
@@ -166,7 +168,9 @@ struct QueueView: View {
             totalTracks = total
             let posInfo = try await sonosManager.getPositionInfo(group: group)
             currentTrack = posInfo.trackNumber
-        } catch {}
+        } catch {
+            sonosDebugLog("[QUEUE] Load queue failed: \(error)")
+        }
         isLoading = false
     }
 
@@ -174,14 +178,18 @@ struct QueueView: View {
         do {
             try await sonosManager.playTrackFromQueue(group: group, trackNumber: trackNumber)
             currentTrack = trackNumber
-        } catch {}
+        } catch {
+            sonosDebugLog("[QUEUE] Play track failed: \(error)")
+        }
     }
 
     private func removeTrack(_ trackIndex: Int) async {
         do {
             try await sonosManager.removeFromQueue(group: group, trackIndex: trackIndex)
             await loadQueue()
-        } catch {}
+        } catch {
+            sonosDebugLog("[QUEUE] Remove track failed: \(error)")
+        }
     }
 
     private func clearQueue() async {
@@ -189,7 +197,9 @@ struct QueueView: View {
             try await sonosManager.clearQueue(group: group)
             queueItems = []
             totalTracks = 0
-        } catch {}
+        } catch {
+            sonosDebugLog("[QUEUE] Clear queue failed: \(error)")
+        }
     }
 }
 

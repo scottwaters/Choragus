@@ -62,7 +62,7 @@ struct AlarmsView: View {
             alarms = try await sonosManager.getAlarms()
             alarms.sort { $0.startTime < $1.startTime }
         } catch {
-            // Alarm load failed
+            sonosDebugLog("[ALARM] Load alarms failed: \(error)")
         }
         isLoading = false
     }
@@ -76,7 +76,7 @@ struct AlarmsView: View {
                 alarms[idx].enabled = enabled
             }
         } catch {
-            // Alarm toggle failed
+            sonosDebugLog("[ALARM] Toggle alarm failed: \(error)")
         }
     }
 
@@ -85,7 +85,7 @@ struct AlarmsView: View {
             try await sonosManager.deleteAlarm(alarm)
             alarms.removeAll { $0.id == alarm.id }
         } catch {
-            // Alarm deletion failed
+            sonosDebugLog("[ALARM] Delete alarm failed: \(error)")
         }
     }
 }

@@ -80,7 +80,7 @@ public final class SonosCache {
             let data = try JSONEncoder().encode(cached)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            // Cache save failed — non-critical, will retry next save
+            sonosDebugLog("[CACHE] Topology save failed: \(error)")
         }
     }
 
@@ -127,7 +127,9 @@ public final class SonosCache {
         do {
             let data = try JSONEncoder().encode(urls)
             try data.write(to: artCacheURL, options: .atomic)
-        } catch {}
+        } catch {
+            sonosDebugLog("[CACHE] Art URL save failed: \(error)")
+        }
     }
 
     public func loadArtURLs() -> [String: String] {

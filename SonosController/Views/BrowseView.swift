@@ -294,9 +294,9 @@ struct BrowseListView: View {
            let name = sonosManager.musicServiceName(fromDescriptor: meta) {
             return name
         }
-        if item.objectID.hasPrefix("SQ:") { return "Sonos Playlist" }
-        if item.objectID.hasPrefix("A:") || item.objectID.hasPrefix("S:") { return "Music Library" }
-        if item.objectID.hasPrefix("R:") { return "Radio" }
+        if item.objectID.hasPrefix("SQ:") { return ServiceName.sonosPlaylist }
+        if item.objectID.hasPrefix("A:") || item.objectID.hasPrefix("S:") { return ServiceName.musicLibrary }
+        if item.objectID.hasPrefix("R:") { return ServiceName.radio }
         return nil
     }
 
@@ -526,7 +526,7 @@ struct BrowseListView: View {
                 totalItems = total
                 loadedCount = result.count
             }
-        } catch {
+        } catch { sonosDebugLog("[BROWSE] Container art browse failed: \(error)")
             errorMessage = error.localizedDescription
         }
         isLoading = false
@@ -544,7 +544,8 @@ struct BrowseListView: View {
             let (result, _) = try await sonosManager.browse(objectID: objectID, start: loadedCount, count: pageSize)
             items.append(contentsOf: result)
             loadedCount += result.count
-        } catch {
+        } catch { sonosDebugLog("[BROWSE] Container art browse failed: \(error)")
+            sonosDebugLog("[BROWSE] Load more failed: \(error)")
         }
     }
 
@@ -565,7 +566,7 @@ struct BrowseListView: View {
             default:
                 playbackError = "\(L10n.couldNotPlay) \"\(item.title)\": \(error.localizedDescription)"
             }
-        } catch {
+        } catch { sonosDebugLog("[BROWSE] Container art browse failed: \(error)")
             playbackError = "\(L10n.couldNotPlay) \"\(item.title)\": \(error.localizedDescription)"
         }
     }
@@ -574,13 +575,15 @@ struct BrowseListView: View {
         do {
             let (result, _) = try await sonosManager.browse(objectID: "SQ:", start: 0, count: 100)
             playlists = result.filter { $0.isContainer }
-        } catch {}
+        } catch { sonosDebugLog("[BROWSE] Container art browse failed: \(error)")
+            sonosDebugLog("[BROWSE] Load playlists failed: \(error)")
+        }
     }
 
     private func addToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool = false) async {
         do {
             try await sonosManager.addBrowseItemToQueue(item, in: group, playNext: playNext)
-        } catch {
+        } catch { sonosDebugLog("[BROWSE] Container art browse failed: \(error)")
             sonosDebugLog("[QUEUE] addToQueue failed: \(error.localizedDescription) for '\(item.title)' uri=\(item.resourceURI ?? "nil")")
         }
     }
@@ -589,7 +592,8 @@ struct BrowseListView: View {
         let containerItem = BrowseItem(id: objectID, title: title, itemClass: .container)
         do {
             try await sonosManager.playBrowseItem(containerItem, in: group)
-        } catch {
+        } catch { sonosDebugLog("[BROWSE] Container art browse failed: \(error)")
+            sonosDebugLog("[BROWSE] Play container failed: \(error)")
         }
     }
 
@@ -597,7 +601,8 @@ struct BrowseListView: View {
         let containerItem = BrowseItem(id: objectID, title: title, itemClass: .container)
         do {
             try await sonosManager.addBrowseItemToQueue(containerItem, in: group)
-        } catch {
+        } catch { sonosDebugLog("[BROWSE] Container art browse failed: \(error)")
+            sonosDebugLog("[BROWSE] Add container to queue failed: \(error)")
         }
     }
 }
@@ -632,9 +637,9 @@ struct BrowseItemRow: View {
         }
 
         // 4. Check objectID for known container types
-        if item.objectID.hasPrefix("SQ:") { return "Sonos Playlist" }
-        if item.objectID.hasPrefix("A:") || item.objectID.hasPrefix("S:") { return "Music Library" }
-        if item.objectID.hasPrefix("R:") { return "Radio" }
+        if item.objectID.hasPrefix("SQ:") { return ServiceName.sonosPlaylist }
+        if item.objectID.hasPrefix("A:") || item.objectID.hasPrefix("S:") { return ServiceName.musicLibrary }
+        if item.objectID.hasPrefix("R:") { return ServiceName.radio }
 
         return nil
     }
@@ -765,7 +770,9 @@ struct BrowseItemRow: View {
                 sonosManager.cacheArtURL(artURI, forURI: item.resourceURI ?? item.objectID, title: item.title, itemID: item.objectID)
                 return
             }
-        } catch {}
+        } catch { sonosDebugLog("[BROWSE] Container art browse failed: \(error)")
+            sonosDebugLog("[BROWSE] BrowseMetadata art lookup failed: \(error)")
+        }
 
         // 3. For non-radio items, try the Sonos speaker's /getaa endpoint
         if let uri = item.resourceURI, !uri.isEmpty,
@@ -790,7 +797,7 @@ struct BrowseItemRow: View {
                     sonosManager.cacheArtURL(artURI, forURI: item.resourceURI ?? item.objectID, title: item.title, itemID: item.objectID)
                     return
                 }
-            } catch {
+            } catch { sonosDebugLog("[BROWSE] Container art browse failed: \(error)")
             }
         }
 
@@ -933,7 +940,7 @@ struct BrowseItemRow: View {
                     }
                 }
             }
-        } catch {}
+        } catch { sonosDebugLog("[BROWSE] Load playlists failed: \(error)") }
         return nil
     }
 

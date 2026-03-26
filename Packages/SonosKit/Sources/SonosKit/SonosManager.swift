@@ -374,7 +374,7 @@ public class SonosManager: ObservableObject {
             devices[device.id] = device
             await refreshTopology(from: device)
         } catch {
-            // Device description fetch failed — will retry on next SSDP response
+            sonosDebugLog("[DISCOVERY] Device description fetch failed: \(error)")
         }
     }
 
@@ -430,7 +430,7 @@ public class SonosManager: ObservableObject {
             // Start or update transport strategy
             await startOrUpdateTransportStrategy()
         } catch {
-            // Topology fetch failed — will retry on next discovery cycle
+            sonosDebugLog("[DISCOVERY] Topology fetch failed: \(error)")
         }
     }
 
@@ -920,7 +920,7 @@ public class SonosManager: ObservableObject {
                     return
                 }
             } catch {
-                // Will retry up to 3 times
+                sonosDebugLog("[SERVICES] Music services load attempt failed: \(error)")
             }
         }
     }
@@ -1021,7 +1021,7 @@ public class SonosManager: ObservableObject {
                     )
                     try await avTransport.play(device: coordinator)
                 } catch {
-                    // Fallback: try direct transport URI
+                    sonosDebugLog("[PLAYBACK] Queue-based play failed, falling back to direct URI: \(error)")
                     try await avTransport.setAVTransportURI(
                         device: coordinator, uri: uri, metadata: meta
                     )
@@ -1137,31 +1137,31 @@ public class SonosManager: ObservableObject {
 
         // 2. Check URI content for known service patterns
         let lower = decoded.lowercased()
-        if lower.contains("spotify") { return "Spotify" }
-        if lower.contains("apple") { return "Apple Music" }
-        if lower.contains("amazon") || lower.contains("amzn") { return "Amazon Music" }
-        if lower.contains("deezer") { return "Deezer" }
-        if lower.contains("tidal") { return "TIDAL" }
-        if lower.contains("soundcloud") { return "SoundCloud" }
-        if lower.contains("youtube") { return "YouTube Music" }
-        if lower.contains("pandora") { return "Pandora" }
+        if lower.contains("spotify") { return ServiceName.spotify }
+        if lower.contains("apple") { return ServiceName.appleMusic }
+        if lower.contains("amazon") || lower.contains("amzn") { return ServiceName.amazonMusic }
+        if lower.contains("deezer") { return ServiceName.deezer }
+        if lower.contains("tidal") { return ServiceName.tidal }
+        if lower.contains("soundcloud") { return ServiceName.soundCloud }
+        if lower.contains("youtube") { return ServiceName.youTubeMusic }
+        if lower.contains("pandora") { return ServiceName.pandora }
         if lower.contains("napster") { return "Napster" }
         if lower.contains("qobuz") { return "Qobuz" }
         if lower.contains("plex") { return "Plex" }
         if lower.contains("audible") { return "Audible" }
         if lower.contains("iheart") || lower.contains("iheartradio") { return "iHeartRadio" }
-        if lower.contains("calmradio") || uri.contains("sid=144") { return "Calm Radio" }
+        if lower.contains("calmradio") || uri.contains("sid=144") { return ServiceName.calmRadio }
 
         // Radio streams — check after specific services
-        if decoded.hasPrefix(URIPrefix.sonosApiStream) || decoded.hasPrefix(URIPrefix.sonosApiRadio) { return "Radio" }
-        if decoded.hasPrefix(URIPrefix.rinconMP3Radio) { return "Radio" }
+        if decoded.hasPrefix(URIPrefix.sonosApiStream) || decoded.hasPrefix(URIPrefix.sonosApiRadio) { return ServiceName.radio }
+        if decoded.hasPrefix(URIPrefix.rinconMP3Radio) { return ServiceName.radio }
 
         // Streaming services via x-sonos-http (use sid if available, otherwise generic)
-        if decoded.hasPrefix(URIPrefix.sonosHTTP) { return "Streaming" }
+        if decoded.hasPrefix(URIPrefix.sonosHTTP) { return ServiceName.streaming }
 
         // Local sources
-        if URIPrefix.isLocal(uri) { return "Music Library" }
-        if uri.hasPrefix("file:///jffs/settings/savedqueues") { return "Sonos Playlist" }
+        if URIPrefix.isLocal(uri) { return ServiceName.musicLibrary }
+        if uri.hasPrefix("file:///jffs/settings/savedqueues") { return ServiceName.sonosPlaylist }
 
         return nil
     }
@@ -1184,12 +1184,12 @@ public class SonosManager: ObservableObject {
 
         // Try common known mappings
         switch rinconNum {
-        case 2311: return "Spotify"
-        case 52231: return "Apple Music"
-        case 65031: return "Amazon Music"
-        case 3079: return "TuneIn"
-        case 519: return "Pandora"
-        case 36871: return "Calm Radio"
+        case 2311: return ServiceName.spotify
+        case 52231: return ServiceName.appleMusic
+        case 65031: return ServiceName.amazonMusic
+        case 3079: return ServiceName.tuneIn
+        case 519: return ServiceName.pandora
+        case 36871: return ServiceName.calmRadio
         default: break
         }
 

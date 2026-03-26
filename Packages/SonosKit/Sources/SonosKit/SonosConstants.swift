@@ -73,6 +73,29 @@ public enum ServiceID {
     ]
 }
 
+// MARK: - Service Name Constants
+
+public enum ServiceName {
+    public static let spotify = "Spotify"
+    public static let appleMusic = "Apple Music"
+    public static let amazonMusic = "Amazon Music"
+    public static let deezer = "Deezer"
+    public static let tidal = "TIDAL"
+    public static let soundCloud = "SoundCloud"
+    public static let youTubeMusic = "YouTube Music"
+    public static let pandora = "Pandora"
+    public static let calmRadio = "Calm Radio"
+    public static let tuneIn = "TuneIn"
+    public static let radio = "Radio"
+    public static let musicLibrary = "Music Library"
+    public static let localLibrary = "Local Library"
+    public static let streaming = "Streaming"
+    public static let unavailable = "Unavailable"
+    public static let unknown = "Unknown"
+    public static let sonosPlaylist = "Sonos Playlist"
+    public static let local = "Local"
+}
+
 // MARK: - SA_RINCON Mappings
 
 public enum RINCONService {
@@ -91,12 +114,12 @@ public enum RINCONService {
 public enum ServiceColor {
     public static func color(for service: String) -> Color {
         switch service {
-        case "Music Library", "Local Library", "Local": return .green.opacity(0.7)
-        case "Radio": return .orange.opacity(0.7)
-        case "Calm Radio": return .teal.opacity(0.7)
-        case "Sonos Playlist": return .purple.opacity(0.7)
+        case ServiceName.musicLibrary, ServiceName.localLibrary, ServiceName.local: return .green.opacity(0.7)
+        case ServiceName.radio: return .orange.opacity(0.7)
+        case ServiceName.calmRadio: return .teal.opacity(0.7)
+        case ServiceName.sonosPlaylist: return .purple.opacity(0.7)
         case "TV", "Line-In": return .gray.opacity(0.7)
-        case "Unavailable": return .red.opacity(0.5)
+        case ServiceName.unavailable: return .red.opacity(0.5)
         default: return .blue.opacity(0.7)
         }
     }

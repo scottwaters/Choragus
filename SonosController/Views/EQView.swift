@@ -94,7 +94,9 @@ struct EQView: View {
             treble = Double(try await sonosManager.getTreble(device: device))
             loudness = try await sonosManager.getLoudness(device: device)
             isLoading = false
-        } catch {}
+        } catch {
+            sonosDebugLog("[EQ] Load EQ settings failed: \(error)")
+        }
     }
 
     private func saveBass() async {
