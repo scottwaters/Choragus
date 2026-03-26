@@ -256,12 +256,20 @@ struct NowPlayingView: View {
 
                 // Transport controls
                 HStack(spacing: 24) {
-                    Image(systemName: "shuffle")
-                        .font(.body)
-                        .foregroundStyle(.tertiary)
-                        .frame(minWidth: 32, minHeight: 32)
-                        .contentShape(Rectangle())
-                        .tooltip("Use the queue shuffle button to shuffle tracks, or enable classic shuffle in Settings")
+                    if UserDefaults.standard.bool(forKey: UDKey.classicShuffleEnabled) {
+                        transportButton("shuffle", icon: "shuffle", size: .body,
+                                        tint: playMode.isShuffled ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
+                            toggleShuffle()
+                        }
+                        .tooltip(L10n.shuffle)
+                    } else {
+                        Image(systemName: "shuffle")
+                            .font(.body)
+                            .foregroundStyle(.tertiary)
+                            .frame(minWidth: 32, minHeight: 32)
+                            .contentShape(Rectangle())
+                            .tooltip("Use the queue shuffle button, or enable Classic Shuffle in Settings")
+                    }
 
                     transportButton("previous", icon: "backward.fill", size: .title2) {
                         performAction("previous") { try await sonosManager.previous(group: group) }

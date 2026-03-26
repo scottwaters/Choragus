@@ -86,6 +86,17 @@ struct SettingsView: View {
                                    text: LocalizedStringKey(L10n.appearanceInfo))
                     }
 
+                    // ─── PLAYBACK ───
+                    settingsSection("Playback") {
+                        Toggle("Classic Shuffle Mode", isOn: Binding(
+                            get: { UserDefaults.standard.bool(forKey: UDKey.classicShuffleEnabled) },
+                            set: { UserDefaults.standard.set($0, forKey: UDKey.classicShuffleEnabled) }
+                        ))
+                        Text("When enabled, the shuffle button on the player uses Sonos play mode shuffle. When disabled (default), use the queue shuffle button to physically reorder tracks.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+
                     // ─── NETWORK ───
                     settingsSection(L10n.network) {
                         settingsRow(L10n.updates) {

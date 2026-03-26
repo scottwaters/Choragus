@@ -154,6 +154,7 @@ public enum UDKey {
     public static let smapiEnabled = "smapiEnabled"
     public static let imageCacheMaxSizeMB = "imageCacheMaxSizeMB"
     public static let imageCacheMaxAgeDays = "imageCacheMaxAgeDays"
+    public static let classicShuffleEnabled = "classicShuffleEnabled"
 }
 
 // MARK: - App Support Directory
