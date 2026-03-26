@@ -5,10 +5,12 @@
 /// state and calls action methods.
 import SwiftUI
 import Combine
+import Observation
 import SonosKit
 
 @MainActor
-final class NowPlayingViewModel: ObservableObject {
+@Observable
+final class NowPlayingViewModel {
     let sonosManager: SonosManager
     let group: SonosGroup
 
@@ -51,11 +53,11 @@ final class NowPlayingViewModel: ObservableObject {
 
     // MARK: - Volume
 
-    @Published var volume: Double = 30
-    @Published var isMuted = false
-    @Published var speakerVolumes: [String: Double] = [:]
-    @Published var speakerMutes: [String: Bool] = [:]
-    @Published var volumeActionPending = false
+    var volume: Double = 30
+    var isMuted = false
+    var speakerVolumes: [String: Double] = [:]
+    var speakerMutes: [String: Bool] = [:]
+    var volumeActionPending = false
     var lastMasterVolume: Double = 0
     var volumePendingTimer: Task<Void, Never>?
     var volumeGraceUntil: Date = .distantPast
@@ -63,8 +65,8 @@ final class NowPlayingViewModel: ObservableObject {
 
     // MARK: - Position
 
-    @Published var smoothPosition: TimeInterval = 0
-    @Published var isDraggingSeek = false
+    var smoothPosition: TimeInterval = 0
+    var isDraggingSeek = false
     var lastKnownPosition: TimeInterval = 0
     var lastPositionTimestamp: Date = .distantPast
     var positionFrozenUntil: Date = .distantPast
@@ -73,16 +75,16 @@ final class NowPlayingViewModel: ObservableObject {
 
     // MARK: - Transport UI
 
-    @Published var actionInFlight: String?
-    @Published var crossfadeOn = false
-    @Published var isInitialized = false
+    var actionInFlight: String?
+    var crossfadeOn = false
+    var isInitialized = false
 
     // MARK: - Art
 
-    @Published var displayedArtURL: URL?
-    @Published var radioTrackArtURL: URL?
-    @Published var radioStationArtURL: URL?
-    @Published var webArtURL: URL?
+    var displayedArtURL: URL?
+    var radioTrackArtURL: URL?
+    var radioStationArtURL: URL?
+    var webArtURL: URL?
     var forceWebArt = false
     var lastArtSearchKey = ""
     var lastTrackURI = ""
