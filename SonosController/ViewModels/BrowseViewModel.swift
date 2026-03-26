@@ -159,11 +159,14 @@ final class BrowseViewModel {
     }
 
     func addToQueue(_ item: BrowseItem, playNext: Bool = false) async {
-        guard let group = group else { return }
+        guard let group = group else {
+            sonosDebugLog("[QUEUE] addToQueue: no group selected")
+            return
+        }
         do {
             try await sonosManager.addBrowseItemToQueue(item, in: group, playNext: playNext)
         } catch {
-            sonosDebugLog("[QUEUE] addToQueue failed: \(error.localizedDescription) for '\(item.title)' uri=\(item.resourceURI ?? "nil")")
+            ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
         }
     }
 

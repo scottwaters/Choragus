@@ -400,13 +400,19 @@ struct BrowseListView: View {
         if let group = group {
             if item.isPlayable {
                 Button(L10n.playNow) {
-                    Task { await vm.play(item) }
+                    let capturedItem = item
+                    let capturedVM = vm
+                    Task { await capturedVM.play(capturedItem) }
                 }
                 Button(L10n.playNext) {
-                    Task { await vm.addToQueue(item, playNext: true) }
+                    let capturedItem = item
+                    let capturedVM = vm
+                    Task { await capturedVM.addToQueue(capturedItem, playNext: true) }
                 }
                 Button(L10n.addToQueue) {
-                    Task { await vm.addToQueue(item) }
+                    let capturedItem = item
+                    let capturedVM = vm
+                    Task { await capturedVM.addToQueue(capturedItem) }
                 }
                 if !vm.playlists.isEmpty {
                     Divider()
