@@ -303,7 +303,10 @@ struct NowPlayingView: View {
                     .buttonStyle(.plain)
 
                     Slider(value: Binding(get: { vm.volume }, set: { vm.volume = $0 }), in: 0...100) { editing in
-                        if !editing { setVolume() }
+                        if !editing {
+                            vm.setVolume()
+                            vm.commitVolume()
+                        }
                     }
                     .frame(maxWidth: 300)
 
