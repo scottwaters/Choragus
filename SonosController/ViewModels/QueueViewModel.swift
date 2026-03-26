@@ -12,6 +12,7 @@ final class QueueViewModel: ObservableObject {
     @Published var totalTracks: Int = 0
     @Published var isLoading = true
     @Published var saveMessage: String?
+    @Published var playingTrack: Int? // Track currently being started (shows spinner)
 
     /// True when the speaker is playing a radio/stream, not the queue
     var isPlayingStation: Bool {
@@ -66,12 +67,14 @@ final class QueueViewModel: ObservableObject {
     }
 
     func playTrack(_ trackNumber: Int) async {
+        playingTrack = trackNumber
         do {
             try await sonosManager.playTrackFromQueue(group: group, trackNumber: trackNumber)
             currentTrack = trackNumber
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
         }
+        playingTrack = nil
     }
 
     func removeTrack(_ trackIndex: Int) async {

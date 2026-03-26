@@ -135,11 +135,16 @@ struct QueueView: View {
                                 .padding(.horizontal, 12)
                         }
 
-                        QueueItemRow(item: item, isCurrentTrack: item.id == vm.currentTrack && !vm.isPlayingStation,
-                                     isPlaying: item.id == vm.currentTrack && !vm.isPlayingStation && vm.sonosManager.groupTransportStates[vm.group.coordinatorID]?.isPlaying == true)
+                        QueueItemRow(item: item,
+                                     isCurrentTrack: item.id == vm.currentTrack && !vm.isPlayingStation,
+                                     isPlaying: item.id == vm.currentTrack && !vm.isPlayingStation && vm.sonosManager.groupTransportStates[vm.group.coordinatorID]?.isPlaying == true,
+                                     isLoading: vm.playingTrack == item.id)
                             .id(item.id)
                             .contentShape(Rectangle())
-                            .onTapGesture { Task { await vm.playTrack(item.id) } }
+                            .onTapGesture {
+                                guard vm.playingTrack == nil else { return } // Don't queue another play while one is pending
+                                Task { await vm.playTrack(item.id) }
+                            }
                             .contextMenu {
                                 Button(L10n.play) { Task { await vm.playTrack(item.id) } }
                                 Divider()
@@ -233,13 +238,18 @@ struct QueueItemRow: View {
     let item: QueueItem
     let isCurrentTrack: Bool
     var isPlaying: Bool = false
+    var isLoading: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
                 CachedAsyncImage(url: item.albumArtURI.flatMap { URL(string: $0) })
                     .frame(width: 36, height: 36)
-                if isPlaying {
+                    .opacity(isLoading ? 0.4 : 1)
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if isPlaying {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(.black.opacity(0.4))
                         .frame(width: 36, height: 36)
