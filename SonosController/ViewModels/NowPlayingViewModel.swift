@@ -58,6 +58,7 @@ final class NowPlayingViewModel {
     var speakerVolumes: [String: Double] = [:]
     var speakerMutes: [String: Bool] = [:]
     var volumeActionPending = false
+    var isDraggingVolume = false
     var lastMasterVolume: Double = 0
     var volumePendingTimer: Task<Void, Never>?
     var volumeGraceUntil: Date = .distantPast
@@ -259,6 +260,7 @@ final class NowPlayingViewModel {
     }
 
     func syncVolumeFromManager() {
+        guard !isDraggingVolume else { return } // Don't override while user is dragging
         let now = Date()
         guard now > volumeGraceUntil else { return }
 

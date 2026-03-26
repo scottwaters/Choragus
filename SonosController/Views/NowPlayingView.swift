@@ -313,6 +313,7 @@ struct NowPlayingView: View {
                         value: Binding(get: { vm.volume }, set: { vm.volume = $0 }),
                         range: 0...100
                     ) { editing in
+                        vm.isDraggingVolume = editing
                         if !editing {
                             vm.setVolume()
                             vm.commitVolume()
@@ -325,15 +326,6 @@ struct NowPlayingView: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .frame(width: 28, alignment: .trailing)
-
-                    if volumeActionPending {
-                        ProgressView()
-                            .controlSize(.mini)
-                            .frame(width: 12)
-                    } else {
-                        Color.clear
-                            .frame(width: 12)
-                    }
                 }
                 .padding(.horizontal, 24)
 

@@ -14,6 +14,7 @@ struct VolumeControlView: View {
 
     @State private var pendingSpeakers: Set<String> = []
     @State private var pendingTimers: [String: Task<Void, Never>] = [:]
+    @State private var draggingSpeaker: String?
 
     private var sortedMembers: [SonosDevice] {
         let coordID = group.coordinatorID
@@ -52,13 +53,12 @@ struct VolumeControlView: View {
                         value: Binding(
                             get: { speakerVolumes[member.id] ?? 0 },
                             set: { newVal in
-                                withAnimation(.easeInOut(duration: 0.15)) {
-                                    speakerVolumes[member.id] = newVal
-                                }
+                                speakerVolumes[member.id] = newVal
                             }
                         ),
                         range: 0...100
                     ) { editing in
+                        draggingSpeaker = editing ? member.id : nil
                         if !editing {
                             Task { await setVolume(device: member) }
                         }
@@ -68,15 +68,6 @@ struct VolumeControlView: View {
                         .font(.caption)
                         .monospacedDigit()
                         .frame(width: 24, alignment: .trailing)
-
-                    if pendingSpeakers.contains(member.id) {
-                        ProgressView()
-                            .controlSize(.mini)
-                            .frame(width: 12)
-                    } else {
-                        Color.clear
-                            .frame(width: 12)
-                    }
                 }
                 .padding(.horizontal, 24)
             }
