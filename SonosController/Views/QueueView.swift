@@ -121,8 +121,8 @@ struct QueueView: View {
                                 .padding(.horizontal, 12)
                         }
 
-                        QueueItemRow(item: item, isCurrentTrack: item.id == vm.currentTrack,
-                                     isPlaying: item.id == vm.currentTrack && vm.sonosManager.groupTransportStates[vm.group.coordinatorID]?.isPlaying == true)
+                        QueueItemRow(item: item, isCurrentTrack: item.id == vm.currentTrack && !vm.isPlayingStation,
+                                     isPlaying: item.id == vm.currentTrack && !vm.isPlayingStation && vm.sonosManager.groupTransportStates[vm.group.coordinatorID]?.isPlaying == true)
                             .id(item.id)
                             .contentShape(Rectangle())
                             .onTapGesture { Task { await vm.playTrack(item.id) } }

@@ -348,4 +348,313 @@ final class NowPlayingViewModel: ObservableObject {
         }
         return String(format: "%d:%02d", minutes, seconds)
     }
+
+    // MARK: - Position Polling & Interpolation
+
+    func startProgressTimer() {
+        stopProgressTimer()
+        progressTimer = Timer.scheduledTimer(withTimeInterval: Timing.progressTimerInterval, repeats: true) { [self] _ in
+            guard !isDraggingSeek else { return }
+            let now = Date()
+            if now > positionFrozenUntil && transportState.isPlaying {
+                let elapsed = now.timeIntervalSince(lastPositionTimestamp)
+                smoothPosition = lastKnownPosition + elapsed
+            }
+        }
+        positionPollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard !Task.isCancelled else { return }
+                await self?.pollPosition()
+            }
+        }
+    }
+
+    func stopProgressTimer() {
+        progressTimer?.invalidate()
+        progressTimer = nil
+        positionPollingTask?.cancel()
+        positionPollingTask = nil
+    }
+
+    private func pollPosition() async {
+        guard let coordinator = group.coordinator else { return }
+        do {
+            let state = try await sonosManager.getTransportState(group: group)
+            let position = try await sonosManager.getPositionInfo(group: group)
+
+            // Enrich metadata from media info for radio streams
+            var enrichedPosition = position
+            if (position.title.isEmpty || position.stationName.isEmpty), state.isActive {
+                let mediaInfo = try? await sonosManager.getMediaInfo(group: group)
+                if let rawDIDL = mediaInfo?["CurrentURIMetaData"], !rawDIDL.isEmpty,
+                   rawDIDL != "NOT_IMPLEMENTED" {
+                    let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
+                    if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
+                        let currentURI = mediaInfo?["CurrentURI"] ?? ""
+                        let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
+                                      currentURI.contains(URIPrefix.sonosApiRadio) ||
+                                      currentURI.contains(URIPrefix.rinconMP3Radio)
+                        if isRadio && !parsed.title.isEmpty {
+                            enrichedPosition.stationName = parsed.title
+                        }
+                        if enrichedPosition.title.isEmpty {
+                            enrichedPosition.title = parsed.title
+                        }
+                        var artURI = parsed.albumArtURI
+                        if artURI.hasPrefix("/") {
+                            artURI = "http://\(coordinator.ip):\(coordinator.port)\(artURI)"
+                        }
+                        if !artURI.isEmpty {
+                            enrichedPosition.albumArtURI = artURI
+                            if let favID = sonosManager.lastPlayedFavoriteID {
+                                sonosManager.cacheArtURL(artURI, forURI: "", title: enrichedPosition.stationName.isEmpty ? enrichedPosition.title : enrichedPosition.stationName, itemID: favID)
+                            }
+                        }
+                    }
+                }
+            }
+
+            sonosManager.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition)
+
+            lastKnownPosition = enrichedPosition.position
+            lastPositionTimestamp = Date()
+            smoothPosition = enrichedPosition.position
+
+            // Fetch volume/mute per member (skip graced devices)
+            for member in group.members {
+                if !sonosManager.isVolumeGraceActive(deviceID: member.id) {
+                    let vol = try await sonosManager.getVolume(device: member)
+                    sonosManager.deviceVolumes[member.id] = vol
+                }
+                if !sonosManager.isMuteGraceActive(deviceID: member.id) {
+                    let muted = try await sonosManager.getMute(device: member)
+                    sonosManager.deviceMutes[member.id] = muted
+                }
+            }
+
+            syncVolumeFromManager()
+            syncMuteFromManager()
+            crossfadeOn = (try? await sonosManager.getCrossfadeMode(group: group)) ?? false
+        } catch {}
+    }
+
+    // MARK: - Fetch Current State
+
+    func fetchCurrentState() async {
+        guard let coordinator = group.coordinator else { return }
+        do {
+            async let stateResult = sonosManager.getTransportState(group: group)
+            async let positionResult = sonosManager.getPositionInfo(group: group)
+            async let modeResult = sonosManager.getPlayMode(group: group)
+
+            let (state, position, mode) = try await (stateResult, positionResult, modeResult)
+            sonosManager.groupTransportStates[group.coordinatorID] = state
+            sonosManager.groupPlayModes[group.coordinatorID] = mode
+
+            var enrichedPosition = position
+            if state.isActive {
+                let mediaInfo = try? await sonosManager.getMediaInfo(group: group)
+                if let rawDIDL = mediaInfo?["CurrentURIMetaData"], !rawDIDL.isEmpty,
+                   rawDIDL != "NOT_IMPLEMENTED" {
+                    let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
+                    if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
+                        let currentURI = mediaInfo?["CurrentURI"] ?? ""
+                        let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
+                                      currentURI.contains(URIPrefix.sonosApiRadio) ||
+                                      currentURI.contains(URIPrefix.rinconMP3Radio)
+                        if isRadio && !parsed.title.isEmpty {
+                            enrichedPosition.stationName = parsed.title
+                        }
+                        if enrichedPosition.title.isEmpty {
+                            enrichedPosition.title = parsed.title
+                        }
+                        var artURI = parsed.albumArtURI
+                        if artURI.hasPrefix("/") {
+                            artURI = "http://\(coordinator.ip):\(coordinator.port)\(artURI)"
+                        }
+                        if !artURI.isEmpty {
+                            enrichedPosition.albumArtURI = artURI
+                            if let favID = sonosManager.lastPlayedFavoriteID {
+                                sonosManager.cacheArtURL(artURI, forURI: "", title: enrichedPosition.stationName.isEmpty ? enrichedPosition.title : enrichedPosition.stationName, itemID: favID)
+                            }
+                        }
+                    }
+                }
+            }
+
+            sonosManager.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition)
+            lastKnownPosition = enrichedPosition.position
+            lastPositionTimestamp = Date()
+            smoothPosition = enrichedPosition.position
+
+            for member in group.members {
+                if !sonosManager.isVolumeGraceActive(deviceID: member.id) {
+                    let vol = try await sonosManager.getVolume(device: member)
+                    sonosManager.deviceVolumes[member.id] = vol
+                }
+                if !sonosManager.isMuteGraceActive(deviceID: member.id) {
+                    let muted = try await sonosManager.getMute(device: member)
+                    sonosManager.deviceMutes[member.id] = muted
+                }
+            }
+
+            syncVolumeFromManager()
+            syncMuteFromManager()
+            crossfadeOn = (try? await sonosManager.getCrossfadeMode(group: group)) ?? false
+        } catch {}
+    }
+
+    // MARK: - Art Resolution
+
+    var localFileArtURL: String? {
+        guard let uri = trackMetadata.trackURI,
+              URIPrefix.isLocal(uri),
+              let coordinator = group.coordinator else { return nil }
+        let encoded = uri.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? uri
+        return "http://\(coordinator.ip):\(coordinator.port)/getaa?s=1&u=\(encoded)"
+    }
+
+    func resolveArtURL() -> URL? {
+        let isLocalFile = trackMetadata.trackURI.map(URIPrefix.isLocal) ?? false
+        let artURI = trackMetadata.albumArtURI ?? localFileArtURL
+        if forceWebArt {
+            return webArtURL ?? artURI.flatMap { URL(string: $0) }
+        } else if isLocalFile && webArtURL != nil {
+            return webArtURL
+        } else {
+            return artURI.flatMap { URL(string: $0) } ?? webArtURL
+        }
+    }
+
+    func updateDisplayedArt() {
+        let resolved = resolveArtURL()
+        if resolved != displayedArtURL {
+            if resolved == nil && displayedArtURL != nil {
+                let currentURI = trackMetadata.trackURI ?? ""
+                if currentURI == lastTrackURI { return }
+            }
+            displayedArtURL = resolved
+        }
+    }
+
+    func searchRadioTrackArt() {
+        guard !trackMetadata.stationName.isEmpty,
+              !trackMetadata.title.isEmpty,
+              trackMetadata.title != trackMetadata.stationName else {
+            if radioTrackArtURL != nil { radioTrackArtURL = nil }
+            return
+        }
+        let key = "\(trackMetadata.title)|\(trackMetadata.artist)"
+        guard key != lastRadioTrackKey else { return }
+        lastRadioTrackKey = key
+        if radioStationArtURL == nil, let stationArt = displayedArtURL ?? trackMetadata.albumArtURI.flatMap({ URL(string: $0) }) {
+            radioStationArtURL = stationArt
+        }
+        let artist = trackMetadata.artist.hasPrefix("RINCON_") ? "" : trackMetadata.artist
+        let cleanTitle = trackMetadata.title
+            .replacingOccurrences(of: "\\s*\\([^)]*\\)\\s*$", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]\\s*$", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        let searchTitle = cleanTitle.isEmpty ? trackMetadata.title : cleanTitle
+        Task {
+            if let artURL = await AlbumArtSearchService.shared.searchRadioTrackArt(
+                artist: artist, title: searchTitle
+            ) {
+                radioTrackArtURL = URL(string: artURL)
+            } else {
+                radioTrackArtURL = nil
+            }
+        }
+    }
+
+    func searchWebArtIfNeeded() {
+        let currentURI = trackMetadata.trackURI ?? trackMetadata.title
+        if currentURI != lastTrackURI && !currentURI.isEmpty {
+            lastTrackURI = currentURI
+            if !forceWebArt {
+                webArtURL = nil
+                lastArtSearchKey = ""
+            }
+            displayedArtURL = trackMetadata.albumArtURI.flatMap { URL(string: $0) }
+            if trackMetadata.stationName.isEmpty {
+                radioTrackArtURL = nil
+                radioStationArtURL = nil
+                lastRadioTrackKey = ""
+            }
+            loadPersistedArtOverride()
+        }
+
+        let hasArt = trackMetadata.albumArtURI != nil && !(trackMetadata.albumArtURI?.isEmpty ?? true)
+        let isLocalFile = trackMetadata.trackURI.map(URIPrefix.isLocal) ?? false
+        if hasArt && !isLocalFile {
+            if !forceWebArt { if webArtURL != nil { webArtURL = nil } }
+            return
+        }
+        forceWebArt = false
+
+        let searchTerm: String
+        if isLocalFile && !trackMetadata.album.isEmpty {
+            searchTerm = trackMetadata.album
+        } else if !trackMetadata.stationName.isEmpty {
+            searchTerm = trackMetadata.stationName
+        } else if !trackMetadata.album.isEmpty {
+            searchTerm = trackMetadata.album
+        } else if !trackMetadata.title.isEmpty {
+            searchTerm = trackMetadata.title
+        } else {
+            searchTerm = ""
+        }
+        let artist = displayArtist
+        let key = "\(searchTerm)|\(artist)"
+        guard !searchTerm.isEmpty else { return }
+        guard key != lastArtSearchKey else { return }
+        lastArtSearchKey = key
+        webArtURL = nil
+        sonosDebugLog("[ART-SEARCH] Searching iTunes for artist='\(artist)' album='\(searchTerm)'")
+        Task {
+            if let artURL = await AlbumArtSearchService.shared.searchArtwork(
+                artist: artist, album: searchTerm
+            ) {
+                sonosDebugLog("[ART-SEARCH] Found: \(artURL.prefix(80))")
+                webArtURL = URL(string: artURL)
+            } else {
+                sonosDebugLog("[ART-SEARCH] No result from iTunes")
+                webArtURL = nil
+            }
+            updateDisplayedArt()
+        }
+    }
+
+    func forceITunesArtSearch() {
+        let artist = displayArtist
+        let searchTerm = !trackMetadata.title.isEmpty ? trackMetadata.title :
+                         !trackMetadata.stationName.isEmpty ? trackMetadata.stationName : ""
+        guard !searchTerm.isEmpty else { return }
+        lastArtSearchKey = ""
+        forceWebArt = false
+        Task {
+            if let artURL = await AlbumArtSearchService.shared.searchArtwork(
+                artist: artist, album: searchTerm
+            ) {
+                webArtURL = URL(string: artURL)
+                forceWebArt = true
+                let key = "artOverride:\(searchTerm.lowercased())"
+                UserDefaults.standard.set(artURL, forKey: key)
+                updateDisplayedArt()
+            }
+        }
+    }
+
+    func loadPersistedArtOverride() {
+        let searchTerm = !trackMetadata.title.isEmpty ? trackMetadata.title :
+                         !trackMetadata.stationName.isEmpty ? trackMetadata.stationName : ""
+        guard !searchTerm.isEmpty else { return }
+        let key = "artOverride:\(searchTerm.lowercased())"
+        if let saved = UserDefaults.standard.string(forKey: key) {
+            webArtURL = URL(string: saved)
+            forceWebArt = true
+            updateDisplayedArt()
+        }
+    }
 }

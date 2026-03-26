@@ -13,6 +13,14 @@ final class QueueViewModel: ObservableObject {
     @Published var isLoading = true
     @Published var saveMessage: String?
 
+    /// True when the speaker is playing a radio/stream, not the queue
+    var isPlayingStation: Bool {
+        let meta = sonosManager.groupTrackMetadata[group.coordinatorID]
+        if let stationName = meta?.stationName, !stationName.isEmpty { return true }
+        if let uri = meta?.trackURI, URIPrefix.isRadio(uri) { return true }
+        return false
+    }
+
     init(sonosManager: SonosManager, group: SonosGroup) {
         self.sonosManager = sonosManager
         self.group = group
