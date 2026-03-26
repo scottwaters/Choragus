@@ -57,10 +57,8 @@ final class NowPlayingViewModel {
     var isMuted = false
     var speakerVolumes: [String: Double] = [:]
     var speakerMutes: [String: Bool] = [:]
-    var volumeActionPending = false
     var isDraggingVolume = false
     var lastMasterVolume: Double = 0
-    var volumePendingTimer: Task<Void, Never>?
     var volumeGraceUntil: Date = .distantPast
     var muteGraceUntil: Date = .distantPast
 
@@ -185,7 +183,6 @@ final class NowPlayingViewModel {
             sonosManager.deviceVolumes[member.id] = Int(newVol)
         }
         lastMasterVolume = volume
-        showVolumePending()
     }
 
     func commitVolume() {
@@ -194,22 +191,7 @@ final class NowPlayingViewModel {
                 let vol = Int(speakerVolumes[member.id] ?? 0)
                 try? await sonosManager.setVolume(device: member, volume: vol)
             }
-            clearVolumePending()
         }
-    }
-
-    private func showVolumePending() {
-        volumePendingTimer?.cancel()
-        volumePendingTimer = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled else { return }
-            volumeActionPending = true
-        }
-    }
-
-    private func clearVolumePending() {
-        volumePendingTimer?.cancel()
-        volumeActionPending = false
     }
 
     // MARK: - Copy Track Info

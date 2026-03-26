@@ -34,7 +34,6 @@ struct NowPlayingView: View {
     private var isMuted: Bool { vm.isMuted }
     private var speakerVolumes: [String: Double] { vm.speakerVolumes }
     private var speakerMutes: [String: Bool] { vm.speakerMutes }
-    private var volumeActionPending: Bool { vm.volumeActionPending }
     private var smoothPosition: TimeInterval { vm.smoothPosition }
     private var isDraggingSeek: Bool { vm.isDraggingSeek }
     private var crossfadeOn: Bool { vm.crossfadeOn }

@@ -12,8 +12,6 @@ struct VolumeControlView: View {
     @Binding var speakerVolumes: [String: Double]
     @Binding var speakerMutes: [String: Bool]
 
-    @State private var pendingSpeakers: Set<String> = []
-    @State private var pendingTimers: [String: Task<Void, Never>] = [:]
     @State private var draggingSpeaker: String?
 
     private var sortedMembers: [SonosDevice] {
@@ -80,9 +78,7 @@ struct VolumeControlView: View {
         let vol = Int(speakerVolumes[device.id] ?? 0)
         sonosManager.setVolumeGrace(deviceID: device.id, duration: 10)
         sonosManager.deviceVolumes[device.id] = vol
-        showPending(device.id)
         try? await sonosManager.setVolume(device: device, volume: vol)
-        clearPending(device.id)
     }
 
     private func toggleMute(device: SonosDevice) async {
@@ -90,25 +86,6 @@ struct VolumeControlView: View {
         speakerMutes[device.id] = !currentMute
         sonosManager.setMuteGrace(deviceID: device.id, duration: 10)
         sonosManager.deviceMutes[device.id] = !currentMute
-        showPending(device.id)
         try? await sonosManager.setMute(device: device, muted: !currentMute)
-        clearPending(device.id)
-    }
-
-    /// Show spinner only if the operation takes longer than 300ms
-    private func showPending(_ id: String) {
-        pendingTimers[id]?.cancel()
-        pendingTimers[id] = Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            if !Task.isCancelled {
-                pendingSpeakers.insert(id)
-            }
-        }
-    }
-
-    private func clearPending(_ id: String) {
-        pendingTimers[id]?.cancel()
-        pendingTimers[id] = nil
-        pendingSpeakers.remove(id)
     }
 }
