@@ -8,11 +8,16 @@ import SonosKit
 
 struct ContentView: View {
     @EnvironmentObject var sonosManager: SonosManager
+    @EnvironmentObject var presetManager: PresetManager
+    @EnvironmentObject var playHistoryManager: PlayHistoryManager
+    @EnvironmentObject var smapiManager: SMAPIAuthManager
     @State private var selectedGroupID: String?
     @State private var showQueue = false
     @State private var showBrowse = false
     @State private var showAlarms = false
     @State private var showSettings = false
+    @State private var showPresetManager = false
+    @State private var sidebarVisibility: NavigationSplitViewVisibility = .automatic
 
     private var selectedGroup: SonosGroup? {
         guard let id = selectedGroupID else { return nil }
@@ -74,7 +79,7 @@ struct ContentView: View {
                 .background(.blue.opacity(0.05))
             }
 
-            NavigationSplitView {
+            NavigationSplitView(columnVisibility: $sidebarVisibility) {
                 RoomListView(selectedGroupID: $selectedGroupID)
                     .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 280)
             } detail: {
@@ -123,6 +128,21 @@ struct ContentView: View {
                 }
             }
             .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
+            .onAppear {
+                restoreLastSelectedGroup()
+                if selectedGroupID == nil {
+                    sidebarVisibility = .all
+                }
+            }
+            .onChange(of: selectedGroupID) {
+                UserDefaults.standard.set(selectedGroupID, forKey: "lastSelectedGroupID")
+            }
+            .onChange(of: sonosManager.groups) {
+                // When groups load/change, try to restore selection if nothing selected
+                if selectedGroupID == nil || selectedGroup == nil {
+                    restoreLastSelectedGroup()
+                }
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
@@ -154,16 +174,40 @@ struct ContentView: View {
                     }
 
                     Menu {
+                        Button("Pause All") {
+                            Task { await sonosManager.pauseAll() }
+                        }
+                        Button("Resume All") {
+                            Task { await sonosManager.resumeAll() }
+                        }
+                        Divider()
                         Button(L10n.muteAllSpeakers) {
                             Task { await muteAll(muted: true) }
                         }
                         Button(L10n.unmuteAllSpeakers) {
                             Task { await muteAll(muted: false) }
                         }
+                        Section(L10n.groupPresets) {
+                            Button(L10n.managePresets) {
+                                showPresetManager = true
+                            }
+                            ForEach(presetManager.presets) { preset in
+                                Button(preset.name) {
+                                    Task {
+                                        await presetManager.applyPreset(preset, using: sonosManager)
+                                    }
+                                }
+                            }
+                        }
                     } label: {
                         Image(systemName: "speaker.wave.3")
                     }
                     .help(L10n.muteOrUnmuteAll)
+                    .sheet(isPresented: $showPresetManager) {
+                        PresetManagerView()
+                            .environmentObject(sonosManager)
+                            .environmentObject(presetManager)
+                    }
 
                     Button {
                         sonosManager.rescan()
@@ -181,10 +225,36 @@ struct ContentView: View {
                     .sheet(isPresented: $showSettings) {
                         SettingsView()
                             .environmentObject(sonosManager)
+                            .environmentObject(playHistoryManager)
+                            .environmentObject(smapiManager)
                     }
                 }
             }
         }
+    }
+
+    /// Restores last selected group, falling back to coordinator if the group no longer exists
+    private func restoreLastSelectedGroup() {
+        guard !sonosManager.groups.isEmpty else { return }
+        guard let lastID = UserDefaults.standard.string(forKey: "lastSelectedGroupID") else { return }
+
+        // Exact match — group still exists
+        if sonosManager.groups.contains(where: { $0.id == lastID }) {
+            selectedGroupID = lastID
+            return
+        }
+
+        // Group gone — find a group containing a device that was the coordinator
+        // The lastID is a zone group ID; try to find the coordinator device in another group
+        if let group = sonosManager.groups.first(where: { group in
+            group.members.contains { $0.id == lastID }
+        }) {
+            selectedGroupID = group.id
+            return
+        }
+
+        // Last resort — select first group
+        selectedGroupID = sonosManager.groups.first?.id
     }
 
     private func muteAll(muted: Bool) async {

@@ -20,6 +20,8 @@ SonosController/
 │   ├── Info.plist
 │   ├── SonosController.entitlements
 │   ├── Assets.xcassets/
+│   ├── MenuBarController.swift      # Menu bar icon and dropdown controls
+│   ├── WindowManager.swift          # AppKit-based window management
 │   └── Views/
 │       ├── ContentView.swift
 │       ├── RoomListView.swift
@@ -29,24 +31,36 @@ SonosController/
 │       ├── GroupEditorView.swift
 │       ├── VolumeControlView.swift
 │       ├── EQView.swift
+│       ├── HomeTheaterEQView.swift  # Home theater EQ/Sub/Surrounds window
 │       ├── AlarmsView.swift
 │       ├── SleepTimerView.swift
 │       ├── SettingsView.swift
-│       └── CachedAsyncImage.swift
+│       ├── RecentlyPlayedView.swift # Recently played stations/tracks
+│       ├── CachedAsyncImage.swift
+│       ├── MarqueeText.swift        # Auto-scrolling text for long names
+│       └── HoverTooltip.swift       # Custom tooltip replacing .help()
 │
 └── Packages/SonosKit/               # Local Swift Package
     ├── Package.swift
     ├── Sources/SonosKit/
     │   ├── SonosManager.swift
+    │   ├── SonosConstants.swift     # URI prefixes, service IDs, colors, timing, paths
     │   ├── Discovery/
     │   │   └── SSDPDiscovery.swift
     │   ├── Models/
     │   │   ├── SonosDevice.swift
     │   │   ├── SonosGroup.swift
+    │   │   ├── HomeTheaterZone.swift # Home theater topology (soundbar/sub/surrounds)
+    │   │   ├── GroupPreset.swift     # Saved group preset with per-speaker volumes
+    │   │   ├── PlayHistoryEntry.swift # Play history entry with metadata
     │   │   ├── TransportState.swift
     │   │   ├── TrackMetadata.swift
     │   │   ├── PlayMode.swift
     │   │   └── BrowseItem.swift
+    │   ├── Managers/
+    │   │   ├── PresetManager.swift          # Save/load/apply group presets
+    │   │   ├── PlayHistoryManager.swift     # Track play history, stats, CSV export
+    │   │   └── PlaylistServiceScanner.swift # Background playlist service badge scanning
     │   ├── UPnP/
     │   │   ├── SOAPClient.swift
     │   │   ├── XMLResponseParser.swift
@@ -73,7 +87,15 @@ The SwiftUI app layer. Contains views and the app entry point. All business logi
 
 ### SonosControllerApp.swift
 
-Entry point. Creates the `SonosManager` as a `@StateObject` and injects it into the view hierarchy via `@EnvironmentObject`. Starts speaker discovery on appear.
+Entry point. Creates the `SonosManager` as a `@StateObject` and injects it into the view hierarchy via `@EnvironmentObject`. Starts speaker discovery on appear. Initializes `MenuBarController` and `WindowManager` for menu bar mode and AppKit-based window management.
+
+### MenuBarController.swift
+
+Manages the optional menu bar icon and its dropdown. Creates an `NSStatusItem` with a speaker icon. The dropdown provides quick playback controls (play/pause, next, previous), volume adjustment, and current track info without needing to bring the main window to the front.
+
+### WindowManager.swift
+
+AppKit-based window management replacing SwiftUI `Window` scenes to avoid menu bar flicker issues. Handles creation and lifecycle of auxiliary windows (play history stats, home theater EQ). Windows are created as `NSWindow` instances hosting SwiftUI views.
 
 ### Views
 
@@ -86,23 +108,24 @@ Main layout using `NavigationSplitView` (sidebar) + `HSplitView` (detail area). 
 Also renders:
 - Stale data warning banner (orange) when a cached device is unreachable
 - Cache status banner (blue) when using cached data on startup
-- Toolbar buttons: Browse, Queue, Alarms, Refresh, Settings
+- Toolbar buttons: Browse, Queue, Alarms, Group Presets, Play History, Refresh, Settings
 
 #### RoomListView.swift
-Sidebar list of Sonos zones/groups. Each row shows the group name, speaker icon (single vs. multi), and speaker count. Binds selection to `selectedGroupID`.
+Sidebar list of Sonos zones/groups. Each row shows the group name, speaker icon (single vs. multi), and speaker count. Binds selection to `selectedGroupID`. Animated sound wave indicators pulse on playing rooms. Context menu on each room provides play/pause, mute, group editor, ungroup, and home theater EQ options. Restores last selected zone on startup.
 
 #### NowPlayingView.swift
 The main playback control view. Contains:
 - **Album art** — uses `CachedAsyncImage` with disk/memory caching
-- **Track info** — title, artist, album
+- **Track info** — title, artist, album with `MarqueeText` for long names
+- **Service tag** — shows source (Apple Music, Music Library, etc.) below album name
 - **Progress bar** — linear progress with position/duration timestamps
-- **Transport controls** — shuffle, previous, play/pause, next, repeat. Each button uses `transportButton()` which shows a spinner overlay during network round-trips and dims the icon.
+- **Transport controls** — shuffle, previous, play/pause, next, repeat, crossfade. Each button uses `transportButton()` which shows a spinner overlay during network round-trips and dims the icon. Custom `HoverTooltip` on each control.
 - **Volume slider** — master volume for the group coordinator
 - **Per-speaker volume** — shown when the group has multiple visible members
 - **Action buttons** — Group, Sleep, EQ
 
 **Optimistic UI system:**
-- Play/pause, shuffle, repeat, mute all flip their state immediately on tap
+- Play/pause, shuffle, repeat, crossfade, mute all flip their state immediately on tap
 - A grace period (`transportGraceUntil`, `volumeGraceUntil`, etc.) prevents the 2-second polling cycle from overwriting the optimistic state with stale data from the speaker
 - Grace lasts 5 seconds or until the speaker confirms the new state, whichever comes first
 - Polling is skipped entirely while an action is in flight
@@ -111,15 +134,16 @@ The main playback control view. Contains:
 Displays the play queue fetched via `ContentDirectoryService.browseQueue()`. Shows track title, artist, duration, and cached album art. Current track is highlighted. Supports:
 - Tap to play a track
 - Right-click to remove
-- Drag to reorder (via `onMove`)
+- Drag-drop reordering with visual drop position indicator
+- Accept drops from browse panel to insert tracks at any position
 - Clear queue button
 - Refresh on group change
 
 #### BrowseView.swift
 Hierarchical content browser using `NavigationStack` with a path-based `navigationDestination`. Structure:
 - **BrowseSectionsView** — top level showing dynamically discovered sections (Favorites, Playlists, Artists, Albums, etc.)
-- **BrowseListView** — generic list view for any browse level. Handles containers (navigate deeper via `NavigationLink`) and leaf items (play on tap via `onTapGesture`).
-- **BrowseItemRow** — row component with cached album art, title, subtitle, and chevron for containers.
+- **BrowseListView** — generic list view for any browse level. Handles containers (navigate deeper via `NavigationLink`) and leaf items (play on tap via `onTapGesture`). Tracks are draggable to the queue panel.
+- **BrowseItemRow** — row component with cached album art, title, subtitle, and chevron for containers. Playlists show per-track service badges from the playlist services cache.
 
 Items marked `requiresService` (no playable URI, like artist shortcuts from SMAPI) are shown dimmed with "Requires Sonos app" label and are not tappable.
 
@@ -132,7 +156,15 @@ Sheet for adding/removing speakers from a group. Shows all visible (non-bonded) 
 Per-speaker volume sliders shown below the main volume when a group has multiple members. Each speaker gets its own slider and mute button.
 
 #### EQView.swift
-Popover with bass (-10 to +10), treble (-10 to +10) sliders and loudness toggle for a single speaker.
+Popover with bass (-10 to +10), treble (-10 to +10) sliders and loudness toggle for a single speaker. When the selected zone is a group, shows a speaker picker to choose which speaker's EQ to adjust.
+
+#### HomeTheaterEQView.swift
+Dedicated window for home theater (soundbar + sub + surround) configurations. Auto-detected from HTSatChanMapSet in zone topology. Three tabs:
+- **EQ** — bass, treble, loudness for the soundbar
+- **Sub** — sub on/off, sub level, sub crossover frequency
+- **Surrounds** — surround on/off, surround level, music playback mode (Full/Ambient)
+
+Also includes night mode toggle and dialog enhancement toggle. Accessible from sidebar context menu on home theater zones.
 
 #### AlarmsView.swift
 Popover listing all Sonos alarms with time, recurrence, room name. Toggle switches enable/disable. Right-click to delete.
@@ -140,13 +172,28 @@ Popover listing all Sonos alarms with time, recurrence, room name. Toggle switch
 #### SleepTimerView.swift
 Sheet with preset duration buttons (15m–2h). Shows remaining time when active. Cancel button.
 
+#### RecentlyPlayedView.swift
+Quick-access list of recently played stations and tracks, displayed in the browse panel. Shows album art, track name, artist, and how long ago it was played. Tapping an entry starts playback of that item.
+
 #### SettingsView.swift
-Sheet with two sections:
-- **Startup Mode** — segmented picker for Quick Start (cached) vs. Classic (live discovery). Each mode has a detailed explanation.
+Sheet with sections for:
+- **Startup Mode** — segmented picker for Quick Start (cached) vs. Classic (live discovery)
+- **Communications Mode** — Event-Driven vs. Legacy Polling
+- **Appearance** — theme, accent color, zone icon colors
+- **Play History** — enable/disable tracking, clear history with confirmation dialog
+- **Menu Bar** — enable/disable menu bar mode
 - **Cache Status** — shows live/cached indicator, cache age, and buttons to clear speaker cache and artwork cache separately. Artwork cache shows current disk usage.
+
+Consistent padding and layout with confirmation dialogs for destructive actions.
 
 #### CachedAsyncImage.swift
 Drop-in replacement for SwiftUI's `AsyncImage` that checks `ImageCache.shared` before fetching. On cache miss, downloads the image, stores it in both memory and disk caches, then displays it. Shows a placeholder (rounded rectangle with music note icon) while loading or on failure.
+
+#### MarqueeText.swift
+Auto-scrolling text view for long track and artist names that don't fit in the available width. Text scrolls horizontally with a pause at start and end positions. Falls back to static text when the content fits.
+
+#### HoverTooltip.swift
+Custom tooltip view modifier that displays a tooltip on mouse hover. Replaces SwiftUI's `.help()` modifier which is unreliable on some controls. Shows a styled tooltip with configurable text after a short hover delay.
 
 ---
 
@@ -199,6 +246,16 @@ Runs a receive loop on a background `DispatchQueue`. Filters responses for "Zone
 
 `rescan()` re-sends the M-SEARCH without recreating the socket. Called every 30 seconds by a timer in SonosManager.
 
+### SonosConstants.swift
+
+Centralized constants file containing:
+- **URIPrefix** — URI prefix patterns for service identification (x-rincon-cpcontainer, x-sonosapi-stream, etc.)
+- **ServiceID** — numeric service IDs for streaming services (Spotify = 9, Apple Music = 204, TuneIn = 254, etc.)
+- **RINCONService** — SA_RINCON descriptor mappings for service identification
+- **ServiceColor** — SwiftUI color definitions for each service badge
+- **Timing** — grace period durations, polling intervals, debounce delays
+- **AppPaths** — centralized Application Support directory paths replacing duplicated init code
+
 ### Models
 
 #### SonosDevice.swift
@@ -206,6 +263,15 @@ Runs a receive loop on a background `DispatchQueue`. Filters responses for "Zone
 
 #### SonosGroup.swift
 `Identifiable`, `Hashable`. Represents a zone group. Fields: `id`, `coordinatorID`, `members: [SonosDevice]`. Computed `coordinator` (first member matching coordinatorID) and `name` (single room name or "Room1 + Room2" for groups).
+
+#### HomeTheaterZone.swift
+Represents a home theater configuration parsed from `HTSatChanMapSet` in the zone topology XML. Fields: `soundbarID`, `subID`, `surroundIDs`, `channelMap`. Used to detect 5.1/sub setups and enable the home theater EQ window. Computed `hasSubwoofer` and `hasSurrounds`.
+
+#### GroupPreset.swift
+`Codable`. Represents a saved speaker group configuration. Fields: `id`, `name`, `coordinatorID`, `memberIDs: [String]`, `volumes: [String: Int]` (per-speaker volume map). Stored as JSON array via `PresetManager`.
+
+#### PlayHistoryEntry.swift
+`Codable`. Represents a single play history record. Fields: `id`, `timestamp`, `title`, `artist`, `album`, `albumArtURI`, `source` (service name), `roomName`, `duration`. Used by `PlayHistoryManager` for tracking and stats.
 
 #### TransportState.swift
 Enum: `playing`, `paused`, `stopped`, `transitioning`, `noMedia`. Raw values match Sonos SOAP responses. Computed `isPlaying`.
@@ -222,6 +288,17 @@ Represents a browsable content item. Fields: `id` (objectID), `title`, `artist`,
 `BrowseItemClass` enum classifies UPnP items: `container`, `musicTrack`, `musicAlbum`, `musicArtist`, `genre`, `playlist`, `favorite`, `radioStation`, `radioShow`, `unknown`. Each has `isContainer` and `systemImage` properties. `from(upnpClass:)` maps UPnP class strings to enum cases.
 
 `BrowseSection` is a top-level browse category with `id`, `title`, `objectID`, and `icon`.
+
+### Managers
+
+#### PresetManager.swift
+Manages saved group presets. Persists presets to `~/Library/Application Support/SonosController/group_presets.json`. Methods: `save(preset:)`, `load()`, `delete(id:)`, `apply(preset:manager:)`. Applying a preset ungroups all speakers, forms the saved group, and sets per-speaker volumes.
+
+#### PlayHistoryManager.swift
+Tracks play history with automatic deduplication (same track within a time window is not re-recorded). Persists to `~/Library/Application Support/SonosController/play_history.json`. Provides stats (top artists, top tracks, top sources, total play count) and CSV export. Filterable by room and service. Toggle on/off via Settings. Supports right-click copy of track details.
+
+#### PlaylistServiceScanner.swift
+Background scanner that determines which streaming service each track in a Sonos playlist belongs to. Browses playlist tracks via ContentDirectory, extracts service from URI pattern and SID metadata. Results cached to `~/Library/Application Support/SonosController/playlist_services_cache.json`. Scans one playlist at a time to limit network load. Results populate service badges in the browse list.
 
 ### UPnP
 

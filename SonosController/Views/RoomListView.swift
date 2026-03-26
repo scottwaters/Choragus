@@ -8,6 +8,7 @@ import SonosKit
 struct RoomListView: View {
     @EnvironmentObject var sonosManager: SonosManager
     @Binding var selectedGroupID: String?
+    @State private var showGroupEditorFor: SonosGroup?
 
     private let iconColumnWidth: CGFloat = 34
 
@@ -34,6 +35,7 @@ struct RoomListView: View {
                         }
                         .buttonStyle(.plain)
                         .id(group.id)
+                        .contextMenu { roomContextMenu(group: group, isPlaying: isPlaying) }
                     }
                 }
                 .padding(.vertical, 4)
@@ -46,6 +48,63 @@ struct RoomListView: View {
             }
             .onChange(of: selectedGroupID) {
                 scrollToSelection(proxy: proxy)
+            }
+            .sheet(item: $showGroupEditorFor) { group in
+                GroupEditorView(initialGroup: group)
+                    .environmentObject(sonosManager)
+            }
+        }
+    }
+
+    // MARK: - Context Menu
+
+    @ViewBuilder
+    private func roomContextMenu(group: SonosGroup, isPlaying: Bool) -> some View {
+        // Play / Pause
+        if isPlaying {
+            Button("Pause") {
+                Task { try? await sonosManager.pause(group: group) }
+            }
+        } else {
+            Button("Play") {
+                Task { try? await sonosManager.play(group: group) }
+            }
+        }
+
+        Divider()
+
+        // Mute / Unmute
+        let allMuted = group.members.allSatisfy { sonosManager.deviceMutes[$0.id] == true }
+        Button(allMuted ? "Unmute" : "Mute") {
+            Task {
+                for member in group.members {
+                    try? await sonosManager.setMute(device: member, muted: !allMuted)
+                }
+            }
+        }
+
+        Divider()
+
+        // Grouping
+        Button("Edit Group...") {
+            showGroupEditorFor = group
+        }
+
+        if group.members.count > 1 {
+            Button("Ungroup All") {
+                Task {
+                    for member in group.members where member.id != group.coordinatorID {
+                        try? await sonosManager.ungroupDevice(member)
+                    }
+                }
+            }
+        }
+
+        // Home Theater EQ (only for HT zones)
+        if sonosManager.htSatChannelMaps[group.coordinatorID] != nil {
+            Divider()
+            Button("Home Theater EQ...") {
+                WindowManager.shared.openHomeTheaterEQ()
             }
         }
     }
@@ -116,9 +175,7 @@ struct RoomListView: View {
     private func speakerWithWaves(playing: Bool, grouped: Bool) -> some View {
         HStack(spacing: 2) {
             if playing {
-                SoundWaves()
-                    .stroke(style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-                    .foregroundStyle(.secondary.opacity(0.5))
+                AnimatedSoundWaves()
                     .frame(width: 8, height: 14)
                     .scaleEffect(x: -1, y: 1)
             } else {
@@ -159,6 +216,22 @@ struct RoomListView: View {
                 }
             }
         }
+    }
+}
+
+/// Animated sound waves that gently pulse opacity
+private struct AnimatedSoundWaves: View {
+    @State private var pulse = false
+
+    var body: some View {
+        SoundWaves()
+            .stroke(style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+            .foregroundStyle(.primary.opacity(pulse ? 0.8 : 0.35))
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            }
     }
 }
 

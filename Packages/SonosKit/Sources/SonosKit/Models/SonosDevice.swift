@@ -24,6 +24,6 @@ public struct SonosDevice: Identifiable, Hashable {
     }
 
     public var baseURL: URL {
-        URL(string: "http://\(ip):\(port)")!
+        URL(string: "http://\(ip):\(port)") ?? URL(string: "http://127.0.0.1:1400")!
     }
 }

@@ -18,7 +18,25 @@ Built interactively with [Claude Code](https://claude.ai/) and tested against a 
 
 Testing has been done with a large local music library and a limited set of streaming services (Apple Music, Spotify, TuneIn, Calm Radio). Your experience may vary depending on which services you use — if something doesn't work as expected, please open an issue.
 
-## What's New in v2
+## What's New in v2.1
+
+- **Group presets** — save your favorite speaker groups with per-speaker volumes, then recall them with one click from the toolbar menu
+- **Play history** — see what you've been listening to with a dedicated stats window showing top artists, tracks, and sources. Filter by room and service, export to CSV.
+- **Home theater EQ** — dedicated window for soundbar setups with EQ, Sub, and Surrounds tabs. Night mode, dialog enhancement, music playback mode (Full/Ambient).
+- **Menu bar mode** — optional menu bar icon with quick playback controls so you can control music without switching to the app
+- **Playlist service tags** — playlists show colored service badges for each track's source (Apple Music, Spotify, etc.), scanned in the background and cached to disk
+- **Recently played** — quick-access list of recently played stations and tracks right in the browse panel
+- **Crossfade toggle** — crossfade control in the transport bar, highlights with your accent color when active
+- **Pause all / Resume all** — one-click pause or resume every active zone from the speaker toolbar menu
+- **Drag browse to queue** — drag tracks from the browse panel and drop them at any position in the queue
+- **Queue drag reorder** — drag-drop reordering within the queue with a visual drop position indicator
+- **Marquee text** — long track and artist names auto-scroll in Now Playing with a pause at start and end
+- **Custom hover tooltips** — reliable tooltips on transport controls, replacing the broken SwiftUI .help() modifier
+- **Sidebar context menu** — right-click any room for play/pause, mute, group editor, ungroup, or home theater EQ
+- **Smart case formatting** — preserves Roman numerals (III, IV), capitalizes after brackets in stream metadata
+- **Centralized constants** — SonosConstants.swift for URI prefixes, service IDs, colors, timing, and app paths
+
+### Also new in v2.0
 
 - **13 languages** — full localization in English, German, French, Dutch, Spanish, Italian, Swedish, Norwegian, Danish, Japanese, Portuguese, Polish, and Chinese (Simplified)
 - **Dark mode** — System, Light, or Dark theme selection
@@ -39,7 +57,9 @@ Testing has been done with a large local music library and a limited set of stre
 - Play, pause, stop, skip forward/back
 - Seek within tracks
 - Shuffle and repeat (off / all / one)
+- Crossfade toggle — highlights with accent color when active
 - Keyboard shortcut: spacebar for play/pause
+- Pause all / Resume all — pause or resume every active zone from the toolbar menu
 - Optimistic UI — controls respond instantly with a grace period system that prevents polling from reverting your action while the speaker processes it
 - Playback transition feedback — when starting a new stream, cached artwork and track info display immediately with a loading spinner until the speaker confirms playback
 
@@ -48,7 +68,9 @@ Testing has been done with a large local music library and a limited set of stre
 - Album art fallback: embedded file art → folder art → iTunes Search API → generic placeholder
 - Right-click album art to refresh from iTunes or clear
 - Copy track info to clipboard — source, artist, album, track on separate labelled lines (localized)
+- Marquee text — long track and artist names auto-scroll with a pause at start and end
 - Track title, artist, album — clears when nothing is playing
+- Service tag below album name shows source (Apple Music, Music Library, Spotify, etc.)
 - Radio station name displayed above current track info for streaming sources
 - TV and Line-In source detection with room name display
 - Streaming service identification (shows "Playing from Apple Music" etc.)
@@ -63,24 +85,39 @@ Testing has been done with a large local music library and a limited set of stre
 - Animated slider transitions when volumes change
 - Delayed spinner indicators — only appear if a volume change takes more than 300ms
 - Bass, treble, and loudness controls (EQ panel per speaker)
+- EQ zone selector — grouped zones show a speaker picker in the EQ panel
 - Mute/Unmute all speakers globally (toolbar menu)
+
+### Home Theater EQ
+- Dedicated window for soundbar/surround setups (auto-detected from zone topology)
+- **EQ tab** — bass, treble, loudness for the soundbar
+- **Sub tab** — sub on/off, sub level, sub crossover
+- **Surrounds tab** — surround on/off, surround level, music playback mode (Full/Ambient)
+- Night mode and dialog enhancement toggles
+- Accessible from sidebar context menu on home theater zones
 
 ### Speaker Management
 - Automatic SSDP discovery of all Sonos speakers on your network
 - Zone grouping — add or remove speakers from groups with optimistic UI
 - Group All / Ungroup All buttons for quick whole-house control
+- **Group presets** — save speaker groups with per-speaker volumes, apply with one click from the toolbar menu
 - Speakers already in another group are labelled in the group editor
 - Coordinator speaker always listed first, others alphabetically
 - Bonded speakers (soundbar + sub + surrounds) shown as a single room
+- Home theater detection — parses HTSatChanMapSet from topology for 5.1/sub identification
 - Invisible/satellite speakers filtered from the UI
 - Custom sidebar with configurable zone icon colors (playing/inactive)
-- Sound wave indicators show which rooms are currently playing
+- Sidebar context menu — right-click rooms for play/pause, mute, group editor, ungroup, home theater EQ
+- Sound wave indicators show which rooms are currently playing (animated pulse)
 - Accent-colored selection highlight in the room list
+- Restore last zone — app remembers your last selected room across restarts
 
 ### Browse & Library
 - **Sonos Favorites** — play any saved favorite including radio stations, Spotify playlists, Apple Music content
+- **Recently played** — quick-access list of recently played stations and tracks in the browse panel
 - **Service identification** — each favorite shows a colored badge identifying its source (Apple Music, Spotify, TuneIn, Calm Radio, Music Library, etc.)
 - **Service filter** — filter favorites and playlists by source service (All / Apple Music / Radio / Spotify / etc.)
+- **Playlist service tags** — playlists show per-track service badges, scanned in the background and cached to disk
 - **Music Library** — browse your local network music shares (NAS/server) by folder, all the way down to individual tracks
 - **Dynamic album art** — library folders load art from embedded files, folder images, or iTunes Search API
 - **Artists, Albums, Genres, Composers, Tracks** — full indexed library browsing with drill-down navigation
@@ -88,6 +125,7 @@ Testing has been done with a large local music library and a limited set of stre
 - **Search** across artists, albums, and tracks
 - All browse sections dynamically discovered from your Sonos system (nothing hardcoded)
 - Play now, play next, or add to queue from any browse result via right-click context menu
+- Drag tracks from browse and drop at any position in the queue
 - Home and back navigation buttons in the browse header
 - Pagination for large libraries (tested with 45,000+ tracks, 6,500+ albums)
 
@@ -95,7 +133,8 @@ Testing has been done with a large local music library and a limited set of stre
 - View the current play queue with album art
 - Tap to jump to any track
 - Remove individual tracks or clear the entire queue
-- Drag to reorder
+- Drag-drop reordering with visual drop position indicator
+- Drag tracks from the browse panel to insert at any queue position
 
 ### Alarms
 - View all configured Sonos alarms
@@ -107,11 +146,25 @@ Testing has been done with a large local music library and a limited set of stre
 - View remaining time
 - Cancel active timer
 
+### Menu Bar Mode
+- Optional menu bar icon for quick access without switching to the app
+- Playback controls (play/pause, next, previous) from the menu bar dropdown
+- Volume control and current track info at a glance
+
+### Play History
+- Tracks what you listen to with timestamps, artist, album, source, and room
+- Dedicated stats window with top artists, tracks, and sources
+- Filter by room and streaming service
+- Export to CSV
+- Toggle on/off in Settings
+- Right-click to copy track details
+
 ### Caching & Performance
 - **Quick Start mode** — caches your speaker layout and browse menu locally. On subsequent launches, the UI appears instantly from cache while speakers are verified in the background. If anything changed, the UI updates automatically. Stale data is detected gracefully with user-visible notifications.
 - **Classic mode** — waits for live network discovery before showing speakers (always current, slightly slower startup).
 - **Album art cache** — two-tier caching (memory + disk) for album artwork. Images load instantly on repeat views. JPEG compressed with configurable max size (100 MB–5 GB) and max age (7 days–never). LRU eviction.
 - **Art URL persistence** — art URLs discovered during playback are persisted to disk and restored on restart, so favorites show artwork immediately without re-discovering from the speaker.
+- **Playlist services cache** — background scan results for playlist track service badges cached to disk, so badges appear instantly on subsequent views.
 - **Grace period system** — after pressing play/pause or changing volume, the UI holds your intended state for 10 seconds so polling doesn't snap it back while the speaker processes the command.
 - **Smooth progress interpolation** — the seek bar advances locally every 0.5s between 2-second server polls, with drift correction. Never jumps backward on small drift.
 - Configurable via Settings (gear icon in toolbar).
@@ -131,6 +184,7 @@ Testing has been done with a large local music library and a limited set of stre
 - **Dark mode** — System / Light / Dark theme selection
 - **Accent color** — customizable tint for sliders, selections, toggles. Preset colors + custom color picker. Does not affect toolbar icons.
 - **Zone icon colors** — separate colors for playing and inactive speaker icons
+- **Custom hover tooltips** — reliable tooltips on transport controls replacing the broken SwiftUI .help() modifier
 - **13 languages** — English, German, French, Dutch, Spanish, Italian, Swedish, Norwegian, Danish, Japanese, Portuguese, Polish, Chinese (Simplified). Switchable in Settings.
 
 ## Requirements
@@ -190,7 +244,7 @@ The resulting `SonosController.zip` can be uploaded to GitHub Releases.
 
 The project is split into two targets:
 
-- **SonosController** — SwiftUI app with 15+ view files
+- **SonosController** — SwiftUI app with 20+ view files
 - **SonosKit** — local Swift package containing all networking, protocols, models, caching, events, localization, and album art services (zero external dependencies)
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed source documentation.

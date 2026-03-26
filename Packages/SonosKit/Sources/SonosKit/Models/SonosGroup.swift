@@ -19,7 +19,11 @@ public struct SonosGroup: Identifiable, Hashable {
         if members.count == 1 {
             return members.first?.roomName ?? "Unknown"
         }
-        let names = members.map(\.roomName).sorted()
-        return names.joined(separator: " + ")
+        let coordName = coordinator?.roomName ?? ""
+        let others = members
+            .filter { $0.id != coordinatorID }
+            .map(\.roomName)
+            .sorted()
+        return ([coordName] + others).joined(separator: " + ")
     }
 }

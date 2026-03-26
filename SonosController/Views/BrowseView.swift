@@ -9,6 +9,7 @@ import SonosKit
 
 struct BrowseView: View {
     @EnvironmentObject var sonosManager: SonosManager
+    @EnvironmentObject var smapiManager: SMAPIAuthManager
     let group: SonosGroup?
 
     @State private var searchText = ""
@@ -94,17 +95,27 @@ struct BrowseView: View {
                     breadcrumbs.append(dest)
                 })
             } else {
-                let current = breadcrumbs.last!
-                BrowseListView(
-                    title: current.title,
-                    objectID: current.objectID,
-                    group: group,
-                    onNavigate: { dest in
-                        breadcrumbs.append(dest)
-                    }
-                )
-                .id(current.objectID) // Force recreation on each navigation
-                .environmentObject(sonosManager)
+                let current = breadcrumbs.last ?? BrowseDestination(title: "", objectID: "")
+                if current.objectID == "RECENT:" {
+                    RecentlyPlayedView(group: group)
+                } else if current.objectID.hasPrefix("SMAPI:"),
+                          let sidStr = current.objectID.components(separatedBy: ":").last,
+                          let sid = Int(sidStr),
+                          let service = smapiManager.availableServices.first(where: { $0.id == sid }) {
+                    ServiceBrowseView(service: service, group: group)
+                        .environmentObject(smapiManager)
+                } else {
+                    BrowseListView(
+                        title: current.title,
+                        objectID: current.objectID,
+                        group: group,
+                        onNavigate: { dest in
+                            breadcrumbs.append(dest)
+                        }
+                    )
+                    .id(current.objectID)
+                    .environmentObject(sonosManager)
+                }
             }
         }
     }
@@ -126,6 +137,8 @@ struct BrowseDestination: Hashable {
 
 struct BrowseSectionsView: View {
     @EnvironmentObject var sonosManager: SonosManager
+    @EnvironmentObject var playHistoryManager: PlayHistoryManager
+    @EnvironmentObject var smapiManager: SMAPIAuthManager
     let group: SonosGroup?
     let onNavigate: (BrowseDestination) -> Void
 
@@ -133,6 +146,32 @@ struct BrowseSectionsView: View {
 
     var body: some View {
         List {
+            // Recently Played
+            if !playHistoryManager.entries.isEmpty {
+                Section {
+                    Button {
+                        onNavigate(BrowseDestination(title: "Recently Played", objectID: "RECENT:"))
+                    } label: {
+                        Label("Recently Played", systemImage: "clock.arrow.circlepath")
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // Connected music services (SMAPI)
+            if smapiManager.isEnabled && !smapiManager.authenticatedServiceList.isEmpty {
+                Section("Music Services") {
+                    ForEach(smapiManager.authenticatedServiceList, id: \.id) { service in
+                        Button {
+                            onNavigate(BrowseDestination(title: service.name, objectID: "SMAPI:\(service.id)"))
+                        } label: {
+                            Label(service.name, systemImage: "music.note.tv")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
             if isLoading && sonosManager.browseSections.isEmpty {
                 Section {
                     ProgressView(L10n.discoveringContent)
@@ -140,14 +179,36 @@ struct BrowseSectionsView: View {
             }
 
             if !sonosManager.browseSections.isEmpty {
-                Section(L10n.libraryAndFavorites) {
-                    ForEach(sonosManager.browseSections) { section in
-                        Button {
-                            onNavigate(BrowseDestination(title: section.title, objectID: section.objectID))
-                        } label: {
-                            Label(section.title, systemImage: section.icon)
+                let nonLibrary = sonosManager.browseSections.filter {
+                    !$0.objectID.hasPrefix("A:") && !$0.objectID.hasPrefix("S:")
+                }
+                let library = sonosManager.browseSections.filter {
+                    $0.objectID.hasPrefix("A:") || $0.objectID.hasPrefix("S:")
+                }.sorted { a, _ in a.objectID.hasPrefix("S:") }
+
+                if !nonLibrary.isEmpty {
+                    Section("Favorites & Services") {
+                        ForEach(nonLibrary) { section in
+                            Button {
+                                onNavigate(BrowseDestination(title: section.title, objectID: section.objectID))
+                            } label: {
+                                Label(section.title, systemImage: section.icon)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                    }
+                }
+
+                if !library.isEmpty {
+                    Section("Local Library") {
+                        ForEach(library) { section in
+                            Button {
+                                onNavigate(BrowseDestination(title: section.title, objectID: section.objectID))
+                            } label: {
+                                Label(section.title, systemImage: section.icon)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
             }
@@ -157,6 +218,12 @@ struct BrowseSectionsView: View {
             Task {
                 await sonosManager.loadBrowseSections()
                 isLoading = false
+                // Load SMAPI services if enabled and not already loaded
+                if smapiManager.isEnabled && smapiManager.availableServices.isEmpty,
+                   let speaker = sonosManager.groups.first?.coordinator {
+                    await smapiManager.loadServices(speakerIP: speaker.ip, musicServicesList: sonosManager.musicServicesList)
+                    await smapiManager.discoverSerialNumbers(using: sonosManager)
+                }
             }
         }
     }
@@ -165,6 +232,7 @@ struct BrowseSectionsView: View {
 /// Displays items for a single level of the browse tree, with pagination and context menus
 struct BrowseListView: View {
     @EnvironmentObject var sonosManager: SonosManager
+    @EnvironmentObject var playlistScanner: PlaylistServiceScanner
     let title: String
     let objectID: String
     let group: SonosGroup?
@@ -172,6 +240,12 @@ struct BrowseListView: View {
 
     @State private var items: [BrowseItem] = []
     @State private var totalItems = 0
+    @State private var showRenameAlert = false
+    @State private var renameItem: BrowseItem?
+    @State private var renameText = ""
+    @State private var showDeleteConfirm = false
+    @State private var deleteItem: BrowseItem?
+    @State private var playlists: [BrowseItem] = []
     @State private var isLoading = true
     @State private var loadedCount = 0
     @State private var errorMessage: String?
@@ -220,9 +294,9 @@ struct BrowseListView: View {
            let name = sonosManager.musicServiceName(fromDescriptor: meta) {
             return name
         }
-        if item.id.hasPrefix("SQ:") { return "Sonos Playlist" }
-        if item.id.hasPrefix("A:") || item.id.hasPrefix("S:") { return "Music Library" }
-        if item.id.hasPrefix("R:") { return "Radio" }
+        if item.objectID.hasPrefix("SQ:") { return "Sonos Playlist" }
+        if item.objectID.hasPrefix("A:") || item.objectID.hasPrefix("S:") { return "Music Library" }
+        if item.objectID.hasPrefix("R:") { return "Radio" }
         return nil
     }
 
@@ -309,6 +383,10 @@ struct BrowseListView: View {
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .onDrag {
+                                    sonosManager.draggedBrowseItem = item
+                                    return NSItemProvider(object: item.objectID as NSString)
+                                }
                                 .contextMenu {
                                     contextMenuItems(for: item)
                                 }
@@ -338,6 +416,32 @@ struct BrowseListView: View {
         }
         .onAppear {
             Task { await loadItems() }
+            Task { await loadPlaylists() }
+        }
+        .alert("Rename Playlist", isPresented: $showRenameAlert) {
+            TextField("Name", text: $renameText)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename") {
+                guard let item = renameItem else { return }
+                let newName = renameText.trimmingCharacters(in: .whitespaces)
+                guard !newName.isEmpty, newName != item.title else { return }
+                Task {
+                    try? await sonosManager.renamePlaylist(playlistID: item.objectID, oldTitle: item.title, newTitle: newName)
+                    await loadItems()
+                }
+            }
+        }
+        .alert("Delete Playlist?", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                guard let item = deleteItem else { return }
+                Task {
+                    try? await sonosManager.deletePlaylist(playlistID: item.objectID)
+                    await loadItems()
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete \"\(deleteItem?.title ?? "")\"?")
         }
     }
 
@@ -354,11 +458,37 @@ struct BrowseListView: View {
                 Button(L10n.addToQueue) {
                     Task { await addToQueue(item, in: group) }
                 }
+
+                // Add to Playlist submenu (for playable non-container items)
+                if !playlists.isEmpty {
+                    Divider()
+                    Menu("Add to Playlist") {
+                        ForEach(playlists) { playlist in
+                            Button(playlist.title) {
+                                Task { try? await sonosManager.addToPlaylist(playlistID: playlist.objectID, item: item) }
+                            }
+                        }
+                    }
+                }
             }
             if item.isContainer {
                 Divider()
                 Button(L10n.browse) {
-                    onNavigate(BrowseDestination(title: item.title, objectID: item.id))
+                    onNavigate(BrowseDestination(title: item.title, objectID: item.objectID))
+                }
+            }
+
+            // Playlist management (rename/delete for SQ: containers)
+            if item.objectID.hasPrefix("SQ:") && item.isContainer && objectID == "SQ:" {
+                Divider()
+                Button("Rename Playlist") {
+                    renameItem = item
+                    renameText = item.title
+                    showRenameAlert = true
+                }
+                Button("Delete Playlist", role: .destructive) {
+                    deleteItem = item
+                    showDeleteConfirm = true
                 }
             }
         }
@@ -366,7 +496,11 @@ struct BrowseListView: View {
 
     private func handleTap(_ item: BrowseItem) {
         if item.isContainer {
-            onNavigate(BrowseDestination(title: item.title, objectID: item.id))
+            // On-demand rescan when opening a playlist
+            if item.objectID.hasPrefix("SQ:") {
+                Task { await playlistScanner.scanPlaylist(objectID: item.objectID, using: sonosManager, force: true) }
+            }
+            onNavigate(BrowseDestination(title: item.title, objectID: item.objectID))
         } else if let group = group {
             Task { await play(item, in: group) }
         }
@@ -396,6 +530,12 @@ struct BrowseListView: View {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+
+        // Trigger background scan for playlists in this list
+        let playlists = items.filter { $0.objectID.hasPrefix("SQ:") }
+        if !playlists.isEmpty {
+            playlistScanner.backgroundScan(playlists: playlists, using: sonosManager)
+        }
     }
 
     private func loadMore() async {
@@ -430,10 +570,18 @@ struct BrowseListView: View {
         }
     }
 
+    private func loadPlaylists() async {
+        do {
+            let (result, _) = try await sonosManager.browse(objectID: "SQ:", start: 0, count: 100)
+            playlists = result.filter { $0.isContainer }
+        } catch {}
+    }
+
     private func addToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool = false) async {
         do {
             try await sonosManager.addBrowseItemToQueue(item, in: group, playNext: playNext)
         } catch {
+            sonosDebugLog("[QUEUE] addToQueue failed: \(error.localizedDescription) for '\(item.title)' uri=\(item.resourceURI ?? "nil")")
         }
     }
 
@@ -456,6 +604,7 @@ struct BrowseListView: View {
 
 struct BrowseItemRow: View {
     @EnvironmentObject var sonosManager: SonosManager
+    @EnvironmentObject var playlistScanner: PlaylistServiceScanner
     let item: BrowseItem
     @State private var resolvedArtURL: URL?
     @State private var didAttemptArtLoad = false
@@ -483,9 +632,9 @@ struct BrowseItemRow: View {
         }
 
         // 4. Check objectID for known container types
-        if item.id.hasPrefix("SQ:") { return "Sonos Playlist" }
-        if item.id.hasPrefix("A:") || item.id.hasPrefix("S:") { return "Music Library" }
-        if item.id.hasPrefix("R:") { return "Radio" }
+        if item.objectID.hasPrefix("SQ:") { return "Sonos Playlist" }
+        if item.objectID.hasPrefix("A:") || item.objectID.hasPrefix("S:") { return "Music Library" }
+        if item.objectID.hasPrefix("R:") { return "Radio" }
 
         return nil
     }
@@ -520,13 +669,18 @@ struct BrowseItemRow: View {
                             .lineLimit(1)
                     }
 
-                    if let source = sourceLabel {
+                    if item.isContainer && item.objectID.hasPrefix("SQ:"), let services = playlistScanner.playlistServices[item.objectID] {
+                        playlistServiceTags(services: services)
+                    } else if let source = sourceLabel {
                         Text(source)
                             .font(.caption2)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(sourceColor(source), in: Capsule())
+                    } else if item.isContainer && item.objectID.hasPrefix("SQ:"), playlistScanner.scanning.contains(item.objectID) {
+                        ProgressView()
+                            .controlSize(.mini)
                     }
                 }
             }
@@ -542,6 +696,7 @@ struct BrowseItemRow: View {
         .padding(.vertical, 2)
         .onAppear {
             checkArtCache()
+            // Only attempt art loading if we have no resolved URL AND no DIDL art
             if resolvedArtURL == nil, item.albumArtURI == nil, !didAttemptArtLoad {
                 didAttemptArtLoad = true
                 Task { await loadMissingArt() }
@@ -555,7 +710,7 @@ struct BrowseItemRow: View {
     /// Checks the discovered art cache for this item using multi-key lookup
     private func checkArtCache() {
         // Try exact ID first (favorites use FV:2/xxx as key)
-        if let cached = sonosManager.discoveredArtURLs[item.id] {
+        if let cached = sonosManager.discoveredArtURLs[item.objectID] {
             resolvedArtURL = URL(string: cached)
             return
         }
@@ -567,16 +722,16 @@ struct BrowseItemRow: View {
 
     /// Whether this item is from the local Music Library (S: shares or A: library)
     private var isLocalLibraryItem: Bool {
-        item.id.hasPrefix("S:") ||
-        (item.id.hasPrefix("A:") && !item.id.hasPrefix("A:GENRE")) ||
-        item.resourceURI?.hasPrefix("x-file-cifs://") == true ||
-        item.resourceURI?.hasPrefix("x-smb://") == true
+        item.objectID.hasPrefix("S:") ||
+        (item.objectID.hasPrefix("A:") && !item.objectID.hasPrefix("A:GENRE")) ||
+        item.resourceURI?.hasPrefix(URIPrefix.fileCifs) == true ||
+        item.resourceURI?.hasPrefix(URIPrefix.smb) == true
     }
 
     /// Loads art for items without albumArtURI.
     private func loadMissingArt() async {
         // 0. Check if playback previously discovered art for this exact item
-        if let cachedArt = sonosManager.discoveredArtURLs[item.id] {
+        if let cachedArt = sonosManager.discoveredArtURLs[item.objectID] {
             resolvedArtURL = URL(string: cachedArt)
             return
         }
@@ -596,7 +751,7 @@ struct BrowseItemRow: View {
                     artURI = "http://\(device.ip):\(device.port)\(artURI)"
                 }
                 resolvedArtURL = URL(string: artURI)
-                sonosManager.cacheArtURL(artURI, forURI: item.resourceURI ?? "", title: item.title, itemID: item.id)
+                sonosManager.cacheArtURL(artURI, forURI: item.resourceURI ?? "", title: item.title, itemID: item.objectID)
                 return
             }
         }
@@ -604,34 +759,35 @@ struct BrowseItemRow: View {
         // 2. Try BrowseMetadata — asks the speaker for the item's full metadata
         //    including albumArtURI (works for radio stations, favorites, etc.)
         do {
-            if let metaItem = try await sonosManager.browseMetadata(objectID: item.id),
+            if let metaItem = try await sonosManager.browseMetadata(objectID: item.objectID),
                let artURI = metaItem.albumArtURI {
                 resolvedArtURL = URL(string: artURI)
-                sonosManager.cacheArtURL(artURI, forURI: item.resourceURI ?? item.id, title: item.title, itemID: item.id)
+                sonosManager.cacheArtURL(artURI, forURI: item.resourceURI ?? item.objectID, title: item.title, itemID: item.objectID)
                 return
             }
         } catch {}
 
         // 3. For non-radio items, try the Sonos speaker's /getaa endpoint
         if let uri = item.resourceURI, !uri.isEmpty,
-           !uri.hasPrefix("x-sonosapi-stream:"),
-           !uri.hasPrefix("x-sonosapi-radio:"),
-           !uri.hasPrefix("x-rincon-mp3radio:"),
-           !uri.hasPrefix("x-rincon-playlist:"),
+           !uri.hasPrefix(URIPrefix.sonosApiStream),
+           !uri.hasPrefix(URIPrefix.sonosApiRadio),
+           !uri.hasPrefix(URIPrefix.rinconMP3Radio),
+           !uri.hasPrefix(URIPrefix.rinconPlaylist),
            let device = sonosManager.groups.first?.coordinator {
             let encoded = uri.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? uri
             let artURL = "http://\(device.ip):\(device.port)/getaa?s=1&u=\(encoded)"
             resolvedArtURL = URL(string: artURL)
-            sonosManager.cacheArtURL(artURL, forURI: uri, title: item.title, itemID: item.id)
+            sonosManager.cacheArtURL(artURL, forURI: uri, title: item.title, itemID: item.objectID)
             return
         }
 
         // 3. Try browsing first track (containers only)
         if item.isContainer {
             do {
-                let (items, _) = try await sonosManager.browse(objectID: item.id, start: 0, count: 1)
+                let (items, _) = try await sonosManager.browse(objectID: item.objectID, start: 0, count: 1)
                 if let firstItem = items.first, let artURI = firstItem.albumArtURI {
                     resolvedArtURL = URL(string: artURI)
+                    sonosManager.cacheArtURL(artURI, forURI: item.resourceURI ?? item.objectID, title: item.title, itemID: item.objectID)
                     return
                 }
             } catch {
@@ -660,25 +816,25 @@ struct BrowseItemRow: View {
         // 1. If the item has a direct file URI (not a playlist/container URI),
         //    try /getaa which extracts embedded art from the file
         if let uri = item.resourceURI, !uri.isEmpty,
-           (uri.hasPrefix("x-file-cifs://") || uri.hasPrefix("x-smb://")) {
+           (uri.hasPrefix(URIPrefix.fileCifs) || uri.hasPrefix(URIPrefix.smb)) {
             let encoded = uri.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? uri
             let artURL = "http://\(device.ip):\(device.port)/getaa?s=1&u=\(encoded)"
             resolvedArtURL = URL(string: artURL)
-            sonosManager.cacheArtURL(artURL, forURI: uri, title: item.title, itemID: item.id)
+            sonosManager.cacheArtURL(artURL, forURI: uri, title: item.title, itemID: item.objectID)
             return
         }
 
         // 2. For containers (folders/albums/artists)
         if item.isContainer {
             // Determine the best search terms based on the item type
-            let isArtistContainer = item.id.hasPrefix("A:ALBUMARTIST/") || item.id.hasPrefix("A:ARTIST/")
-            let isAlbumContainer = item.id.hasPrefix("A:ALBUM/")
+            let isArtistContainer = item.objectID.hasPrefix("A:ALBUMARTIST/") || item.objectID.hasPrefix("A:ARTIST/")
+            let isAlbumContainer = item.objectID.hasPrefix("A:ALBUM/")
 
             if isArtistContainer {
                 // Artist container: title IS the artist name
                 if let artURL = await AlbumArtSearchService.shared.searchArtwork(artist: item.title, album: "") {
                     resolvedArtURL = URL(string: artURL)
-                    sonosManager.cacheArtURL(artURL, forURI: item.id, title: item.title)
+                    sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title)
                     return
                 }
             } else if isAlbumContainer {
@@ -686,7 +842,7 @@ struct BrowseItemRow: View {
                 let artist = item.artist.isEmpty ? "" : item.artist
                 if let artURL = await AlbumArtSearchService.shared.searchArtwork(artist: artist, album: item.title) {
                     resolvedArtURL = URL(string: artURL)
-                    sonosManager.cacheArtURL(artURL, forURI: item.id, title: item.title)
+                    sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title)
                     return
                 }
             } else {
@@ -694,24 +850,24 @@ struct BrowseItemRow: View {
                 let artist = item.artist.isEmpty ? "" : item.artist
                 if let artURL = await AlbumArtSearchService.shared.searchArtwork(artist: artist, album: item.title) {
                     resolvedArtURL = URL(string: artURL)
-                    sonosManager.cacheArtURL(artURL, forURI: item.id, title: item.title)
+                    sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title)
                     return
                 }
 
                 // Try guessing from path: parent folder = artist, current = album
-                if let (guessedArtist, guessedAlbum) = guessArtistAlbum(from: item.id, title: item.title) {
+                if let (guessedArtist, guessedAlbum) = guessArtistAlbum(from: item.objectID, title: item.title) {
                     if let artURL = await AlbumArtSearchService.shared.searchArtwork(artist: guessedArtist, album: guessedAlbum) {
                         resolvedArtURL = URL(string: artURL)
-                        sonosManager.cacheArtURL(artURL, forURI: item.id, title: item.title)
+                        sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title)
                         return
                     }
                 }
             }
 
             // Inherit from child: browse to find a track with embedded art
-            if let artURL = await findArtInContainer(objectID: item.id, device: device, depth: 0) {
+            if let artURL = await findArtInContainer(objectID: item.objectID, device: device, depth: 0) {
                 resolvedArtURL = artURL
-                sonosManager.cacheArtURL(artURL.absoluteString, forURI: item.id, title: item.title)
+                sonosManager.cacheArtURL(artURL.absoluteString, forURI: item.objectID, title: item.title)
                 return
             }
         }
@@ -772,7 +928,7 @@ struct BrowseItemRow: View {
                 }
                 // Subfolder — browse into it
                 if browseItem.isContainer {
-                    if let art = await findArtInContainer(objectID: browseItem.id, device: device, depth: depth + 1) {
+                    if let art = await findArtInContainer(objectID: browseItem.objectID, device: device, depth: depth + 1) {
                         return art
                     }
                 }
@@ -781,15 +937,35 @@ struct BrowseItemRow: View {
         return nil
     }
 
-    private func sourceColor(_ source: String) -> Color {
-        switch source {
-        case "Music Library": return .green.opacity(0.7)
-        case "Radio": return .orange.opacity(0.7)
-        case "Calm Radio": return .teal.opacity(0.7)
-        case "Sonos Playlist": return .purple.opacity(0.7)
-        case "TV", "Line-In": return .gray.opacity(0.7)
-        default: return .blue.opacity(0.7)
+    @ViewBuilder
+    private func playlistServiceTags(services: Set<String>) -> some View {
+        let sorted = services.sorted()
+        let maxVisible = 3
+        let visible = Array(sorted.prefix(maxVisible))
+        let overflow = sorted.count - maxVisible
+
+        ForEach(visible, id: \.self) { service in
+            Text(service)
+                .font(.caption2)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(sourceColor(service), in: Capsule())
         }
+
+        if overflow > 0 {
+            Text("+\(overflow)")
+                .font(.caption2)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(.gray.opacity(0.6), in: Capsule())
+                .help(sorted.dropFirst(maxVisible).joined(separator: ", "))
+        }
+    }
+
+    private func sourceColor(_ source: String) -> Color {
+        ServiceColor.color(for: source)
     }
 }
 

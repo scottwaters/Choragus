@@ -45,6 +45,7 @@ struct NowPlayingView: View {
     @State private var isDraggingSeek = false
     @State private var positionFrozenUntil: Date = .distantPast
 
+    @State private var crossfadeOn = false
     @State private var showGroupEditor = false
     @State private var showSleepTimer = false
     @State private var showEQ = false
@@ -73,12 +74,27 @@ struct NowPlayingView: View {
         sonosManager.awaitingPlayback[group.coordinatorID] ?? false
     }
 
+    private var currentServiceName: String? {
+        if let sid = trackMetadata.serviceID,
+           let name = sonosManager.musicServiceName(for: sid) {
+            return name
+        }
+        if let uri = trackMetadata.trackURI,
+           let name = sonosManager.detectServiceName(fromURI: uri) {
+            return name
+        }
+        if let uri = trackMetadata.trackURI, URIPrefix.isLocal(uri) {
+            return "Music Library"
+        }
+        return nil
+    }
+
     /// Resolves the artist field — converts RINCON device IDs to room names
     /// for TV/Line-In sources.
     private var displayArtist: String {
         let artist = trackMetadata.artist
         if artist.hasPrefix("RINCON_") {
-            return sonosManager.devices[artist]?.roomName ?? artist
+            return ""
         }
         return artist
     }
@@ -131,11 +147,11 @@ struct NowPlayingView: View {
                             trackMetadata.title.lowercased() != trackMetadata.stationName.lowercased()
                         if showTitle {
                             HStack(spacing: 8) {
-                                Text(trackMetadata.title)
-                                    .font(trackMetadata.stationName.isEmpty ? .title2 : .title3)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(2)
+                                MarqueeText(
+                                    text: trackMetadata.title,
+                                    font: trackMetadata.stationName.isEmpty ? .title2 : .title3,
+                                    fontWeight: .semibold
+                                )
                                 if awaitingPlayback && trackMetadata.stationName.isEmpty {
                                     ProgressView()
                                         .controlSize(.small)
@@ -158,10 +174,11 @@ struct NowPlayingView: View {
 
                         if hasTrack {
                             if !displayArtist.isEmpty {
-                                Text(displayArtist)
-                                    .font(.title3)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                                MarqueeText(
+                                    text: displayArtist,
+                                    font: .title3,
+                                    foregroundStyle: AnyShapeStyle(.secondary)
+                                )
                             }
 
                             if !trackMetadata.album.isEmpty {
@@ -171,11 +188,9 @@ struct NowPlayingView: View {
                                     .lineLimit(1)
                             }
 
-                            // Show streaming service name when artist/album unavailable
-                            if displayArtist.isEmpty,
-                               let sid = trackMetadata.serviceID,
-                               let serviceName = sonosManager.musicServiceName(for: sid) {
-                                Label("\(L10n.playingFrom) \(serviceName)", systemImage: "music.note.tv")
+                            // Service tag
+                            if let serviceName = currentServiceName {
+                                Label(serviceName, systemImage: "music.note.tv")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -202,17 +217,21 @@ struct NowPlayingView: View {
                             .buttonStyle(.bordered)
                             .controlSize(.small)
 
-                            if let coordinator = group.coordinator {
-                                Button { showEQ = true } label: {
-                                    Label(L10n.eq, systemImage: "slider.horizontal.3")
-                                        .font(.caption)
+                            Button {
+                                if sonosManager.htSatChannelMaps[group.coordinatorID] != nil {
+                                    WindowManager.shared.openHomeTheaterEQ()
+                                } else {
+                                    showEQ = true
                                 }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                                .popover(isPresented: $showEQ) {
-                                    EQView(device: coordinator)
-                                        .environmentObject(sonosManager)
-                                }
+                            } label: {
+                                Label(L10n.eq, systemImage: "slider.horizontal.3")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .popover(isPresented: $showEQ) {
+                                EQView(group: group)
+                                    .environmentObject(sonosManager)
                             }
 
                             if hasTrack {
@@ -288,28 +307,37 @@ struct NowPlayingView: View {
                                     tint: playMode.isShuffled ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
                         toggleShuffle()
                     }
-                    .help(L10n.shuffle)
+                    .tooltip(L10n.shuffle)
 
                     transportButton("previous", icon: "backward.fill", size: .title2) {
                         performAction("previous") { try await sonosManager.previous(group: group) }
                     }
+                    .tooltip("Previous")
 
                     transportButton("playPause",
                                     icon: transportState.isPlaying ? "pause.circle.fill" : "play.circle.fill",
                                     size: .system(size: 44)) {
                         togglePlayPause()
                     }
+                    .tooltip(transportState.isPlaying ? "Pause" : "Play")
                     .keyboardShortcut(.space, modifiers: [])
 
                     transportButton("next", icon: "forward.fill", size: .title2) {
                         performAction("next") { try await sonosManager.next(group: group) }
                     }
+                    .tooltip("Next")
 
                     transportButton("repeat", icon: repeatIcon, size: .body,
                                     tint: playMode.repeatMode != .off ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
                         cycleRepeat()
                     }
-                    .help(L10n.repeat_)
+                    .tooltip(L10n.repeat_)
+
+                    transportButton("crossfade", icon: "arrow.triangle.swap", size: .caption,
+                                    tint: crossfadeOn ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
+                        toggleCrossfade()
+                    }
+                    .tooltip("Crossfade")
                 }
                 .padding(.vertical, 16)
 
@@ -400,6 +428,8 @@ struct NowPlayingView: View {
                         .controlSize(.small)
                 }
             }
+            .frame(minWidth: 32, minHeight: 32)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(actionInFlight != nil)
@@ -410,16 +440,57 @@ struct NowPlayingView: View {
     @State private var webArtURL: URL?
     @State private var lastArtSearchKey = ""
     @State private var forceWebArt = false
+    @State private var lastTrackURI = ""
+    @State private var displayedArtURL: URL?
+    @State private var radioTrackArtURL: URL?  // Track-specific art for radio stations
+    @State private var radioStationArtURL: URL? // Station badge art for overlay
+    @State private var lastRadioTrackKey = ""
+
+    /// For local library files, construct a /getaa URL to extract embedded art
+    private var localFileArtURL: String? {
+        guard let uri = trackMetadata.trackURI,
+              URIPrefix.isLocal(uri),
+              let coordinator = group.coordinator else { return nil }
+        let encoded = uri.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? uri
+        return "http://\(coordinator.ip):\(coordinator.port)/getaa?s=1&u=\(encoded)"
+    }
+
+    /// Resolves the best art URL from all sources
+    private func resolveArtURL() -> URL? {
+        let isLocalFile = trackMetadata.trackURI.map(URIPrefix.isLocal) ?? false
+        let artURI = trackMetadata.albumArtURI ?? localFileArtURL
+
+        if forceWebArt {
+            return webArtURL ?? artURI.flatMap { URL(string: $0) }
+        } else if isLocalFile && webArtURL != nil {
+            return webArtURL
+        } else {
+            return artURI.flatMap { URL(string: $0) } ?? webArtURL
+        }
+    }
+
+    /// Updates displayedArtURL only when there's a genuine change
+    private func updateDisplayedArt() {
+        let resolved = resolveArtURL()
+        // Only update if we have a new URL or if track changed (nil is valid — shows placeholder)
+        if resolved != displayedArtURL {
+            // Don't downgrade from a valid URL to nil unless the track actually changed
+            if resolved == nil && displayedArtURL != nil {
+                let currentURI = trackMetadata.trackURI ?? ""
+                if currentURI == lastTrackURI { return } // Same track, don't clear art
+            }
+            displayedArtURL = resolved
+        }
+    }
 
     private var albumArtView: some View {
-        let url = forceWebArt ? (webArtURL ?? trackMetadata.albumArtURI.flatMap { URL(string: $0) }) :
-                                (trackMetadata.albumArtURI.flatMap { URL(string: $0) } ?? webArtURL)
-
-        return ZStack {
-            if url != nil {
+        return ZStack(alignment: .bottomTrailing) {
+            if let trackArt = radioTrackArtURL, !trackMetadata.stationName.isEmpty {
+                // Radio mode: track art as main, station art as badge
+                CachedAsyncImage(url: trackArt, cornerRadius: 8)
+            } else if let url = displayedArtURL {
                 CachedAsyncImage(url: url, cornerRadius: 8)
             } else {
-                // Generic art placeholder for streaming/radio without art
                 RoundedRectangle(cornerRadius: 8)
                     .fill(
                         LinearGradient(
@@ -434,10 +505,20 @@ struct NowPlayingView: View {
                             .foregroundStyle(.white.opacity(0.6))
                     }
             }
+
+            // Station badge overlay when showing track-specific art
+            if radioTrackArtURL != nil, let stationArt = radioStationArtURL {
+                CachedAsyncImage(url: stationArt, cornerRadius: 4)
+                    .frame(width: 36, height: 36)
+                    .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+                    .padding(6)
+            }
         }
-        .onAppear { loadPersistedArtOverride(); searchWebArtIfNeeded() }
+        .onAppear { loadPersistedArtOverride(); searchWebArtIfNeeded(); updateDisplayedArt(); searchRadioTrackArt() }
         .onReceive(sonosManager.$groupTrackMetadata) { _ in
             searchWebArtIfNeeded()
+            updateDisplayedArt()
+            searchRadioTrackArt()
         }
             .contextMenu {
                 Button(L10n.refreshArtwork) {
@@ -458,6 +539,47 @@ struct NowPlayingView: View {
             }
     }
 
+    /// Searches for track-specific album art when playing a radio station.
+    /// Shows the track's art as main with the station art as a small badge overlay.
+    private func searchRadioTrackArt() {
+        // Only for radio stations with track info
+        guard !trackMetadata.stationName.isEmpty,
+              !trackMetadata.title.isEmpty,
+              trackMetadata.title != trackMetadata.stationName else {
+            // No track info or title is just the station name — clear track art
+            if radioTrackArtURL != nil { radioTrackArtURL = nil }
+            return
+        }
+
+        // Dedup — don't search for the same track twice
+        let key = "\(trackMetadata.title)|\(trackMetadata.artist)"
+        guard key != lastRadioTrackKey else { return }
+        lastRadioTrackKey = key
+
+        // Save the station art for the badge overlay
+        if radioStationArtURL == nil, let stationArt = displayedArtURL ?? trackMetadata.albumArtURI.flatMap({ URL(string: $0) }) {
+            radioStationArtURL = stationArt
+        }
+
+        // Search iTunes for the current track using song-specific search
+        let artist = trackMetadata.artist.hasPrefix("RINCON_") ? "" : trackMetadata.artist
+        // Strip parenthetical text (often foreign translations that confuse search)
+        let cleanTitle = trackMetadata.title
+            .replacingOccurrences(of: "\\s*\\([^)]*\\)\\s*$", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]\\s*$", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        let searchTitle = cleanTitle.isEmpty ? trackMetadata.title : cleanTitle
+        Task {
+            if let artURL = await AlbumArtSearchService.shared.searchRadioTrackArt(
+                artist: artist, title: searchTitle
+            ) {
+                radioTrackArtURL = URL(string: artURL)
+            } else {
+                radioTrackArtURL = nil
+            }
+        }
+    }
+
     /// Forces an iTunes artwork search regardless of existing art.
     /// Persists the override to UserDefaults so it survives app restart.
     private func forceITunesArtSearch() {
@@ -473,9 +595,9 @@ struct NowPlayingView: View {
             ) {
                 webArtURL = URL(string: artURL)
                 forceWebArt = true
-                // Persist so it survives restart
                 let key = "artOverride:\(searchTerm.lowercased())"
                 UserDefaults.standard.set(artURL, forKey: key)
+                updateDisplayedArt()
             }
         }
     }
@@ -489,34 +611,78 @@ struct NowPlayingView: View {
         if let saved = UserDefaults.standard.string(forKey: key) {
             webArtURL = URL(string: saved)
             forceWebArt = true
+            updateDisplayedArt()
         }
     }
 
     /// Searches iTunes for album art when none available from Sonos.
     private func searchWebArtIfNeeded() {
-        guard trackMetadata.albumArtURI == nil || trackMetadata.albumArtURI?.isEmpty == true else {
+        // Detect track change — reset art state
+        let currentURI = trackMetadata.trackURI ?? trackMetadata.title
+        if currentURI != lastTrackURI && !currentURI.isEmpty {
+            lastTrackURI = currentURI
+            if !forceWebArt {
+                webArtURL = nil
+                lastArtSearchKey = ""
+            }
+            // Clear displayed art so stale art doesn't persist
+            displayedArtURL = trackMetadata.albumArtURI.flatMap { URL(string: $0) }
+            loadPersistedArtOverride()
+
+            // Reset radio track art when source changes
+            if trackMetadata.stationName.isEmpty {
+                radioTrackArtURL = nil
+                radioStationArtURL = nil
+                lastRadioTrackKey = ""
+            }
+        }
+
+        // Skip if we have art from the speaker (but not for local files with /getaa that may 404)
+        let hasArt = trackMetadata.albumArtURI != nil && !(trackMetadata.albumArtURI?.isEmpty ?? true)
+        let isLocalFile = trackMetadata.trackURI.map(URIPrefix.isLocal) ?? false
+        sonosDebugLog("[ART-SEARCH] hasArt=\(hasArt) isLocal=\(isLocalFile) albumArtURI=\(trackMetadata.albumArtURI ?? "nil") trackURI=\(trackMetadata.trackURI?.prefix(60) ?? "nil")")
+        if hasArt && !isLocalFile {
+            sonosDebugLog("[ART-SEARCH] Skipping — has art and not local")
             if !forceWebArt {
                 if webArtURL != nil { webArtURL = nil }
             }
             return
         }
         forceWebArt = false
-        // Use station name, track title, or artist for the search
-        let searchTerm = !trackMetadata.stationName.isEmpty ? trackMetadata.stationName :
-                         !trackMetadata.title.isEmpty ? trackMetadata.title : ""
-        let key = "\(searchTerm)|\(displayArtist)"
-        guard !searchTerm.isEmpty else { return }
-        guard key != lastArtSearchKey else { return }
+
+        // For local library: prefer album name for search (track titles are too generic)
+        // For radio/streaming: prefer station name or track title
+        let searchTerm: String
+        if isLocalFile && !trackMetadata.album.isEmpty {
+            searchTerm = trackMetadata.album
+        } else if !trackMetadata.stationName.isEmpty {
+            searchTerm = trackMetadata.stationName
+        } else if !trackMetadata.album.isEmpty {
+            searchTerm = trackMetadata.album
+        } else if !trackMetadata.title.isEmpty {
+            searchTerm = trackMetadata.title
+        } else {
+            searchTerm = ""
+        }
+        let artist = displayArtist
+        let key = "\(searchTerm)|\(artist)"
+        sonosDebugLog("[ART-SEARCH] searchTerm=\(searchTerm) artist=\(artist) key=\(key) lastKey=\(lastArtSearchKey)")
+        guard !searchTerm.isEmpty else { sonosDebugLog("[ART-SEARCH] Empty search term, skipping"); return }
+        guard key != lastArtSearchKey else { sonosDebugLog("[ART-SEARCH] Same key, skipping"); return }
         lastArtSearchKey = key
-        webArtURL = nil  // Clear old art while searching
+        webArtURL = nil
+        sonosDebugLog("[ART-SEARCH] Searching iTunes for artist='\(artist)' album='\(searchTerm)'")
         Task {
             if let artURL = await AlbumArtSearchService.shared.searchArtwork(
-                artist: displayArtist, album: searchTerm
+                artist: artist, album: searchTerm
             ) {
+                sonosDebugLog("[ART-SEARCH] Found: \(artURL.prefix(80))")
                 webArtURL = URL(string: artURL)
             } else {
+                sonosDebugLog("[ART-SEARCH] No result from iTunes")
                 webArtURL = nil
             }
+            updateDisplayedArt()
         }
     }
 
@@ -683,6 +849,14 @@ struct NowPlayingView: View {
         }
     }
 
+    private func toggleCrossfade() {
+        let newValue = !crossfadeOn
+        crossfadeOn = newValue
+        performAction("crossfade") {
+            try await sonosManager.setCrossfadeMode(group: group, enabled: newValue)
+        }
+    }
+
     private func copyTrackInfo() {
         var lines: [String] = []
 
@@ -753,9 +927,9 @@ struct NowPlayingView: View {
                     let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
                     if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
                         let currentURI = mediaInfo?["CurrentURI"] ?? ""
-                        let isRadio = currentURI.contains("x-sonosapi-stream:") ||
-                                      currentURI.contains("x-sonosapi-radio:") ||
-                                      currentURI.contains("x-rincon-mp3radio:")
+                        let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
+                                      currentURI.contains(URIPrefix.sonosApiRadio) ||
+                                      currentURI.contains(URIPrefix.rinconMP3Radio)
                         if isRadio && !parsed.title.isEmpty {
                             enrichedPosition.stationName = parsed.title
                         }
@@ -785,16 +959,23 @@ struct NowPlayingView: View {
             lastPositionTimestamp = Date()
             smoothPosition = enrichedPosition.position
 
-            // Fetch volume/mute per member
+            // Fetch volume/mute per member (skip graced devices — preset just set them)
             for member in group.members {
-                let vol = try await sonosManager.getVolume(device: member)
-                let muted = try await sonosManager.getMute(device: member)
-                sonosManager.deviceVolumes[member.id] = vol
-                sonosManager.deviceMutes[member.id] = muted
+                if !sonosManager.isVolumeGraceActive(deviceID: member.id) {
+                    let vol = try await sonosManager.getVolume(device: member)
+                    sonosManager.deviceVolumes[member.id] = vol
+                }
+                if !sonosManager.isMuteGraceActive(deviceID: member.id) {
+                    let muted = try await sonosManager.getMute(device: member)
+                    sonosManager.deviceMutes[member.id] = muted
+                }
             }
 
             syncVolumeFromManager()
             syncMuteFromManager()
+
+            // Fetch crossfade state
+            crossfadeOn = (try? await sonosManager.getCrossfadeMode(group: group)) ?? false
         } catch {
             // Fall back to whatever the transport strategy has cached
         }
@@ -865,9 +1046,9 @@ struct NowPlayingView: View {
                     let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
                     if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
                         let currentURI = mediaInfo?["CurrentURI"] ?? ""
-                        let isRadio = currentURI.contains("x-sonosapi-stream:") ||
-                                      currentURI.contains("x-sonosapi-radio:") ||
-                                      currentURI.contains("x-rincon-mp3radio:")
+                        let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
+                                      currentURI.contains(URIPrefix.sonosApiRadio) ||
+                                      currentURI.contains(URIPrefix.rinconMP3Radio)
 
                         if isRadio && position.stationName.isEmpty && !parsed.title.isEmpty {
                             position.stationName = parsed.title
@@ -942,9 +1123,16 @@ struct NowPlayingView: View {
         if group.members.count > 1 {
             var totalVol = 0.0
             for member in group.members {
-                // Skip devices with active grace (user just adjusted this speaker's volume)
+                // During grace, use the optimistic value already in deviceVolumes
+                // (skip updating the local slider, but still include in average)
                 if sonosManager.isVolumeGraceActive(deviceID: member.id) {
-                    totalVol += speakerVolumes[member.id] ?? 0
+                    let v = Double(sonosManager.deviceVolumes[member.id] ?? 0)
+                    if abs((speakerVolumes[member.id] ?? 0) - v) > 0.5 {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            speakerVolumes[member.id] = v
+                        }
+                    }
+                    totalVol += v
                     continue
                 }
                 let v = Double(sonosManager.deviceVolumes[member.id] ?? 0)

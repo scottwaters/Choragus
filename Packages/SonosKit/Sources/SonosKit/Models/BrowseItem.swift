@@ -6,7 +6,9 @@
 import Foundation
 
 public struct BrowseItem: Identifiable, Equatable {
-    public let id: String // UPnP objectID, e.g. FV:2/124, SQ:17, A:ARTIST/Beatles
+    public let instanceID: UUID // Unique per-instance (handles duplicate tracks in playlists)
+    public var id: UUID { instanceID }
+    public let objectID: String // UPnP objectID, e.g. FV:2/124, SQ:17, A:ARTIST/Beatles
     public var title: String
     public var artist: String
     public var album: String
@@ -16,11 +18,12 @@ public struct BrowseItem: Identifiable, Equatable {
     public var resourceMetadata: String? // DIDL metadata for playback
     public var serviceDescriptor: String? // SA_RINCON descriptor from desc element
 
-    public init(id: String, title: String = "", artist: String = "", album: String = "",
+    public init(id objectID: String, title: String = "", artist: String = "", album: String = "",
                 albumArtURI: String? = nil, itemClass: BrowseItemClass = .unknown,
                 resourceURI: String? = nil, resourceMetadata: String? = nil,
                 serviceDescriptor: String? = nil) {
-        self.id = id
+        self.instanceID = UUID()
+        self.objectID = objectID
         self.title = title
         self.artist = artist
         self.album = album

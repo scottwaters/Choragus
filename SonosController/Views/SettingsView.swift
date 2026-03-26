@@ -5,10 +5,15 @@ import SonosKit
 
 struct SettingsView: View {
     @EnvironmentObject var sonosManager: SonosManager
+    @EnvironmentObject var playHistoryManager: PlayHistoryManager
+    @EnvironmentObject var smapiManager: SMAPIAuthManager
     @Environment(\.dismiss) private var dismiss
     @State private var showAppearanceInfo = false
     @State private var showNetworkInfo = false
     @State private var showCacheInfo = false
+    @State private var showClearHistoryConfirm = false
+    @State private var showClearSpeakerCacheConfirm = false
+    @State private var showClearArtworkCacheConfirm = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,7 +34,7 @@ struct SettingsView: View {
 
             // Settings content
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 28) {
 
                     // ─── LANGUAGE ───
                     settingsSection(L10n.language) {
@@ -69,6 +74,13 @@ struct SettingsView: View {
                         colorRow(label: L10n.inactive, systemImage: "hifispeaker",
                                  iconColor: sonosManager.resolvedInactiveZoneColor,
                                  storedColor: $sonosManager.inactiveZoneColor, allowSystem: true)
+
+                        Divider()
+
+                        Toggle("Menu Bar Controls", isOn: Binding(
+                            get: { MenuBarController.shared.isEnabled },
+                            set: { MenuBarController.shared.isEnabled = $0 }
+                        ))
 
                         infoToggle(isExpanded: $showAppearanceInfo, label: L10n.aboutAppearance,
                                    text: LocalizedStringKey(L10n.appearanceInfo))
@@ -155,23 +167,77 @@ struct SettingsView: View {
                         }
 
                         HStack(spacing: 8) {
-                            Button(L10n.clearSpeakerCache) { sonosManager.clearCache() }
+                            Button(L10n.clearSpeakerCache) { showClearSpeakerCacheConfirm = true }
                                 .controlSize(.small)
-                            Button(L10n.clearArtworkCache) {
+                            Button(L10n.clearArtworkCache) { showClearArtworkCacheConfirm = true }
+                                .controlSize(.small)
+                        }
+                        .alert("Clear Speaker Cache?", isPresented: $showClearSpeakerCacheConfirm) {
+                            Button(L10n.cancel, role: .cancel) {}
+                            Button(L10n.clearSpeakerCache, role: .destructive) { sonosManager.clearCache() }
+                        } message: {
+                            Text("This will remove the cached speaker layout. The app will rediscover speakers on next launch.")
+                        }
+                        .alert("Clear Artwork Cache?", isPresented: $showClearArtworkCacheConfirm) {
+                            Button(L10n.cancel, role: .cancel) {}
+                            Button(L10n.clearArtworkCache, role: .destructive) {
                                 ImageCache.shared.clearDisk()
                                 ImageCache.shared.clearMemory()
                             }
-                            .controlSize(.small)
+                        } message: {
+                            Text("This will remove all cached album art (\(ImageCache.shared.diskUsageString)). Images will be re-downloaded as needed.")
                         }
 
                         infoToggle(isExpanded: $showCacheInfo, label: L10n.aboutCache,
                                    text: "Speaker cache stores your room layout for instant startup. Artwork cache stores album art for faster browsing. Both rebuild automatically when cleared.")
                     }
+
+                    // ─── PLAY HISTORY ───
+                    settingsSection(L10n.playHistory) {
+                    Toggle(L10n.enablePlayHistory, isOn: Binding(
+                        get: { playHistoryManager.isEnabled },
+                        set: { playHistoryManager.isEnabled = $0 }
+                    ))
+
+                    if playHistoryManager.totalEntries > 0 {
+                        Text("\(playHistoryManager.totalEntries) entries, \(String(format: "%.1f", playHistoryManager.totalListeningHours)) hours")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack(spacing: 8) {
+                        Button(L10n.playHistory) {
+                            dismiss()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                WindowManager.shared.openPlayHistory()
+                            }
+                        }
+                        .controlSize(.small)
+
+                        Button(L10n.clearHistory) {
+                            showClearHistoryConfirm = true
+                        }
+                        .controlSize(.small)
+                        .disabled(playHistoryManager.entries.isEmpty)
+                    }
                 }
-                .padding(24)
+                .alert("Clear Play History?", isPresented: $showClearHistoryConfirm) {
+                    Button(L10n.cancel, role: .cancel) {}
+                    Button(L10n.clearHistory, role: .destructive) {
+                        playHistoryManager.clearHistory()
+                    }
+                }
+
+                    // ─── MUSIC SERVICES ───
+                    settingsSection("Music Services") {
+                        MusicServicesSettingsSection()
+                            .environmentObject(smapiManager)
+                    }
+                }
+                .padding(32)
             }
         }
-        .frame(width: 560, height: 700)
+        .frame(width: 560, height: 760)
         .onDisappear {
             // Close the macOS system color panel if it's open
             NSColorPanel.shared.close()
@@ -184,11 +250,13 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .font(.headline)
+                .padding(.leading, 4)
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 content()
             }
-            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
         }
     }

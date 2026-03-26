@@ -182,6 +182,86 @@ public final class ContentDirectoryService {
         return Int(result["FirstTrackNumberEnqueued"] ?? "0") ?? 0
     }
 
+    // MARK: - Playlist Management (Saved Queues)
+
+    /// Creates a new Sonos playlist from the current queue
+    public func createSavedQueue(device: SonosDevice, title: String) async throws -> String {
+        let result = try await soap.send(
+            to: device.baseURL,
+            path: "/MediaRenderer/AVTransport/Control",
+            service: "AVTransport",
+            action: "CreateSavedQueue",
+            arguments: [
+                ("InstanceID", "0"),
+                ("Title", title),
+                ("EnqueuedURI", ""),
+                ("EnqueuedURIMetaData", "")
+            ]
+        )
+        return result["AssignedObjectID"] ?? ""
+    }
+
+    /// Saves the current queue as a new Sonos playlist (includes all tracks)
+    public func saveQueue(device: SonosDevice, title: String, objectID: String = "") async throws -> String {
+        let result = try await soap.send(
+            to: device.baseURL,
+            path: "/MediaRenderer/AVTransport/Control",
+            service: "AVTransport",
+            action: "SaveQueue",
+            arguments: [
+                ("InstanceID", "0"),
+                ("Title", title),
+                ("ObjectID", objectID)
+            ]
+        )
+        return result["AssignedObjectID"] ?? ""
+    }
+
+    /// Adds a track to an existing Sonos playlist
+    public func addURIToSavedQueue(device: SonosDevice, objectID: String, uri: String, metadata: String = "", addAtIndex: Int = 4294967295) async throws -> Int {
+        let result = try await soap.send(
+            to: device.baseURL,
+            path: "/MediaRenderer/AVTransport/Control",
+            service: "AVTransport",
+            action: "AddURIToSavedQueue",
+            arguments: [
+                ("InstanceID", "0"),
+                ("ObjectID", objectID),
+                ("EnqueuedURI", uri),
+                ("EnqueuedURIMetaData", metadata),
+                ("AddAtIndex", "\(addAtIndex)"),
+                ("UpdateID", "0")
+            ]
+        )
+        return Int(result["NewQueueLength"] ?? "0") ?? 0
+    }
+
+    /// Deletes a Sonos playlist
+    public func destroyObject(device: SonosDevice, objectID: String) async throws {
+        _ = try await soap.send(
+            to: device.baseURL,
+            path: Self.path,
+            service: Self.service,
+            action: "DestroyObject",
+            arguments: [("ObjectID", objectID)]
+        )
+    }
+
+    /// Renames a Sonos playlist via UpdateObject
+    public func renameSavedQueue(device: SonosDevice, objectID: String, oldTitle: String, newTitle: String) async throws {
+        _ = try await soap.send(
+            to: device.baseURL,
+            path: Self.path,
+            service: Self.service,
+            action: "UpdateObject",
+            arguments: [
+                ("ObjectID", objectID),
+                ("CurrentTagValue", "<dc:title>\(oldTitle)</dc:title>"),
+                ("NewTagValue", "<dc:title>\(newTitle)</dc:title>")
+            ]
+        )
+    }
+
     // MARK: - Search
 
     /// Sonos "search" is actually a Browse with a colon-delimited search term appended

@@ -55,9 +55,7 @@ public final class SonosCache {
     private let artCacheURL: URL
 
     public init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("SonosController", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dir = AppPaths.appSupportDirectory
         self.fileURL = dir.appendingPathComponent("topology_cache.json")
         self.artCacheURL = dir.appendingPathComponent("art_url_cache.json")
     }

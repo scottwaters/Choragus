@@ -43,8 +43,7 @@ public final class ImageCache {
     private var maxAgeSeconds: TimeInterval { TimeInterval(maxAgeDays) * 86400 }
 
     private init() {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        diskCacheURL = appSupport.appendingPathComponent("SonosController/ImageCache", isDirectory: true)
+        diskCacheURL = AppPaths.appSupportDirectory.appendingPathComponent("ImageCache", isDirectory: true)
         try? fileManager.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
 
         memoryCache.countLimit = 200

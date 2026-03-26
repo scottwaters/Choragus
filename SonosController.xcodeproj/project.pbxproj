@@ -24,6 +24,15 @@
 		A10019 /* CachedAsyncImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019; };
 		A10021 /* AccentColorHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10021; };
 		A10022 /* ColorSwatchGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10022; };
+		A10023 /* PresetManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10023; };
+		A10024 /* PlayHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10024; };
+		A10025 /* MarqueeText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10025; };
+		A10026 /* HomeTheaterEQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10026; };
+		A10027 /* WindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10027; };
+		A10028 /* HoverTooltip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10028; };
+		A10029 /* RecentlyPlayedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10029; };
+		A10030 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10030; };
+		A10031 /* MusicServicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10031; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +55,15 @@
 		B10019 /* CachedAsyncImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedAsyncImage.swift; sourceTree = "<group>"; };
 		B10021 /* AccentColorHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccentColorHelper.swift; sourceTree = "<group>"; };
 		B10022 /* ColorSwatchGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSwatchGrid.swift; sourceTree = "<group>"; };
+		B10023 /* PresetManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetManagerView.swift; sourceTree = "<group>"; };
+		B10024 /* PlayHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayHistoryView.swift; sourceTree = "<group>"; };
+		B10025 /* MarqueeText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarqueeText.swift; sourceTree = "<group>"; };
+		B10026 /* HomeTheaterEQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTheaterEQView.swift; sourceTree = "<group>"; };
+		B10027 /* WindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManager.swift; sourceTree = "<group>"; };
+		B10028 /* HoverTooltip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverTooltip.swift; sourceTree = "<group>"; };
+		B10029 /* RecentlyPlayedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentlyPlayedView.swift; sourceTree = "<group>"; };
+		B10030 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		B10031 /* MusicServicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicServicesView.swift; sourceTree = "<group>"; };
 		B10020 /* SonosController.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonosController.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -99,6 +117,15 @@
 				B10019 /* CachedAsyncImage.swift */,
 				B10021 /* AccentColorHelper.swift */,
 				B10022 /* ColorSwatchGrid.swift */,
+				B10023 /* PresetManagerView.swift */,
+				B10024 /* PlayHistoryView.swift */,
+				B10025 /* MarqueeText.swift */,
+				B10026 /* HomeTheaterEQView.swift */,
+				B10027 /* WindowManager.swift */,
+				B10028 /* HoverTooltip.swift */,
+				B10029 /* RecentlyPlayedView.swift */,
+				B10030 /* MenuBarController.swift */,
+				B10031 /* MusicServicesView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -198,6 +225,15 @@
 				A10019 /* CachedAsyncImage.swift in Sources */,
 				A10021 /* AccentColorHelper.swift in Sources */,
 				A10022 /* ColorSwatchGrid.swift in Sources */,
+				A10023 /* PresetManagerView.swift in Sources */,
+				A10024 /* PlayHistoryView.swift in Sources */,
+				A10025 /* MarqueeText.swift in Sources */,
+				A10026 /* HomeTheaterEQView.swift in Sources */,
+				A10027 /* WindowManager.swift in Sources */,
+				A10028 /* HoverTooltip.swift in Sources */,
+				A10029 /* RecentlyPlayedView.swift in Sources */,
+				A10030 /* MenuBarController.swift in Sources */,
+				A10031 /* MusicServicesView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

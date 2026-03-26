@@ -146,6 +146,20 @@ public enum L10n {
     public static var albumLabel: String { tr("albumLabel") }
     public static var trackLabel: String { tr("trackLabel") }
 
+    // MARK: - Group Presets
+    public static var groupPresets: String { tr("groupPresets") }
+    public static var managePresets: String { tr("managePresets") }
+    public static var saveFromCurrent: String { tr("saveFromCurrent") }
+    public static var presetName: String { tr("presetName") }
+    public static var applyPreset: String { tr("applyPreset") }
+    public static var deletePreset: String { tr("deletePreset") }
+    public static var noPresets: String { tr("noPresets") }
+
+    // MARK: - Play History
+    public static var playHistory: String { tr("playHistory") }
+    public static var enablePlayHistory: String { tr("enablePlayHistory") }
+    public static var clearHistory: String { tr("clearHistory") }
+
     // MARK: - Appearance Modes
     public static var systemMode: String { tr("systemMode") }
     public static var lightMode: String { tr("lightMode") }
@@ -1939,6 +1953,76 @@ public enum L10n {
             "pt": "Entrada de linha",
             "pl": "Wej\u{015B}cie liniowe",
             "zh-Hans": "\u{7EBF}\u{8DEF}\u{8F93}\u{5165}",
+        ],
+
+        // ========================
+        // MARK: Group Presets
+        // ========================
+
+        "groupPresets": [
+            "en": "Group Presets", "de": "Gruppenvorlagen", "fr": "Pr\u{00E9}r\u{00E9}glages de groupes",
+            "nl": "Groepsvoorinstellingen", "es": "Preajustes de grupo", "it": "Preset di gruppo",
+            "sv": "Gruppf\u{00F6}rinst\u{00E4}llningar", "nb": "Gruppeforh\u{00E5}ndsinnstillinger", "da": "Gruppeforudindstillinger",
+            "ja": "\u{30B0}\u{30EB}\u{30FC}\u{30D7}\u{30D7}\u{30EA}\u{30BB}\u{30C3}\u{30C8}", "pt": "Predefinições de grupo", "pl": "Ustawienia grupowe", "zh-Hans": "\u{7EC4}\u{9884}\u{8BBE}",
+        ],
+        "managePresets": [
+            "en": "Manage Presets...", "de": "Vorlagen verwalten...", "fr": "G\u{00E9}rer les pr\u{00E9}r\u{00E9}glages...",
+            "nl": "Voorinstellingen beheren...", "es": "Gestionar preajustes...", "it": "Gestisci preset...",
+            "sv": "Hantera f\u{00F6}rinst\u{00E4}llningar...", "nb": "Administrer forh\u{00E5}ndsinnstillinger...", "da": "Administrer forudindstillinger...",
+            "ja": "\u{30D7}\u{30EA}\u{30BB}\u{30C3}\u{30C8}\u{3092}\u{7BA1}\u{7406}...", "pt": "Gerir predefinições...", "pl": "Zarządzaj ustawieniami...", "zh-Hans": "\u{7BA1}\u{7406}\u{9884}\u{8BBE}...",
+        ],
+        "saveFromCurrent": [
+            "en": "Save Current", "de": "Aktuelle speichern", "fr": "Enregistrer l\u{2019}actuel",
+            "nl": "Huidige opslaan", "es": "Guardar actual", "it": "Salva corrente",
+            "sv": "Spara nuvarande", "nb": "Lagre gjeldende", "da": "Gem nuv\u{00E6}rende",
+            "ja": "\u{73FE}\u{5728}\u{3092}\u{4FDD}\u{5B58}", "pt": "Guardar atual", "pl": "Zapisz bieżące", "zh-Hans": "\u{4FDD}\u{5B58}\u{5F53}\u{524D}",
+        ],
+        "presetName": [
+            "en": "Preset Name", "de": "Vorlagenname", "fr": "Nom du pr\u{00E9}r\u{00E9}glage",
+            "nl": "Naam voorinstelling", "es": "Nombre del preajuste", "it": "Nome preset",
+            "sv": "F\u{00F6}rinst\u{00E4}llningsnamn", "nb": "Forh\u{00E5}ndsinnstillingsnavn", "da": "Forudindstillingsnavn",
+            "ja": "\u{30D7}\u{30EA}\u{30BB}\u{30C3}\u{30C8}\u{540D}", "pt": "Nome da predefinição", "pl": "Nazwa ustawienia", "zh-Hans": "\u{9884}\u{8BBE}\u{540D}\u{79F0}",
+        ],
+        "applyPreset": [
+            "en": "Apply", "de": "Anwenden", "fr": "Appliquer",
+            "nl": "Toepassen", "es": "Aplicar", "it": "Applica",
+            "sv": "Till\u{00E4}mpa", "nb": "Bruk", "da": "Anvend",
+            "ja": "\u{9069}\u{7528}", "pt": "Aplicar", "pl": "Zastosuj", "zh-Hans": "\u{5E94}\u{7528}",
+        ],
+        "deletePreset": [
+            "en": "Delete Preset", "de": "Vorlage l\u{00F6}schen", "fr": "Supprimer le pr\u{00E9}r\u{00E9}glage",
+            "nl": "Voorinstelling verwijderen", "es": "Eliminar preajuste", "it": "Elimina preset",
+            "sv": "Ta bort f\u{00F6}rinst\u{00E4}llning", "nb": "Slett forh\u{00E5}ndsinnstilling", "da": "Slet forudindstilling",
+            "ja": "\u{30D7}\u{30EA}\u{30BB}\u{30C3}\u{30C8}\u{3092}\u{524A}\u{9664}", "pt": "Eliminar predefinição", "pl": "Usuń ustawienie", "zh-Hans": "\u{5220}\u{9664}\u{9884}\u{8BBE}",
+        ],
+        "noPresets": [
+            "en": "No Presets", "de": "Keine Vorlagen", "fr": "Aucun pr\u{00E9}r\u{00E9}glage",
+            "nl": "Geen voorinstellingen", "es": "Sin preajustes", "it": "Nessun preset",
+            "sv": "Inga f\u{00F6}rinst\u{00E4}llningar", "nb": "Ingen forh\u{00E5}ndsinnstillinger", "da": "Ingen forudindstillinger",
+            "ja": "\u{30D7}\u{30EA}\u{30BB}\u{30C3}\u{30C8}\u{306A}\u{3057}", "pt": "Sem predefinições", "pl": "Brak ustawień", "zh-Hans": "\u{65E0}\u{9884}\u{8BBE}",
+        ],
+
+        // ========================
+        // MARK: Play History
+        // ========================
+
+        "playHistory": [
+            "en": "Play History", "de": "Wiedergabeverlauf", "fr": "Historique de lecture",
+            "nl": "Afspeelgeschiedenis", "es": "Historial de reproducci\u{00F3}n", "it": "Cronologia riproduzione",
+            "sv": "Uppspelningshistorik", "nb": "Avspillingshistorikk", "da": "Afspilningshistorik",
+            "ja": "\u{518D}\u{751F}\u{5C65}\u{6B74}", "pt": "Histórico de reprodução", "pl": "Historia odtwarzania", "zh-Hans": "\u{64AD}\u{653E}\u{5386}\u{53F2}",
+        ],
+        "enablePlayHistory": [
+            "en": "Track Play History", "de": "Wiedergabeverlauf aufzeichnen", "fr": "Enregistrer l\u{2019}historique",
+            "nl": "Afspeelgeschiedenis bijhouden", "es": "Registrar historial", "it": "Registra cronologia",
+            "sv": "Spela in historik", "nb": "Registrer historikk", "da": "Registrer historik",
+            "ja": "\u{518D}\u{751F}\u{5C65}\u{6B74}\u{3092}\u{8A18}\u{9332}", "pt": "Registar histórico", "pl": "Rejestruj historię", "zh-Hans": "\u{8BB0}\u{5F55}\u{64AD}\u{653E}\u{5386}\u{53F2}",
+        ],
+        "clearHistory": [
+            "en": "Clear History", "de": "Verlauf l\u{00F6}schen", "fr": "Effacer l\u{2019}historique",
+            "nl": "Geschiedenis wissen", "es": "Borrar historial", "it": "Cancella cronologia",
+            "sv": "Rensa historik", "nb": "T\u{00F8}m historikk", "da": "Ryd historik",
+            "ja": "\u{5C65}\u{6B74}\u{3092}\u{6D88}\u{53BB}", "pt": "Limpar histórico", "pl": "Wyczyść historię", "zh-Hans": "\u{6E05}\u{9664}\u{5386}\u{53F2}",
         ],
 
         // ========================

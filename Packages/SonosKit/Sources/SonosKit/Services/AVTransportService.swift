@@ -221,6 +221,29 @@ public final class AVTransportService {
         )
     }
 
+    // MARK: - Crossfade
+
+    public func getCrossfadeMode(device: SonosDevice) async throws -> Bool {
+        let result = try await soap.send(
+            to: device.baseURL,
+            path: Self.path,
+            service: Self.service,
+            action: "GetCrossfadeMode",
+            arguments: [("InstanceID", "0")]
+        )
+        return result["CrossfadeMode"] == "1"
+    }
+
+    public func setCrossfadeMode(device: SonosDevice, enabled: Bool) async throws {
+        _ = try await soap.send(
+            to: device.baseURL,
+            path: Self.path,
+            service: Self.service,
+            action: "SetCrossfadeMode",
+            arguments: [("InstanceID", "0"), ("CrossfadeMode", enabled ? "1" : "0")]
+        )
+    }
+
     // MARK: - Sleep Timer
 
     public func configureSleepTimer(device: SonosDevice, duration: String) async throws {
@@ -280,18 +303,73 @@ public final class AVTransportService {
         return false
     }
 
-    /// Converts ALL CAPS text to Title Case. Leaves mixed-case text unchanged.
+    /// Cleans up stream metadata text casing.
+    /// - ALL CAPS text (>70% uppercase) is converted to Title Case, preserving Roman numerals.
+    /// - All text gets first-letter-after-bracket capitalisation (fixes stream metadata like "(os Caça" → "(Os Caça").
+    private static let romanNumerals: Set<String> = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XX"]
+
     private static func smartCase(_ text: String) -> String {
-        // Only convert if the text is mostly uppercase (>70% caps letters)
+        var result = text
+
+        // Convert ALL CAPS to title case
         let letters = text.filter { $0.isLetter }
-        guard !letters.isEmpty else { return text }
-        let upperCount = letters.filter { $0.isUppercase }.count
-        guard Double(upperCount) / Double(letters.count) > 0.7 else { return text }
-        // Title-case: capitalize first letter of each word
-        return text.lowercased().split(separator: " ").map { word in
-            guard let first = word.first else { return String(word) }
-            return String(first).uppercased() + word.dropFirst()
-        }.joined(separator: " ")
+        if !letters.isEmpty {
+            let upperCount = letters.filter { $0.isUppercase }.count
+            if Double(upperCount) / Double(letters.count) > 0.7 {
+                result = text.lowercased().split(separator: " ").map { word in
+                    let str = String(word)
+                    // Preserve Roman numerals
+                    let stripped = str.trimmingCharacters(in: .punctuationCharacters)
+                    let original = String(text[word.startIndex..<word.endIndex]).trimmingCharacters(in: .punctuationCharacters)
+                    if romanNumerals.contains(original.uppercased()) {
+                        // Reattach any leading punctuation
+                        let prefix = str.prefix(while: { !$0.isLetter })
+                        return prefix + original.uppercased()
+                    }
+                    // Capitalise first letter (including after punctuation)
+                    return capitaliseFirstLetter(str)
+                }.joined(separator: " ")
+            }
+        }
+
+        // Always fix first letter after ( [ / — regardless of overall case
+        result = fixBracketCapitalisation(result)
+        return result
+    }
+
+    /// Capitalises the first letter in a string, even after leading punctuation
+    private static func capitaliseFirstLetter(_ str: String) -> String {
+        var result = ""
+        var done = false
+        for char in str {
+            if !done && char.isLetter {
+                result.append(contentsOf: char.uppercased())
+                done = true
+            } else {
+                result.append(char)
+            }
+        }
+        return result
+    }
+
+    /// Capitalises the first letter after ( [ /
+    private static func fixBracketCapitalisation(_ text: String) -> String {
+        var result = ""
+        var capitaliseNext = false
+        for char in text {
+            if capitaliseNext && char.isLetter {
+                result.append(contentsOf: char.uppercased())
+                capitaliseNext = false
+            } else {
+                result.append(char)
+                if char == "(" || char == "[" || char == "/" {
+                    capitaliseNext = true
+                } else if char != " " {
+                    capitaliseNext = false
+                }
+            }
+        }
+        return result
     }
 
     public func becomeCoordinatorOfStandaloneGroup(device: SonosDevice) async throws {

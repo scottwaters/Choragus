@@ -107,8 +107,14 @@ public class SonosManager: ObservableObject {
     /// The objectID of the last favorite that was played — used to map art back to the browse list
     public var lastPlayedFavoriteID: String?
 
+    /// Optional play history manager — set from app layer
+    public var playHistoryManager: PlayHistoryManager?
+
     /// Set when user initiates playback, cleared only when speaker confirms playing
     @Published public var awaitingPlayback: [String: Bool] = [:]
+
+    /// Drag state for cross-view drag-and-drop (browse → queue)
+    public var draggedBrowseItem: BrowseItem?
 
     /// Stores an art URL with multiple cache keys for flexible lookup
     public func cacheArtURL(_ artURL: String, forURI uri: String, title: String = "", itemID: String = "") {
@@ -414,6 +420,9 @@ public class SonosManager: ObservableObject {
                 saveCache()
             }
 
+            // Parse home theater channel maps
+            parseHTChannelMaps(from: groupData)
+
             self.isUsingCachedData = false
             self.isRefreshing = false
             self.staleMessage = nil
@@ -423,6 +432,32 @@ public class SonosManager: ObservableObject {
         } catch {
             // Topology fetch failed — will retry on next discovery cycle
         }
+    }
+
+    /// Parses HTSatChanMapSet from topology data to identify surround/sub configurations
+    private func parseHTChannelMaps(from groupData: [ZoneGroupData]) {
+        var maps: [String: [(String, SpeakerChannel)]] = [:]
+        for gd in groupData {
+            for md in gd.members where !md.htSatChanMapSet.isEmpty {
+                // Format: "RINCON_xxx:LF,RF;RINCON_yyy:SW;RINCON_zzz:LR;RINCON_www:RR"
+                var channelList: [(String, SpeakerChannel)] = []
+                let pairs = md.htSatChanMapSet.components(separatedBy: ";")
+                for pair in pairs {
+                    let parts = pair.components(separatedBy: ":")
+                    guard parts.count == 2 else { continue }
+                    let deviceID = parts[0]
+                    let channelStr = parts[1]
+                    if let channel = SpeakerChannel(rawValue: channelStr) {
+                        channelList.append((deviceID, channel))
+                    }
+                }
+                if !channelList.isEmpty {
+                    maps[gd.coordinatorUUID] = channelList
+                    break // Only need it from the coordinator's entry
+                }
+            }
+        }
+        htSatChannelMaps = maps
     }
 
     // MARK: - Transport Strategy Management
@@ -577,6 +612,34 @@ public class SonosManager: ObservableObject {
         try await avTransport.setPlayMode(device: coordinator, mode: mode)
     }
 
+    // MARK: - Crossfade
+
+    public func getCrossfadeMode(group: SonosGroup) async throws -> Bool {
+        guard let coordinator = group.coordinator else { return false }
+        return try await avTransport.getCrossfadeMode(device: coordinator)
+    }
+
+    public func setCrossfadeMode(group: SonosGroup, enabled: Bool) async throws {
+        guard let coordinator = group.coordinator else { return }
+        try await avTransport.setCrossfadeMode(device: coordinator, enabled: enabled)
+    }
+
+    // MARK: - Pause / Resume All
+
+    public func pauseAll() async {
+        for group in groups {
+            guard groupTransportStates[group.coordinatorID]?.isPlaying == true else { continue }
+            try? await pause(group: group)
+        }
+    }
+
+    public func resumeAll() async {
+        for group in groups {
+            guard groupTransportStates[group.coordinatorID] == .paused else { continue }
+            try? await play(group: group)
+        }
+    }
+
     // MARK: - Sleep Timer
 
     public func setSleepTimer(group: SonosGroup, duration: String) async throws {
@@ -638,6 +701,45 @@ public class SonosManager: ObservableObject {
         try await renderingControl.setLoudness(device: device, enabled: enabled)
     }
 
+    // MARK: - Home Theater EQ
+
+    public func getEQ(device: SonosDevice, eqType: String) async throws -> Int {
+        try await renderingControl.getEQ(device: device, eqType: eqType)
+    }
+
+    public func setEQ(device: SonosDevice, eqType: String, value: Int) async throws {
+        try await renderingControl.setEQ(device: device, eqType: eqType, value: value)
+    }
+
+    /// Returns bonded home theater zones (those with HTSatChanMapSet — sub/surrounds)
+    public var homeTheaterZones: [HomeTheaterZone] {
+        var zones: [HomeTheaterZone] = []
+        for group in groups {
+            guard let coordinator = group.coordinator else { continue }
+            // Check if this coordinator has satellite channel info
+            if let channelMap = htSatChannelMaps[coordinator.id] {
+                var members: [HomeTheaterMember] = []
+                // Add coordinator as LF,RF (soundbar)
+                members.append(HomeTheaterMember(device: coordinator, channel: .soundbar))
+                // Add satellites
+                for (deviceID, channel) in channelMap {
+                    if let device = devices[deviceID], deviceID != coordinator.id {
+                        members.append(HomeTheaterMember(device: device, channel: channel))
+                    }
+                }
+                zones.append(HomeTheaterZone(
+                    coordinatorID: coordinator.id,
+                    name: coordinator.roomName,
+                    members: members.sorted { $0.channel.sortOrder < $1.channel.sortOrder }
+                ))
+            }
+        }
+        return zones
+    }
+
+    /// Parsed HTSatChanMapSet data: coordinator ID → [(deviceID, channel)]
+    @Published public var htSatChannelMaps: [String: [(String, SpeakerChannel)]] = [:]
+
     // MARK: - Queue
 
     public func getQueue(group: SonosGroup, start: Int = 0, count: Int = 100) async throws -> (items: [QueueItem], total: Int) {
@@ -657,23 +759,78 @@ public class SonosManager: ObservableObject {
 
     public func playTrackFromQueue(group: SonosGroup, trackNumber: Int) async throws {
         guard let coordinator = group.coordinator else { return }
-        // Clear radio station state — we're switching to queue playback
-        if var meta = groupTrackMetadata[coordinator.id] {
-            meta.stationName = ""
-            meta.albumArtURI = nil
-            groupTrackMetadata[coordinator.id] = meta
-        }
+
+        // Fully clear existing metadata — we're switching source
+        groupTrackMetadata[coordinator.id] = TrackMetadata()
+
         // Ensure transport is pointing at the queue (not a radio stream etc.)
         try await avTransport.setAVTransportURI(
             device: coordinator, uri: "x-rincon-queue:\(coordinator.id)#0"
         )
         try await contentDirectory.seekToTrack(device: coordinator, trackNumber: trackNumber)
         try await avTransport.play(device: coordinator)
+
+        // Immediately fetch the new track's metadata — set directly (skip merge logic)
+        groupTransportStates[coordinator.id] = .playing
+        setTransportGrace(groupID: coordinator.id, duration: 5)
+        let position = try await avTransport.getPositionInfo(device: coordinator)
+        groupTrackMetadata[coordinator.id] = position
     }
 
     public func moveTrackInQueue(group: SonosGroup, from: Int, to: Int) async throws {
         guard let coordinator = group.coordinator else { return }
         try await contentDirectory.reorderTracksInQueue(device: coordinator, startIndex: from, numberOfTracks: 1, insertBefore: to)
+    }
+
+    // MARK: - Playlist Management
+
+    /// Saves the current queue as a new Sonos playlist using SaveQueue
+    public func saveQueueAsPlaylist(group: SonosGroup, title: String) async throws -> String {
+        guard let coordinator = group.coordinator else { return "" }
+        return try await contentDirectory.saveQueue(device: coordinator, title: title)
+    }
+
+    /// Adds a browse item to an existing Sonos playlist
+    public func addToPlaylist(playlistID: String, item: BrowseItem) async throws {
+        guard let device = preferredDevice else { return }
+        guard let uri = item.resourceURI, !uri.isEmpty else { return }
+        var meta = item.resourceMetadata ?? ""
+        if meta.contains("&lt;") { meta = XMLResponseParser.xmlUnescape(meta) }
+        _ = try await contentDirectory.addURIToSavedQueue(device: device, objectID: playlistID, uri: uri, metadata: meta)
+    }
+
+    /// Deletes a Sonos playlist
+    public func deletePlaylist(playlistID: String) async throws {
+        guard let device = preferredDevice else { return }
+        try await contentDirectory.destroyObject(device: device, objectID: playlistID)
+    }
+
+    /// Renames a Sonos playlist
+    public func renamePlaylist(playlistID: String, oldTitle: String, newTitle: String) async throws {
+        guard let device = preferredDevice else { return }
+        try await contentDirectory.renameSavedQueue(device: device, objectID: playlistID, oldTitle: oldTitle, newTitle: newTitle)
+    }
+
+    /// Plays a raw URI (used for replaying history entries)
+    public func playURI(group: SonosGroup, uri: String, metadata: String = "",
+                        title: String = "", artist: String = "", stationName: String = "",
+                        albumArtURI: String? = nil) async throws {
+        guard let coordinator = group.coordinator else { return }
+
+        // Set optimistic metadata immediately so the player view updates
+        var pendingMeta = TrackMetadata()
+        pendingMeta.title = title
+        pendingMeta.artist = artist
+        pendingMeta.stationName = stationName
+        pendingMeta.albumArtURI = albumArtURI
+        pendingMeta.trackURI = uri
+        groupTrackMetadata[coordinator.id] = pendingMeta
+        groupTransportStates[coordinator.id] = .transitioning
+        awaitingPlayback[coordinator.id] = true
+        setTransportGrace(groupID: coordinator.id, duration: 10)
+
+        try await avTransport.setAVTransportURI(device: coordinator, uri: uri, metadata: metadata)
+        try await avTransport.play(device: coordinator)
     }
 
     // MARK: - Grouping
@@ -729,8 +886,8 @@ public class SonosManager: ObservableObject {
         do {
             let (items, _) = try await contentDirectory.browse(device: anyDevice, objectID: "A:", start: 0, count: 20)
             for item in items {
-                let icon = libraryIcon(for: item.id)
-                sections.append(BrowseSection(id: item.id, title: item.title, objectID: item.id, icon: icon))
+                let icon = libraryIcon(for: item.objectID)
+                sections.append(BrowseSection(id: item.objectID, title: item.title, objectID: item.objectID, icon: icon))
             }
         } catch {
             sections.append(BrowseSection(id: "artists", title: "Artists", objectID: "A:ALBUMARTIST", icon: "person.2"))
@@ -811,12 +968,12 @@ public class SonosManager: ObservableObject {
         guard let coordinator = group.coordinator else { return }
 
         // Remember which favorite was played so art can be mapped back
-        lastPlayedFavoriteID = item.id
+        lastPlayedFavoriteID = item.objectID
 
         // Build metadata from browse item for UI display
-        let isRadioStream = item.resourceURI?.hasPrefix("x-sonosapi-stream:") == true
-            || item.resourceURI?.hasPrefix("x-sonosapi-radio:") == true
-            || item.resourceURI?.hasPrefix("x-rincon-mp3radio:") == true
+        let isRadioStream = item.resourceURI?.hasPrefix(URIPrefix.sonosApiStream) == true
+            || item.resourceURI?.hasPrefix(URIPrefix.sonosApiRadio) == true
+            || item.resourceURI?.hasPrefix(URIPrefix.rinconMP3Radio) == true
 
         var initialMeta = TrackMetadata(
             title: item.title,
@@ -831,12 +988,12 @@ public class SonosManager: ObservableObject {
 
         // Show new item info immediately with transitioning state.
         // Use cached art if available so artwork appears instantly while waiting.
-        let isContainer = item.resourceURI?.hasPrefix("x-rincon-cpcontainer:") == true
+        let isContainer = item.resourceURI?.hasPrefix(URIPrefix.rinconContainer) == true
         awaitingPlayback[coordinator.id] = true
         if !isContainer {
             var pendingMeta = initialMeta
             // Prefer cached art (survives restart), then item's DIDL art, then nil
-            if let cachedArt = discoveredArtURLs[item.id] ?? lookupCachedArt(uri: item.resourceURI, title: item.title) {
+            if let cachedArt = discoveredArtURLs[item.objectID] ?? lookupCachedArt(uri: item.resourceURI, title: item.title) {
                 pendingMeta.albumArtURI = cachedArt
             }
             groupTrackMetadata[coordinator.id] = pendingMeta
@@ -851,7 +1008,7 @@ public class SonosManager: ObservableObject {
                 meta = XMLResponseParser.xmlUnescape(meta)
             }
 
-            if uri.hasPrefix("x-rincon-cpcontainer:") {
+            if uri.hasPrefix(URIPrefix.rinconContainer) {
                 // Streaming service containers (albums/playlists) —
                 // try adding to queue first, fall back to direct transport URI
                 do {
@@ -872,14 +1029,14 @@ public class SonosManager: ObservableObject {
                 }
                 // Success — show new item info with transitioning state
                 var pendingMeta = initialMeta
-                if let cachedArt = discoveredArtURLs[item.id] ?? lookupCachedArt(uri: item.resourceURI, title: item.title) {
+                if let cachedArt = discoveredArtURLs[item.objectID] ?? lookupCachedArt(uri: item.resourceURI, title: item.title) {
                     pendingMeta.albumArtURI = cachedArt
                 }
                 groupTrackMetadata[coordinator.id] = pendingMeta
                 groupTransportStates[coordinator.id] = .transitioning
                 setTransportGrace(groupID: coordinator.id, duration: 10)
                 awaitingPlayback[coordinator.id] = true
-            } else if uri.hasPrefix("x-rincon-playlist:") || uri.hasPrefix("file:///jffs/") {
+            } else if uri.hasPrefix(URIPrefix.rinconPlaylist) || uri.hasPrefix("file:///jffs/") {
                 // Sonos playlists and library playlists — add to queue then play
                 try await withStaleHandling(for: group.name) {
                     try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
@@ -911,22 +1068,32 @@ public class SonosManager: ObservableObject {
         }
     }
 
-    public func addBrowseItemToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool = false) async throws {
-        guard let coordinator = group.coordinator else { return }
+    @discardableResult
+    public func addBrowseItemToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool = false, atPosition: Int = 0) async throws -> Int {
+        guard let coordinator = group.coordinator else { return 0 }
 
         if let uri = item.resourceURI, !uri.isEmpty {
-            _ = try await contentDirectory.addURIToQueue(device: coordinator, uri: uri, metadata: item.resourceMetadata ?? "", enqueueAsNext: playNext)
+            // Unescape metadata — browse parser stores it XML-escaped
+            var meta = item.resourceMetadata ?? ""
+            if meta.contains("&lt;") {
+                meta = XMLResponseParser.xmlUnescape(meta)
+            }
+            sonosDebugLog("[QUEUE] Adding URI to queue: \(uri.prefix(60)) meta=\(meta.isEmpty ? "empty" : "\(meta.count) chars") playNext=\(playNext) atPos=\(atPosition)")
+            return try await contentDirectory.addURIToQueue(device: coordinator, uri: uri, metadata: meta, desiredFirstTrackNumberEnqueued: atPosition, enqueueAsNext: playNext)
         } else if item.isContainer {
             let containerURI = makeContainerURI(item)
-            _ = try await contentDirectory.addURIToQueue(device: coordinator, uri: containerURI, enqueueAsNext: playNext)
+            sonosDebugLog("[QUEUE] Adding container to queue: \(containerURI.prefix(60))")
+            return try await contentDirectory.addURIToQueue(device: coordinator, uri: containerURI, desiredFirstTrackNumberEnqueued: atPosition, enqueueAsNext: playNext)
         }
+        sonosDebugLog("[QUEUE] Cannot add to queue: no URI for '\(item.title)' objectID=\(item.objectID)")
+        return 0
     }
 
     /// Builds a URI that Sonos understands for enqueuing an entire container.
     /// Each prefix maps to a different Sonos protocol scheme:
     ///   SQ: = saved queues stored in flash, A:/S: = local library playlists
     private func makeContainerURI(_ item: BrowseItem) -> String {
-        let objectID = item.id
+        let objectID = item.objectID
         if objectID.hasPrefix("SQ:") {
             return "file:///jffs/settings/savedqueues.rsq#\(objectID)"
         }
@@ -948,22 +1115,28 @@ public class SonosManager: ObservableObject {
         if let match = musicServicesList.first(where: { $0.id == serviceID }) {
             return match.name
         }
-        return nil
+        return ServiceID.knownNames[serviceID]
     }
 
     /// Detects the music service from a URI by checking both sid= and URI content patterns.
     public func detectServiceName(fromURI uri: String) -> String? {
-        // 1. Try sid= parameter
-        if let range = uri.range(of: "sid=") {
-            let after = uri[range.upperBound...]
-            let numStr = String(after.prefix(while: { $0.isNumber }))
-            if let sid = Int(numStr), let name = musicServiceName(for: sid) {
-                return name
+        // Decode URL-encoded URIs and XML entities
+        let decoded = (uri.removingPercentEncoding ?? uri)
+            .replacingOccurrences(of: "&amp;", with: "&")
+
+        // 1. Try sid= parameter (check both original and decoded)
+        for candidate in [decoded, uri] {
+            if let range = candidate.range(of: "sid=") {
+                let after = candidate[range.upperBound...]
+                let numStr = String(after.prefix(while: { $0.isNumber }))
+                if let sid = Int(numStr), let name = musicServiceName(for: sid) {
+                    return name
+                }
             }
         }
 
         // 2. Check URI content for known service patterns
-        let lower = uri.lowercased()
+        let lower = decoded.lowercased()
         if lower.contains("spotify") { return "Spotify" }
         if lower.contains("apple") { return "Apple Music" }
         if lower.contains("amazon") || lower.contains("amzn") { return "Amazon Music" }
@@ -980,14 +1153,14 @@ public class SonosManager: ObservableObject {
         if lower.contains("calmradio") || uri.contains("sid=144") { return "Calm Radio" }
 
         // Radio streams — check after specific services
-        if uri.hasPrefix("x-sonosapi-stream:") || uri.hasPrefix("x-sonosapi-radio:") { return "Radio" }
-        if uri.hasPrefix("x-rincon-mp3radio:") { return "Radio" }
+        if decoded.hasPrefix(URIPrefix.sonosApiStream) || decoded.hasPrefix(URIPrefix.sonosApiRadio) { return "Radio" }
+        if decoded.hasPrefix(URIPrefix.rinconMP3Radio) { return "Radio" }
 
-        // Apple Music uses x-sonos-http with sid=204
-        if uri.hasPrefix("x-sonos-http:") { return "Apple Music" }
+        // Streaming services via x-sonos-http (use sid if available, otherwise generic)
+        if decoded.hasPrefix(URIPrefix.sonosHTTP) { return "Streaming" }
 
         // Local sources
-        if uri.hasPrefix("x-file-cifs://") || uri.hasPrefix("x-smb://") { return "Music Library" }
+        if URIPrefix.isLocal(uri) { return "Music Library" }
         if uri.hasPrefix("file:///jffs/settings/savedqueues") { return "Sonos Playlist" }
 
         return nil
@@ -1095,22 +1268,34 @@ extension SonosManager: TransportStrategyDelegate {
 
         var updated = metadata
 
-        // Only carry forward station name if still playing radio
-        let isStillRadio = updated.trackURI?.contains("x-sonosapi-stream:") == true ||
-                           updated.trackURI?.contains("x-sonosapi-radio:") == true ||
-                           updated.trackURI?.contains("x-rincon-mp3radio:") == true
-        if updated.stationName.isEmpty && !existing.stationName.isEmpty && isStillRadio {
+        // Detect if the track actually changed
+        let trackChanged = updated.trackURI != existing.trackURI && updated.trackURI != nil
+
+        // Only carry forward station name if still playing the same radio stream
+        let isStillRadio = updated.trackURI?.contains(URIPrefix.sonosApiStream) == true ||
+                           updated.trackURI?.contains(URIPrefix.sonosApiRadio) == true ||
+                           updated.trackURI?.contains(URIPrefix.rinconMP3Radio) == true
+        if updated.stationName.isEmpty && !existing.stationName.isEmpty && isStillRadio && !trackChanged {
             updated.stationName = existing.stationName
         }
 
-        // Only carry forward art if the source hasn't changed
-        if updated.albumArtURI == nil, let existingArt = existing.albumArtURI {
-            // Don't carry radio art to queue tracks
+        // Only carry forward art if the track hasn't changed
+        if updated.albumArtURI == nil, let existingArt = existing.albumArtURI, !trackChanged {
             if isStillRadio || existing.stationName.isEmpty {
                 updated.albumArtURI = existingArt
             }
         }
         groupTrackMetadata[groupID] = updated
+
+        // Log to play history
+        if let group = groups.first(where: { $0.coordinatorID == groupID || $0.id == groupID }) {
+            playHistoryManager?.trackMetadataChanged(
+                groupID: groupID,
+                metadata: updated,
+                groupName: group.name,
+                transportState: groupTransportStates[groupID] ?? .stopped
+            )
+        }
     }
 
     /// Detects technical stream names that should not replace friendly titles.

@@ -96,6 +96,7 @@ public struct ZoneMemberData {
     public let ip: String
     public let port: Int
     public let isInvisible: Bool
+    public let htSatChanMapSet: String
 }
 
 public struct DIDLItem {
@@ -197,8 +198,27 @@ private class ZoneGroupParser: NSObject, XMLParserDelegate {
                 port = url.port ?? 1400
             }
 
-            let member = ZoneMemberData(uuid: uuid, location: location, zoneName: zoneName, ip: ip, port: port, isInvisible: invisible)
+            let htSatMap = attributes["HTSatChanMapSet"] ?? ""
+            let member = ZoneMemberData(uuid: uuid, location: location, zoneName: zoneName, ip: ip, port: port, isInvisible: invisible, htSatChanMapSet: htSatMap)
             currentGroup?.members.append(member)
+
+        case "Satellite":
+            guard currentGroup != nil else { return }
+            let uuid = attributes["UUID"] ?? ""
+            let location = attributes["Location"] ?? ""
+            let zoneName = attributes["ZoneName"] ?? ""
+            let invisible = attributes["Invisible"] == "1"
+            let htSatMap = attributes["HTSatChanMapSet"] ?? ""
+
+            var ip = ""
+            var port = 1400
+            if let url = URL(string: location) {
+                ip = url.host ?? ""
+                port = url.port ?? 1400
+            }
+
+            let satellite = ZoneMemberData(uuid: uuid, location: location, zoneName: zoneName, ip: ip, port: port, isInvisible: invisible, htSatChanMapSet: htSatMap)
+            currentGroup?.members.append(satellite)
 
         default:
             break

@@ -116,4 +116,27 @@ public final class RenderingControlService {
             arguments: [("InstanceID", "0"), ("Channel", "Master"), ("DesiredLoudness", enabled ? "1" : "0")]
         )
     }
+
+    // MARK: - Home Theater EQ (Sub / Surrounds / Night Mode)
+
+    public func getEQ(device: SonosDevice, eqType: String) async throws -> Int {
+        let result = try await soap.send(
+            to: device.baseURL,
+            path: Self.path,
+            service: Self.service,
+            action: "GetEQ",
+            arguments: [("InstanceID", "0"), ("EQType", eqType)]
+        )
+        return Int(result["CurrentValue"] ?? "0") ?? 0
+    }
+
+    public func setEQ(device: SonosDevice, eqType: String, value: Int) async throws {
+        _ = try await soap.send(
+            to: device.baseURL,
+            path: Self.path,
+            service: Self.service,
+            action: "SetEQ",
+            arguments: [("InstanceID", "0"), ("EQType", eqType), ("DesiredValue", "\(value)")]
+        )
+    }
 }

@@ -10,19 +10,51 @@ import SonosKit
 @main
 struct SonosControllerApp: App {
     @StateObject private var sonosManager = SonosManager()
-
+    @StateObject private var presetManager = PresetManager()
+    @StateObject private var playHistoryManager = PlayHistoryManager()
+    @StateObject private var playlistScanner = PlaylistServiceScanner()
+    @StateObject private var smapiManager = SMAPIAuthManager()
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(sonosManager)
+                .environmentObject(presetManager)
+                .environmentObject(playHistoryManager)
+                .environmentObject(playlistScanner)
+                .environmentObject(smapiManager)
                 .onAppear {
+                    sonosManager.playHistoryManager = playHistoryManager
                     sonosManager.startDiscovery()
+                    MenuBarController.shared.setup(sonosManager: sonosManager)
+                    // Load SMAPI services if enabled
+                    if smapiManager.isEnabled, let speaker = sonosManager.groups.first?.coordinator {
+                        Task { await smapiManager.loadServices(speakerIP: speaker.ip, musicServicesList: sonosManager.musicServicesList) }
+                    }
+                    WindowManager.shared.playHistoryManager = playHistoryManager
+                    WindowManager.shared.sonosManager = sonosManager
+                    WindowManager.shared.colorScheme = colorScheme
+                }
+                .onChange(of: sonosManager.appearanceMode) {
+                    WindowManager.shared.colorScheme = colorScheme
                 }
                 .frame(minWidth: 700, minHeight: 450)
                 .preferredColorScheme(colorScheme)
         }
         .windowStyle(.titleBar)
         .defaultSize(width: 900, height: 550)
+        .commands {
+            CommandGroup(before: .windowList) {
+                Button("Play History") {
+                    WindowManager.shared.openPlayHistory()
+                }
+                .keyboardShortcut("H", modifiers: [.command, .shift])
+                Button("Home Theater EQ") {
+                    WindowManager.shared.openHomeTheaterEQ()
+                }
+                .keyboardShortcut("E", modifiers: [.command, .shift])
+                Divider()
+            }
+        }
     }
 
     private var colorScheme: ColorScheme? {

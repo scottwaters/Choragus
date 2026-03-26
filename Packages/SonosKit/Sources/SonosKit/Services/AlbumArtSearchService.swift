@@ -69,6 +69,43 @@ public final class AlbumArtSearchService {
         return nil
     }
 
+    /// Optimized search for radio track artwork — uses song entity first for better accuracy.
+    /// Radio stream metadata often has movie/show names as "artist" which confuse album searches.
+    public func searchRadioTrackArt(artist: String, title: String) async -> String? {
+        let cacheKey = "radio:\(artist.lowercased())|\(title.lowercased())"
+        cacheLock.lock()
+        if let cached = cache[cacheKey] {
+            cacheLock.unlock()
+            return cached
+        }
+        cacheLock.unlock()
+
+        // Strategy 1: Verified song search with artist + title
+        if !artist.isEmpty {
+            if let url = await verifiedSongSearch(query: "\(artist) \(title)", expectedTitle: title) {
+                cacheSet(cacheKey, url)
+                return url
+            }
+        }
+
+        // Strategy 2: Verified song search with just title
+        if let url = await verifiedSongSearch(query: title, expectedTitle: title) {
+            cacheSet(cacheKey, url)
+            return url
+        }
+
+        // Strategy 3: Album search with artist + title (for soundtrack albums)
+        if !artist.isEmpty {
+            if let url = await iTunesSearch(query: "\(artist) \(title) soundtrack", entity: "album") {
+                cacheSet(cacheKey, url)
+                return url
+            }
+        }
+
+        cacheSet(cacheKey, nil)
+        return nil
+    }
+
     private func cacheSet(_ key: String, _ value: String?) {
         cacheLock.lock()
         cache[key] = value
@@ -76,9 +113,15 @@ public final class AlbumArtSearchService {
     }
 
     /// Low-level iTunes Search API call
-    private func iTunesSearch(query: String, entity: String) async -> String? {
+    private func iTunesSearch(query: String, entity: String, limit: Int = 1) async -> String? {
+        let result = await iTunesSearchFull(query: query, entity: entity, limit: limit)
+        return result?.artURL
+    }
+
+    /// iTunes search that also returns metadata for verification
+    private func iTunesSearchFull(query: String, entity: String, limit: Int = 3) async -> (artURL: String, artistName: String, collectionName: String, trackName: String)? {
         guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=1") else {
+              let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=\(limit)") else {
             return nil
         }
 
@@ -96,17 +139,37 @@ public final class AlbumArtSearchService {
                 return nil
             }
 
-            // Different entities return art in different fields
             let artURL = first["artworkUrl100"] as? String ??
                          first["artworkUrl60"] as? String ??
                          first["artworkUrl30"] as? String
             guard let art = artURL else { return nil }
 
-            return art.replacingOccurrences(of: "100x100", with: "600x600")
-                      .replacingOccurrences(of: "60x60", with: "600x600")
-                      .replacingOccurrences(of: "30x30", with: "600x600")
+            let upscaled = art.replacingOccurrences(of: "100x100", with: "600x600")
+                              .replacingOccurrences(of: "60x60", with: "600x600")
+                              .replacingOccurrences(of: "30x30", with: "600x600")
+
+            return (
+                artURL: upscaled,
+                artistName: first["artistName"] as? String ?? "",
+                collectionName: first["collectionName"] as? String ?? "",
+                trackName: first["trackName"] as? String ?? ""
+            )
         } catch {
             return nil
         }
+    }
+
+    /// Verified song search — checks that the result's track name loosely matches the search title
+    private func verifiedSongSearch(query: String, expectedTitle: String) async -> String? {
+        guard let result = await iTunesSearchFull(query: query, entity: "song", limit: 5) else { return nil }
+        let resultTrack = result.trackName.lowercased()
+        let expected = expectedTitle.lowercased()
+        // Accept if the result track name contains a significant portion of the expected title
+        let expectedWords = expected.components(separatedBy: .whitespaces).filter { $0.count > 2 }
+        let matchCount = expectedWords.filter { resultTrack.contains($0) }.count
+        if expectedWords.isEmpty || matchCount >= max(1, expectedWords.count / 2) {
+            return result.artURL
+        }
+        return nil
     }
 }

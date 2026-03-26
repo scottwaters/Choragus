@@ -1,6 +1,6 @@
 # Caching System
 
-SonosController uses three caching layers to minimise latency and provide instant startup.
+SonosController uses five caching layers to minimise latency and provide instant startup.
 
 ## 1. Topology Cache (Speaker Layout)
 
@@ -115,7 +115,46 @@ Favorite displayed in browse list
 - Restored on startup in `startDiscovery()` before any UI renders
 - Independent of Quick Start / Classic startup mode
 
-## 4. Optimistic State Cache (In-Memory)
+## 4. Playlist Services Cache
+
+**Location:** `~/Library/Application Support/SonosController/playlist_services_cache.json`
+**Format:** JSON dictionary mapping playlist IDs to per-track service identifiers
+
+### Problem
+
+When browsing Sonos Playlists, users want to see which streaming service each track belongs to (Apple Music, Spotify, Music Library, etc.). Determining the service requires inspecting each track's resource URI or metadata, which means browsing into the playlist and examining every track. For large playlists, this is slow.
+
+### Solution
+
+`PlaylistServiceScanner` runs a background scan of playlist tracks, extracting the service identifier for each track from its URI pattern and SID (Service ID) metadata. Results are stored as a `[String: [String: String]]` dictionary — outer key is playlist ID, inner dictionary maps track IDs to service names.
+
+### Flow
+
+```
+Playlist displayed in browse list
+  → Check playlist services cache for this playlist ID
+    → HIT: show service badges immediately from cache
+    → MISS: Queue background scan
+      → Browse playlist tracks via ContentDirectory
+      → Extract service from each track's URI / SID
+      → Store results in memory + persist to disk
+      → UI updates with service badges
+```
+
+### Persistence
+
+- Saved to disk after each playlist scan completes
+- Restored on startup so badges appear instantly without re-scanning
+- Cache is invalidated when playlists are modified (tracks added/removed)
+- Independent of Quick Start / Classic startup mode
+
+### Performance
+
+- Scanning runs on a background task to avoid blocking the UI
+- Only one playlist is scanned at a time to limit network load
+- Results are cached permanently until the playlist changes
+
+## 5. Optimistic State Cache (In-Memory)
 
 Not a traditional cache, but a grace period system that temporarily holds user-intended state to prevent polling from reverting it.
 
