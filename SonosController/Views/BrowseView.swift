@@ -398,28 +398,32 @@ struct BrowseListView: View {
     @ViewBuilder
     private func contextMenuItems(for item: BrowseItem) -> some View {
         if let group = group {
+            let isRadio = item.resourceURI.map(URIPrefix.isRadio) ?? false ||
+                          item.itemClass == .radioStation || item.itemClass == .radioShow
             if item.isPlayable {
                 Button(L10n.playNow) {
                     let capturedItem = item
                     let capturedVM = vm
                     Task { await capturedVM.play(capturedItem) }
                 }
-                Button(L10n.playNext) {
-                    let capturedItem = item
-                    let capturedVM = vm
-                    Task { await capturedVM.addToQueue(capturedItem, playNext: true) }
-                }
-                Button(L10n.addToQueue) {
-                    let capturedItem = item
-                    let capturedVM = vm
-                    Task { await capturedVM.addToQueue(capturedItem) }
-                }
-                if !vm.playlists.isEmpty {
-                    Divider()
-                    Menu("Add to Playlist") {
-                        ForEach(vm.playlists) { playlist in
-                            Button(playlist.title) {
-                                Task { await vm.addToPlaylist(playlistID: playlist.objectID, item: item) }
+                if !isRadio {
+                    Button(L10n.playNext) {
+                        let capturedItem = item
+                        let capturedVM = vm
+                        Task { await capturedVM.addToQueue(capturedItem, playNext: true) }
+                    }
+                    Button(L10n.addToQueue) {
+                        let capturedItem = item
+                        let capturedVM = vm
+                        Task { await capturedVM.addToQueue(capturedItem) }
+                    }
+                    if !vm.playlists.isEmpty {
+                        Divider()
+                        Menu("Add to Playlist") {
+                            ForEach(vm.playlists) { playlist in
+                                Button(playlist.title) {
+                                    Task { await vm.addToPlaylist(playlistID: playlist.objectID, item: item) }
+                                }
                             }
                         }
                     }
