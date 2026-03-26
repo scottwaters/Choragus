@@ -63,6 +63,13 @@ struct QueueView: View {
             Text("\(vm.totalTracks) \(L10n.tracks)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Button { Task { await vm.shuffleQueue() } } label: {
+                Image(systemName: "shuffle").font(.caption)
+            }
+            .buttonStyle(.plain)
+            .tooltip("Shuffle Queue")
+            .disabled(vm.queueItems.count < 2)
+
             Button { showSavePlaylist = true } label: {
                 Image(systemName: "square.and.arrow.down").font(.caption)
             }

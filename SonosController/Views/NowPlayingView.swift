@@ -422,8 +422,22 @@ struct NowPlayingView: View {
                     .padding(6)
             }
         }
-        .onAppear { vm.loadPersistedArtOverride(); vm.searchWebArtIfNeeded(); vm.updateDisplayedArt(); vm.searchRadioTrackArt() }
-        .onReceive(sonosManager.$groupTrackMetadata) { _ in
+        .onAppear {
+            vm.loadPersistedArtOverride()
+            vm.searchWebArtIfNeeded()
+            vm.updateDisplayedArt()
+            vm.searchRadioTrackArt()
+        }
+        .onReceive(sonosManager.$groupTrackMetadata) { newMeta in
+            // Force art update whenever metadata changes
+            let meta = newMeta[group.coordinatorID]
+            let artURI = meta?.albumArtURI
+            // If speaker provided art, use it directly
+            if let art = artURI, !art.isEmpty, let url = URL(string: art) {
+                if vm.displayedArtURL != url && !vm.forceWebArt {
+                    vm.displayedArtURL = url
+                }
+            }
             vm.searchWebArtIfNeeded()
             vm.updateDisplayedArt()
             vm.searchRadioTrackArt()
