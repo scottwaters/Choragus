@@ -90,9 +90,16 @@ struct QueueView: View {
 
     @ViewBuilder
     private var content: some View {
-        if vm.isLoading {
-            ProgressView()
-                .frame(maxHeight: .infinity)
+        if vm.isLoading || vm.isShuffling {
+            VStack(spacing: 8) {
+                ProgressView()
+                if vm.isShuffling {
+                    Text("Shuffling...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxHeight: .infinity)
         } else if vm.queueItems.isEmpty {
             emptyState
         } else {
@@ -161,6 +168,13 @@ struct QueueView: View {
             guard vm.currentTrack > 0, !vm.isPlayingStation else { return }
             withAnimation(.easeInOut(duration: 0.3)) {
                 proxy.scrollTo(vm.currentTrack, anchor: .center)
+            }
+        }
+        .onChange(of: vm.isShuffling) {
+            if !vm.isShuffling, let firstID = vm.queueItems.first?.id {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    proxy.scrollTo(firstID, anchor: .top)
+                }
             }
         }
         }

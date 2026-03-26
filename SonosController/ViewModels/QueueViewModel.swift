@@ -93,9 +93,13 @@ final class QueueViewModel: ObservableObject {
         }
     }
 
+    @Published var isShuffling = false
+
     /// Shuffles the queue order randomly on the speaker
     func shuffleQueue() async {
         guard queueItems.count > 1 else { return }
+        isShuffling = true
+
         // Fisher-Yates shuffle: move each track to a random position
         for i in stride(from: queueItems.count, through: 2, by: -1) {
             let randomPos = Int.random(in: 1...i)
@@ -108,7 +112,15 @@ final class QueueViewModel: ObservableObject {
                 }
             }
         }
-        await loadQueue()
+
+        // Reload queue with new order
+        do {
+            let (items, total) = try await sonosManager.getQueue(group: group)
+            queueItems = items
+            totalTracks = total
+        } catch {}
+
+        isShuffling = false
     }
 
     func saveAsPlaylist(name: String) async {
