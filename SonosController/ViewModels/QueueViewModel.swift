@@ -29,8 +29,20 @@ final class QueueViewModel: ObservableObject {
     /// Updates current track number from transport metadata
     func updateCurrentTrack() {
         let meta = sonosManager.groupTrackMetadata[group.coordinatorID]
+
+        // Try track number first (reliable from GetPositionInfo)
         if let trackNum = meta?.trackNumber, trackNum > 0, trackNum != currentTrack {
             currentTrack = trackNum
+            return
+        }
+
+        // Fallback: match by title (for shuffle mode where trackNumber may lag)
+        if let title = meta?.title, !title.isEmpty {
+            if let match = queueItems.first(where: { $0.title == title }) {
+                if match.id != currentTrack {
+                    currentTrack = match.id
+                }
+            }
         }
     }
 
