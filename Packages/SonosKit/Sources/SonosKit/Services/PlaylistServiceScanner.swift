@@ -85,7 +85,7 @@ public final class PlaylistServiceScanner: ObservableObject {
             for playlist in uncached {
                 guard let self else { return }
                 await self.scanPlaylist(objectID: playlist.objectID, using: manager)
-                try? await Task.sleep(nanoseconds: 500_000_000)
+                try? await Task.sleep(nanoseconds: Timing.reloadDebounce)
             }
         }
     }

@@ -45,7 +45,7 @@ public final class SMAPIClient {
         </s:Body></s:Envelope>
         """
         let result = try await soapCall(
-            url: "http://\(speakerIP):1400/DeviceProperties/Control",
+            url: "http://\(speakerIP):\(SonosProtocol.defaultPort)/DeviceProperties/Control",
             action: "urn:schemas-upnp-org:service:DeviceProperties:1#GetHouseholdID",
             body: body
         )
@@ -63,7 +63,7 @@ public final class SMAPIClient {
         </u:GetString></s:Body></s:Envelope>
         """
         let result = try await soapCall(
-            url: "http://\(speakerIP):1400/SystemProperties/Control",
+            url: "http://\(speakerIP):\(SonosProtocol.defaultPort)/SystemProperties/Control",
             action: "urn:schemas-upnp-org:service:SystemProperties:1#GetString",
             body: body
         )
@@ -135,12 +135,14 @@ public final class SMAPIClient {
 
     public func search(serviceURI: String, token: SMAPIToken, searchID: String = "artist",
                        term: String, index: Int = 0, count: Int = 20) async throws -> (items: [SMAPIMediaItem], total: Int) {
+        guard !term.trimmingCharacters(in: .whitespaces).isEmpty else { return ([], 0) }
+        let clampedCount = min(max(count, 1), 500)
         let body = buildAuthenticatedEnvelope(token: token, bodyContent: """
         <s:search>
         <s:id>\(searchID)</s:id>
         <s:term>\(xmlEscape(term))</s:term>
         <s:index>\(index)</s:index>
-        <s:count>\(count)</s:count>
+        <s:count>\(clampedCount)</s:count>
         </s:search>
         """)
         let result = try await soapCallWithRefresh(
@@ -297,9 +299,7 @@ public final class SMAPIClient {
     }
 
     private func unescape(_ str: String) -> String {
-        str.replacingOccurrences(of: "&amp;", with: "&")
-           .replacingOccurrences(of: "&lt;", with: "<")
-           .replacingOccurrences(of: "&gt;", with: ">")
+        XMLResponseParser.xmlUnescape(str)
     }
 
     private func extractElements(from xml: String, tag: String) -> [String] {

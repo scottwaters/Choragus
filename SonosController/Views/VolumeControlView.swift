@@ -76,7 +76,7 @@ struct VolumeControlView: View {
 
     private func setVolume(device: SonosDevice) async {
         let vol = Int(speakerVolumes[device.id] ?? 0)
-        sonosManager.setVolumeGrace(deviceID: device.id, duration: 10)
+        sonosManager.setVolumeGrace(deviceID: device.id, duration: Timing.playbackGracePeriod)
         sonosManager.deviceVolumes[device.id] = vol
         try? await sonosManager.setVolume(device: device, volume: vol)
     }
@@ -84,7 +84,7 @@ struct VolumeControlView: View {
     private func toggleMute(device: SonosDevice) async {
         let currentMute = speakerMutes[device.id] ?? false
         speakerMutes[device.id] = !currentMute
-        sonosManager.setMuteGrace(deviceID: device.id, duration: 10)
+        sonosManager.setMuteGrace(deviceID: device.id, duration: Timing.playbackGracePeriod)
         sonosManager.deviceMutes[device.id] = !currentMute
         try? await sonosManager.setMute(device: device, muted: !currentMute)
     }

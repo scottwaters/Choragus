@@ -91,7 +91,7 @@ public final class SMAPIAuthManager: ObservableObject {
             }
             if !snMap.isEmpty {
                 serviceSerialNumbers = snMap
-                sonosDebugLog("[SMAPI] Discovered sn map: \(snMap)")
+                sonosDebugLog("[SMAPI] Discovered \(snMap.count) service serial numbers")
             }
         } catch {
             sonosDebugLog("[SMAPI] Failed to discover serial numbers: \(error)")
@@ -138,8 +138,7 @@ public final class SMAPIAuthManager: ObservableObject {
                 return nil
             }
 
-            sonosDebugLog("[SMAPI] Auth URL for \(service.name): \(regUrl)")
-            sonosDebugLog("[SMAPI] Link code: \(linkCode)")
+            sonosDebugLog("[SMAPI] Auth started for \(service.name)")
 
             // Start polling for auth completion in background
             Task {
@@ -157,7 +156,7 @@ public final class SMAPIAuthManager: ObservableObject {
     /// Polls the service for auth completion (user needs to authorize in browser)
     private func pollForAuth(service: SMAPIServiceDescriptor, linkCode: String) async {
         for _ in 0..<60 { // Poll for up to 5 minutes (60 * 5s)
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            try? await Task.sleep(nanoseconds: Timing.smapiAuthPollInterval)
 
             do {
                 if let result = try await client.getDeviceAuthToken(
@@ -208,7 +207,9 @@ public final class SMAPIAuthManager: ObservableObject {
         <u:ListAvailableServices xmlns:u="urn:schemas-upnp-org:service:MusicServices:1"/>
         </s:Body></s:Envelope>
         """
-        var request = URLRequest(url: URL(string: "http://\(speakerIP):1400/MusicServices/Control") ?? URL(string: "http://127.0.0.1:1400/MusicServices/Control")!)
+        let port = SonosProtocol.defaultPort
+        guard let url = URL(string: "http://\(speakerIP):\(port)/MusicServices/Control") else { return "" }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("text/xml; charset=\"utf-8\"", forHTTPHeaderField: "Content-Type")
         request.setValue("\"urn:schemas-upnp-org:service:MusicServices:1#ListAvailableServices\"", forHTTPHeaderField: "SOAPAction")
@@ -220,11 +221,7 @@ public final class SMAPIAuthManager: ObservableObject {
     }
 
     private func parseServiceDescriptors(_ xml: String) -> [SMAPIServiceDescriptor] {
-        let unescaped = xml
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&amp;", with: "&")
+        let unescaped = XMLResponseParser.xmlUnescape(xml)
 
         var services: [SMAPIServiceDescriptor] = []
         let parts = unescaped.components(separatedBy: "<Service ")

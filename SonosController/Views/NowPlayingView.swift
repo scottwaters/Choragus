@@ -508,7 +508,7 @@ struct NowPlayingView: View {
     private func copyTrackInfo() {
         vm.copyTrackInfo()
         showCopied = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showCopied = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Timing.toastDismiss) { showCopied = false }
     }
 
     private func performAction(_ id: String, _ action: @escaping () async throws -> Void) {

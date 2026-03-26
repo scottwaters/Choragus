@@ -10,7 +10,7 @@ public struct SonosDevice: Identifiable, Hashable {
     public var isCoordinator: Bool
     public var groupID: String?
 
-    public init(id: String, ip: String, port: Int = 1400, roomName: String = "",
+    public init(id: String, ip: String, port: Int = SonosProtocol.defaultPort, roomName: String = "",
                 modelName: String = "", modelNumber: String = "",
                 isCoordinator: Bool = false, groupID: String? = nil) {
         self.id = id
@@ -23,7 +23,10 @@ public struct SonosDevice: Identifiable, Hashable {
         self.groupID = groupID
     }
 
+    // swiftlint:disable:next force_unwrapping
+    private static let fallbackURL = URL(string: "http://127.0.0.1:1400")!
+
     public var baseURL: URL {
-        URL(string: "http://\(ip):\(port)") ?? URL(string: "http://127.0.0.1:1400")!
+        URL(string: "http://\(ip):\(port)") ?? Self.fallbackURL
     }
 }

@@ -314,7 +314,7 @@ struct PresetManagerView: View {
 
     private func showStatus(_ message: String) {
         withAnimation { statusMessage = message }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Timing.statusMessageDismiss) {
             withAnimation {
                 if statusMessage == message { statusMessage = nil }
             }

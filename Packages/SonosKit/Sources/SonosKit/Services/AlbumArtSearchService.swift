@@ -127,6 +127,21 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
         return nil
     }
 
+    // MARK: - Shared Utilities
+
+    /// Constructs a /getaa URL to extract embedded art from a local file via the Sonos speaker
+    public static func getaaURL(speakerIP: String, port: Int = SonosProtocol.defaultPort, trackURI: String) -> String {
+        let encoded = trackURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trackURI
+        return "http://\(speakerIP):\(port)/getaa?s=1&u=\(encoded)"
+    }
+
+    /// Cleans a track title for deduplication/search: strips parenthetical/bracket suffixes
+    public static func cleanTrackTitle(_ title: String) -> String {
+        title.replacingOccurrences(of: "\\s*\\([^)]*\\)\\s*$", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]\\s*$", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+    }
+
     private func cacheSet(_ key: String, _ value: String?) {
         cacheLock.lock()
         cache[key] = value

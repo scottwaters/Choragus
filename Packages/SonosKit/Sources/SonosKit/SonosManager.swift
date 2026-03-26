@@ -10,20 +10,20 @@
 /// instantly on launch while live discovery runs in the background.
 import Foundation
 
-private let debugLogPath = "/tmp/sonos_debug.log"
+private let debugLogPath: String = {
+    AppPaths.appSupportDirectory.appendingPathComponent("sonos_debug.log").path
+}()
+
 public func sonosDebugLog(_ msg: String) {
     #if DEBUG
     let line = "\(Date()): \(msg)\n"
-    if let data = line.data(using: .utf8) {
-        if FileManager.default.fileExists(atPath: debugLogPath) {
-            if let handle = FileHandle(forWritingAtPath: debugLogPath) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                handle.closeFile()
-            }
-        } else {
-            FileManager.default.createFile(atPath: debugLogPath, contents: data)
-        }
+    guard let data = line.data(using: .utf8) else { return }
+    if let handle = FileHandle(forWritingAtPath: debugLogPath) {
+        handle.seekToEndOfFile()
+        handle.write(data)
+        handle.closeFile()
+    } else {
+        FileManager.default.createFile(atPath: debugLogPath, contents: data, attributes: [.posixPermissions: 0o600])
     }
     #endif
 }
@@ -140,7 +140,7 @@ public class SonosManager: ObservableObject {
     private func persistArtCache() {
         artCacheSaveTask?.cancel()
         artCacheSaveTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s debounce
+            try? await Task.sleep(nanoseconds: Timing.rescanDebounce)
             guard !Task.isCancelled, let self else { return }
             self.cache.saveArtURLs(self.discoveredArtURLs)
         }
@@ -781,7 +781,7 @@ public class SonosManager: ObservableObject {
 
         // Immediately fetch the new track's metadata — set directly (skip merge logic)
         groupTransportStates[coordinator.id] = .playing
-        setTransportGrace(groupID: coordinator.id, duration: 5)
+        setTransportGrace(groupID: coordinator.id, duration: Timing.defaultGracePeriod)
         let position = try await avTransport.getPositionInfo(device: coordinator)
         groupTrackMetadata[coordinator.id] = position
     }
@@ -836,7 +836,7 @@ public class SonosManager: ObservableObject {
         groupTrackMetadata[coordinator.id] = pendingMeta
         groupTransportStates[coordinator.id] = .transitioning
         awaitingPlayback[coordinator.id] = true
-        setTransportGrace(groupID: coordinator.id, duration: 10)
+        setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
 
         try await avTransport.setAVTransportURI(device: coordinator, uri: uri, metadata: metadata)
         try await avTransport.play(device: coordinator)
@@ -1007,7 +1007,7 @@ public class SonosManager: ObservableObject {
             }
             groupTrackMetadata[coordinator.id] = pendingMeta
             groupTransportStates[coordinator.id] = .transitioning
-            setTransportGrace(groupID: coordinator.id, duration: 10)
+            setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
         }
 
         if let uri = item.resourceURI, !uri.isEmpty {
@@ -1043,7 +1043,7 @@ public class SonosManager: ObservableObject {
                 }
                 groupTrackMetadata[coordinator.id] = pendingMeta
                 groupTransportStates[coordinator.id] = .transitioning
-                setTransportGrace(groupID: coordinator.id, duration: 10)
+                setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
                 awaitingPlayback[coordinator.id] = true
             } else if uri.hasPrefix(URIPrefix.rinconPlaylist) || uri.hasPrefix("file:///jffs/") {
                 // Sonos playlists and library playlists — add to queue then play

@@ -125,6 +125,12 @@ public enum ServiceColor {
     }
 }
 
+// MARK: - Sonos Protocol
+
+public enum SonosProtocol {
+    public static let defaultPort = 1400
+}
+
 // MARK: - Timing Constants
 
 public enum Timing {
@@ -138,6 +144,13 @@ public enum Timing {
     public static let discoveryRescanInterval: TimeInterval = 30
     public static let artCacheDebounceSec: UInt64 = 2_000_000_000
     public static let subscriptionRenewalFraction: Double = 0.8
+    public static let presetStepDelay: UInt64 = 500_000_000
+    public static let reloadDebounce: UInt64 = 500_000_000
+    public static let smapiAuthPollInterval: UInt64 = 5_000_000_000
+    public static let errorAutoDismiss: UInt64 = 5_000_000_000
+    public static let rescanDebounce: UInt64 = 2_000_000_000
+    public static let toastDismiss: TimeInterval = 2
+    public static let statusMessageDismiss: TimeInterval = 3
 }
 
 // MARK: - UserDefaults Keys

@@ -138,7 +138,7 @@ public final class SSDPDiscovery: @unchecked Sendable {
             return
         }
 
-        let port = url.port ?? 1400
+        let port = url.port ?? SonosProtocol.defaultPort
         onDeviceFound?(location, host, port)
     }
 }

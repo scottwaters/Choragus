@@ -119,7 +119,9 @@ public final class PlayHistoryManager: ObservableObject {
             sqlite3_bind_null(stmt, 10)
         }
 
-        sqlite3_step(stmt)
+        if sqlite3_step(stmt) != SQLITE_DONE {
+            sonosDebugLog("[HISTORY] Insert failed: \(String(cString: sqlite3_errmsg(db)))")
+        }
     }
 
     private func loadEntries() {
@@ -152,8 +154,13 @@ public final class PlayHistoryManager: ObservableObject {
         guard entries.count > Self.maxEntries else { return }
         let toRemove = entries.count - Self.maxEntries
         let oldEntries = entries.prefix(toRemove)
+        let sql = "DELETE FROM history WHERE id = ?"
         for entry in oldEntries {
-            exec("DELETE FROM history WHERE id = '\(entry.id.uuidString)'")
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { continue }
+            sqlite3_bind_text(stmt, 1, (entry.id.uuidString as NSString).utf8String, -1, nil)
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
         }
         entries.removeFirst(toRemove)
     }
@@ -161,7 +168,7 @@ public final class PlayHistoryManager: ObservableObject {
     private func scheduleReload() {
         reloadTask?.cancel()
         reloadTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            try? await Task.sleep(nanoseconds: Timing.reloadDebounce)
             guard !Task.isCancelled, let self else { return }
             self.loadEntries()
         }
@@ -219,7 +226,9 @@ public final class PlayHistoryManager: ObservableObject {
                 defer { sqlite3_finalize(stmt) }
                 sqlite3_bind_text(stmt, 1, (artURL as NSString).utf8String, -1, nil)
                 sqlite3_bind_text(stmt, 2, (entries[i].id.uuidString as NSString).utf8String, -1, nil)
-                sqlite3_step(stmt)
+                if sqlite3_step(stmt) != SQLITE_DONE {
+                    sonosDebugLog("[HISTORY] Update art failed: \(String(cString: sqlite3_errmsg(db)))")
+                }
                 return
             }
         }

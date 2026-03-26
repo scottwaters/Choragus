@@ -64,7 +64,13 @@ public final class AVTransportService {
         )
     }
 
+    /// Seeks to a position. Time must be in HH:MM:SS format.
     public func seek(device: SonosDevice, to time: String) async throws {
+        let parts = time.split(separator: ":")
+        guard parts.count == 3, parts.allSatisfy({ Int($0) != nil }) else {
+            sonosDebugLog("[AVTransport] Invalid seek time format: \(time)")
+            return
+        }
         _ = try await soap.send(
             to: device.baseURL,
             path: Self.path,

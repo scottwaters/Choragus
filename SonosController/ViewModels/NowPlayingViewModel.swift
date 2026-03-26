@@ -497,8 +497,7 @@ final class NowPlayingViewModel {
         guard let uri = trackMetadata.trackURI,
               URIPrefix.isLocal(uri),
               let coordinator = group.coordinator else { return nil }
-        let encoded = uri.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? uri
-        return "http://\(coordinator.ip):\(coordinator.port)/getaa?s=1&u=\(encoded)"
+        return AlbumArtSearchService.getaaURL(speakerIP: coordinator.ip, port: coordinator.port, trackURI: uri)
     }
 
     func resolveArtURL() -> URL? {
@@ -538,10 +537,7 @@ final class NowPlayingViewModel {
             radioStationArtURL = stationArt
         }
         let artist = trackMetadata.artist.hasPrefix("RINCON_") ? "" : trackMetadata.artist
-        let cleanTitle = trackMetadata.title
-            .replacingOccurrences(of: "\\s*\\([^)]*\\)\\s*$", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]\\s*$", with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
+        let cleanTitle = AlbumArtSearchService.cleanTrackTitle(trackMetadata.title)
         let searchTitle = cleanTitle.isEmpty ? trackMetadata.title : cleanTitle
         Task {
             if let artURL = await AlbumArtSearchService.shared.searchRadioTrackArt(

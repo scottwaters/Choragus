@@ -192,10 +192,10 @@ private class ZoneGroupParser: NSObject, XMLParserDelegate {
             let invisible = attributes["Invisible"] == "1"
 
             var ip = ""
-            var port = 1400
+            var port = SonosProtocol.defaultPort
             if let url = URL(string: location) {
                 ip = url.host ?? ""
-                port = url.port ?? 1400
+                port = url.port ?? SonosProtocol.defaultPort
             }
 
             let htSatMap = attributes["HTSatChanMapSet"] ?? ""
@@ -211,10 +211,10 @@ private class ZoneGroupParser: NSObject, XMLParserDelegate {
             let htSatMap = attributes["HTSatChanMapSet"] ?? ""
 
             var ip = ""
-            var port = 1400
+            var port = SonosProtocol.defaultPort
             if let url = URL(string: location) {
                 ip = url.host ?? ""
-                port = url.port ?? 1400
+                port = url.port ?? SonosProtocol.defaultPort
             }
 
             let satellite = ZoneMemberData(uuid: uuid, location: location, zoneName: zoneName, ip: ip, port: port, isInvisible: invisible, htSatChanMapSet: htSatMap)

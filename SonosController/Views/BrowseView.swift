@@ -603,8 +603,7 @@ struct BrowseItemRow: View {
            !uri.hasPrefix(URIPrefix.rinconMP3Radio),
            !uri.hasPrefix(URIPrefix.rinconPlaylist),
            let device = sonosManager.groups.first?.coordinator {
-            let encoded = uri.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? uri
-            let artURL = "http://\(device.ip):\(device.port)/getaa?s=1&u=\(encoded)"
+            let artURL = AlbumArtSearchService.getaaURL(speakerIP: device.ip, port: device.port, trackURI: uri)
             resolvedArtURL = URL(string: artURL)
             sonosManager.cacheArtURL(artURL, forURI: uri, title: item.title, itemID: item.objectID)
             return
@@ -624,9 +623,7 @@ struct BrowseItemRow: View {
         }
 
         // 4. Fallback: search iTunes for art (not for radio)
-        let isRadio = item.resourceURI?.contains("x-sonosapi-stream:") == true ||
-                      item.resourceURI?.contains("x-sonosapi-radio:") == true ||
-                      item.resourceURI?.contains("x-rincon-mp3radio:") == true
+        let isRadio = item.resourceURI.map { URIPrefix.isRadio($0) } ?? false
         if !isRadio {
             let artist = item.artist.isEmpty ? "" : item.artist
             if let artURL = await AlbumArtSearchService.shared.searchArtwork(artist: artist, album: item.title) {
@@ -646,8 +643,7 @@ struct BrowseItemRow: View {
         //    try /getaa which extracts embedded art from the file
         if let uri = item.resourceURI, !uri.isEmpty,
            (uri.hasPrefix(URIPrefix.fileCifs) || uri.hasPrefix(URIPrefix.smb)) {
-            let encoded = uri.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? uri
-            let artURL = "http://\(device.ip):\(device.port)/getaa?s=1&u=\(encoded)"
+            let artURL = AlbumArtSearchService.getaaURL(speakerIP: device.ip, port: device.port, trackURI: uri)
             resolvedArtURL = URL(string: artURL)
             sonosManager.cacheArtURL(artURL, forURI: uri, title: item.title, itemID: item.objectID)
             return
@@ -752,8 +748,7 @@ struct BrowseItemRow: View {
                 }
                 // Track without art in DIDL — try /getaa with its resource URI
                 if !browseItem.isContainer, let uri = browseItem.resourceURI, !uri.isEmpty {
-                    let encoded = uri.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? uri
-                    return URL(string: "http://\(device.ip):\(device.port)/getaa?s=1&u=\(encoded)")
+                    return URL(string: AlbumArtSearchService.getaaURL(speakerIP: device.ip, port: device.port, trackURI: uri))
                 }
                 // Subfolder — browse into it
                 if browseItem.isContainer {

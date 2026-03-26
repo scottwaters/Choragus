@@ -38,7 +38,7 @@ public final class ErrorHandler: ObservableObject {
             showError = true
             // Auto-dismiss after 5 seconds
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                try? await Task.sleep(nanoseconds: Timing.errorAutoDismiss)
                 if self.showError {
                     self.showError = false
                     self.currentError = nil

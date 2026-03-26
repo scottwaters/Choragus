@@ -161,22 +161,22 @@ public final class PresetManager: ObservableObject {
             }
             if inOtherGroup {
                 try? await manager.ungroupDevice(device)
-                try? await Task.sleep(nanoseconds: 500_000_000)
+                try? await Task.sleep(nanoseconds: Timing.presetStepDelay)
             }
             try? await manager.joinGroup(device: device, toCoordinator: coordinator)
             topologyChanged = true
         }
 
         if topologyChanged {
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            try? await Task.sleep(nanoseconds: Timing.presetStepDelay)
             await manager.refreshTopology(from: coordinator)
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            try? await Task.sleep(nanoseconds: Timing.presetStepDelay)
         }
 
         // Set volumes
         for member in preset.members {
             guard let device = manager.devices[member.deviceID] else { continue }
-            manager.setVolumeGrace(deviceID: device.id, duration: 5)
+            manager.setVolumeGrace(deviceID: device.id, duration: Timing.defaultGracePeriod)
             manager.deviceVolumes[device.id] = member.volume
             try? await manager.setVolume(device: device, volume: member.volume)
         }
