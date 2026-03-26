@@ -235,10 +235,11 @@ public class SonosManager: ObservableObject {
         didSet { inactiveZoneColor.save(to: "inactiveZoneColor") }
     }
 
-    // MARK: - Private Services
+    // MARK: - Services (injectable for testability)
 
     private let discovery = SSDPDiscovery()
-    private let soap = SOAPClient()
+    private let soap: SOAPClient
+    private let cache: SonosCache
     // Lazy so services share a single SOAPClient (and its URLSession)
     private lazy var avTransport = AVTransportService(soap: soap)
     private lazy var renderingControl = RenderingControlService(soap: soap)
@@ -247,7 +248,6 @@ public class SonosManager: ObservableObject {
     private lazy var alarmClock = AlarmClockService(soap: soap)
     private lazy var musicServices = MusicServicesService(soap: soap)
 
-    private let cache = SonosCache()
     private var discoveredLocations: Set<String> = []  // de-dups SSDP responses
     private var refreshTimer: Timer?
 
@@ -273,7 +273,16 @@ public class SonosManager: ObservableObject {
         (transportStrategy as? HybridEventFirstTransport)?.callbackURLString ?? "Not available"
     }
 
-    public init() {
+    /// Default init with production services
+    public convenience init() {
+        self.init(soap: SOAPClient(), cache: SonosCache())
+    }
+
+    /// Injectable init for testing
+    public init(soap: SOAPClient, cache: SonosCache) {
+        self.soap = soap
+        self.cache = cache
+
         let savedStartup = UserDefaults.standard.string(forKey: "startupMode") ?? StartupMode.quickStart.rawValue
         self.startupMode = StartupMode(rawValue: savedStartup) ?? .quickStart
 

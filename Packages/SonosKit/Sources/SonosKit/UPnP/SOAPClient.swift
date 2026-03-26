@@ -23,7 +23,7 @@ public enum SOAPError: Error, LocalizedError {
     }
 }
 
-public final class SOAPClient {
+public final class SOAPClient: SOAPClientProtocol {
     private let session: URLSession
 
     public init() {

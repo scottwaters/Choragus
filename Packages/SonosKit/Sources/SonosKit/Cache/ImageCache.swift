@@ -7,7 +7,7 @@
 import Foundation
 import AppKit
 
-public final class ImageCache {
+public final class ImageCache: ImageCacheProtocol {
     public static let shared = ImageCache()
 
     private let memoryCache = NSCache<NSString, NSImage>()

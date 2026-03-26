@@ -5,7 +5,7 @@
 /// No API key required. Results are cached in memory to avoid repeat lookups.
 import Foundation
 
-public final class AlbumArtSearchService {
+public final class AlbumArtSearchService: AlbumArtSearchProtocol {
     public static let shared = AlbumArtSearchService()
 
     private let session: URLSession

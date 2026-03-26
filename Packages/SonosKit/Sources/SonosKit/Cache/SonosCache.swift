@@ -50,7 +50,7 @@ public struct CachedBrowseSection: Codable {
     public var icon: String
 }
 
-public final class SonosCache {
+public final class SonosCache: SonosCacheProtocol {
     private let fileURL: URL
     private let artCacheURL: URL
 
