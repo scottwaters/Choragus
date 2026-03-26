@@ -640,9 +640,7 @@ struct NowPlayingView: View {
         // Skip if we have art from the speaker (but not for local files with /getaa that may 404)
         let hasArt = trackMetadata.albumArtURI != nil && !(trackMetadata.albumArtURI?.isEmpty ?? true)
         let isLocalFile = trackMetadata.trackURI.map(URIPrefix.isLocal) ?? false
-        sonosDebugLog("[ART-SEARCH] hasArt=\(hasArt) isLocal=\(isLocalFile) albumArtURI=\(trackMetadata.albumArtURI ?? "nil") trackURI=\(trackMetadata.trackURI?.prefix(60) ?? "nil")")
         if hasArt && !isLocalFile {
-            sonosDebugLog("[ART-SEARCH] Skipping — has art and not local")
             if !forceWebArt {
                 if webArtURL != nil { webArtURL = nil }
             }
@@ -666,9 +664,8 @@ struct NowPlayingView: View {
         }
         let artist = displayArtist
         let key = "\(searchTerm)|\(artist)"
-        sonosDebugLog("[ART-SEARCH] searchTerm=\(searchTerm) artist=\(artist) key=\(key) lastKey=\(lastArtSearchKey)")
-        guard !searchTerm.isEmpty else { sonosDebugLog("[ART-SEARCH] Empty search term, skipping"); return }
-        guard key != lastArtSearchKey else { sonosDebugLog("[ART-SEARCH] Same key, skipping"); return }
+        guard !searchTerm.isEmpty else { return }
+        guard key != lastArtSearchKey else { return }
         lastArtSearchKey = key
         webArtURL = nil
         sonosDebugLog("[ART-SEARCH] Searching iTunes for artist='\(artist)' album='\(searchTerm)'")

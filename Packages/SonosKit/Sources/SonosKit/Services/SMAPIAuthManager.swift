@@ -203,7 +203,7 @@ public final class SMAPIAuthManager: ObservableObject {
         <u:ListAvailableServices xmlns:u="urn:schemas-upnp-org:service:MusicServices:1"/>
         </s:Body></s:Envelope>
         """
-        var request = URLRequest(url: URL(string: "http://\(speakerIP):1400/MusicServices/Control")!)
+        var request = URLRequest(url: URL(string: "http://\(speakerIP):1400/MusicServices/Control") ?? URL(string: "http://127.0.0.1:1400/MusicServices/Control")!)
         request.httpMethod = "POST"
         request.setValue("text/xml; charset=\"utf-8\"", forHTTPHeaderField: "Content-Type")
         request.setValue("\"urn:schemas-upnp-org:service:MusicServices:1#ListAvailableServices\"", forHTTPHeaderField: "SOAPAction")
