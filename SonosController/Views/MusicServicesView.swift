@@ -5,6 +5,16 @@ import AppKit
 
 struct MusicServicesSettingsSection: View {
     @EnvironmentObject var smapiManager: SMAPIAuthManager
+    @State private var searchText = ""
+
+    private var filteredServices: [SMAPIServiceDescriptor] {
+        let all = smapiManager.availableServices
+            .filter { smapiManager.tokenStore.authenticatedServices[$0.id] == nil }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        if searchText.isEmpty { return all }
+        let query = searchText.lowercased()
+        return all.filter { $0.name.lowercased().contains(query) }
+    }
 
     var body: some View {
         Toggle("Music Service Browsing (Beta)", isOn: Binding(
@@ -13,10 +23,10 @@ struct MusicServicesSettingsSection: View {
         ))
 
         if smapiManager.isEnabled {
-            // Authenticated services
+            // Connected services
             if !smapiManager.authenticatedServiceList.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Connected Services")
+                    Text("Connected")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     ForEach(smapiManager.authenticatedServiceList, id: \.id) { service in
@@ -35,30 +45,64 @@ struct MusicServicesSettingsSection: View {
                 }
             }
 
-            // Available services to connect
-            if !smapiManager.authenticatableServices.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Available Services (\(smapiManager.authenticatableServices.count))")
+            // Available services with search
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Available (\(filteredServices.count))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    ScrollView {
-                        VStack(spacing: 2) {
-                            ForEach(smapiManager.authenticatableServices, id: \.id) { service in
-                                HStack {
-                                    Text(service.name)
-                                        .font(.caption)
-                                    Spacer()
+                    Spacer()
+                }
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10))
+                    TextField("Search services...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.caption)
+                    if !searchText.isEmpty {
+                        Button { searchText = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                                .font(.system(size: 10))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(filteredServices, id: \.id) { service in
+                            HStack {
+                                Text(service.name)
+                                    .font(.caption)
+                                Text(service.authType)
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.tertiary)
+                                Spacer()
+                                if service.authType == "Anonymous" {
+                                    Text("No login")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.secondary)
+                                } else if service.authType == "AppLink" || service.authType == "DeviceLink" {
                                     Button("Connect") {
                                         connectService(service)
                                     }
                                     .controlSize(.mini)
                                     .disabled(smapiManager.isAuthenticating)
+                                } else {
+                                    Text("Unsupported")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.tertiary)
                                 }
                             }
                         }
                     }
-                    .frame(maxHeight: 200)
                 }
+                .frame(maxHeight: 200)
             }
 
             // Auth status
@@ -77,7 +121,7 @@ struct MusicServicesSettingsSection: View {
                     .foregroundStyle(.red)
             }
 
-            Text("Connect to browse and search music services directly. Your credentials are stored securely in the macOS Keychain.")
+            Text("Connect to browse and search music services. Credentials stored in macOS Keychain.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -86,7 +130,6 @@ struct MusicServicesSettingsSection: View {
     private func connectService(_ service: SMAPIServiceDescriptor) {
         Task {
             if let url = await smapiManager.startAuth(service: service) {
-                // Open authorization URL in browser
                 if let nsURL = URL(string: url) {
                     NSWorkspace.shared.open(nsURL)
                 }
