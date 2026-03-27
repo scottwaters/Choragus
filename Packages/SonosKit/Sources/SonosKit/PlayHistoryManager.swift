@@ -263,6 +263,95 @@ public final class PlayHistoryManager: ObservableObject {
         return counts.sorted { $0.value > $1.value }
     }
 
+    // MARK: - Extended Stats
+
+    public var mostPlayedAlbums: [(String, Int)] {
+        var counts: [String: Int] = [:]
+        for e in entries where !e.album.isEmpty {
+            counts[e.album, default: 0] += 1
+        }
+        return counts.sorted { $0.value > $1.value }
+    }
+
+    public var uniqueAlbumCount: Int {
+        Set(entries.compactMap { $0.album.isEmpty ? nil : $0.album }).count
+    }
+
+    public var uniqueStationCount: Int {
+        Set(entries.compactMap { $0.stationName.isEmpty ? nil : $0.stationName }).count
+    }
+
+    /// Plays grouped by day of week (0=Sunday, 1=Monday, ..., 6=Saturday)
+    public var dayOfWeekDistribution: [(String, Int)] {
+        let calendar = Calendar.current
+        let symbols = calendar.shortWeekdaySymbols // ["Sun", "Mon", ...]
+        var counts = [Int](repeating: 0, count: 7)
+        for entry in entries {
+            let weekday = calendar.component(.weekday, from: entry.timestamp) - 1 // 0-based
+            counts[weekday] += 1
+        }
+        return counts.enumerated().map { (symbols[$0.offset], $0.element) }
+    }
+
+    /// Longest consecutive-day listening streak
+    public var listeningStreak: Int {
+        guard !entries.isEmpty else { return 0 }
+        let calendar = Calendar.current
+        let days = Set(entries.map { calendar.startOfDay(for: $0.timestamp) }).sorted()
+        guard !days.isEmpty else { return 0 }
+        var maxStreak = 1
+        var current = 1
+        for i in 1..<days.count {
+            if calendar.dateComponents([.day], from: days[i-1], to: days[i]).day == 1 {
+                current += 1
+                maxStreak = max(maxStreak, current)
+            } else {
+                current = 1
+            }
+        }
+        return maxStreak
+    }
+
+    /// Current active streak (consecutive days ending today or yesterday)
+    public var currentStreak: Int {
+        guard !entries.isEmpty else { return 0 }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let days = Set(entries.map { calendar.startOfDay(for: $0.timestamp) }).sorted().reversed()
+        guard let latest = days.first else { return 0 }
+        // Must include today or yesterday to be "active"
+        let diff = calendar.dateComponents([.day], from: latest, to: today).day ?? 99
+        guard diff <= 1 else { return 0 }
+        var streak = 1
+        var prev = latest
+        for day in days.dropFirst() {
+            if calendar.dateComponents([.day], from: day, to: prev).day == 1 {
+                streak += 1
+                prev = day
+            } else {
+                break
+            }
+        }
+        return streak
+    }
+
+    /// Average plays per day (over days that had at least one play)
+    public var averagePlaysPerDay: Double {
+        let calendar = Calendar.current
+        let uniqueDays = Set(entries.map { calendar.startOfDay(for: $0.timestamp) }).count
+        guard uniqueDays > 0 else { return 0 }
+        return Double(entries.count) / Double(uniqueDays)
+    }
+
+    /// Per-room play counts
+    public var roomDistribution: [(String, Int)] {
+        var counts: [String: Int] = [:]
+        for e in entries where !e.groupName.isEmpty {
+            counts[e.groupName, default: 0] += 1
+        }
+        return counts.sorted { $0.value > $1.value }
+    }
+
     // MARK: - Export
 
     public func exportCSV() -> String {

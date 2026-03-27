@@ -118,11 +118,21 @@ struct PlayHistoryDashboard: View {
     private var totalListeningHours: Double { stats.totalListeningHours }
     private var uniqueArtistCount: Int { stats.uniqueArtistCount }
     private var uniqueRoomCount: Int { stats.uniqueRoomCount }
+    private var uniqueAlbumCount: Int { stats.uniqueAlbumCount }
+    private var uniqueStationCount: Int { stats.uniqueStationCount }
     private var dailyActivity: [(Date, Int)] { stats.dailyActivity }
     private var hourlyDistribution: [(Int, Int)] { stats.hourlyDistribution }
     private var peakHour: Int { stats.peakHour }
     private var mostPlayedArtists: [(String, Int)] { stats.mostPlayedArtists }
+    private var mostPlayedTracks: [(String, String, Int)] { stats.mostPlayedTracks }
+    private var mostPlayedStations: [(String, Int)] { stats.mostPlayedStations }
+    private var mostPlayedAlbums: [(String, Int)] { stats.mostPlayedAlbums }
     private var sourceDistribution: [(String, Int)] { stats.sourceDistribution }
+    private var dayOfWeekDistribution: [(String, Int)] { stats.dayOfWeekDistribution }
+    private var roomDistribution: [(String, Int)] { stats.roomDistribution }
+    private var listeningStreak: Int { stats.listeningStreak }
+    private var currentStreak: Int { stats.currentStreak }
+    private var averagePlaysPerDay: Double { stats.averagePlaysPerDay }
 
     private func recentlyPlayed(limit: Int) -> [PlayHistoryEntry] {
         var seen = Set<String>()
@@ -153,11 +163,25 @@ struct PlayHistoryDashboard: View {
                 VStack(spacing: 20) {
                     themePicker
                     heroStats
+                    quickStatsPills
                     activityChart
-                    peakHoursChart
+                    HStack(alignment: .top, spacing: 16) {
+                        peakHoursChart
+                        dayOfWeekChart
+                    }
                     HStack(alignment: .top, spacing: 16) {
                         topArtistsChart
                         topSourcesChart
+                    }
+                    HStack(alignment: .top, spacing: 16) {
+                        topTracksChart
+                        topStationsChart
+                    }
+                    if !mostPlayedAlbums.isEmpty {
+                        topAlbumsChart
+                    }
+                    if roomDistribution.count > 1 {
+                        roomChart
                     }
                     recentTimeline
                 }
@@ -618,6 +642,242 @@ struct PlayHistoryDashboard: View {
         }
     }
 
+    // MARK: - Quick Stats Pills
+
+    private var quickStatsPills: some View {
+        HStack(spacing: 12) {
+            statPill(icon: "flame.fill", label: "Streak", value: "\(currentStreak)d", color: currentStreak >= 7 ? .orange : .secondary)
+            statPill(icon: "trophy.fill", label: "Best", value: "\(listeningStreak)d", color: .yellow)
+            statPill(icon: "chart.line.uptrend.xyaxis", label: "Avg/Day", value: String(format: "%.1f", averagePlaysPerDay), color: effectivePrimary)
+            statPill(icon: "opticaldisc.fill", label: "Albums", value: "\(uniqueAlbumCount)", color: effectiveSecondary)
+            statPill(icon: "antenna.radiowaves.left.and.right", label: "Stations", value: "\(uniqueStationCount)", color: .orange)
+            Spacer()
+        }
+    }
+
+    private func statPill(icon: String, label: String, value: String, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 9))
+                .foregroundStyle(color)
+            Text(value)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .monospacedDigit()
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+
+    // MARK: - Day of Week Chart
+
+    @State private var hoveredWeekday: String?
+
+    private var dayOfWeekChart: some View {
+        dashboardCard {
+            VStack(alignment: .leading, spacing: 12) {
+                let data = dayOfWeekDistribution
+
+                HStack {
+                    Text("Day of Week")
+                        .font(.headline)
+                    Spacer()
+                    if let hDay = hoveredWeekday, let match = data.first(where: { $0.0 == hDay }) {
+                        Text("\(match.1) plays")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text(hDay)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Chart {
+                    ForEach(data, id: \.0) { day, count in
+                        BarMark(
+                            x: .value("Day", day),
+                            y: .value("Plays", count)
+                        )
+                        .foregroundStyle(effectiveBarGradient)
+                        .cornerRadius(3)
+                    }
+                }
+                .chartXSelection(value: $hoveredWeekday)
+                .frame(height: 150)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Top Tracks Chart
+
+    private var topTracksChart: some View {
+        dashboardCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Top Tracks", systemImage: "music.note")
+                    .font(.headline)
+
+                let tracks = mostPlayedTracks.prefix(8)
+                if tracks.isEmpty {
+                    Text("No data").font(.caption).foregroundStyle(.tertiary)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(tracks.enumerated()), id: \.offset) { idx, item in
+                            HStack(spacing: 8) {
+                                Text("\(idx + 1)")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.tertiary)
+                                    .frame(width: 16, alignment: .trailing)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(item.0)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .lineLimit(1)
+                                    if !item.1.isEmpty {
+                                        Text(item.1)
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                                Text("\(item.2)")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(effectivePrimary)
+                                    .monospacedDigit()
+                            }
+                            if idx < tracks.count - 1 {
+                                Divider()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Top Stations Chart
+
+    private var topStationsChart: some View {
+        dashboardCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Top Stations", systemImage: "antenna.radiowaves.left.and.right")
+                    .font(.headline)
+
+                let stations = mostPlayedStations.prefix(8)
+                if stations.isEmpty {
+                    Text("No station data").font(.caption).foregroundStyle(.tertiary)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(stations.enumerated()), id: \.offset) { idx, item in
+                            HStack(spacing: 8) {
+                                Text("\(idx + 1)")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.tertiary)
+                                    .frame(width: 16, alignment: .trailing)
+                                Image(systemName: "radio")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.orange.opacity(0.8))
+                                Text(item.0)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .lineLimit(1)
+                                Spacer()
+                                Text("\(item.1)")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(effectivePrimary)
+                                    .monospacedDigit()
+                            }
+                            if idx < stations.count - 1 {
+                                Divider()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Top Albums Chart
+
+    private var topAlbumsChart: some View {
+        dashboardCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Top Albums", systemImage: "square.stack")
+                    .font(.headline)
+
+                let albums = mostPlayedAlbums.prefix(8)
+                if albums.isEmpty {
+                    Text("No data").font(.caption).foregroundStyle(.tertiary)
+                } else {
+                    Chart {
+                        ForEach(Array(albums.enumerated()), id: \.offset) { _, item in
+                            BarMark(
+                                x: .value("Plays", item.1),
+                                y: .value("Album", item.0)
+                            )
+                            .foregroundStyle(effectiveHorizontalGradient)
+                            .cornerRadius(4)
+                            .annotation(position: .trailing, spacing: 4) {
+                                Text("\(item.1)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { _ in
+                            AxisValueLabel()
+                                .font(.caption)
+                        }
+                    }
+                    .chartXAxis(.hidden)
+                    .frame(height: CGFloat(albums.count) * 32)
+                }
+            }
+        }
+    }
+
+    // MARK: - Room Distribution Chart
+
+    private var roomChart: some View {
+        dashboardCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Room Usage", systemImage: "hifispeaker.2")
+                    .font(.headline)
+
+                let rooms = roomDistribution.prefix(8)
+                Chart {
+                    ForEach(rooms, id: \.0) { room, count in
+                        BarMark(
+                            x: .value("Plays", count),
+                            y: .value("Room", room)
+                        )
+                        .foregroundStyle(effectiveHorizontalGradient)
+                        .cornerRadius(4)
+                        .annotation(position: .trailing, spacing: 4) {
+                            Text("\(count)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks { _ in
+                        AxisValueLabel()
+                            .font(.caption)
+                    }
+                }
+                .chartXAxis(.hidden)
+                .frame(height: CGFloat(rooms.count) * 32)
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     private func dashboardCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -643,21 +903,34 @@ private struct DashboardStats {
     let totalListeningHours: Double
     let uniqueArtistCount: Int
     let uniqueRoomCount: Int
+    let uniqueAlbumCount: Int
+    let uniqueStationCount: Int
     let dailyActivity: [(Date, Int)]
     let hourlyDistribution: [(Int, Int)]
     let peakHour: Int
     let mostPlayedArtists: [(String, Int)]
+    let mostPlayedTracks: [(String, String, Int)]
+    let mostPlayedStations: [(String, Int)]
+    let mostPlayedAlbums: [(String, Int)]
     let sourceDistribution: [(String, Int)]
+    let dayOfWeekDistribution: [(String, Int)]
+    let roomDistribution: [(String, Int)]
+    let listeningStreak: Int
+    let currentStreak: Int
+    let averagePlaysPerDay: Double
 
     init(entries: [PlayHistoryEntry], historyManager: PlayHistoryManager) {
         self.totalEntries = entries.count
         self.totalListeningHours = entries.reduce(0) { $0 + $1.duration } / 3600.0
         self.uniqueArtistCount = Set(entries.compactMap { $0.artist.isEmpty ? nil : $0.artist }).count
         self.uniqueRoomCount = Set(entries.compactMap { $0.groupName.isEmpty ? nil : $0.groupName }).count
+        self.uniqueAlbumCount = Set(entries.compactMap { $0.album.isEmpty ? nil : $0.album }).count
+        self.uniqueStationCount = Set(entries.compactMap { $0.stationName.isEmpty ? nil : $0.stationName }).count
 
-        // Daily activity (last 30 days)
         let calendar = Calendar.current
         let now = Date()
+
+        // Daily activity (last 30 days)
         var dayCounts: [Date: Int] = [:]
         for entry in entries {
             let day = calendar.startOfDay(for: entry.timestamp)
@@ -676,12 +949,47 @@ private struct DashboardStats {
         self.hourlyDistribution = hourCounts.enumerated().map { ($0.offset, $0.element) }
         self.peakHour = hourlyDistribution.max(by: { $0.1 < $1.1 })?.0 ?? 12
 
+        // Day of week distribution
+        let symbols = calendar.shortWeekdaySymbols
+        var weekdayCounts = [Int](repeating: 0, count: 7)
+        for entry in entries {
+            weekdayCounts[calendar.component(.weekday, from: entry.timestamp) - 1] += 1
+        }
+        self.dayOfWeekDistribution = weekdayCounts.enumerated().map { (symbols[$0.offset], $0.element) }
+
         // Top artists
         var artistCounts: [String: Int] = [:]
         for e in entries where !e.artist.isEmpty {
             artistCounts[e.artist, default: 0] += 1
         }
         self.mostPlayedArtists = artistCounts.sorted { $0.value > $1.value }
+
+        // Top tracks
+        var trackCounts: [String: Int] = [:]
+        var trackArtist: [String: String] = [:]
+        for e in entries where !e.title.isEmpty {
+            let key = "\(e.title)|\(e.artist)"
+            trackCounts[key, default: 0] += 1
+            trackArtist[key] = e.artist
+        }
+        self.mostPlayedTracks = trackCounts.sorted { $0.value > $1.value }.map { (key, count) in
+            let parts = key.components(separatedBy: "|")
+            return (parts[0], parts.count > 1 ? parts[1] : "", count)
+        }
+
+        // Top stations
+        var stationCounts: [String: Int] = [:]
+        for e in entries where !e.stationName.isEmpty {
+            stationCounts[e.stationName, default: 0] += 1
+        }
+        self.mostPlayedStations = stationCounts.sorted { $0.value > $1.value }
+
+        // Top albums
+        var albumCounts: [String: Int] = [:]
+        for e in entries where !e.album.isEmpty {
+            albumCounts[e.album, default: 0] += 1
+        }
+        self.mostPlayedAlbums = albumCounts.sorted { $0.value > $1.value }
 
         // Source distribution
         var sourceCounts: [String: Int] = [:]
@@ -690,6 +998,48 @@ private struct DashboardStats {
             sourceCounts[source, default: 0] += 1
         }
         self.sourceDistribution = sourceCounts.sorted { $0.value > $1.value }
+
+        // Room distribution
+        var roomCounts: [String: Int] = [:]
+        for e in entries where !e.groupName.isEmpty {
+            roomCounts[e.groupName, default: 0] += 1
+        }
+        self.roomDistribution = roomCounts.sorted { $0.value > $1.value }
+
+        // Listening streak
+        let days = Set(entries.map { calendar.startOfDay(for: $0.timestamp) }).sorted()
+        var maxStreak = days.isEmpty ? 0 : 1
+        var cur = 1
+        for i in 1..<days.count {
+            if calendar.dateComponents([.day], from: days[i-1], to: days[i]).day == 1 {
+                cur += 1
+                maxStreak = max(maxStreak, cur)
+            } else {
+                cur = 1
+            }
+        }
+        self.listeningStreak = maxStreak
+
+        // Current streak
+        let today = calendar.startOfDay(for: now)
+        let reverseDays = days.reversed()
+        if let latest = reverseDays.first, (calendar.dateComponents([.day], from: latest, to: today).day ?? 99) <= 1 {
+            var streak = 1
+            var prev = latest
+            for day in reverseDays.dropFirst() {
+                if calendar.dateComponents([.day], from: day, to: prev).day == 1 {
+                    streak += 1
+                    prev = day
+                } else { break }
+            }
+            self.currentStreak = streak
+        } else {
+            self.currentStreak = 0
+        }
+
+        // Average plays per day
+        let uniqueDayCount = dayCounts.count
+        self.averagePlaysPerDay = uniqueDayCount > 0 ? Double(entries.count) / Double(uniqueDayCount) : 0
     }
 }
 
