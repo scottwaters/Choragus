@@ -412,10 +412,10 @@ final class NowPlayingViewModel {
         let hasArt = metadata.albumArtURI != nil && !(metadata.albumArtURI?.isEmpty ?? true)
         let isLocalFile = metadata.trackURI.map(URIPrefix.isLocal) ?? false
         if hasArt && !isLocalFile {
-            if !art.forceWebArt { if art.webArtURL != nil { art.webArtURL = nil } }
+            if !art.forceWebArt { art.clearWebArt() }
             return
         }
-        art.forceWebArt = false
+        art.clearWebArt()
 
         let searchTerm: String
         if isLocalFile && !metadata.album.isEmpty {
@@ -427,24 +427,23 @@ final class NowPlayingViewModel {
         } else if !metadata.title.isEmpty {
             searchTerm = metadata.title
         } else {
-            searchTerm = ""
+            return
         }
         let artist = displayArtist
         let key = "\(searchTerm)|\(artist)"
-        guard !searchTerm.isEmpty else { return }
-        guard key != art.lastArtSearchKey else { return }
-        art.lastArtSearchKey = key
-        art.webArtURL = nil
+        guard art.shouldSearch(key: key) else { return }
+        art.setSearchKey(key)
+        art.setWebArtResult(nil)
         Task {
             if let artURL = await AlbumArtSearchService.shared.searchArtwork(
                 artist: artist, album: searchTerm
             ) {
-                art.webArtURL = URL(string: artURL)
+                art.setWebArtResult(URL(string: artURL))
                 art.playHistoryManager?.updateArtwork(
                     forTitle: metadata.title, artist: metadata.artist, artURL: artURL
                 )
             } else {
-                art.webArtURL = nil
+                art.setWebArtResult(nil)
             }
             art.updateDisplayedArt(trackMetadata: metadata, group: group)
         }
@@ -455,13 +454,12 @@ final class NowPlayingViewModel {
               !metadata.title.isEmpty,
               metadata.title != metadata.stationName,
               !metadata.isAdBreak else {
-            if art.radioTrackArtURL != nil { art.radioTrackArtURL = nil }
-            art.lastRadioTrackKey = ""
+            art.clearRadioTrackArt()
             return
         }
         let key = "\(metadata.title)|\(metadata.artist)"
-        guard key != art.lastRadioTrackKey else { return }
-        art.lastRadioTrackKey = key
+        guard art.shouldSearchRadioTrack(key: key) else { return }
+        art.setRadioTrackKey(key)
         if art.radioStationArtURL == nil, let stationArt = art.displayedArtURL ?? metadata.albumArtURI.flatMap({ URL(string: $0) }) {
             art.radioStationArtURL = stationArt
         }
@@ -472,12 +470,12 @@ final class NowPlayingViewModel {
             if let artURL = await AlbumArtSearchService.shared.searchRadioTrackArt(
                 artist: artist, title: searchTitle
             ) {
-                art.radioTrackArtURL = URL(string: artURL)
+                art.setRadioTrackArt(URL(string: artURL))
                 art.playHistoryManager?.updateArtwork(
                     forTitle: metadata.title, artist: metadata.artist, artURL: artURL
                 )
             } else {
-                art.radioTrackArtURL = nil
+                art.setRadioTrackArt(nil)
             }
         }
     }
@@ -507,8 +505,8 @@ final class NowPlayingViewModel {
 
     func startProgressTimer() {
         stopProgressTimer()
-        progressTimer = Timer.scheduledTimer(withTimeInterval: Timing.progressTimerInterval, repeats: true) { [self] _ in
-            guard !isDraggingSeek else { return }
+        progressTimer = Timer.scheduledTimer(withTimeInterval: Timing.progressTimerInterval, repeats: true) { [weak self] _ in
+            guard let self, !isDraggingSeek else { return }
             let now = Date()
             if now > positionFrozenUntil && transportState.isPlaying {
                 let elapsed = now.timeIntervalSince(lastPositionTimestamp)

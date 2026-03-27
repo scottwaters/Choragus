@@ -30,7 +30,8 @@ public enum URIPrefix {
 
     /// True if this URI is a radio/internet stream
     public static func isRadio(_ uri: String) -> Bool {
-        uri.hasPrefix(sonosApiStream) || uri.hasPrefix(sonosApiRadio) || uri.hasPrefix(rinconMP3Radio)
+        uri.hasPrefix(sonosApiStream) || uri.hasPrefix(sonosApiRadio) || uri.hasPrefix(rinconMP3Radio) ||
+        uri.hasPrefix(sonosApiHLS) || uri.hasPrefix(sonosApiHLSStatic)
     }
 }
 

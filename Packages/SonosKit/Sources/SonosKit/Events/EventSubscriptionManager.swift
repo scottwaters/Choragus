@@ -110,8 +110,8 @@ public final class EventSubscriptionManager: @unchecked Sendable {
         )
 
         lock.lock()
+        defer { lock.unlock() }
         subscriptions[sid] = subscription
-        lock.unlock()
         return subscription
     }
 
@@ -138,8 +138,8 @@ public final class EventSubscriptionManager: @unchecked Sendable {
         // 412 means SID is invalid — need fresh subscribe
         if httpResponse.statusCode == 412 {
             lock.lock()
+            defer { lock.unlock() }
             subscriptions.removeValue(forKey: subscription.sid)
-            lock.unlock()
             throw EventSubscriptionError.subscriptionExpired
         }
 
@@ -166,8 +166,8 @@ public final class EventSubscriptionManager: @unchecked Sendable {
         )
 
         lock.lock()
+        defer { lock.unlock() }
         subscriptions[subscription.sid] = renewed
-        lock.unlock()
         return renewed
     }
 
@@ -182,16 +182,16 @@ public final class EventSubscriptionManager: @unchecked Sendable {
         request.httpMethod = "UNSUBSCRIBE"
         request.setValue(subscription.sid, forHTTPHeaderField: "SID")
 
-        // Best-effort — don't care if it fails
         _ = try? await session.data(for: request)
         lock.lock()
+        defer { lock.unlock() }
         subscriptions.removeValue(forKey: subscription.sid)
-        lock.unlock()
     }
 
     public func unsubscribeAll() async {
+        let allSubs: [EventSubscription]
         lock.lock()
-        let allSubs = Array(subscriptions.values)
+        allSubs = Array(subscriptions.values)
         lock.unlock()
         for sub in allSubs {
             await unsubscribe(sub)
@@ -210,8 +210,9 @@ public final class EventSubscriptionManager: @unchecked Sendable {
                 try? await Task.sleep(for: .seconds(60))
 
                 let now = Date()
+                let currentSubs: [EventSubscription]
                 self.lock.lock()
-                let currentSubs = Array(self.subscriptions.values)
+                currentSubs = Array(self.subscriptions.values)
                 self.lock.unlock()
                 for sub in currentSubs {
                     guard !Task.isCancelled else { return }
@@ -219,10 +220,9 @@ public final class EventSubscriptionManager: @unchecked Sendable {
                         do {
                             _ = try await renew(sub)
                         } catch {
-                            // Renewal failed — will resubscribe
                             self.lock.lock()
+                            defer { self.lock.unlock() }
                             self.subscriptions.removeValue(forKey: sub.sid)
-                            self.lock.unlock()
                             onRenewalFailed(sub)
                         }
                     }

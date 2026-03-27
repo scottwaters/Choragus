@@ -52,16 +52,16 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
     private func setSID(_ sid: String, device: String, service: String) {
         sidLock.lock()
+        defer { sidLock.unlock() }
         sidToDevice[sid] = device
         sidToService[sid] = service
-        sidLock.unlock()
     }
 
     private func removeSID(_ sid: String) {
         sidLock.lock()
+        defer { sidLock.unlock() }
         sidToDevice.removeValue(forKey: sid)
         sidToService.removeValue(forKey: sid)
-        sidLock.unlock()
     }
 
     private func lookupSID(_ sid: String) -> (deviceID: String, service: String)? {
@@ -79,9 +79,9 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
     private func clearAllSIDs() {
         sidLock.lock()
+        defer { sidLock.unlock() }
         sidToDevice.removeAll()
         sidToService.removeAll()
-        sidLock.unlock()
     }
 
     // Service paths
@@ -123,7 +123,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                 listener.stop()
             }
         } catch {
-            // Event listener failed — running in poll-only mode
+            sonosDebugLog("[TRANSPORT] Event listener failed, running in poll-only mode: \(error)")
         }
 
         // Always start reconciliation polling (safety net + position updates)
@@ -222,7 +222,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             let sub = try await manager.subscribe(device: device, servicePath: path)
             setSID(sub.sid, device: device.id, service: serviceType)
         } catch {
-            // Subscription failed — reconciliation polling will cover this
+            sonosDebugLog("[TRANSPORT] Subscription to \(device.roomName) \(serviceType) failed: \(error)")
         }
     }
 
@@ -383,7 +383,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                     await delegate.transportDidUpdateMute(member.id, muted: muted)
                 }
             } catch {
-                // Silently retry next cycle
+                sonosDebugLog("[TRANSPORT] Reconciliation failed for group: \(error)")
             }
         }
     }
@@ -430,7 +430,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                     await delegate.transportDidUpdateMute(member.id, muted: muted)
                 }
             } catch {
-                // Will retry on next reconciliation cycle
+                sonosDebugLog("[TRANSPORT] Initial state fetch failed for group: \(error)")
             }
         }
     }
@@ -528,7 +528,7 @@ public final class LegacyPollingTransport: TransportStrategy, @unchecked Sendabl
                     await delegate.transportDidUpdateMute(member.id, muted: muted)
                 }
             } catch {
-                // Silently retry next poll
+                sonosDebugLog("[TRANSPORT] Poll failed for group: \(error)")
             }
         }
     }

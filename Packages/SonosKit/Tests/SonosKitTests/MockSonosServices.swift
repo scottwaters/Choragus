@@ -36,6 +36,7 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
     var lastPlayedFavoriteID: String?
     var draggedBrowseItem: BrowseItem?
     var groups: [SonosGroup] = []
+    var devices: [String: SonosDevice] = [:]
 
     func updateTransportState(_ groupID: String, state: TransportState) {
         groupTransportStates[groupID] = state
@@ -179,6 +180,7 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
     // MARK: - AlarmServiceProtocol
 
     func getAlarms() async throws -> [SonosAlarm] { [] }
+    func createAlarm(_ alarm: SonosAlarm) async throws -> Int { 0 }
     func updateAlarm(_ alarm: SonosAlarm) async throws {}
     func deleteAlarm(_ alarm: SonosAlarm) async throws {}
 

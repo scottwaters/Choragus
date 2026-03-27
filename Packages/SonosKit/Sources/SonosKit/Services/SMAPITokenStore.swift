@@ -105,7 +105,11 @@ public final class SMAPITokenStore: ObservableObject {
         SecItemDelete(query as CFDictionary)
         var addQuery = query
         addQuery[kSecValueData as String] = data
-        SecItemAdd(addQuery as CFDictionary, nil)
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        if status != errSecSuccess {
+            sonosDebugLog("[KEYCHAIN] Store failed for \(key): OSStatus \(status)")
+        }
     }
 
     private func getKeychainItem(key: String) -> String? {
@@ -117,9 +121,15 @@ public final class SMAPITokenStore: ObservableObject {
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess,
               let data = item as? Data,
-              let str = String(data: data, encoding: .utf8) else { return nil }
+              let str = String(data: data, encoding: .utf8) else {
+            if status != errSecItemNotFound {
+                sonosDebugLog("[KEYCHAIN] Read failed for \(key): OSStatus \(status)")
+            }
+            return nil
+        }
         return str
     }
 
@@ -129,6 +139,9 @@ public final class SMAPITokenStore: ObservableObject {
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: key,
         ]
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            sonosDebugLog("[KEYCHAIN] Delete failed for \(key): OSStatus \(status)")
+        }
     }
 }

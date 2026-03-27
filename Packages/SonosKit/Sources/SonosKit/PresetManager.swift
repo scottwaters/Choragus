@@ -15,15 +15,22 @@ public final class PresetManager: ObservableObject {
 
     private func load() {
         guard let data = try? Data(contentsOf: fileURL) else { return }
-        presets = (try? JSONDecoder().decode([GroupPreset].self, from: data)) ?? []
+        do {
+            presets = try JSONDecoder().decode([GroupPreset].self, from: data)
+        } catch {
+            sonosDebugLog("[PRESET] Failed to decode presets: \(error)")
+            presets = []
+        }
     }
 
     private func save() {
-        do {
-            let data = try JSONEncoder().encode(presets)
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            sonosDebugLog("[PRESET] Save failed: \(error)")
+        Task.detached(priority: .utility) { [presets, fileURL] in
+            do {
+                let data = try JSONEncoder().encode(presets)
+                try data.write(to: fileURL, options: .atomic)
+            } catch {
+                sonosDebugLog("[PRESET] Save failed: \(error)")
+            }
         }
     }
 

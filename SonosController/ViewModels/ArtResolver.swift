@@ -158,6 +158,42 @@ final class ArtResolver {
         }
     }
 
+    // MARK: - State Mutation (encapsulated — ViewModel calls these, not direct property access)
+
+    func clearWebArt() {
+        webArtURL = nil
+        forceWebArt = false
+    }
+
+    func setWebArtResult(_ url: URL?) {
+        webArtURL = url
+    }
+
+    func setRadioTrackArt(_ url: URL?) {
+        radioTrackArtURL = url
+    }
+
+    func clearRadioTrackArt() {
+        radioTrackArtURL = nil
+        lastRadioTrackKey = ""
+    }
+
+    func setSearchKey(_ key: String) {
+        lastArtSearchKey = key
+    }
+
+    func shouldSearch(key: String) -> Bool {
+        key != lastArtSearchKey
+    }
+
+    func shouldSearchRadioTrack(key: String) -> Bool {
+        key != lastRadioTrackKey
+    }
+
+    func setRadioTrackKey(_ key: String) {
+        lastRadioTrackKey = key
+    }
+
     func reset() {
         displayedArtURL = nil
         radioTrackArtURL = nil
