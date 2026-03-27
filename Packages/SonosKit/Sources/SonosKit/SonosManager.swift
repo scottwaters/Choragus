@@ -865,14 +865,16 @@ public class SonosManager: ObservableObject {
     public func refreshAlarms() async {
         var bestAlarms: [SonosAlarm] = []
         let candidates = groups.compactMap(\.coordinator)
+        sonosDebugLog("[ALARM] refreshAlarms: querying \(candidates.count) coordinators")
         for device in candidates {
             do {
                 let result = try await alarmClock.listAlarms(device: device)
+                sonosDebugLog("[ALARM]   \(device.roomName) (\(device.ip)): \(result.count) alarms")
                 if result.count > bestAlarms.count {
                     bestAlarms = result
                 }
             } catch {
-                continue
+                sonosDebugLog("[ALARM]   \(device.roomName) (\(device.ip)): failed - \(error)")
             }
         }
         for i in bestAlarms.indices {
@@ -881,6 +883,7 @@ public class SonosManager: ObservableObject {
             }
         }
         cachedAlarms = bestAlarms.sorted { $0.startTime < $1.startTime }
+        sonosDebugLog("[ALARM] refreshAlarms done: \(cachedAlarms.count) alarms cached")
     }
 
     public func getAlarms() async throws -> [SonosAlarm] {

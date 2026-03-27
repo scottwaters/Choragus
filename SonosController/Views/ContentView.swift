@@ -14,7 +14,8 @@ struct ContentView: View {
     @State private var selectedGroupID: String?
     @State private var showQueue = false
     @State private var showBrowse = false
-    @State private var showAlarms = false
+    // Alarms: Sonos S2 app uses cloud API for alarms, not local UPnP AlarmClock.
+    // UPnP returns 0 alarms. Feature removed until cloud API access is available.
     @State private var showSettings = false
     @State private var showPresetManager = false
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .automatic
@@ -227,18 +228,6 @@ struct ContentView: View {
                     }
                     .help(L10n.showPlayQueue)
                     .disabled(selectedGroupID == nil)
-
-                    Button {
-                        showAlarms.toggle()
-                    } label: {
-                        Image(systemName: "alarm")
-                    }
-                    .help(L10n.manageAlarms)
-                    .popover(isPresented: $showAlarms) {
-                        AlarmsView()
-                            .environmentObject(sonosManager)
-                            .frame(width: 340, height: 400)
-                    }
 
                     Menu {
                         Button("Pause All") {
