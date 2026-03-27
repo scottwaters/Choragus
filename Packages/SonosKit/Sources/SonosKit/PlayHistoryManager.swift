@@ -88,13 +88,11 @@ public final class PlayHistoryManager: ObservableObject {
         let dedupKey = "\(normTitle)|\(normArtist)|\(groupID)"
         guard lastLoggedTrack[groupID] != dedupKey else { return }
 
-        // For radio/streaming, also check DB to avoid duplicates across app restarts
-        if !metadata.stationName.isEmpty || (metadata.trackURI.map { URIPrefix.isRadio($0) } ?? false) {
-            let fiveMinAgo = Date().timeIntervalSince1970 - 300
-            if repo.hasRecentEntry(title: normTitle, artist: normArtist, groupName: groupName, since: fiveMinAgo) {
-                lastLoggedTrack[groupID] = dedupKey
-                return
-            }
+        // Check DB to avoid duplicates across app restarts and metadata re-emissions
+        let fiveMinAgo = Date().timeIntervalSince1970 - 300
+        if repo.hasRecentEntry(title: normTitle, artist: normArtist, groupName: groupName, since: fiveMinAgo) {
+            lastLoggedTrack[groupID] = dedupKey
+            return
         }
 
         lastLoggedTrack[groupID] = dedupKey
