@@ -8,12 +8,13 @@ struct MusicServicesSettingsSection: View {
     @State private var searchText = ""
 
     private var filteredServices: [SMAPIServiceDescriptor] {
-        let all = smapiManager.availableServices
-            .filter { smapiManager.tokenStore.authenticatedServices[$0.id] == nil }
+        let connectable = smapiManager.availableServices
+            .filter { ($0.authType == "AppLink" || $0.authType == "DeviceLink") &&
+                      smapiManager.tokenStore.authenticatedServices[$0.id] == nil }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        if searchText.isEmpty { return all }
+        if searchText.isEmpty { return connectable }
         let query = searchText.lowercased()
-        return all.filter { $0.name.lowercased().contains(query) }
+        return connectable.filter { $0.name.lowercased().contains(query) }
     }
 
     var body: some View {
@@ -79,25 +80,12 @@ struct MusicServicesSettingsSection: View {
                             HStack {
                                 Text(service.name)
                                     .font(.caption)
-                                Text(service.authType)
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.tertiary)
                                 Spacer()
-                                if service.authType == "Anonymous" {
-                                    Text("No login")
-                                        .font(.system(size: 9))
-                                        .foregroundStyle(.secondary)
-                                } else if service.authType == "AppLink" || service.authType == "DeviceLink" {
-                                    Button("Connect") {
-                                        connectService(service)
-                                    }
-                                    .controlSize(.mini)
-                                    .disabled(smapiManager.isAuthenticating)
-                                } else {
-                                    Text("Unsupported")
-                                        .font(.system(size: 9))
-                                        .foregroundStyle(.tertiary)
+                                Button("Connect") {
+                                    connectService(service)
                                 }
+                                .controlSize(.mini)
+                                .disabled(smapiManager.isAuthenticating)
                             }
                         }
                     }
