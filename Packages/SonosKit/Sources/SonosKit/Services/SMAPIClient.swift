@@ -303,7 +303,7 @@ public final class SMAPIClient {
                 itemType: extractValue(from: element, tag: "itemType") ?? extractAttribute(from: element, tag: "mediaCollection", attr: "itemType") ?? "container",
                 artist: extractValue(from: element, tag: "artist") ?? extractValue(from: element, tag: "artistId") ?? "",
                 album: extractValue(from: element, tag: "album") ?? "",
-                albumArtURI: extractValue(from: element, tag: "albumArtURI") ?? "",
+                albumArtURI: extractValue(from: element, tag: "albumArtURI") ?? extractValue(from: element, tag: "logo") ?? "",
                 canPlay: element.contains("canPlay") ? extractValue(from: element, tag: "canPlay") == "true" : true,
                 canBrowse: element.contains("canEnumerate") ? extractValue(from: element, tag: "canEnumerate") == "true" : element.contains("mediaCollection"),
                 uri: extractValue(from: element, tag: "uri") ?? "",
