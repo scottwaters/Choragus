@@ -14,7 +14,7 @@ struct ContentView: View {
     @State private var selectedGroupID: String?
     @State private var showQueue = false
     @State private var showBrowse = false
-    @State private var showAlarms = false
+    // Alarms removed — UPnP alarm sync across speakers is unreliable
     @State private var showSettings = false
     @State private var showPresetManager = false
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .automatic
@@ -227,18 +227,6 @@ struct ContentView: View {
                     }
                     .help(L10n.showPlayQueue)
                     .disabled(selectedGroupID == nil)
-
-                    Button {
-                        showAlarms.toggle()
-                    } label: {
-                        Image(systemName: "alarm")
-                    }
-                    .help(L10n.manageAlarms)
-                    .popover(isPresented: $showAlarms) {
-                        AlarmsView(sonosManager: sonosManager)
-                            .environmentObject(sonosManager)
-                            .frame(width: 340, height: 400)
-                    }
 
                     Menu {
                         Button("Pause All") {
