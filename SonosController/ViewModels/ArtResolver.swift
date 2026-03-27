@@ -21,10 +21,15 @@ final class ArtResolver {
 
     // MARK: - Dependencies
 
-    private let sonosManager: SonosManager
+    private weak var playHistoryManager: PlayHistoryManager?
 
-    init(sonosManager: SonosManager) {
-        self.sonosManager = sonosManager
+    init(sonosManager: any NowPlayingServices) {
+        // ArtResolver only needs the play history manager for artwork updates
+        self.playHistoryManager = (sonosManager as? SonosManager)?.playHistoryManager
+    }
+
+    init(playHistoryManager: PlayHistoryManager?) {
+        self.playHistoryManager = playHistoryManager
     }
 
     // MARK: - Resolution
@@ -82,7 +87,7 @@ final class ArtResolver {
                 artist: artist, title: searchTitle
             ) {
                 radioTrackArtURL = URL(string: artURL)
-                sonosManager.playHistoryManager?.updateArtwork(
+                playHistoryManager?.updateArtwork(
                     forTitle: trackMetadata.title, artist: trackMetadata.artist, artURL: artURL
                 )
             } else {
@@ -143,7 +148,7 @@ final class ArtResolver {
             ) {
                 sonosDebugLog("[ART-SEARCH] Found: \(artURL.prefix(80))")
                 webArtURL = URL(string: artURL)
-                sonosManager.playHistoryManager?.updateArtwork(
+                playHistoryManager?.updateArtwork(
                     forTitle: trackMetadata.title, artist: trackMetadata.artist, artURL: artURL
                 )
             } else {

@@ -61,7 +61,7 @@ struct NowPlayingView: View {
                 HStack(spacing: 24) {
                     if hasTrack {
                         albumArtView
-                            .frame(width: 180, height: 180)
+                            .frame(width: UILayout.nowPlayingArtSize, height: UILayout.nowPlayingArtSize)
                             .onTapGesture { showExpandedArt = true }
                     } else if awaitingPlayback {
                         RoundedRectangle(cornerRadius: 8)
@@ -70,7 +70,7 @@ struct NowPlayingView: View {
                                 ProgressView()
                                     .controlSize(.regular)
                             }
-                            .frame(width: 180, height: 180)
+                            .frame(width: UILayout.nowPlayingArtSize, height: UILayout.nowPlayingArtSize)
                     } else {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(.quaternary)
@@ -79,7 +79,7 @@ struct NowPlayingView: View {
                                     .font(.system(size: 40))
                                     .foregroundStyle(.tertiary)
                             }
-                            .frame(width: 180, height: 180)
+                            .frame(width: UILayout.nowPlayingArtSize, height: UILayout.nowPlayingArtSize)
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -232,7 +232,7 @@ struct NowPlayingView: View {
                                 .monospacedDigit()
                         }
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, UILayout.horizontalPadding)
                     .padding(.top, 12)
                 } else if transportState.isActive {
                     // Streaming content — show elapsed time only
@@ -246,7 +246,7 @@ struct NowPlayingView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, UILayout.horizontalPadding)
                     .padding(.top, 12)
                 } else {
                     Spacer()
@@ -310,7 +310,7 @@ struct NowPlayingView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.vertical, 16)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, UILayout.horizontalPadding)
 
                 // Volume
                 HStack(spacing: 12) {
@@ -338,14 +338,16 @@ struct NowPlayingView: View {
                         .monospacedDigit()
                         .frame(width: 28, alignment: .trailing)
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, UILayout.horizontalPadding)
 
                 // Per-speaker volumes for grouped speakers
                 if group.members.count > 1 {
                     VolumeControlView(group: group,
                                       speakerVolumes: Binding(get: { vm.speakerVolumes }, set: { vm.speakerVolumes = $0 }),
-                                      speakerMutes: Binding(get: { vm.speakerMutes }, set: { vm.speakerMutes = $0 }))
-                        .environmentObject(sonosManager)
+                                      speakerMutes: Binding(get: { vm.speakerMutes }, set: { vm.speakerMutes = $0 }),
+                                      accentColor: sonosManager.resolvedAccentColor ?? .accentColor,
+                                      onSetVolume: { device, vol in await vm.setSpeakerVolume(device: device, volume: vol) },
+                                      onToggleMute: { device, muted in await vm.setSpeakerMute(device: device, muted: muted) })
                 }
             }
         }

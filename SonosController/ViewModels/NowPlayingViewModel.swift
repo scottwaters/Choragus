@@ -11,7 +11,7 @@ import SonosKit
 @MainActor
 @Observable
 final class NowPlayingViewModel {
-    let sonosManager: SonosManager
+    var sonosManager: any NowPlayingServices
     var group: SonosGroup
 
     // MARK: - Transport State
@@ -84,7 +84,7 @@ final class NowPlayingViewModel {
 
     // MARK: - Init
 
-    init(sonosManager: SonosManager, group: SonosGroup) {
+    init(sonosManager: any NowPlayingServices, group: SonosGroup) {
         self.sonosManager = sonosManager
         self.group = group
         self.art = ArtResolver(sonosManager: sonosManager)
@@ -99,7 +99,7 @@ final class NowPlayingViewModel {
         } else {
             sonosManager.groupTransportStates[group.coordinatorID] = .paused
         }
-        sonosManager.setTransportGrace(groupID: group.coordinatorID)
+        sonosManager.setTransportGrace(groupID: group.coordinatorID, duration: Timing.defaultGracePeriod)
         performAction("playPause") {
             if shouldPlay {
                 try await self.sonosManager.play(group: self.group)
@@ -112,7 +112,7 @@ final class NowPlayingViewModel {
     func toggleShuffle() {
         let newMode = playMode.togglingShuffle()
         sonosManager.groupPlayModes[group.coordinatorID] = newMode
-        sonosManager.setModeGrace(groupID: group.coordinatorID)
+        sonosManager.setModeGrace(groupID: group.coordinatorID, duration: Timing.defaultGracePeriod)
         performAction("shuffle") {
             try await self.sonosManager.setPlayMode(group: self.group, mode: newMode)
         }
@@ -121,7 +121,7 @@ final class NowPlayingViewModel {
     func cycleRepeat() {
         let newMode = playMode.cyclingRepeat()
         sonosManager.groupPlayModes[group.coordinatorID] = newMode
-        sonosManager.setModeGrace(groupID: group.coordinatorID)
+        sonosManager.setModeGrace(groupID: group.coordinatorID, duration: Timing.defaultGracePeriod)
         performAction("repeat") {
             try await self.sonosManager.setPlayMode(group: self.group, mode: newMode)
         }
@@ -143,7 +143,11 @@ final class NowPlayingViewModel {
         positionFrozenUntil = Date().addingTimeInterval(Timing.positionFreezeAfterSeek)
         sonosManager.setPositionGrace(coordinatorID: group.coordinatorID, duration: Timing.positionFreezeAfterSeek)
         Task {
-            try? await sonosManager.seek(group: group, to: timeStr)
+            do {
+                try await sonosManager.seek(group: group, to: timeStr)
+            } catch {
+                sonosDebugLog("[NOW-PLAYING] Seek failed: \(error)")
+            }
         }
     }
 
@@ -154,13 +158,17 @@ final class NowPlayingViewModel {
         isMuted = newMuted
         muteGraceUntil = Date().addingTimeInterval(Timing.playbackGracePeriod)
         for member in group.members {
-            sonosManager.setMuteGrace(deviceID: member.id)
+            sonosManager.setMuteGrace(deviceID: member.id, duration: Timing.playbackGracePeriod)
             speakerMutes[member.id] = newMuted
             sonosManager.deviceMutes[member.id] = newMuted
         }
         Task {
             for member in group.members {
-                try? await sonosManager.setMute(device: member, muted: newMuted)
+                do {
+                    try await sonosManager.setMute(device: member, muted: newMuted)
+                } catch {
+                    sonosDebugLog("[NOW-PLAYING] setMute failed for \(member.roomName): \(error)")
+                }
             }
         }
     }
@@ -170,7 +178,7 @@ final class NowPlayingViewModel {
         volumeGraceUntil = now.addingTimeInterval(Timing.playbackGracePeriod)
         let delta = volume - lastMasterVolume
         for member in group.members {
-            sonosManager.setVolumeGrace(deviceID: member.id)
+            sonosManager.setVolumeGrace(deviceID: member.id, duration: Timing.playbackGracePeriod)
             let currentVol = speakerVolumes[member.id] ?? 0
             let newVol = max(0, min(100, currentVol + delta))
             speakerVolumes[member.id] = newVol
@@ -183,8 +191,34 @@ final class NowPlayingViewModel {
         Task {
             for member in group.members {
                 let vol = Int(speakerVolumes[member.id] ?? 0)
-                try? await sonosManager.setVolume(device: member, volume: vol)
+                do {
+                    try await sonosManager.setVolume(device: member, volume: vol)
+                } catch {
+                    sonosDebugLog("[NOW-PLAYING] commitVolume failed for \(member.roomName): \(error)")
+                }
             }
+        }
+    }
+
+    // MARK: - Per-Speaker Volume/Mute (called from VolumeControlView)
+
+    func setSpeakerVolume(device: SonosDevice, volume: Int) async {
+        sonosManager.setVolumeGrace(deviceID: device.id, duration: Timing.playbackGracePeriod)
+        sonosManager.deviceVolumes[device.id] = volume
+        do {
+            try await sonosManager.setVolume(device: device, volume: volume)
+        } catch {
+            sonosDebugLog("[VOLUME] setSpeakerVolume failed for \(device.roomName): \(error)")
+        }
+    }
+
+    func setSpeakerMute(device: SonosDevice, muted: Bool) async {
+        sonosManager.setMuteGrace(deviceID: device.id, duration: Timing.playbackGracePeriod)
+        sonosManager.deviceMutes[device.id] = muted
+        do {
+            try await sonosManager.setMute(device: device, muted: muted)
+        } catch {
+            sonosDebugLog("[VOLUME] setSpeakerMute failed for \(device.roomName): \(error)")
         }
     }
 
@@ -329,6 +363,41 @@ final class NowPlayingViewModel {
         return String(format: "%d:%02d", minutes, seconds)
     }
 
+    // MARK: - Metadata Enrichment
+
+    /// Enriches track metadata from media info for radio streams.
+    /// Extracts station name, title, and album art from CurrentURIMetaData DIDL.
+    private func enrichMetadata(_ position: TrackMetadata, state: TransportState, coordinator: SonosDevice) async -> TrackMetadata {
+        var enriched = position
+        guard (position.title.isEmpty || position.stationName.isEmpty), state.isActive else {
+            return enriched
+        }
+        let mediaInfo = try? await sonosManager.getMediaInfo(group: group)
+        guard let rawDIDL = mediaInfo?["CurrentURIMetaData"], !rawDIDL.isEmpty,
+              rawDIDL != "NOT_IMPLEMENTED" else {
+            return enriched
+        }
+        let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
+        guard let parsed = XMLResponseParser.parseDIDLMetadata(didl) else {
+            return enriched
+        }
+        let currentURI = mediaInfo?["CurrentURI"] ?? ""
+        if URIPrefix.isRadio(currentURI), !parsed.title.isEmpty {
+            enriched.stationName = parsed.title
+        }
+        if enriched.title.isEmpty {
+            enriched.title = parsed.title
+        }
+        let artURI = coordinator.makeAbsoluteURL(parsed.albumArtURI)
+        if !artURI.isEmpty {
+            enriched.albumArtURI = artURI
+            if let favID = sonosManager.lastPlayedFavoriteID {
+                sonosManager.cacheArtURL(artURI, forURI: "", title: enriched.stationName.isEmpty ? enriched.title : enriched.stationName, itemID: favID)
+            }
+        }
+        return enriched
+    }
+
     // MARK: - Position Polling & Interpolation
 
     func startProgressTimer() {
@@ -362,38 +431,7 @@ final class NowPlayingViewModel {
         do {
             let state = try await sonosManager.getTransportState(group: group)
             let position = try await sonosManager.getPositionInfo(group: group)
-
-            // Enrich metadata from media info for radio streams
-            var enrichedPosition = position
-            if (position.title.isEmpty || position.stationName.isEmpty), state.isActive {
-                let mediaInfo = try? await sonosManager.getMediaInfo(group: group)
-                if let rawDIDL = mediaInfo?["CurrentURIMetaData"], !rawDIDL.isEmpty,
-                   rawDIDL != "NOT_IMPLEMENTED" {
-                    let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
-                    if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
-                        let currentURI = mediaInfo?["CurrentURI"] ?? ""
-                        let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
-                                      currentURI.contains(URIPrefix.sonosApiRadio) ||
-                                      currentURI.contains(URIPrefix.rinconMP3Radio)
-                        if isRadio && !parsed.title.isEmpty {
-                            enrichedPosition.stationName = parsed.title
-                        }
-                        if enrichedPosition.title.isEmpty {
-                            enrichedPosition.title = parsed.title
-                        }
-                        var artURI = parsed.albumArtURI
-                        if artURI.hasPrefix("/") {
-                            artURI = "http://\(coordinator.ip):\(coordinator.port)\(artURI)"
-                        }
-                        if !artURI.isEmpty {
-                            enrichedPosition.albumArtURI = artURI
-                            if let favID = sonosManager.lastPlayedFavoriteID {
-                                sonosManager.cacheArtURL(artURI, forURI: "", title: enrichedPosition.stationName.isEmpty ? enrichedPosition.title : enrichedPosition.stationName, itemID: favID)
-                            }
-                        }
-                    }
-                }
-            }
+            let enrichedPosition = await enrichMetadata(position, state: state, coordinator: coordinator)
 
             sonosManager.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition)
 
@@ -401,22 +439,11 @@ final class NowPlayingViewModel {
             lastPositionTimestamp = Date()
             smoothPosition = enrichedPosition.position
 
-            // Fetch volume/mute per member (skip graced devices)
-            for member in group.members {
-                if !sonosManager.isVolumeGraceActive(deviceID: member.id) {
-                    let vol = try await sonosManager.getVolume(device: member)
-                    sonosManager.deviceVolumes[member.id] = vol
-                }
-                if !sonosManager.isMuteGraceActive(deviceID: member.id) {
-                    let muted = try await sonosManager.getMute(device: member)
-                    sonosManager.deviceMutes[member.id] = muted
-                }
-            }
-
-            syncVolumeFromManager()
-            syncMuteFromManager()
+            await syncVolumeMuteFromSpeakers()
             crossfadeOn = (try? await sonosManager.getCrossfadeMode(group: group)) ?? false
-        } catch {}
+        } catch {
+            sonosDebugLog("[NOW-PLAYING] pollPosition failed: \(error)")
+        }
     }
 
     // MARK: - Fetch Current State
@@ -432,57 +459,36 @@ final class NowPlayingViewModel {
             sonosManager.groupTransportStates[group.coordinatorID] = state
             sonosManager.groupPlayModes[group.coordinatorID] = mode
 
-            var enrichedPosition = position
-            if state.isActive {
-                let mediaInfo = try? await sonosManager.getMediaInfo(group: group)
-                if let rawDIDL = mediaInfo?["CurrentURIMetaData"], !rawDIDL.isEmpty,
-                   rawDIDL != "NOT_IMPLEMENTED" {
-                    let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
-                    if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
-                        let currentURI = mediaInfo?["CurrentURI"] ?? ""
-                        let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
-                                      currentURI.contains(URIPrefix.sonosApiRadio) ||
-                                      currentURI.contains(URIPrefix.rinconMP3Radio)
-                        if isRadio && !parsed.title.isEmpty {
-                            enrichedPosition.stationName = parsed.title
-                        }
-                        if enrichedPosition.title.isEmpty {
-                            enrichedPosition.title = parsed.title
-                        }
-                        var artURI = parsed.albumArtURI
-                        if artURI.hasPrefix("/") {
-                            artURI = "http://\(coordinator.ip):\(coordinator.port)\(artURI)"
-                        }
-                        if !artURI.isEmpty {
-                            enrichedPosition.albumArtURI = artURI
-                            if let favID = sonosManager.lastPlayedFavoriteID {
-                                sonosManager.cacheArtURL(artURI, forURI: "", title: enrichedPosition.stationName.isEmpty ? enrichedPosition.title : enrichedPosition.stationName, itemID: favID)
-                            }
-                        }
-                    }
-                }
-            }
+            let enrichedPosition = await enrichMetadata(position, state: state, coordinator: coordinator)
 
             sonosManager.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition)
             lastKnownPosition = enrichedPosition.position
             lastPositionTimestamp = Date()
             smoothPosition = enrichedPosition.position
 
-            for member in group.members {
-                if !sonosManager.isVolumeGraceActive(deviceID: member.id) {
-                    let vol = try await sonosManager.getVolume(device: member)
+            await syncVolumeMuteFromSpeakers()
+            crossfadeOn = (try? await sonosManager.getCrossfadeMode(group: group)) ?? false
+        } catch {
+            sonosDebugLog("[NOW-PLAYING] fetchCurrentState failed: \(error)")
+        }
+    }
+
+    /// Fetches volume/mute per member from speakers, skipping graced devices.
+    private func syncVolumeMuteFromSpeakers() async {
+        for member in group.members {
+            if !sonosManager.isVolumeGraceActive(deviceID: member.id) {
+                if let vol = try? await sonosManager.getVolume(device: member) {
                     sonosManager.deviceVolumes[member.id] = vol
                 }
-                if !sonosManager.isMuteGraceActive(deviceID: member.id) {
-                    let muted = try await sonosManager.getMute(device: member)
+            }
+            if !sonosManager.isMuteGraceActive(deviceID: member.id) {
+                if let muted = try? await sonosManager.getMute(device: member) {
                     sonosManager.deviceMutes[member.id] = muted
                 }
             }
-
-            syncVolumeFromManager()
-            syncMuteFromManager()
-            crossfadeOn = (try? await sonosManager.getCrossfadeMode(group: group)) ?? false
-        } catch {}
+        }
+        syncVolumeFromManager()
+        syncMuteFromManager()
     }
 
 }

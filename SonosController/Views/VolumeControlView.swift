@@ -2,14 +2,17 @@
 ///
 /// Shown below the master volume when a group has multiple members.
 /// Layout: [mute] [name] [slider] [value] — all inline, slider fills remaining space.
+/// Business logic is delegated to the parent via closures (SoC).
 import SwiftUI
 import SonosKit
 
 struct VolumeControlView: View {
-    @EnvironmentObject var sonosManager: SonosManager
     let group: SonosGroup
     @Binding var speakerVolumes: [String: Double]
     @Binding var speakerMutes: [String: Bool]
+    var accentColor: Color = .accentColor
+    var onSetVolume: ((SonosDevice, Int) async -> Void)?
+    var onToggleMute: ((SonosDevice, Bool) async -> Void)?
 
     @State private var draggingSpeaker: String?
 
@@ -27,13 +30,15 @@ struct VolumeControlView: View {
             Text(L10n.speakerVolumes)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, UILayout.horizontalPadding)
                 .padding(.top, 8)
 
             ForEach(sortedMembers, id: \.id) { member in
                 HStack(spacing: 8) {
                     Button {
-                        Task { await toggleMute(device: member) }
+                        let newMuted = !(speakerMutes[member.id] ?? false)
+                        speakerMutes[member.id] = newMuted
+                        Task { await onToggleMute?(member, newMuted) }
                     } label: {
                         Image(systemName: (speakerMutes[member.id] ?? false) ? "speaker.slash.fill" : "speaker.wave.2.fill")
                             .frame(width: 20)
@@ -44,7 +49,7 @@ struct VolumeControlView: View {
                     Text(member.roomName)
                         .font(.caption)
                         .lineLimit(1)
-                        .frame(minWidth: 60, alignment: .leading)
+                        .frame(minWidth: UILayout.speakerNameMinWidth, alignment: .leading)
                         .layoutPriority(-1)
 
                     SliderWithPopup(
@@ -58,34 +63,20 @@ struct VolumeControlView: View {
                     ) { editing in
                         draggingSpeaker = editing ? member.id : nil
                         if !editing {
-                            Task { await setVolume(device: member) }
+                            let vol = Int(speakerVolumes[member.id] ?? 0)
+                            Task { await onSetVolume?(member, vol) }
                         }
                     }
 
                     Text("\(Int(speakerVolumes[member.id] ?? 0))")
                         .font(.caption)
                         .monospacedDigit()
-                        .frame(width: 28, alignment: .trailing)
+                        .frame(width: UILayout.volumeLabelWidth, alignment: .trailing)
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, UILayout.horizontalPadding)
             }
         }
         .padding(.bottom, 16)
-        .tint(sonosManager.resolvedAccentColor)
-    }
-
-    private func setVolume(device: SonosDevice) async {
-        let vol = Int(speakerVolumes[device.id] ?? 0)
-        sonosManager.setVolumeGrace(deviceID: device.id, duration: Timing.playbackGracePeriod)
-        sonosManager.deviceVolumes[device.id] = vol
-        try? await sonosManager.setVolume(device: device, volume: vol)
-    }
-
-    private func toggleMute(device: SonosDevice) async {
-        let currentMute = speakerMutes[device.id] ?? false
-        speakerMutes[device.id] = !currentMute
-        sonosManager.setMuteGrace(deviceID: device.id, duration: Timing.playbackGracePeriod)
-        sonosManager.deviceMutes[device.id] = !currentMute
-        try? await sonosManager.setMute(device: device, muted: !currentMute)
+        .tint(accentColor)
     }
 }

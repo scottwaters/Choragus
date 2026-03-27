@@ -29,4 +29,11 @@ public struct SonosDevice: Identifiable, Hashable {
     public var baseURL: URL {
         URL(string: "http://\(ip):\(port)") ?? Self.fallbackURL
     }
+
+    /// Converts a relative path (e.g. "/getaa?...") to an absolute URL using this device's address.
+    /// Returns the original string unchanged if it's already absolute.
+    public func makeAbsoluteURL(_ path: String) -> String {
+        guard path.hasPrefix("/") else { return path }
+        return "http://\(ip):\(port)\(path)"
+    }
 }

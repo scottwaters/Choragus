@@ -980,9 +980,7 @@ public class SonosManager: ObservableObject {
         lastPlayedFavoriteID = item.objectID
 
         // Build metadata from browse item for UI display
-        let isRadioStream = item.resourceURI?.hasPrefix(URIPrefix.sonosApiStream) == true
-            || item.resourceURI?.hasPrefix(URIPrefix.sonosApiRadio) == true
-            || item.resourceURI?.hasPrefix(URIPrefix.rinconMP3Radio) == true
+        let isRadioStream = item.resourceURI.map(URIPrefix.isRadio) ?? false
 
         var initialMeta = TrackMetadata(
             title: item.title,
@@ -991,8 +989,8 @@ public class SonosManager: ObservableObject {
             albumArtURI: item.albumArtURI,
             stationName: isRadioStream ? item.title : ""
         )
-        if let art = initialMeta.albumArtURI, art.hasPrefix("/") {
-            initialMeta.albumArtURI = "http://\(coordinator.ip):\(coordinator.port)\(art)"
+        if let art = initialMeta.albumArtURI {
+            initialMeta.albumArtURI = coordinator.makeAbsoluteURL(art)
         }
 
         // Show new item info immediately with transitioning state.
@@ -1296,9 +1294,7 @@ extension SonosManager: TransportStrategyDelegate {
         let trackChanged = updated.trackURI != existing.trackURI && updated.trackURI != nil
 
         // Only carry forward station name if still playing the same radio stream
-        let isStillRadio = updated.trackURI?.contains(URIPrefix.sonosApiStream) == true ||
-                           updated.trackURI?.contains(URIPrefix.sonosApiRadio) == true ||
-                           updated.trackURI?.contains(URIPrefix.rinconMP3Radio) == true
+        let isStillRadio = updated.trackURI.map(URIPrefix.isRadio) ?? false
         if updated.stationName.isEmpty && !existing.stationName.isEmpty && isStillRadio && !trackChanged {
             updated.stationName = existing.stationName
         }
@@ -1411,3 +1407,18 @@ extension SonosManager: TransportStrategyDelegate {
         zoneTopology
     }
 }
+
+// MARK: - Protocol Conformances (ISP)
+// SonosManager conforms to segregated protocols so ViewModels depend on
+// narrow interfaces instead of the full 121-method class.
+
+extension SonosManager: PlaybackServiceProtocol {}
+extension SonosManager: VolumeServiceProtocol {}
+extension SonosManager: EQServiceProtocol {}
+extension SonosManager: QueueServiceProtocol {}
+extension SonosManager: BrowsingServiceProtocol {}
+extension SonosManager: GroupingServiceProtocol {}
+extension SonosManager: AlarmServiceProtocol {}
+extension SonosManager: MusicServiceDetectionProtocol {}
+extension SonosManager: TransportStateProviding {}
+extension SonosManager: ArtCacheProtocol {}

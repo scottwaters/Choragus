@@ -176,6 +176,18 @@ public enum UDKey {
 }
 
 
+// MARK: - UI Layout Constants
+
+public enum UILayout {
+    public static let nowPlayingArtSize: CGFloat = 180
+    public static let horizontalPadding: CGFloat = 24
+    public static let defaultSpacing: CGFloat = 12
+    public static let volumeLabelWidth: CGFloat = 28
+    public static let speakerNameMinWidth: CGFloat = 60
+    public static let presetWindowWidth: CGFloat = 680
+    public static let presetWindowHeight: CGFloat = 580
+}
+
 // MARK: - Notifications
 
 public extension Notification.Name {

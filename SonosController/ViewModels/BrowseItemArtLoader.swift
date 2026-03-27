@@ -8,9 +8,9 @@ import SonosKit
 
 @MainActor
 final class BrowseItemArtLoader {
-    private let sonosManager: SonosManager
+    private let sonosManager: any (BrowsingServiceProtocol & ArtCacheProtocol & TransportStateProviding)
 
-    init(sonosManager: SonosManager) {
+    init(sonosManager: any (BrowsingServiceProtocol & ArtCacheProtocol & TransportStateProviding)) {
         self.sonosManager = sonosManager
     }
 
@@ -42,8 +42,8 @@ final class BrowseItemArtLoader {
             let didl = meta.contains("&lt;") ? XMLResponseParser.xmlUnescape(meta) : meta
             if let parsed = XMLResponseParser.parseDIDLMetadata(didl), !parsed.albumArtURI.isEmpty {
                 var artURI = parsed.albumArtURI
-                if artURI.hasPrefix("/"), let device = sonosManager.groups.first?.coordinator {
-                    artURI = "http://\(device.ip):\(device.port)\(artURI)"
+                if let device = sonosManager.groups.first?.coordinator {
+                    artURI = device.makeAbsoluteURL(artURI)
                 }
                 sonosManager.cacheArtURL(artURI, forURI: item.resourceURI ?? "", title: item.title, itemID: item.objectID)
                 return URL(string: artURI)
@@ -138,7 +138,7 @@ final class BrowseItemArtLoader {
 
             // Inherit from child
             if let artURL = await findArtInContainer(objectID: item.objectID, device: device, depth: 0) {
-                sonosManager.cacheArtURL(artURL.absoluteString, forURI: item.objectID, title: item.title)
+                sonosManager.cacheArtURL(artURL.absoluteString, forURI: item.objectID, title: item.title, itemID: "")
                 return artURL
             }
         }
@@ -161,7 +161,7 @@ final class BrowseItemArtLoader {
         }
 
         if let artURL = await AlbumArtSearchService.shared.searchArtwork(artist: artist, album: album) {
-            sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title)
+            sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title, itemID: "")
             return URL(string: artURL)
         }
 
@@ -169,7 +169,7 @@ final class BrowseItemArtLoader {
         if !isArtist && !isAlbum {
             if let (guessedArtist, guessedAlbum) = guessArtistAlbum(from: item.objectID, title: item.title) {
                 if let artURL = await AlbumArtSearchService.shared.searchArtwork(artist: guessedArtist, album: guessedAlbum) {
-                    sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title)
+                    sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title, itemID: "")
                     return URL(string: artURL)
                 }
             }

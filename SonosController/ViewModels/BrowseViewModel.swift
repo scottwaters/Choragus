@@ -8,7 +8,7 @@ import SonosKit
 @MainActor
 @Observable
 final class BrowseViewModel {
-    let sonosManager: SonosManager
+    let sonosManager: any BrowsingServices
     let objectID: String
     let title: String
     let group: SonosGroup?
@@ -35,7 +35,7 @@ final class BrowseViewModel {
 
     var isSearch: Bool { objectID.hasPrefix("SEARCH:") }
 
-    init(sonosManager: SonosManager, objectID: String, title: String, group: SonosGroup?) {
+    init(sonosManager: any BrowsingServices, objectID: String, title: String, group: SonosGroup?) {
         self.sonosManager = sonosManager
         self.objectID = objectID
         self.title = title
@@ -77,9 +77,9 @@ final class BrowseViewModel {
         do {
             if isSearch {
                 let query = String(objectID.dropFirst("SEARCH:".count))
-                async let artistResults = sonosManager.search(query: query, in: "A:ALBUMARTIST", count: 20)
-                async let albumResults = sonosManager.search(query: query, in: "A:ALBUM", count: 20)
-                async let trackResults = sonosManager.search(query: query, in: "A:TRACKS", count: 30)
+                async let artistResults = sonosManager.search(query: query, in: "A:ALBUMARTIST", start: 0, count: 20)
+                async let albumResults = sonosManager.search(query: query, in: "A:ALBUM", start: 0, count: 20)
+                async let trackResults = sonosManager.search(query: query, in: "A:TRACKS", start: 0, count: 30)
                 let (artists, albums, tracks) = try await (artistResults, albumResults, trackResults)
                 items = artists.items + albums.items + tracks.items
                 totalItems = items.count
@@ -149,7 +149,7 @@ final class BrowseViewModel {
             return
         }
         do {
-            try await sonosManager.addBrowseItemToQueue(item, in: group, playNext: playNext)
+            try await sonosManager.addBrowseItemToQueue(item, in: group, playNext: playNext, atPosition: 0)
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
         }

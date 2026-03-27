@@ -147,10 +147,7 @@ public final class AVTransportService {
                 }
 
                 // Relative art URIs need the device's base URL prepended
-                var artURI = parsed.albumArtURI
-                if artURI.hasPrefix("/") {
-                    artURI = "http://\(device.ip):\(device.port)\(artURI)"
-                }
+                var artURI = device.makeAbsoluteURL(parsed.albumArtURI)
                 if artURI.isEmpty, !parsed.resourceURI.isEmpty {
                     let encoded = parsed.resourceURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? parsed.resourceURI
                     artURI = "http://\(device.ip):\(device.port)/getaa?s=1&u=\(encoded)"

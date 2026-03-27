@@ -283,8 +283,8 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             // The SAX parser already unescaped the val attribute, so didlXML is valid DIDL XML
             if let parsed = XMLResponseParser.parseDIDLMetadata(didlXML) {
                 var artURI = parsed.albumArtURI
-                if let device = currentDevices[deviceID], artURI.hasPrefix("/") {
-                    artURI = "http://\(device.ip):\(device.port)\(artURI)"
+                if let device = currentDevices[deviceID] {
+                    artURI = device.makeAbsoluteURL(artURI)
                 }
 
                 var metadata = TrackMetadata(
@@ -321,9 +321,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                         let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
                         if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
                             let currentURI = mediaInfo["CurrentURI"] ?? ""
-                            let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
-                                          currentURI.contains(URIPrefix.sonosApiRadio) ||
-                                          currentURI.contains(URIPrefix.rinconMP3Radio)
+                            let isRadio = URIPrefix.isRadio(currentURI)
                             if isRadio && !parsed.title.isEmpty {
                                 enriched.stationName = parsed.title
                             }
@@ -397,9 +395,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                         let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
                         if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
                             let currentURI = mediaInfo["CurrentURI"] ?? ""
-                            let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
-                                          currentURI.contains(URIPrefix.sonosApiRadio) ||
-                                          currentURI.contains(URIPrefix.rinconMP3Radio)
+                            let isRadio = URIPrefix.isRadio(currentURI)
                             if isRadio && !parsed.title.isEmpty {
                                 enrichedPosition.stationName = parsed.title
                             }
@@ -407,10 +403,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                                 enrichedPosition.title = parsed.title
                             }
                             if !parsed.albumArtURI.isEmpty {
-                                var artURI = parsed.albumArtURI
-                                if artURI.hasPrefix("/") {
-                                    artURI = "http://\(coordinator.ip):\(coordinator.port)\(artURI)"
-                                }
+                                let artURI = coordinator.makeAbsoluteURL(parsed.albumArtURI)
                                 enrichedPosition.albumArtURI = artURI
                             }
                         }
@@ -466,9 +459,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                         let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
                         if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
                             let currentURI = mediaInfo["CurrentURI"] ?? ""
-                            let isRadio = currentURI.contains(URIPrefix.sonosApiStream) ||
-                                          currentURI.contains(URIPrefix.sonosApiRadio) ||
-                                          currentURI.contains(URIPrefix.rinconMP3Radio)
+                            let isRadio = URIPrefix.isRadio(currentURI)
                             if isRadio && !parsed.title.isEmpty {
                                 enrichedPosition.stationName = parsed.title
                             }
@@ -476,10 +467,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                                 enrichedPosition.title = parsed.title
                             }
                             if !parsed.albumArtURI.isEmpty {
-                                var artURI = parsed.albumArtURI
-                                if artURI.hasPrefix("/") {
-                                    artURI = "http://\(coordinator.ip):\(coordinator.port)\(artURI)"
-                                }
+                                let artURI = coordinator.makeAbsoluteURL(parsed.albumArtURI)
                                 enrichedPosition.albumArtURI = artURI
                             }
                         }

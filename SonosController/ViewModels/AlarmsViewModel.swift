@@ -6,12 +6,12 @@ import SonosKit
 @MainActor
 @Observable
 final class AlarmsViewModel {
-    let sonosManager: SonosManager
+    let sonosManager: any AlarmServiceProtocol
 
     var alarms: [SonosAlarm] = []
     var isLoading = true
 
-    init(sonosManager: SonosManager) {
+    init(sonosManager: any AlarmServiceProtocol) {
         self.sonosManager = sonosManager
     }
 

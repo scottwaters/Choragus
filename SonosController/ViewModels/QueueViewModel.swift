@@ -4,7 +4,7 @@ import SonosKit
 
 @MainActor
 final class QueueViewModel: ObservableObject {
-    let sonosManager: SonosManager
+    var sonosManager: any QueueServices
     let group: SonosGroup
 
     @Published var queueItems: [QueueItem] = []
@@ -22,7 +22,7 @@ final class QueueViewModel: ObservableObject {
         return false
     }
 
-    init(sonosManager: SonosManager, group: SonosGroup) {
+    init(sonosManager: any QueueServices, group: SonosGroup) {
         self.sonosManager = sonosManager
         self.group = group
     }
@@ -55,7 +55,7 @@ final class QueueViewModel: ObservableObject {
     func loadQueue() async {
         isLoading = true
         do {
-            let (items, total) = try await sonosManager.getQueue(group: group)
+            let (items, total) = try await sonosManager.getQueue(group: group, start: 0, count: 100)
             queueItems = items
             totalTracks = total
             let posInfo = try await sonosManager.getPositionInfo(group: group)
@@ -118,10 +118,12 @@ final class QueueViewModel: ObservableObject {
 
         // Reload queue with new order
         do {
-            let (items, total) = try await sonosManager.getQueue(group: group)
+            let (items, total) = try await sonosManager.getQueue(group: group, start: 0, count: 100)
             queueItems = items
             totalTracks = total
-        } catch {}
+        } catch {
+            sonosDebugLog("[QUEUE] Reload after shuffle failed: \(error)")
+        }
 
         isShuffling = false
     }
@@ -140,7 +142,7 @@ final class QueueViewModel: ObservableObject {
 
     func addBrowseItem(_ item: BrowseItem, atPosition: Int = 0) async {
         do {
-            try await sonosManager.addBrowseItemToQueue(item, in: group, atPosition: atPosition)
+            try await sonosManager.addBrowseItemToQueue(item, in: group, playNext: false, atPosition: atPosition)
             await loadQueue()
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUE")

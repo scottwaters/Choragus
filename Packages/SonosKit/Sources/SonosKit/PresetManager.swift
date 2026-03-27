@@ -145,7 +145,11 @@ public final class PresetManager: ObservableObject {
         let toRemove = currentMemberIDs.subtracting(presetDeviceIDs).subtracting([coordinator.id])
         for deviceID in toRemove {
             if let device = manager.devices[deviceID] {
-                try? await manager.ungroupDevice(device)
+                do {
+                    try await manager.ungroupDevice(device)
+                } catch {
+                    sonosDebugLog("[PRESET] Ungroup \(device.roomName) failed: \(error)")
+                }
                 topologyChanged = true
             }
         }
@@ -160,10 +164,18 @@ public final class PresetManager: ObservableObject {
                 group.members.count > 1
             }
             if inOtherGroup {
-                try? await manager.ungroupDevice(device)
+                do {
+                    try await manager.ungroupDevice(device)
+                } catch {
+                    sonosDebugLog("[PRESET] Ungroup \(device.roomName) from other group failed: \(error)")
+                }
                 try? await Task.sleep(nanoseconds: Timing.presetStepDelay)
             }
-            try? await manager.joinGroup(device: device, toCoordinator: coordinator)
+            do {
+                try await manager.joinGroup(device: device, toCoordinator: coordinator)
+            } catch {
+                sonosDebugLog("[PRESET] Join \(device.roomName) to \(coordinator.roomName) failed: \(error)")
+            }
             topologyChanged = true
         }
 
@@ -178,28 +190,40 @@ public final class PresetManager: ObservableObject {
             guard let device = manager.devices[member.deviceID] else { continue }
             manager.setVolumeGrace(deviceID: device.id, duration: Timing.defaultGracePeriod)
             manager.deviceVolumes[device.id] = member.volume
-            try? await manager.setVolume(device: device, volume: member.volume)
+            do {
+                try await manager.setVolume(device: device, volume: member.volume)
+            } catch {
+                sonosDebugLog("[PRESET] setVolume for \(device.roomName) failed: \(error)")
+            }
         }
 
         // Apply EQ if preset includes it
         if preset.includesEQ {
             for member in preset.members {
                 guard let eq = member.eq, let device = manager.devices[member.deviceID] else { continue }
-                try? await manager.setBass(device: device, bass: eq.bass)
-                try? await manager.setTreble(device: device, treble: eq.treble)
-                try? await manager.setLoudness(device: device, enabled: eq.loudness)
+                do {
+                    try await manager.setBass(device: device, bass: eq.bass)
+                    try await manager.setTreble(device: device, treble: eq.treble)
+                    try await manager.setLoudness(device: device, enabled: eq.loudness)
+                } catch {
+                    sonosDebugLog("[PRESET] EQ for \(device.roomName) failed: \(error)")
+                }
             }
 
             if let htEQ = preset.homeTheaterEQ, let device = manager.devices[preset.coordinatorDeviceID] {
-                try? await manager.setEQ(device: device, eqType: "NightMode", value: htEQ.nightMode ? 1 : 0)
-                try? await manager.setEQ(device: device, eqType: "DialogLevel", value: htEQ.dialogLevel ? 1 : 0)
-                try? await manager.setEQ(device: device, eqType: "SubEnable", value: htEQ.subEnabled ? 1 : 0)
-                try? await manager.setEQ(device: device, eqType: "SubGain", value: htEQ.subGain)
-                try? await manager.setEQ(device: device, eqType: "SubPolarity", value: htEQ.subPolarity ? 1 : 0)
-                try? await manager.setEQ(device: device, eqType: "SurroundEnable", value: htEQ.surroundEnabled ? 1 : 0)
-                try? await manager.setEQ(device: device, eqType: "SurroundLevel", value: htEQ.surroundLevel)
-                try? await manager.setEQ(device: device, eqType: "MusicSurroundLevel", value: htEQ.musicSurroundLevel)
-                try? await manager.setEQ(device: device, eqType: "SurroundMode", value: htEQ.surroundMode)
+                do {
+                    try await manager.setEQ(device: device, eqType: "NightMode", value: htEQ.nightMode ? 1 : 0)
+                    try await manager.setEQ(device: device, eqType: "DialogLevel", value: htEQ.dialogLevel ? 1 : 0)
+                    try await manager.setEQ(device: device, eqType: "SubEnable", value: htEQ.subEnabled ? 1 : 0)
+                    try await manager.setEQ(device: device, eqType: "SubGain", value: htEQ.subGain)
+                    try await manager.setEQ(device: device, eqType: "SubPolarity", value: htEQ.subPolarity ? 1 : 0)
+                    try await manager.setEQ(device: device, eqType: "SurroundEnable", value: htEQ.surroundEnabled ? 1 : 0)
+                    try await manager.setEQ(device: device, eqType: "SurroundLevel", value: htEQ.surroundLevel)
+                    try await manager.setEQ(device: device, eqType: "MusicSurroundLevel", value: htEQ.musicSurroundLevel)
+                    try await manager.setEQ(device: device, eqType: "SurroundMode", value: htEQ.surroundMode)
+                } catch {
+                    sonosDebugLog("[PRESET] Home Theater EQ failed: \(error)")
+                }
             }
         }
     }
