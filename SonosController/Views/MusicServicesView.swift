@@ -6,6 +6,7 @@ import AppKit
 struct MusicServicesSettingsSection: View {
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     @State private var searchText = ""
+    @State private var showHelp = false
 
     /// Services that block third-party AppLink auth (require native app OAuth)
     private static let blockedServices: Set<Int> = [
@@ -24,12 +25,30 @@ struct MusicServicesSettingsSection: View {
     }
 
     var body: some View {
-        Toggle("Music Service Browsing (Beta)", isOn: Binding(
-            get: { smapiManager.isEnabled },
-            set: { smapiManager.isEnabled = $0 }
-        ))
+        HStack {
+            Toggle("Music Service Browsing (Beta)", isOn: Binding(
+                get: { smapiManager.isEnabled },
+                set: { smapiManager.isEnabled = $0 }
+            ))
+            Spacer()
+            Button { showHelp = true } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .tooltip("Setup Guide")
+            .sheet(isPresented: $showHelp) {
+                MusicServicesHelpView()
+            }
+        }
 
         if smapiManager.isEnabled {
+            // Service status overview
+            serviceStatusList
+
+            Divider().padding(.vertical, 4)
+
             // Connected services
             if !smapiManager.authenticatedServiceList.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -38,9 +57,20 @@ struct MusicServicesSettingsSection: View {
                         .foregroundStyle(.secondary)
                     ForEach(smapiManager.authenticatedServiceList, id: \.id) { service in
                         HStack {
-                            Circle().fill(.green).frame(width: 6, height: 6)
+                            Circle()
+                                .fill(smapiManager.serviceSerialNumbers[service.id] != nil ? .green : .orange)
+                                .frame(width: 6, height: 6)
                             Text(service.name)
                                 .font(.caption)
+                            if smapiManager.serviceSerialNumbers[service.id] != nil {
+                                Text("Active")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.green)
+                            } else {
+                                Text("Needs Favorite")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.orange)
+                            }
                             Spacer()
                             Button("Sign Out") {
                                 smapiManager.signOut(serviceID: service.id)
@@ -52,14 +82,14 @@ struct MusicServicesSettingsSection: View {
                 }
             }
 
+            Divider().padding(.vertical, 4)
+
             // Available services with search
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Available (\(filteredServices.count))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
+                Text("Available (\(filteredServices.count))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
@@ -119,12 +149,53 @@ struct MusicServicesSettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-
-            Text("Connect to browse and search music services. Credentials stored in macOS Keychain.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
     }
+
+    // MARK: - Service Status
+
+    private var serviceStatusList: some View {
+        let allServices = smapiManager.availableServices.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        let connected = Set(smapiManager.authenticatedServiceList.map(\.id))
+        let withSN = smapiManager.serviceSerialNumbers
+
+        return DisclosureGroup {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(allServices.filter { connected.contains($0.id) || withSN[$0.id] != nil }, id: \.id) { svc in
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(connected.contains(svc.id) && withSN[svc.id] != nil ? .green :
+                                  connected.contains(svc.id) ? .orange : .gray)
+                            .frame(width: 6, height: 6)
+                        Text(svc.name)
+                            .font(.system(size: 11))
+                        Spacer()
+                        if connected.contains(svc.id) && withSN[svc.id] != nil {
+                            Text("Active")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.green)
+                        } else if connected.contains(svc.id) {
+                            Text("Connected — add a favorite")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.orange)
+                        } else if withSN[svc.id] != nil {
+                            Text("Linked via Sonos")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        } label: {
+            Text("Service Status")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Actions
 
     private func connectService(_ service: SMAPIServiceDescriptor) {
         Task {
@@ -137,275 +208,106 @@ struct MusicServicesSettingsSection: View {
     }
 }
 
-// MARK: - Service Browse View (for authenticated SMAPI services)
+// MARK: - Setup Guide
 
-struct ServiceBrowseView: View {
-    @EnvironmentObject var sonosManager: SonosManager
-    @EnvironmentObject var smapiManager: SMAPIAuthManager
-    let service: SMAPIServiceDescriptor
-    let group: SonosGroup?
-
-    @State private var items: [SMAPIMediaItem] = []
-    @State private var isLoading = true
-    @State private var errorMessage: String?
-    @State private var breadcrumbs: [(String, String)] = [] // (title, id)
-    @State private var searchText = ""
-
-    private var currentID: String {
-        breadcrumbs.last?.1 ?? "root"
-    }
+struct MusicServicesHelpView: View {
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Navigation
-            HStack(spacing: 6) {
-                if !breadcrumbs.isEmpty {
-                    Button {
-                        breadcrumbs.removeAll()
-                        Task { await loadContent(id: "root") }
-                    } label: {
-                        Image(systemName: "house.fill").font(.system(size: 14))
-                    }
-                    .buttonStyle(.plain)
-                }
-                if breadcrumbs.count > 1 {
-                    Button {
-                        breadcrumbs.removeLast()
-                        Task { await loadContent(id: currentID) }
-                    } label: {
-                        Image(systemName: "chevron.backward").font(.system(size: 14, weight: .semibold))
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Text(breadcrumbs.last?.0 ?? service.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Music Services Setup Guide")
+                    .font(.system(size: 14, weight: .semibold))
                 Spacer()
-
-                // Search
-                HStack(spacing: 4) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary).font(.caption)
-                    TextField("Search \(service.name)", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .font(.caption)
-                        .onSubmit { performSearch() }
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.tertiary)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(nsColor: .quaternaryLabelColor).opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-                .frame(maxWidth: 160)
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.bar)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
 
             Divider()
 
-            // Content
-            if isLoading {
-                ProgressView(L10n.loading)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let error = errorMessage {
-                VStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle").font(.title).foregroundStyle(.secondary)
-                    Text(error).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding()
-            } else if items.isEmpty {
-                Text("No content").foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(items, id: \.id) { item in
-                            Button {
-                                handleTap(item)
-                            } label: {
-                                ServiceItemRow(item: item)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 4)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                if item.canPlay, let group = group {
-                                    Button("Play Now") {
-                                        playItem(item, in: group)
-                                    }
-                                    Button("Add to Queue") {
-                                        addToQueue(item, in: group)
-                                    }
-                                }
-                                if item.canBrowse {
-                                    Button("Browse") {
-                                        navigateTo(item)
-                                    }
-                                }
-                            }
-                            Divider().padding(.leading, 64)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    setupStep(number: 1, title: "Connect a Service", icon: "link",
+                              text: "Find your service in the Available list and click Connect. A browser window will open for you to sign in and authorize access.")
+
+                    setupStep(number: 2, title: "Complete Authorization", icon: "checkmark.shield",
+                              text: "Sign in with your account in the browser. Once authorized, the service will appear in the Connected list. This may take a few seconds to detect.")
+
+                    setupStep(number: 3, title: "Add One Favorite", icon: "star",
+                              text: "Using the official Sonos app on your phone, play a station or track from this service and add it to your Sonos Favorites. This is required once per service to link your account for full playback.")
+
+                    setupStep(number: 4, title: "Browse and Play", icon: "play.circle",
+                              text: "The service will appear in the Browse sidebar under Music Services. You can browse categories, search, and play content directly.")
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Service Status", systemImage: "circle.grid.2x2")
+                            .font(.system(size: 12, weight: .semibold))
+
+                        HStack(spacing: 6) {
+                            Circle().fill(.green).frame(width: 8, height: 8)
+                            Text("Active — Connected and ready to play")
+                                .font(.caption)
+                        }
+                        HStack(spacing: 6) {
+                            Circle().fill(.orange).frame(width: 8, height: 8)
+                            Text("Needs Favorite — Connected but needs step 3")
+                                .font(.caption)
+                        }
+                        HStack(spacing: 6) {
+                            Circle().fill(.gray).frame(width: 8, height: 8)
+                            Text("Not connected — use Connect button")
+                                .font(.caption)
                         }
                     }
-                }
-            }
-        }
-        .onAppear {
-            Task { await loadContent(id: "root") }
-        }
-    }
+                    .padding(12)
+                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
 
-    // MARK: - Actions
-
-    private func loadContent(id: String) async {
-        guard let token = smapiManager.tokenStore.getToken(for: service.id) else {
-            errorMessage = "Not signed in to \(service.name)"
-            isLoading = false
-            return
-        }
-        isLoading = true
-        errorMessage = nil
-        do {
-            let (result, _) = try await smapiManager.client.getMetadata(
-                serviceURI: service.secureUri, token: token, id: id
-            )
-            items = result
-        } catch {
-            errorMessage = (error as? SMAPIError).map(AppError.from)?.errorDescription ?? error.localizedDescription
-        }
-        isLoading = false
-    }
-
-    private func performSearch() {
-        let query = searchText.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return }
-        guard let token = smapiManager.tokenStore.getToken(for: service.id) else { return }
-        Task {
-            isLoading = true
-            errorMessage = nil
-            do {
-                let (result, _) = try await smapiManager.client.search(
-                    serviceURI: service.secureUri, token: token, term: query
-                )
-                items = result
-                breadcrumbs.append(("Search: \(query)", "search:\(query)"))
-            } catch {
-                errorMessage = (error as? SMAPIError).map(AppError.from)?.errorDescription ?? error.localizedDescription
-            }
-            isLoading = false
-        }
-    }
-
-    private func navigateTo(_ item: SMAPIMediaItem) {
-        breadcrumbs.append((item.title, item.id))
-        Task { await loadContent(id: item.id) }
-    }
-
-    private func handleTap(_ item: SMAPIMediaItem) {
-        if item.canBrowse {
-            navigateTo(item)
-        } else if item.canPlay, let group = group {
-            playItem(item, in: group)
-        }
-    }
-
-    /// Constructs the correct Sonos URI based on service and item type
-    private func buildSonosURI(for item: SMAPIMediaItem) -> String {
-        let encodedID = item.id.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? item.id
-        let sn = smapiManager.serialNumber(for: service.id)
-
-        // Radio streams use x-sonosapi-stream with flags=8224 for most, flags=32 for basic
-        let radioFlags = sn > 0 ? 8224 : 32
-        if item.itemType == "stream" || item.itemType == "show" {
-            return "x-sonosapi-stream:\(encodedID)?sid=\(service.id)&flags=\(radioFlags)&sn=\(sn)"
-        }
-
-        // TuneIn and radio services
-        if service.name.lowercased().contains("tunein") || service.name.lowercased().contains("radio") {
-            return "x-sonosapi-stream:\(encodedID)?sid=\(service.id)&flags=\(radioFlags)&sn=\(sn)"
-        }
-
-        // HLS streams (Apple Music style)
-        if item.uri.contains("hls") || item.itemType == "track" && service.id == 204 {
-            return "x-sonosapi-hls-static:\(encodedID)?sid=\(service.id)&flags=8232&sn=\(sn)"
-        }
-
-        // Default: x-sonos-http for most music services
-        return "x-sonos-http:\(encodedID)?sid=\(service.id)&flags=8232&sn=\(sn)"
-    }
-
-    private func playItem(_ item: SMAPIMediaItem, in group: SonosGroup) {
-        Task {
-            do {
-                let uri = buildSonosURI(for: item)
-                sonosDebugLog("[SMAPI] Playing: \(item.title) uri=\(uri.prefix(80))")
-                try await sonosManager.playURI(
-                    group: group, uri: uri,
-                    title: item.title, artist: item.artist,
-                    stationName: item.itemType == "stream" ? item.title : "",
-                    albumArtURI: item.albumArtURI.isEmpty ? nil : item.albumArtURI
-                )
-            } catch {
-                sonosDebugLog("[SMAPI] Play failed: \(error)")
-            }
-        }
-    }
-
-    private func addToQueue(_ item: SMAPIMediaItem, in group: SonosGroup) {
-        let uri = buildSonosURI(for: item)
-        let browseItem = BrowseItem(
-            id: item.id, title: item.title, artist: item.artist, album: item.album,
-            albumArtURI: item.albumArtURI.isEmpty ? nil : item.albumArtURI,
-            resourceURI: uri
-        )
-        Task {
-            try? await sonosManager.addBrowseItemToQueue(browseItem, in: group)
-        }
-    }
-}
-
-// MARK: - Service Item Row
-
-private struct ServiceItemRow: View {
-    let item: SMAPIMediaItem
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if !item.albumArtURI.isEmpty {
-                CachedAsyncImage(url: URL(string: item.albumArtURI))
-                    .frame(width: 40, height: 40)
-            } else {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(.quaternary)
-                    .overlay {
-                        Image(systemName: item.canBrowse ? "folder.fill" : "music.note")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Why is step 3 needed?")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Sonos uses an internal account identifier to authenticate streaming playback. This identifier is only created when content from a service is first used through the Sonos system. Adding one favorite through the official Sonos app creates this link. After that, all browsing and playback works from SonosController.")
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     }
-                    .frame(width: 40, height: 40)
-            }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(.body)
-                    .lineLimit(1)
-                if !item.artist.isEmpty {
-                    Text(item.artist)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Unsupported Services")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Apple Music requires native Apple Sign-In which isn't available to third-party apps. Use Apple Music through Sonos Favorites instead — any favorites you add in the Sonos app will appear in the Favorites section.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .padding(20)
             }
+        }
+        .frame(width: 420, height: 520)
+    }
 
-            Spacer()
-
-            if item.canBrowse {
-                Image(systemName: "chevron.right")
+    private func setupStep(number: Int, title: String, icon: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(.blue.opacity(0.15))
+                    .frame(width: 28, height: 28)
+                Text("\(number)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.blue)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Label(title, systemImage: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(text)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
