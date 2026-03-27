@@ -65,6 +65,9 @@ struct PlayHistoryDashboard: View {
     let entries: [PlayHistoryEntry]
     @Binding var expandedArtEntry: PlayHistoryEntry?
 
+    // Cached stats — computed once, updated only when entries change
+    @State private var stats: DashboardStats?
+
     // Animated counter states
     @State private var animatedPlays: Double = 0
     @State private var animatedHours: Double = 0
@@ -110,29 +113,31 @@ struct PlayHistoryDashboard: View {
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
-    // MARK: - Cached stats (computed once per entries change, not per body access)
+    // MARK: - Stats Accessors (from cached @State, zero cost per access)
 
-    private var stats: DashboardStats { DashboardStats(entries: entries, historyManager: historyManager) }
+    private var totalEntries: Int { stats?.totalEntries ?? 0 }
+    private var totalListeningHours: Double { stats?.totalListeningHours ?? 0 }
+    private var uniqueArtistCount: Int { stats?.uniqueArtistCount ?? 0 }
+    private var uniqueRoomCount: Int { stats?.uniqueRoomCount ?? 0 }
+    private var uniqueAlbumCount: Int { stats?.uniqueAlbumCount ?? 0 }
+    private var uniqueStationCount: Int { stats?.uniqueStationCount ?? 0 }
+    private var dailyActivity: [(Date, Int)] { stats?.dailyActivity ?? [] }
+    private var hourlyDistribution: [(Int, Int)] { stats?.hourlyDistribution ?? [] }
+    private var peakHour: Int { stats?.peakHour ?? 12 }
+    private var mostPlayedArtists: [(String, Int)] { stats?.mostPlayedArtists ?? [] }
+    private var mostPlayedTracks: [(String, String, Int)] { stats?.mostPlayedTracks ?? [] }
+    private var mostPlayedStations: [(String, Int)] { stats?.mostPlayedStations ?? [] }
+    private var mostPlayedAlbums: [(String, Int)] { stats?.mostPlayedAlbums ?? [] }
+    private var sourceDistribution: [(String, Int)] { stats?.sourceDistribution ?? [] }
+    private var dayOfWeekDistribution: [(String, Int)] { stats?.dayOfWeekDistribution ?? [] }
+    private var roomDistribution: [(String, Int)] { stats?.roomDistribution ?? [] }
+    private var listeningStreak: Int { stats?.listeningStreak ?? 0 }
+    private var currentStreak: Int { stats?.currentStreak ?? 0 }
+    private var averagePlaysPerDay: Double { stats?.averagePlaysPerDay ?? 0 }
 
-    private var totalEntries: Int { stats.totalEntries }
-    private var totalListeningHours: Double { stats.totalListeningHours }
-    private var uniqueArtistCount: Int { stats.uniqueArtistCount }
-    private var uniqueRoomCount: Int { stats.uniqueRoomCount }
-    private var uniqueAlbumCount: Int { stats.uniqueAlbumCount }
-    private var uniqueStationCount: Int { stats.uniqueStationCount }
-    private var dailyActivity: [(Date, Int)] { stats.dailyActivity }
-    private var hourlyDistribution: [(Int, Int)] { stats.hourlyDistribution }
-    private var peakHour: Int { stats.peakHour }
-    private var mostPlayedArtists: [(String, Int)] { stats.mostPlayedArtists }
-    private var mostPlayedTracks: [(String, String, Int)] { stats.mostPlayedTracks }
-    private var mostPlayedStations: [(String, Int)] { stats.mostPlayedStations }
-    private var mostPlayedAlbums: [(String, Int)] { stats.mostPlayedAlbums }
-    private var sourceDistribution: [(String, Int)] { stats.sourceDistribution }
-    private var dayOfWeekDistribution: [(String, Int)] { stats.dayOfWeekDistribution }
-    private var roomDistribution: [(String, Int)] { stats.roomDistribution }
-    private var listeningStreak: Int { stats.listeningStreak }
-    private var currentStreak: Int { stats.currentStreak }
-    private var averagePlaysPerDay: Double { stats.averagePlaysPerDay }
+    private func recomputeStats() {
+        stats = DashboardStats(entries: entries, historyManager: historyManager)
+    }
 
     private func recentlyPlayed(limit: Int) -> [PlayHistoryEntry] {
         var seen = Set<String>()
@@ -187,8 +192,14 @@ struct PlayHistoryDashboard: View {
                 }
                 .padding(20)
             }
-            .onAppear { animateCounters() }
-            .onChange(of: entries.count) { animateToCurrentValues() }
+            .onAppear {
+                recomputeStats()
+                animateCounters()
+            }
+            .onChange(of: entries.count) {
+                recomputeStats()
+                animateToCurrentValues()
+            }
         }
     }
 
