@@ -459,11 +459,13 @@ struct NowPlayingView: View {
             vm.art.searchRadioTrackArt(trackMetadata: trackMetadata)
         }
         .onReceive(sonosManager.$groupTrackMetadata) { newMeta in
-            let meta = newMeta[group.coordinatorID]
-            let artURI = meta?.albumArtURI
-            if let art = artURI, !art.isEmpty, let url = URL(string: art) {
-                if vm.art.displayedArtURL != url && !vm.art.forceWebArt {
-                    vm.art.displayedArtURL = url
+            let meta = newMeta[group.coordinatorID] ?? TrackMetadata()
+            // During ad breaks, don't let stale track art override station art
+            if !vm.art.isRadioAdBreak(meta) {
+                if let art = meta.albumArtURI, !art.isEmpty, let url = URL(string: art) {
+                    if vm.art.displayedArtURL != url && !vm.art.forceWebArt {
+                        vm.art.displayedArtURL = url
+                    }
                 }
             }
             vm.art.searchWebArtIfNeeded(trackMetadata: trackMetadata, displayArtist: vm.displayArtist, group: group)
