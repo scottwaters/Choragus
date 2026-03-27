@@ -423,12 +423,14 @@ struct NowPlayingView: View {
 
     private var albumArtView: some View {
         return ZStack(alignment: .bottomTrailing) {
-            if let trackArt = vm.art.radioTrackArtURL, !trackMetadata.stationName.isEmpty {
+            if vm.art.inAdBreak, let stationArt = vm.art.radioStationArtURL {
+                // Ad break — show station art, not stale track art
+                CachedAsyncImage(url: stationArt, cornerRadius: 8)
+            } else if let trackArt = vm.art.radioTrackArtURL, !trackMetadata.stationName.isEmpty {
                 CachedAsyncImage(url: trackArt, cornerRadius: 8)
             } else if let url = vm.art.displayedArtURL {
                 CachedAsyncImage(url: url, cornerRadius: 8)
             } else if let stationArt = vm.art.radioStationArtURL, !trackMetadata.stationName.isEmpty {
-                // Ad break — no track art available, fall back to station art
                 CachedAsyncImage(url: stationArt, cornerRadius: 8)
             } else {
                 RoundedRectangle(cornerRadius: 8)
@@ -445,10 +447,11 @@ struct NowPlayingView: View {
                             .foregroundStyle(.white.opacity(0.6))
                     }
             }
-            // Show station badge only when track-specific art is displayed AND station has its own distinct art
-            if let trackArt = vm.art.radioTrackArtURL,
+            // Show station badge only when track-specific art differs from station art
+            if let _ = vm.art.radioTrackArtURL,
                let stationArt = vm.art.radioStationArtURL,
-               stationArt != trackArt {
+               stationArt != vm.art.radioTrackArtURL,
+               stationArt != vm.art.displayedArtURL {
                 CachedAsyncImage(url: stationArt, cornerRadius: 4)
                     .frame(width: 36, height: 36)
                     .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
