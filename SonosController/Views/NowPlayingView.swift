@@ -206,9 +206,9 @@ struct NowPlayingView: View {
 
                 Divider()
 
-                // Seek slider — hidden for streams with no duration
-                if trackMetadata.duration > 0 {
-                    VStack(spacing: 4) {
+                // Time/seek area — fixed height to prevent layout shift
+                VStack(spacing: 4) {
+                    if trackMetadata.duration > 0 {
                         SliderWithPopup(
                             value: Binding(get: { vm.smoothPosition }, set: { vm.smoothPosition = $0 }),
                             range: 0...trackMetadata.duration,
@@ -219,39 +219,28 @@ struct NowPlayingView: View {
                                 seekToPosition(vm.smoothPosition)
                             }
                         }
-
-                        HStack {
-                            Text(smoothPositionString)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                            Spacer()
-                            Text(trackMetadata.durationString)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
                     }
-                    .padding(.horizontal, UILayout.horizontalPadding)
-                    .padding(.top, 12)
-                } else if transportState.isActive {
-                    // Streaming content — show elapsed time only
+
                     HStack {
-                        Text(smoothPositionString)
+                        Text(transportState.isActive ? smoothPositionString : " ")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                         Spacer()
-                        Text(L10n.live)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if trackMetadata.duration > 0 {
+                            Text(trackMetadata.durationString)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        } else if transportState.isActive {
+                            Text(L10n.live)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .padding(.horizontal, UILayout.horizontalPadding)
-                    .padding(.top, 12)
-                } else {
-                    Spacer()
-                        .frame(height: 12)
                 }
+                .padding(.horizontal, UILayout.horizontalPadding)
+                .padding(.top, 12)
 
                 // Transport controls — play/pause centered above volume slider center
                 HStack(spacing: 24) {
