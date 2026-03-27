@@ -4,7 +4,11 @@ import SonosKit
 
 struct AlarmsView: View {
     @EnvironmentObject var sonosManager: SonosManager
-    @State private var vm: AlarmsViewModel?
+    @State private var vm: AlarmsViewModel
+
+    init(sonosManager: SonosManager) {
+        _vm = State(initialValue: AlarmsViewModel(sonosManager: sonosManager))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -12,13 +16,13 @@ struct AlarmsView: View {
                 Text(L10n.alarms)
                     .font(.headline)
                 Spacer()
-                Button { vm?.startCreate() } label: {
+                Button { vm.startCreate() } label: {
                     Image(systemName: "plus").font(.caption)
                 }
                 .buttonStyle(.plain)
                 .tooltip("New Alarm")
 
-                Button { Task { await vm?.loadAlarms() } } label: {
+                Button { Task { await vm.loadAlarms() } } label: {
                     Image(systemName: "arrow.clockwise").font(.caption)
                 }
                 .buttonStyle(.plain)
@@ -29,60 +33,54 @@ struct AlarmsView: View {
 
             Divider()
 
-            if let vm {
-                if vm.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if vm.alarms.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "alarm")
-                            .font(.title)
-                            .foregroundStyle(.secondary)
-                        Text(L10n.noAlarmsSet)
-                            .foregroundStyle(.secondary)
-                        Button("Create Alarm") { vm.startCreate() }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                    }
+            if vm.isLoading {
+                ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List {
-                        ForEach(vm.alarms) { alarm in
-                            AlarmRow(alarm: alarm, onToggle: { enabled in
-                                Task { await vm.toggleAlarm(alarm, enabled: enabled) }
-                            })
-                            .contentShape(Rectangle())
-                            .onTapGesture { vm.startEdit(alarm) }
-                            .contextMenu {
-                                Button("Edit") { vm.startEdit(alarm) }
-                                Divider()
-                                Button(L10n.delete, role: .destructive) {
-                                    Task { await vm.deleteAlarm(alarm) }
-                                }
+            } else if vm.alarms.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "alarm")
+                        .font(.title)
+                        .foregroundStyle(.secondary)
+                    Text(L10n.noAlarmsSet)
+                        .foregroundStyle(.secondary)
+                    Button("Create Alarm") { vm.startCreate() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(vm.alarms) { alarm in
+                        AlarmRow(alarm: alarm, onToggle: { enabled in
+                            Task { await vm.toggleAlarm(alarm, enabled: enabled) }
+                        })
+                        .contentShape(Rectangle())
+                        .onTapGesture { vm.startEdit(alarm) }
+                        .contextMenu {
+                            Button("Edit") { vm.startEdit(alarm) }
+                            Divider()
+                            Button(L10n.delete, role: .destructive) {
+                                Task { await vm.deleteAlarm(alarm) }
                             }
                         }
                     }
-                    .listStyle(.plain)
                 }
+                .listStyle(.plain)
             }
         }
         .onAppear {
-            if vm == nil { vm = AlarmsViewModel(sonosManager: sonosManager) }
-            Task { await vm?.loadAlarms() }
+            Task { await vm.loadAlarms() }
         }
-        .sheet(item: Binding(
-            get: { vm?.editingAlarm },
-            set: { vm?.editingAlarm = $0 }
-        )) { alarm in
+        .sheet(item: $vm.editingAlarm) { alarm in
             AlarmEditorView(
                 alarm: alarm,
-                rooms: vm?.availableRooms ?? [],
-                isNew: vm?.isCreating ?? false
+                rooms: vm.availableRooms,
+                isNew: vm.isCreating
             ) { saved in
-                Task { await vm?.saveAlarm(saved) }
-                vm?.editingAlarm = nil
+                Task { await vm.saveAlarm(saved) }
+                vm.editingAlarm = nil
             } onCancel: {
-                vm?.editingAlarm = nil
+                vm.editingAlarm = nil
             }
         }
     }
