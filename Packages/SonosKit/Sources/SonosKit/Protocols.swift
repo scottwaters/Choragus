@@ -147,8 +147,11 @@ public protocol GroupingServiceProtocol {
 @MainActor
 public protocol AlarmServiceProtocol {
     func getAlarms() async throws -> [SonosAlarm]
+    func createAlarm(_ alarm: SonosAlarm) async throws -> Int
     func updateAlarm(_ alarm: SonosAlarm) async throws
     func deleteAlarm(_ alarm: SonosAlarm) async throws
+    var devices: [String: SonosDevice] { get }
+    var groups: [SonosGroup] { get }
 }
 
 // MARK: - Music Service Detection (SRP: service name resolution)

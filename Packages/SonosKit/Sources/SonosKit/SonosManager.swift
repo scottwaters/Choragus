@@ -869,6 +869,12 @@ public class SonosManager: ObservableObject {
         return alarms
     }
 
+    @discardableResult
+    public func createAlarm(_ alarm: SonosAlarm) async throws -> Int {
+        guard let anyDevice = preferredDevice else { return 0 }
+        return try await alarmClock.createAlarm(device: anyDevice, alarm: alarm)
+    }
+
     public func updateAlarm(_ alarm: SonosAlarm) async throws {
         guard let anyDevice = preferredDevice else { return }
         try await alarmClock.updateAlarm(device: anyDevice, alarm: alarm)
