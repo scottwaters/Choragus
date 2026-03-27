@@ -9,7 +9,7 @@ final class AlarmsViewModel {
     let sonosManager: any AlarmServiceProtocol
 
     var alarms: [SonosAlarm] = []
-    var isLoading = true
+    var isLoading = false
     var editingAlarm: SonosAlarm?
     var isCreating = false
 
@@ -22,6 +22,7 @@ final class AlarmsViewModel {
         do {
             alarms = try await sonosManager.getAlarms()
             alarms.sort { $0.startTime < $1.startTime }
+            sonosDebugLog("[ALARM] Loaded \(alarms.count) alarms")
         } catch {
             sonosDebugLog("[ALARM] Load alarms failed: \(error)")
         }

@@ -68,8 +68,8 @@ struct AlarmsView: View {
                 .listStyle(.plain)
             }
         }
-        .onAppear {
-            Task { await vm.loadAlarms() }
+        .task {
+            await vm.loadAlarms()
         }
         .sheet(item: $vm.editingAlarm) { alarm in
             AlarmEditorView(
