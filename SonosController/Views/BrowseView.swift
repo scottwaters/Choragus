@@ -303,7 +303,7 @@ struct BrowseListView: View {
 
                     // Service filter bar
                     if vm.showsFilters && vm.availableFilters.count > 1 {
-                        ScrollView(.horizontal, showsIndicators: false) {
+                        ScrollView(.horizontal, showsIndicators: true) {
                             HStack(spacing: 6) {
                                 FilterChip(label: L10n.all, isSelected: vm.selectedFilter == nil) {
                                     vm.selectedFilter = nil

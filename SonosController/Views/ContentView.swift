@@ -24,9 +24,9 @@ struct ContentView: View {
         return sonosManager.groups.first { $0.id == id }
     }
 
-    private let nowPlayingMinWidth: CGFloat = 400
-    private let browseMinWidth: CGFloat = 280
-    private let queueMinWidth: CGFloat = 250
+    private let nowPlayingMinWidth: CGFloat = 380
+    private let browseMinWidth: CGFloat = 260
+    private let queueMinWidth: CGFloat = 280
     private let sidebarWidth: CGFloat = 200
 
     /// Calculates browse panel width — takes ~40% of available space
@@ -142,25 +142,26 @@ struct ContentView: View {
 
             NavigationSplitView(columnVisibility: $sidebarVisibility) {
                 RoomListView(selectedGroupID: $selectedGroupID)
-                    .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 280)
+                    .navigationSplitViewColumnWidth(min: 140, ideal: 180, max: 220)
             } detail: {
                 if let group = selectedGroup {
-                    HStack(spacing: 0) {
-                        if showBrowse {
-                            BrowseView(group: group)
-                                .environmentObject(sonosManager)
-                                .frame(minWidth: browseMinWidth, idealWidth: 320, maxWidth: 420)
-                            Divider()
-                        }
+                    GeometryReader { geo in
+                        HStack(spacing: 0) {
+                            if showBrowse {
+                                BrowseView(group: group)
+                                    .environmentObject(sonosManager)
+                                    .frame(width: browseWidth(totalWidth: geo.size.width))
+                                Divider()
+                            }
 
-                        NowPlayingView(group: group, sonosManager: sonosManager, playHistoryManager: playHistoryManager)
-                            .frame(minWidth: nowPlayingMinWidth, maxWidth: .infinity)
-                            .layoutPriority(1)
+                            NowPlayingView(group: group, sonosManager: sonosManager, playHistoryManager: playHistoryManager)
+                                .frame(minWidth: nowPlayingMinWidth, maxWidth: .infinity)
 
-                        if showQueue {
-                            Divider()
-                            QueueView(group: group, sonosManager: sonosManager)
-                                .frame(minWidth: queueMinWidth, idealWidth: 280, maxWidth: 400)
+                            if showQueue {
+                                Divider()
+                                QueueView(group: group, sonosManager: sonosManager)
+                                    .frame(width: queueWidth(totalWidth: geo.size.width))
+                            }
                         }
                     }
                 } else {
