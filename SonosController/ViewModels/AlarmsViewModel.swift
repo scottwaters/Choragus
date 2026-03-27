@@ -44,50 +44,24 @@ final class AlarmsViewModel {
     func deleteAlarm(_ alarm: SonosAlarm) async {
         do {
             try await sonosManager.deleteAlarm(alarm)
-            alarms.removeAll { $0.id == alarm.id }
         } catch {
             sonosDebugLog("[ALARM] Delete alarm failed: \(error)")
         }
-    }
-
-    func createAlarm(_ alarm: SonosAlarm) async {
-        do {
-            let newID = try await sonosManager.createAlarm(alarm)
-            var created = alarm
-            created = SonosAlarm(
-                id: newID,
-                startTime: alarm.startTime,
-                duration: alarm.duration,
-                recurrence: alarm.recurrence,
-                enabled: alarm.enabled,
-                roomUUID: alarm.roomUUID,
-                programURI: alarm.programURI,
-                programMetaData: alarm.programMetaData,
-                volume: alarm.volume,
-                includeLinkedZones: alarm.includeLinkedZones,
-                roomName: alarm.roomName
-            )
-            alarms.append(created)
-            alarms.sort { $0.startTime < $1.startTime }
-        } catch {
-            sonosDebugLog("[ALARM] Create alarm failed: \(error)")
-        }
+        await loadAlarms()
     }
 
     func saveAlarm(_ alarm: SonosAlarm) async {
-        if alarm.id == 0 {
-            await createAlarm(alarm)
-        } else {
-            do {
+        do {
+            if alarm.id == 0 {
+                try await sonosManager.createAlarm(alarm)
+            } else {
                 try await sonosManager.updateAlarm(alarm)
-                if let idx = alarms.firstIndex(where: { $0.id == alarm.id }) {
-                    alarms[idx] = alarm
-                }
-                alarms.sort { $0.startTime < $1.startTime }
-            } catch {
-                sonosDebugLog("[ALARM] Update alarm failed: \(error)")
             }
+        } catch {
+            sonosDebugLog("[ALARM] Save alarm failed: \(error)")
         }
+        // Reload from speaker to get authoritative state
+        await loadAlarms()
     }
 
     func startCreate() {
