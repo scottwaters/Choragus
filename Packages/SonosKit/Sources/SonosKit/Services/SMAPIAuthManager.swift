@@ -141,7 +141,7 @@ public final class SMAPIAuthManager: ObservableObject {
             sonosDebugLog("[SMAPI] Auth started for \(service.name)")
 
             // Start polling for auth completion in background
-            Task {
+            authTask = Task {
                 await pollForAuth(service: service, linkCode: linkCode)
             }
 
@@ -153,9 +153,23 @@ public final class SMAPIAuthManager: ObservableObject {
         }
     }
 
+    private var authTask: Task<Void, Never>?
+
+    /// Cancels an in-progress authentication
+    public func cancelAuth() {
+        authTask?.cancel()
+        authTask = nil
+        isAuthenticating = false
+        authServiceName = ""
+    }
+
     /// Polls the service for auth completion (user needs to authorize in browser)
     private func pollForAuth(service: SMAPIServiceDescriptor, linkCode: String) async {
         for _ in 0..<60 { // Poll for up to 5 minutes (60 * 5s)
+            guard !Task.isCancelled else {
+                isAuthenticating = false
+                return
+            }
             try? await Task.sleep(nanoseconds: Timing.smapiAuthPollInterval)
 
             do {

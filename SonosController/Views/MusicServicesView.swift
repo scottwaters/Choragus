@@ -109,9 +109,14 @@ struct MusicServicesSettingsSection: View {
             if smapiManager.isAuthenticating {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("Waiting for \(smapiManager.authServiceName) authorization...")
+                    Text("Waiting for \(smapiManager.authServiceName)...")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Cancel") {
+                        smapiManager.cancelAuth()
+                    }
+                    .controlSize(.mini)
                 }
             }
 
