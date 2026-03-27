@@ -7,10 +7,16 @@ struct MusicServicesSettingsSection: View {
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     @State private var searchText = ""
 
+    /// Services that block third-party AppLink auth (require native app OAuth)
+    private static let blockedServices: Set<Int> = [
+        204, // Apple Music — requires native Apple Sign-In, returns error 999
+    ]
+
     private var filteredServices: [SMAPIServiceDescriptor] {
         let connectable = smapiManager.availableServices
             .filter { ($0.authType == "AppLink" || $0.authType == "DeviceLink") &&
-                      smapiManager.tokenStore.authenticatedServices[$0.id] == nil }
+                      smapiManager.tokenStore.authenticatedServices[$0.id] == nil &&
+                      !Self.blockedServices.contains($0.id) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         if searchText.isEmpty { return connectable }
         let query = searchText.lowercased()
