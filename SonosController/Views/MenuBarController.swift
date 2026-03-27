@@ -189,9 +189,21 @@ struct MenuBarPlayerView: View {
 
             // Volume
             HStack(spacing: 8) {
-                Image(systemName: "speaker.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Button {
+                    guard let group = selectedGroup else { return }
+                    let anyMuted = group.members.contains { sonosManager.deviceMutes[$0.id] == true }
+                    let newMuted = !anyMuted
+                    for member in group.members {
+                        sonosManager.updateDeviceMute(member.id, muted: newMuted)
+                        Task { try? await sonosManager.setMute(device: member, muted: newMuted) }
+                    }
+                } label: {
+                    let anyMuted = selectedGroup?.members.contains { sonosManager.deviceMutes[$0.id] == true } ?? false
+                    Image(systemName: anyMuted ? "speaker.slash.fill" : "speaker.fill")
+                        .font(.caption)
+                        .foregroundStyle(anyMuted ? .red.opacity(0.8) : .secondary)
+                }
+                .buttonStyle(.plain)
                 Slider(value: Binding(
                     get: { volume },
                     set: { newVol in
