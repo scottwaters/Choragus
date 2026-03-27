@@ -1294,9 +1294,9 @@ extension SonosManager: TransportStrategyDelegate {
         // Detect if the track actually changed
         let trackChanged = updated.trackURI != existing.trackURI && updated.trackURI != nil
 
-        // Only carry forward station name if still playing the same radio stream
+        // Carry forward station name unless the source actually changed
         let isStillRadio = updated.trackURI.map(URIPrefix.isRadio) ?? false
-        if updated.stationName.isEmpty && !existing.stationName.isEmpty && isStillRadio && !trackChanged {
+        if updated.stationName.isEmpty && !existing.stationName.isEmpty && !trackChanged {
             updated.stationName = existing.stationName
         }
 
