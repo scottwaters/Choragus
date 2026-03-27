@@ -268,9 +268,10 @@ struct NowPlayingView: View {
                                         Text("Use the shuffle button in the Queue panel to physically reorder tracks, or enable Classic Shuffle Mode in Settings.")
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
-                                            .frame(maxWidth: 220)
+                                            .fixedSize(horizontal: false, vertical: true)
                                     }
-                                    .padding(10)
+                                    .frame(width: 240)
+                                    .padding(12)
                                 }
                         }
 
