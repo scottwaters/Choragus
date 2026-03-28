@@ -90,8 +90,9 @@ public final class PlayHistoryManager: ObservableObject {
         let dedupKey = "\(normTitle)|\(normArtist)|\(groupID)"
         guard lastLoggedTrack[groupID] != dedupKey else { return }
 
-        // For radio, reduce dedup window to 60 seconds (tracks change frequently)
-        let dedupWindow: TimeInterval = metadata.isRadioStream ? 60 : 300
+        // Dedup window: use track duration + buffer, minimum 60s for radio, 10min for others
+        let trackDuration = metadata.duration > 0 ? metadata.duration : 300
+        let dedupWindow: TimeInterval = metadata.isRadioStream ? max(60, trackDuration + 30) : max(600, trackDuration + 60)
         let cutoff = Date().timeIntervalSince1970 - dedupWindow
         if repo.hasRecentEntry(title: normTitle, artist: normArtist, groupName: groupName, since: cutoff) {
             lastLoggedTrack[groupID] = dedupKey
