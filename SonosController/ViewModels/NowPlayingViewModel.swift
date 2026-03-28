@@ -376,8 +376,16 @@ final class NowPlayingViewModel {
     // MARK: - Art Orchestration (single entry point — View calls this, not art.* directly)
 
     func handleMetadataChanged(_ metadata: TrackMetadata) {
-        // Track URI changed — reset search state
+        // Track URI changed — reset search state and position
+        let uriChanged = art.lastTrackURI != (metadata.trackURI ?? metadata.title)
         art.handleTrackURIChanged(trackMetadata: metadata, group: group)
+
+        // Reset position on source/track change to avoid stale time display
+        if uriChanged {
+            lastKnownPosition = metadata.position
+            lastPositionTimestamp = Date()
+            smoothPosition = metadata.position
+        }
 
         // During ad breaks, just update display state (show station art)
         guard !metadata.isAdBreak else {
@@ -410,6 +418,11 @@ final class NowPlayingViewModel {
     private func searchWebArtIfNeeded(_ metadata: TrackMetadata) {
         let hasArt = metadata.albumArtURI != nil && !(metadata.albumArtURI?.isEmpty ?? true)
         let isLocalFile = metadata.trackURI.map(URIPrefix.isLocal) ?? false
+        // Local files with art from /getaa — don't override with iTunes search
+        if hasArt && isLocalFile && !art.forceWebArt {
+            art.clearWebArt()
+            return
+        }
         if hasArt && !isLocalFile {
             if !art.forceWebArt { art.clearWebArt() }
             return
