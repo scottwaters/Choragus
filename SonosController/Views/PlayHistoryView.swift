@@ -167,7 +167,14 @@ struct PlayHistoryView: View {
                 stationName: entry.stationName
             )
         }
-        .task { refreshFilteredEntries() }
+        .onAppear { refreshFilteredEntries() }
+        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
+            // Periodic refresh to catch new entries from background logging
+            let currentTotal = historyManager.totalEntries
+            if currentTotal != cachedFilteredCount || (cachedFilteredEntries.isEmpty && currentTotal > 0) {
+                refreshFilteredEntries()
+            }
+        }
         .onChange(of: filterDateRange) { refreshFilteredEntries() }
         .onChange(of: filterRoom) { refreshFilteredEntries() }
         .onChange(of: filterSource) { refreshFilteredEntries() }
@@ -175,7 +182,9 @@ struct PlayHistoryView: View {
         .onChange(of: customDateFrom) { refreshFilteredEntries() }
         .onChange(of: customDateTo) { refreshFilteredEntries() }
         .onChange(of: searchText) { debouncedRefresh() }
-        .onReceive(historyManager.$entries) { _ in refreshFilteredEntries() }
+        .onReceive(historyManager.$entries) { _ in
+            refreshFilteredEntries()
+        }
     }
 
     // MARK: - Filter Bar
