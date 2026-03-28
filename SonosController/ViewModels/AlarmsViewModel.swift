@@ -20,17 +20,17 @@ final class AlarmsViewModel: ObservableObject {
         isLoading = true
         do {
             let result = try await sonosManager.getAlarms()
-            print("[ALARM] Fetched \(result.count) alarms from speaker")
+            sonosDebugLog("[ALARM] Fetched \(result.count) alarms from speaker")
             for a in result {
-                print("[ALARM]   ID=\(a.id) \(a.startTime) \(a.recurrence) room=\(a.roomName)")
+                sonosDebugLog("[ALARM]   ID=\(a.id) \(a.startTime) \(a.recurrence) room=\(a.roomName)")
             }
             alarms = result
             alarms.sort { $0.startTime < $1.startTime }
         } catch {
-            print("[ALARM] Load failed: \(error)")
+            sonosDebugLog("[ALARM] Load failed: \(error)")
         }
         isLoading = false
-        print("[ALARM] isLoading=\(isLoading) alarms.count=\(alarms.count)")
+        sonosDebugLog("[ALARM] isLoading=\(isLoading) alarms.count=\(alarms.count)")
     }
 
     func toggleAlarm(_ alarm: SonosAlarm, enabled: Bool) async {

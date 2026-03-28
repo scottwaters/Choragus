@@ -1,6 +1,6 @@
 # SonosController
 
-A native macOS controller for Sonos speakers, built entirely in Swift and SwiftUI for Apple Silicon.
+A native macOS controller for Sonos speakers, built entirely in Swift and SwiftUI for Apple Silicon and Intel Macs.
 
 ![SonosController](screenshots/main.png)
 
@@ -8,189 +8,146 @@ A native macOS controller for Sonos speakers, built entirely in Swift and SwiftU
 
 Sonos shipped a macOS desktop controller for years, but it was an Intel-only (x86_64) binary that relied on Apple's Rosetta 2 translation layer. Apple is discontinuing Rosetta, which means the official Sonos desktop app will stop working on modern Macs — and Sonos appears to have no plans to release a native replacement.
 
-This project was built from scratch by a Sonos fan from the beginning who wanted to keep controlling their speakers from their Mac.  I usually use the phone app but I sit in front of my workstation most days and use the desktop app many times during those days for my office speakers.  I also added a few tweaks/features that always bugged me or I thought were missing (but I added settings options to revert to original behaviour if you have problems :) ).
-
-It is not affiliated with, endorsed by, or derived from Sonos, Inc. in any way. No proprietary Sonos code, assets, or intellectual property were used. The app communicates with Sonos speakers using the same open UPnP/SOAP protocols that any device on your local network can see and use (the same the other fan built implementations also use).
+This project was built from scratch by a Sonos fan who wanted to keep controlling their speakers from their Mac. It is not affiliated with, endorsed by, or derived from Sonos, Inc. in any way. No proprietary Sonos code, assets, or intellectual property were used. The app communicates with Sonos speakers using the same open UPnP/SOAP protocols that any device on your local network can see and use.
 
 ## Development
 
-Built interactively with [Claude Code](https://claude.ai/) and tested against a live Sonos system with 16 speakers. v2 was a few more hours of refinement — fixing rough edges and adding network and usability features based on daily use.
+Built interactively with [Claude Code](https://claude.ai/) and tested against a live Sonos system with 16 speakers across 10 zones. Testing has been done with a large local music library (45,000+ tracks) and streaming services (Apple Music, Spotify, TuneIn, Calm Radio, Sonos Radio).
 
-Testing has been done with a large local music library and a limited set of streaming services (Apple Music, Spotify, TuneIn, Calm Radio). Your experience may vary depending on which services you use — if something doesn't work as expected, please open an issue.
+## What's New in v3
 
-## What's New in v2.1
+### Music Service Browsing (SMAPI)
+- **Connect streaming services** — TuneIn, Spotify, Deezer, TIDAL, and 40+ services with AppLink/DeviceLink authentication
+- **Browse and play** from connected services directly in the sidebar
+- **Setup guide** with step-by-step instructions and service status indicators (Active / Needs Favorite / Connect)
+- **Serial number discovery** — automatically detects account identifiers from favorites and play history
 
-- **Group presets** — save your favorite speaker groups with per-speaker volumes, then recall them with one click from the toolbar menu
-- **Play history** — see what you've been listening to with a dedicated stats window showing top artists, tracks, and sources. Filter by room and service, export to CSV.
-- **Home theater EQ** — dedicated window for soundbar setups with EQ, Sub, and Surrounds tabs. Night mode, dialog enhancement, music playback mode (Full/Ambient).
-- **Menu bar mode** — optional menu bar icon with quick playback controls so you can control music without switching to the app
-- **Playlist service tags** — playlists show colored service badges for each track's source (Apple Music, Spotify, etc.), scanned in the background and cached to disk
-- **Recently played** — quick-access list of recently played stations and tracks right in the browse panel
-- **Crossfade toggle** — crossfade control in the transport bar, highlights with your accent color when active
-- **Pause all / Resume all** — one-click pause or resume every active zone from the speaker toolbar menu
-- **Drag browse to queue** — drag tracks from the browse panel and drop them at any position in the queue
-- **Queue drag reorder** — drag-drop reordering within the queue with a visual drop position indicator
-- **Marquee text** — long track and artist names auto-scroll in Now Playing with a pause at start and end
-- **Custom hover tooltips** — reliable tooltips on transport controls, replacing the broken SwiftUI .help() modifier
-- **Sidebar context menu** — right-click any room for play/pause, mute, group editor, ungroup, or home theater EQ
-- **Smart case formatting** — preserves Roman numerals (III, IV), capitalizes after brackets in stream metadata
-- **Centralized constants** — SonosConstants.swift for URI prefixes, service IDs, colors, timing, and app paths
+### Listening Stats Overhaul
+- **Dashboard** — top tracks, top stations, top albums, day-of-week distribution, room usage, listening streaks
+- **Quick stats pills** — current streak, best streak, avg plays/day, unique albums, unique stations
+- **Card-based history** — timeline view grouped by day with album art, metadata pills, context menus
+- **Custom date range** filter with From/To date pickers
+- **SQL-based filtering** — handles 50,000+ entries with instant search (debounced 300ms)
+- **Service tags** — show streaming service name (Sonos Radio, TuneIn, Spotify) instead of station name
 
-### Also new in v2.0
+### Artwork System Rebuild
+- **Single DIDL parser** — TrackMetadata.enrichFromDIDL consolidates 4 duplicate parsing paths
+- **Ad break detection** — shows station art during radio ads, resumes track art when music returns
+- **Station change tracking** — clears stale art when switching stations, captures new station art from metadata
+- **Smart search** — strips parentheses, track suffixes (End Titles, Main Theme, Suite), handles unclosed parentheses
+- **Art caching** — discovered art shared across main player, menu bar, and history views
 
-- **13 languages** — full localization in English, German, French, Dutch, Spanish, Italian, Swedish, Norwegian, Danish, Japanese, Portuguese, Polish, and Chinese (Simplified)
-- **Dark mode** — System, Light, or Dark theme selection
-- **Appearance customization** — accent color picker, zone icon colors for playing/inactive states
-- **Playback transition feedback** — clicking a favorite shows cached artwork and station/track name immediately with a loading spinner until the speaker confirms playback. No more wondering if you clicked.
-- **Persistent artwork caching** — album art for favorites is remembered across app restarts. No more blank thumbnails every time you relaunch.
-- **Service identification** — favorites show colored source badges (Apple Music, Spotify, TuneIn, Calm Radio, etc.) with a filterable service bar
-- **Copy track info** — clipboard output with labelled Source/Artist/Album/Track lines in the active language
-- **Album art context menu** — right-click to refresh from iTunes or clear cached art
-- **Streaming service error handling** — clear error messages when playback fails (e.g. "Spotify may require sign-in")
-- **Dynamic album art discovery** — multi-strategy art resolution for library items: embedded art, folder images, iTunes Search API, container browsing
-- **UPnP event subscriptions (GENA)** — real-time push notifications from speakers replace polling as the default, with automatic subscription renewal and polling fallback
-- **Many bug fixes and performance improvements** — faster browse loading, reduced unnecessary network requests, smoother UI transitions, fixed edge cases with grouped speaker volume, and general stability improvements throughout
+### Menu Bar Redesign
+- **Hero art area** — blurred album art background with track info overlay
+- **Room picker** — green/gray dots showing playing status per zone
+- **Mute button** — speaker icon toggles mute for all group members
+- **Volume readout** — numeric display alongside slider
+- **Proportional scaling** — uses same linear/proportional mode as main player
+- **Accent color** — inherits custom accent from main app settings
+- **Resolved artwork** — uses discovered art cache, not just raw metadata
+
+### Architecture & Quality
+- **11 service protocols** (ISP) — PlaybackService, VolumeService, EQService, QueueService, BrowsingService, GroupingService, AlarmService, MusicServiceDetection, TransportStateProviding, ArtCache
+- **ViewModels use protocol types** — NowPlayingServices, BrowsingServices, QueueServices
+- **Encapsulated state mutations** — updateTransportState, updateDeviceVolume, updatePlayMode etc.
+- **100 unit tests** covering metadata enrichment, URI detection, art resolution, state mutations, grace periods, protocol conformance
+- **App sandbox** enabled with minimal entitlements
+- **Universal binary** — native arm64 + x86_64 (Apple Silicon + Intel)
+- **Keychain security** — kSecAttrAccessibleWhenUnlockedThisDeviceOnly with error checking
+
+### Performance
+- **Removed duplicate polling** — NowPlayingViewModel no longer duplicates TransportStrategy's SOAP calls
+- **@Published change guards** — dictionary writes only trigger SwiftUI updates when values actually change
+- **Dashboard stats cached** — computed once in @State, not per-body evaluation
+- **Position timer** — 1s interval with 0.5s change threshold to minimize re-renders
+
+### Bug Fixes
+- Radio station name preserved on pause
+- Queue artwork for local library tracks via /getaa fallback
+- History dedup uses track duration for window (no more duplicates for long songs)
+- RINCON device IDs filtered from all metadata paths
+- Volume/mute correctly syncs on zone switch (grace periods cleared, live fetch)
+- Filter tags wrap with FlowLayout instead of hidden scroll
+- Time display fixed height (no layout shift on play/pause)
 
 ## Features
 
 ### Playback Control
-- Play, pause, stop, skip forward/back
-- Seek within tracks
-- Shuffle and repeat (off / all / one)
-- Crossfade toggle — highlights with accent color when active
-- Keyboard shortcut: spacebar for play/pause
-- Pause all / Resume all — pause or resume every active zone from the toolbar menu
-- Optimistic UI — controls respond instantly with a grace period system that prevents polling from reverting your action while the speaker processes it
-- Playback transition feedback — when starting a new stream, cached artwork and track info display immediately with a loading spinner until the speaker confirms playback
+- Play, pause, stop, skip forward/back, seek
+- Shuffle and repeat (off / all / one) with Classic Shuffle toggle
+- Crossfade toggle
+- Pause all / Resume all from toolbar menu
+- Optimistic UI with grace period system
+- Playback transition feedback with loading spinner
 
 ### Now Playing
-- Album art display with two-tier disk and memory caching
-- Album art fallback: embedded file art → folder art → iTunes Search API → generic placeholder
-- Right-click album art to refresh from iTunes or clear
-- Copy track info to clipboard — source, artist, album, track on separate labelled lines (localized)
-- Marquee text — long track and artist names auto-scroll with a pause at start and end
-- Track title, artist, album — clears when nothing is playing
-- Service tag below album name shows source (Apple Music, Music Library, Spotify, etc.)
-- Radio station name displayed above current track info for streaming sources
-- TV and Line-In source detection with room name display
-- Streaming service identification (shows "Playing from Apple Music" etc.)
-- Draggable seek slider with smooth interpolation (no 2-second jumps)
-- Freeze period after play/seek prevents slider bounce while speaker buffers
-- Live indicator for streaming content without fixed duration
+- Album art with multi-strategy resolution (DIDL, /getaa, iTunes Search)
+- Radio track art from iTunes with station badge overlay
+- Station name displayed above track info for streaming sources
+- TV and Line-In source detection
+- Service tag showing source (Apple Music, Spotify, TuneIn, etc.)
+- Copy track info to clipboard
+- Draggable seek slider with smooth interpolation
 
 ### Volume
-- **Single speaker** — direct volume slider and mute
-- **Grouped speakers** — master slider adjusts all speakers proportionally, preserving relative balance. Master mute controls all speakers.
-- Individual per-speaker volume sliders and mute buttons below the master
-- Animated slider transitions when volumes change
-- Delayed spinner indicators — only appear if a volume change takes more than 300ms
-- Bass, treble, and loudness controls (EQ panel per speaker)
-- EQ zone selector — grouped zones show a speaker picker in the EQ panel
-- Mute/Unmute all speakers globally (toolbar menu)
-
-### Home Theater EQ
-- Dedicated window for soundbar/surround setups (auto-detected from zone topology)
-- **EQ tab** — bass, treble, loudness for the soundbar
-- **Sub tab** — sub on/off, sub level, sub crossover
-- **Surrounds tab** — surround on/off, surround level, music playback mode (Full/Ambient)
-- Night mode and dialog enhancement toggles
-- Accessible from sidebar context menu on home theater zones
+- Master slider adjusts all speakers (proportional or linear mode)
+- Individual per-speaker volume sliders with drag protection
+- Mute toggle per speaker and master
+- Bass, treble, loudness controls (EQ panel)
+- Home Theater EQ with Sub and Surround controls
 
 ### Speaker Management
-- Automatic SSDP discovery of all Sonos speakers on your network
-- Zone grouping — add or remove speakers from groups with optimistic UI
-- Group All / Ungroup All buttons for quick whole-house control
-- **Group presets** — save speaker groups with per-speaker volumes, apply with one click from the toolbar menu
-- Speakers already in another group are labelled in the group editor
-- Coordinator speaker always listed first, others alphabetically
-- Bonded speakers (soundbar + sub + surrounds) shown as a single room
-- Home theater detection — parses HTSatChanMapSet from topology for 5.1/sub identification
-- Invisible/satellite speakers filtered from the UI
-- Custom sidebar with configurable zone icon colors (playing/inactive)
-- Sidebar context menu — right-click rooms for play/pause, mute, group editor, ungroup, home theater EQ
-- Sound wave indicators show which rooms are currently playing (animated pulse)
-- Accent-colored selection highlight in the room list
-- Restore last zone — app remembers your last selected room across restarts
+- Automatic SSDP discovery
+- Zone grouping with group editor
+- Group presets with per-speaker volumes and EQ
+- Bonded speakers (soundbar + sub + surrounds) shown as single room
+- Sidebar with playing status indicators and context menus
+- Restore last selected zone across restarts
 
 ### Browse & Library
-- **Sonos Favorites** — play any saved favorite including radio stations, Spotify playlists, Apple Music content
-- **Recently played** — quick-access list of recently played stations and tracks in the browse panel
-- **Service identification** — each favorite shows a colored badge identifying its source (Apple Music, Spotify, TuneIn, Calm Radio, Music Library, etc.)
-- **Service filter** — filter favorites and playlists by source service (All / Apple Music / Radio / Spotify / etc.)
-- **Playlist service tags** — playlists show per-track service badges, scanned in the background and cached to disk
-- **Music Library** — browse your local network music shares (NAS/server) by folder, all the way down to individual tracks
-- **Dynamic album art** — library folders load art from embedded files, folder images, or iTunes Search API
-- **Artists, Albums, Genres, Composers, Tracks** — full indexed library browsing with drill-down navigation
-- **Sonos Playlists** and imported playlists
-- **Search** across artists, albums, and tracks
-- All browse sections dynamically discovered from your Sonos system (nothing hardcoded)
-- Play now, play next, or add to queue from any browse result via right-click context menu
-- Drag tracks from browse and drop at any position in the queue
-- Home and back navigation buttons in the browse header
-- Pagination for large libraries (tested with 45,000+ tracks, 6,500+ albums)
+- Sonos Favorites with service filter
+- Music Library browsing (NAS/server) with pagination
+- Recently played quick-access list
+- Music Services browsing via SMAPI (TuneIn, Spotify, etc.)
+- Search across artists, albums, and tracks
+- Play now, play next, add to queue from context menu
+- Drag tracks from browse to queue
 
 ### Queue
-- View the current play queue with album art
-- Tap to jump to any track
-- Remove individual tracks or clear the entire queue
-- Drag-drop reordering with visual drop position indicator
-- Drag tracks from the browse panel to insert at any queue position
-
-### Alarms
-- View all configured Sonos alarms
-- Enable/disable individual alarms
-- Delete alarms
-
-### Sleep Timer
-- Set from preset durations (15m, 30m, 45m, 1h, 2h)
-- View remaining time
-- Cancel active timer
-
-### Menu Bar Mode
-- Optional menu bar icon for quick access without switching to the app
-- Playback controls (play/pause, next, previous) from the menu bar dropdown
-- Volume control and current track info at a glance
+- View, reorder, and manage the play queue
+- Tap to jump, drag to reorder, right-click to remove
+- Queue shuffle (physical reorder)
+- Save queue as Sonos playlist
 
 ### Play History
-- Tracks what you listen to with timestamps, artist, album, source, and room
-- Dedicated stats window with top artists, tracks, and sources
-- Filter by room and streaming service
+- Dashboard with charts: listening activity, peak hours, top artists/tracks/stations/albums, day-of-week, room usage
+- Listening streaks (current + best)
+- Card-based timeline grouped by day
+- Search, date range, room, and source filters
 - Export to CSV
-- Toggle on/off in Settings
-- Right-click to copy track details
+- Right-click: copy details, filter by artist/room/source
 
-### Caching & Performance
-- **Quick Start mode** — caches your speaker layout and browse menu locally. On subsequent launches, the UI appears instantly from cache while speakers are verified in the background. If anything changed, the UI updates automatically. Stale data is detected gracefully with user-visible notifications.
-- **Classic mode** — waits for live network discovery before showing speakers (always current, slightly slower startup).
-- **Album art cache** — two-tier caching (memory + disk) for album artwork. Images load instantly on repeat views. JPEG compressed with configurable max size (100 MB–5 GB) and max age (7 days–never). LRU eviction.
-- **Art URL persistence** — art URLs discovered during playback are persisted to disk and restored on restart, so favorites show artwork immediately without re-discovering from the speaker.
-- **Playlist services cache** — background scan results for playlist track service badges cached to disk, so badges appear instantly on subsequent views.
-- **Grace period system** — after pressing play/pause or changing volume, the UI holds your intended state for 10 seconds so polling doesn't snap it back while the speaker processes the command.
-- **Smooth progress interpolation** — the seek bar advances locally every 0.5s between 2-second server polls, with drift correction. Never jumps backward on small drift.
-- Configurable via Settings (gear icon in toolbar).
+### Menu Bar Mode
+- Hero art area with blurred background
+- Transport controls, volume slider with mute
+- Room picker with playing status dots
+- Inherits accent color from main app
 
-### Communications
-- **Event-Driven mode** (default) — UPnP event subscriptions for real-time state updates with automatic subscription renewal. Falls back to reconciliation polling every 10 seconds as a safety net. Position polled every 2 seconds for smooth progress bar.
-- **Legacy Polling mode** — original 2-second polling for all state. More predictable on networks where event callbacks are unreliable.
-- Switchable in Settings without restart.
-
-### Music Services
-- Streaming services (Spotify, Apple Music, TuneIn, Calm Radio, etc.) identified by colored badges in the browse list
-- Content from these services is playable through **Sonos Favorites** — add favorites via the Sonos mobile app, then play them from the Favorites section in Browse
-- Streaming service albums/playlists (x-rincon-cpcontainer URIs) are handled automatically via queue
-- Service-specific error messages when playback fails (e.g. "Spotify may require sign-in or an active subscription")
-
-### Appearance & Localization
-- **Dark mode** — System / Light / Dark theme selection
-- **Accent color** — customizable tint for sliders, selections, toggles. Preset colors + custom color picker. Does not affect toolbar icons.
-- **Zone icon colors** — separate colors for playing and inactive speaker icons
-- **Custom hover tooltips** — reliable tooltips on transport controls replacing the broken SwiftUI .help() modifier
-- **13 languages** — English, German, French, Dutch, Spanish, Italian, Swedish, Norwegian, Danish, Japanese, Portuguese, Polish, Chinese (Simplified). Switchable in Settings.
+### Settings
+- Startup mode (Quick Start / Classic)
+- Communication mode (Event-Driven / Legacy Polling)
+- Appearance (System / Light / Dark)
+- Accent color, zone icon colors
+- Proportional Group Volume toggle
+- Classic Shuffle toggle
+- Music Services management with setup guide
+- Image cache controls (size, age)
+- 13 languages
 
 ## Requirements
 
 - macOS 14.0 (Sonoma) or later
-- Apple Silicon Mac (M1 or later) — also runs on Intel via Rosetta during the transition period
+- Apple Silicon Mac (M1+) or Intel Mac
 - Sonos speakers on the same local network
 
 ## Installation
@@ -199,119 +156,60 @@ Testing has been done with a large local music library and a limited set of stre
 
 1. Go to [Releases](../../releases) and download the latest `SonosController.zip`
 2. Unzip and drag `SonosController.app` to your Applications folder
-3. **First launch:** Right-click the app and click "Open", then click "Open" in the dialog (required once because the app is not notarized with Apple — it's a community project, not from the App Store)
-4. macOS will ask to allow local network access — click Allow (the app needs this to find your Sonos speakers)
+3. **First launch:** Right-click the app and click "Open", then click "Open" in the dialog (required once because the app is not notarized)
+4. macOS will ask to allow local network access — click Allow
 
 ### Option 2: Build From Source
 
-**Prerequisites:** Xcode 15 or later (free from the Mac App Store). No other tools or dependencies needed.
+**Prerequisites:** Xcode 15 or later.
 
 ```bash
-# Clone the repo
 git clone https://github.com/scottwaters/SonosController.git
 cd SonosController
 
-# Build (Release, Apple Silicon)
+# Build universal binary (Apple Silicon + Intel)
 xcodebuild -scheme SonosController \
   -configuration Release \
-  -arch arm64 \
+  -destination 'platform=macOS' \
   CONFIGURATION_BUILD_DIR="$(pwd)/build" \
+  ONLY_ACTIVE_ARCH=NO \
+  ARCHS="arm64 x86_64" \
   build
 
-# The built app is at:
-# build/SonosController.app
+# The built app is at: build/SonosController.app
 ```
 
-Or open `SonosController.xcodeproj` in Xcode and press Cmd+R to build and run.
-
-**No external dependencies.** No CocoaPods, no SPM remote packages, no downloads. The entire project builds using only Apple's standard frameworks (SwiftUI, Foundation, Darwin).
-
-### Building a Release ZIP for Distribution
-
-```bash
-xcodebuild -scheme SonosController \
-  -configuration Release \
-  -arch arm64 \
-  CONFIGURATION_BUILD_DIR="$(pwd)/build" \
-  build
-
-cd build && zip -r ~/Desktop/SonosController.zip SonosController.app
-```
-
-The resulting `SonosController.zip` can be uploaded to GitHub Releases.
+**No external dependencies.** No CocoaPods, no SPM remote packages. The entire project builds using only Apple's standard frameworks.
 
 ## Architecture
 
-The project is split into two targets:
+- **SonosController** — SwiftUI app (26 view files, 6 ViewModels)
+- **SonosKit** — local Swift package (networking, protocols, models, caching, events, localization, services)
+- **22,000+ lines of Swift** across 80 source files
+- **100 unit tests**
+- **Zero external dependencies**
 
-- **SonosController** — SwiftUI app with 20+ view files
-- **SonosKit** — local Swift package containing all networking, protocols, models, caching, events, localization, and album art services (zero external dependencies)
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed source documentation.
-
-### Protocol Stack (all implemented from scratch)
+### Protocol Stack
 
 | Protocol | Purpose |
 |----------|---------|
-| SSDP | UDP multicast discovery of speakers on the LAN |
+| SSDP | UDP multicast discovery of speakers |
 | UPnP/SOAP | HTTP+XML commands to speakers on port 1400 |
-| UPnP Eventing (GENA) | Real-time push notifications via HTTP SUBSCRIBE/NOTIFY |
+| GENA | Real-time push notifications via HTTP SUBSCRIBE/NOTIFY |
+| SMAPI | Music service browsing and authentication |
 | DIDL-Lite | XML metadata format for tracks, albums, playlists |
-| Sonos UPnP extensions | Zone topology, favorites, service account URIs |
 | iTunes Search API | Album art fallback for local library content |
 
-### Sonos Services Used
+## Known Limitations
 
-| Service | What It Controls |
-|---------|-----------------|
-| AVTransport | Play, pause, stop, seek, sleep timer, grouping |
-| RenderingControl | Volume, mute, bass, treble, loudness |
-| ZoneGroupTopology | Room/group/coordinator discovery |
-| ContentDirectory | Queue, browse library, search, add to queue |
-| AlarmClock | List, create, update, delete alarms |
-| MusicServices | List available streaming services |
-
-## How It Works
-
-All communication happens on your local network. The app never contacts the internet.
-
-1. **Discovery** — sends a UDP multicast M-SEARCH packet to `239.255.255.250:1900` asking for Sonos ZonePlayers. Each speaker responds with its IP address.
-2. **Device description** — fetches XML from each speaker to learn its name, model, and UUID.
-3. **Zone topology** — a single SOAP call to any speaker returns the complete map of all rooms, groups, and which speaker is the coordinator of each group.
-4. **Commands** — all playback, volume, and browse operations are SOAP (HTTP POST with XML) to port 1400 on the relevant speaker. Transport commands go to the group coordinator; volume commands go to individual speakers.
-5. **Event subscriptions** (default) — the app subscribes to UPnP events for real-time push notifications of state changes. AVTransport events for playback, RenderingControl events for volume/mute, with reconciliation polling as a safety net.
-6. **Polling** (fallback) — alternatively, the app polls the selected speaker every 2 seconds. A grace period system prevents polling from overwriting optimistic UI state after user actions.
-7. **Caching** — speaker topology and browse sections are cached to disk (JSON) for instant startup. Album artwork is cached to a two-tier memory + disk cache with LRU eviction. Art URLs discovered during playback are persisted to disk so favorites retain artwork across restarts.
-
-## Limitations
-
-- **Music service browsing** — Spotify, Apple Music, and other streaming services use Sonos's proprietary SMAPI protocol which requires OAuth authentication. Only the official Sonos mobile app can configure service accounts. Content from these services is accessible through Sonos Favorites.
-- **Radio** — TuneIn, Calm Radio, and other radio services are SMAPI-based. Radio stations saved as Sonos Favorites play correctly with station name and current track info displayed. Browsing the radio directory is not supported.
-- **Streaming track metadata** — some streaming services (particularly Apple Music) may not provide full track metadata (artist, album, art) for all content when played via UPnP. The app falls back to the favorite's metadata and iTunes Search API for album art.
+- **Apple Music** — blocks third-party AppLink auth (use via Sonos Favorites)
+- **Add to Favorites** — requires the official Sonos app (UPnP CreateObject not supported)
+- **Alarms** — Sonos S2 uses cloud API; UPnP AlarmClock returns empty
+- **SMAPI serial number** — discovered from existing favorites/history; new services need one favorite added via Sonos app
 
 ## License
 
-MIT License
-
-Copyright (c) 2026
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+MIT License — Copyright (c) 2026
 
 ## Disclaimer
 
