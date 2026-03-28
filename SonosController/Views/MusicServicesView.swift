@@ -181,9 +181,11 @@ struct MusicServicesSettingsSection: View {
                                 .font(.system(size: 9))
                                 .foregroundStyle(.orange)
                         } else if withSN[svc.id] != nil {
-                            Text("Linked via Sonos")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
+                            Button("Connect") {
+                                connectService(svc)
+                            }
+                            .controlSize(.mini)
+                            .disabled(smapiManager.isAuthenticating)
                         }
                     }
                 }
