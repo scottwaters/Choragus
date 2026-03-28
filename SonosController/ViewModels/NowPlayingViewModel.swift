@@ -387,11 +387,11 @@ final class NowPlayingViewModel {
             smoothPosition = metadata.position
         }
 
-        // During ad breaks, just update display state (show station art)
-        guard !metadata.isAdBreak else {
-            art.updateDisplayedArt(trackMetadata: metadata, group: group)
-            return
-        }
+        // Always update display art (handles ad break → station art switch)
+        art.updateDisplayedArt(trackMetadata: metadata, group: group)
+
+        // During ad breaks, skip searches but still update display
+        guard !metadata.isAdBreak else { return }
 
         // Update from new albumArtURI if available
         if let artStr = metadata.albumArtURI, !artStr.isEmpty, let url = URL(string: artStr) {

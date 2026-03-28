@@ -92,7 +92,7 @@ struct NowPlayingView: View {
                                     .fontWeight(.medium)
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
-                                if awaitingPlayback {
+                                if awaitingPlayback && !transportState.isPlaying {
                                     ProgressView()
                                         .controlSize(.small)
                                 }
