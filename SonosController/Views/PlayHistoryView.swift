@@ -17,6 +17,11 @@ struct PlayHistoryView: View {
     @State private var customDateFrom: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @State private var customDateTo: Date = Date()
 
+    // Cached query results — updated via refreshFilteredEntries(), not computed per body eval
+    @State private var cachedFilteredEntries: [PlayHistoryEntry] = []
+    @State private var cachedFilteredCount: Int = 0
+    @State private var searchDebounceTask: Task<Void, Never>?
+
     enum DateRange: String, CaseIterable {
         case all = "All Time"
         case today = "Today"
@@ -34,57 +39,49 @@ struct PlayHistoryView: View {
         Array(Set(historyManager.entries.map { sourceLabel(for: $0) })).sorted()
     }
 
-    /// Entries filtered by date/room/source/search but NOT sorted (for dashboard)
-    private var filteredEntriesUnsorted: [PlayHistoryEntry] {
-        var result = historyManager.entries
-
-        if filterDateRange != .all {
-            if filterDateRange == .custom {
-                let fromStart = Calendar.current.startOfDay(for: customDateFrom)
-                let toEnd = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: customDateTo)) ?? customDateTo
-                result = result.filter { $0.timestamp >= fromStart && $0.timestamp < toEnd }
-            } else {
-                let calendar = Calendar.current
-                let now = Date()
-                let cutoff: Date
-                switch filterDateRange {
-                case .today: cutoff = calendar.startOfDay(for: now)
-                case .week: cutoff = calendar.date(byAdding: .day, value: -7, to: now)!
-                case .month: cutoff = calendar.date(byAdding: .month, value: -1, to: now)!
-                case .quarter: cutoff = calendar.date(byAdding: .month, value: -3, to: now)!
-                default: cutoff = .distantPast
-                }
-                result = result.filter { $0.timestamp >= cutoff }
-            }
-        }
-
-        if let room = filterRoom {
-            result = result.filter { $0.groupName == room }
-        }
-        if let source = filterSource {
-            result = result.filter { sourceLabel(for: $0) == source }
-        }
-        if !searchText.isEmpty {
-            let query = searchText.lowercased()
-            result = result.filter {
-                $0.artist.lowercased().contains(query) ||
-                $0.title.lowercased().contains(query) ||
-                $0.album.lowercased().contains(query) ||
-                $0.stationName.lowercased().contains(query) ||
-                $0.groupName.lowercased().contains(query)
-            }
-        }
-        return result
-    }
-
-    /// Sorted for history list display
-    private var filteredEntries: [PlayHistoryEntry] {
-        sortNewestFirst ? filteredEntriesUnsorted.sorted { $0.timestamp > $1.timestamp }
-                        : filteredEntriesUnsorted.sorted { $0.timestamp < $1.timestamp }
-    }
+    /// Cached filtered entries for display (updated by refreshFilteredEntries)
+    private var filteredEntries: [PlayHistoryEntry] { cachedFilteredEntries }
+    private var filteredEntriesUnsorted: [PlayHistoryEntry] { cachedFilteredEntries }
 
     private var hasActiveFilters: Bool {
         filterRoom != nil || filterSource != nil || filterDateRange != .all || !searchText.isEmpty
+    }
+
+    /// Compute date range bounds from filter selection
+    private var dateBounds: (since: Date?, until: Date?) {
+        switch filterDateRange {
+        case .all: return (nil, nil)
+        case .today: return (Calendar.current.startOfDay(for: Date()), nil)
+        case .week: return (Calendar.current.date(byAdding: .day, value: -7, to: Date()), nil)
+        case .month: return (Calendar.current.date(byAdding: .month, value: -1, to: Date()), nil)
+        case .quarter: return (Calendar.current.date(byAdding: .month, value: -3, to: Date()), nil)
+        case .custom:
+            let from = Calendar.current.startOfDay(for: customDateFrom)
+            let to = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: customDateTo))
+            return (from, to)
+        }
+    }
+
+    /// Refresh cached results from SQLite query
+    private func refreshFilteredEntries() {
+        let bounds = dateBounds
+        cachedFilteredEntries = historyManager.queryFiltered(
+            since: bounds.since, until: bounds.until,
+            room: filterRoom, source: filterSource,
+            searchText: searchText.isEmpty ? nil : searchText,
+            sortNewestFirst: sortNewestFirst
+        )
+        cachedFilteredCount = cachedFilteredEntries.count
+    }
+
+    /// Debounced refresh for search text changes
+    private func debouncedRefresh() {
+        searchDebounceTask?.cancel()
+        searchDebounceTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
+            guard !Task.isCancelled else { return }
+            refreshFilteredEntries()
+        }
     }
 
     var body: some View {
@@ -164,6 +161,15 @@ struct PlayHistoryView: View {
                 stationName: entry.stationName
             )
         }
+        .task { refreshFilteredEntries() }
+        .onChange(of: filterDateRange) { refreshFilteredEntries() }
+        .onChange(of: filterRoom) { refreshFilteredEntries() }
+        .onChange(of: filterSource) { refreshFilteredEntries() }
+        .onChange(of: sortNewestFirst) { refreshFilteredEntries() }
+        .onChange(of: customDateFrom) { refreshFilteredEntries() }
+        .onChange(of: customDateTo) { refreshFilteredEntries() }
+        .onChange(of: searchText) { debouncedRefresh() }
+        .onReceive(historyManager.$entries) { _ in refreshFilteredEntries() }
     }
 
     // MARK: - Filter Bar
@@ -242,7 +248,7 @@ struct PlayHistoryView: View {
             Spacer()
 
             // Count
-            Text("\(filteredEntriesUnsorted.count)")
+            Text("\(cachedFilteredCount)")
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(.primary)

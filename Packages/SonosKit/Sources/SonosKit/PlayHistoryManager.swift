@@ -135,6 +135,27 @@ public final class PlayHistoryManager: ObservableObject {
         }
     }
 
+    /// Query filtered entries via SQLite — efficient for large datasets.
+    /// Source filtering still done in-memory after the SQL query.
+    public func queryFiltered(since: Date? = nil, until: Date? = nil,
+                              room: String? = nil, source: String? = nil,
+                              searchText: String? = nil,
+                              sortNewestFirst: Bool = true) -> [PlayHistoryEntry] {
+        var result = repo.loadFiltered(since: since, until: until, room: room,
+                                        searchText: searchText, sortNewestFirst: sortNewestFirst)
+        // Source filtering requires URI pattern matching — done in-memory
+        if let source {
+            result = result.filter { sourceServiceName(for: $0) == source }
+        }
+        return result
+    }
+
+    /// Count filtered entries via SQLite (fast, no data loading)
+    public func countFiltered(since: Date? = nil, until: Date? = nil,
+                              room: String? = nil, searchText: String? = nil) -> Int {
+        repo.countFiltered(since: since, until: until, room: room, searchText: searchText)
+    }
+
     public func clearHistory() {
         entries.removeAll()
         lastLoggedTrack.removeAll()

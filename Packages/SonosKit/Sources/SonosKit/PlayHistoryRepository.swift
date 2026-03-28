@@ -48,6 +48,8 @@ public final class PlayHistoryRepository {
 
         exec("CREATE INDEX IF NOT EXISTS idx_history_timestamp ON history(timestamp)")
         exec("CREATE INDEX IF NOT EXISTS idx_history_artist ON history(artist)")
+        exec("CREATE INDEX IF NOT EXISTS idx_history_group ON history(group_name)")
+        exec("CREATE INDEX IF NOT EXISTS idx_history_title ON history(title)")
     }
 
     // MARK: - CRUD
@@ -108,6 +110,124 @@ public final class PlayHistoryRepository {
             entries.append(entry)
         }
         return entries
+    }
+
+    /// Filtered query — pushes filtering to SQLite instead of in-memory.
+    /// Handles date range, room, search text. Source filtering done in-memory
+    /// since it requires URI pattern matching not suited to SQL.
+    func loadFiltered(since: Date? = nil, until: Date? = nil,
+                      room: String? = nil, searchText: String? = nil,
+                      sortNewestFirst: Bool = true, limit: Int = 50_000) -> [PlayHistoryEntry] {
+        var clauses: [String] = []
+        var binds: [(Int, Any)] = []
+        var bindIndex = 1
+
+        if let since {
+            clauses.append("timestamp >= ?")
+            binds.append((bindIndex, since.timeIntervalSince1970))
+            bindIndex += 1
+        }
+        if let until {
+            clauses.append("timestamp < ?")
+            binds.append((bindIndex, until.timeIntervalSince1970))
+            bindIndex += 1
+        }
+        if let room, !room.isEmpty {
+            clauses.append("group_name = ?")
+            binds.append((bindIndex, room))
+            bindIndex += 1
+        }
+        if let searchText, !searchText.isEmpty {
+            clauses.append("(title LIKE ? OR artist LIKE ? OR album LIKE ? OR station_name LIKE ? OR group_name LIKE ?)")
+            let pattern = "%\(searchText)%"
+            for _ in 0..<5 {
+                binds.append((bindIndex, pattern))
+                bindIndex += 1
+            }
+        }
+
+        let whereClause = clauses.isEmpty ? "" : "WHERE " + clauses.joined(separator: " AND ")
+        let order = sortNewestFirst ? "DESC" : "ASC"
+        let sql = "SELECT id, timestamp, title, artist, album, station_name, source_uri, group_name, duration, album_art_uri FROM history \(whereClause) ORDER BY timestamp \(order) LIMIT \(limit)"
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        for (idx, value) in binds {
+            if let d = value as? Double {
+                sqlite3_bind_double(stmt, Int32(idx), d)
+            } else if let s = value as? String {
+                sqlite3_bind_text(stmt, Int32(idx), (s as NSString).utf8String, -1, nil)
+            }
+        }
+
+        var entries: [PlayHistoryEntry] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let entry = PlayHistoryEntry(
+                id: UUID(uuidString: String(cString: sqlite3_column_text(stmt, 0))) ?? UUID(),
+                timestamp: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1)),
+                title: String(cString: sqlite3_column_text(stmt, 2)),
+                artist: String(cString: sqlite3_column_text(stmt, 3)),
+                album: String(cString: sqlite3_column_text(stmt, 4)),
+                stationName: String(cString: sqlite3_column_text(stmt, 5)),
+                sourceURI: sqlite3_column_type(stmt, 6) != SQLITE_NULL ? String(cString: sqlite3_column_text(stmt, 6)) : nil,
+                groupName: String(cString: sqlite3_column_text(stmt, 7)),
+                duration: sqlite3_column_double(stmt, 8),
+                albumArtURI: sqlite3_column_type(stmt, 9) != SQLITE_NULL ? String(cString: sqlite3_column_text(stmt, 9)) : nil
+            )
+            entries.append(entry)
+        }
+        return entries
+    }
+
+    /// Count entries matching filters (for display without loading all data)
+    func countFiltered(since: Date? = nil, until: Date? = nil,
+                       room: String? = nil, searchText: String? = nil) -> Int {
+        var clauses: [String] = []
+        var binds: [(Int, Any)] = []
+        var bindIndex = 1
+
+        if let since {
+            clauses.append("timestamp >= ?")
+            binds.append((bindIndex, since.timeIntervalSince1970))
+            bindIndex += 1
+        }
+        if let until {
+            clauses.append("timestamp < ?")
+            binds.append((bindIndex, until.timeIntervalSince1970))
+            bindIndex += 1
+        }
+        if let room, !room.isEmpty {
+            clauses.append("group_name = ?")
+            binds.append((bindIndex, room))
+            bindIndex += 1
+        }
+        if let searchText, !searchText.isEmpty {
+            clauses.append("(title LIKE ? OR artist LIKE ? OR album LIKE ? OR station_name LIKE ? OR group_name LIKE ?)")
+            let pattern = "%\(searchText)%"
+            for _ in 0..<5 {
+                binds.append((bindIndex, pattern))
+                bindIndex += 1
+            }
+        }
+
+        let whereClause = clauses.isEmpty ? "" : "WHERE " + clauses.joined(separator: " AND ")
+        let sql = "SELECT COUNT(*) FROM history \(whereClause)"
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+        defer { sqlite3_finalize(stmt) }
+
+        for (idx, value) in binds {
+            if let d = value as? Double {
+                sqlite3_bind_double(stmt, Int32(idx), d)
+            } else if let s = value as? String {
+                sqlite3_bind_text(stmt, Int32(idx), (s as NSString).utf8String, -1, nil)
+            }
+        }
+
+        return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
     }
 
     func delete(ids: [UUID]) {
