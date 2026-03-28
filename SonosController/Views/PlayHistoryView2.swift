@@ -5,10 +5,17 @@
 import SwiftUI
 import SonosKit
 
+enum HistoryFilterAction {
+    case search(String)
+    case room(String)
+    case source(String)
+}
+
 struct PlayHistoryView2: View {
     let entries: [PlayHistoryEntry]
     @Binding var expandedArtEntry: PlayHistoryEntry?
     var sourceLabel: (PlayHistoryEntry) -> String
+    var onFilter: ((HistoryFilterAction) -> Void)?
 
     private var groupedByDay: [(String, [PlayHistoryEntry])] {
         let calendar = Calendar.current
@@ -197,9 +204,22 @@ struct PlayHistoryView2: View {
                 if !entry.artist.isEmpty { lines.append("Artist: \(entry.artist)") }
                 if !entry.album.isEmpty { lines.append("Album: \(entry.album)") }
                 if !entry.title.isEmpty { lines.append("Track: \(entry.title)") }
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+                copyToClipboard(lines.joined(separator: "\n"))
             }
+            if !entry.title.isEmpty {
+                Button("Copy Title") { copyToClipboard(entry.title) }
+            }
+            if !entry.artist.isEmpty {
+                Button("Copy Artist") { copyToClipboard(entry.artist) }
+            }
+            Divider()
+            if !entry.artist.isEmpty {
+                Button("Filter by \"\(entry.artist)\"") { onFilter?(.search(entry.artist)) }
+            }
+            if !entry.groupName.isEmpty {
+                Button("Filter by Room: \(entry.groupName)") { onFilter?(.room(entry.groupName)) }
+            }
+            Button("Filter by Source: \(source)") { onFilter?(.source(source)) }
         }
     }
 
@@ -226,5 +246,10 @@ struct PlayHistoryView2: View {
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", mins, secs)
+    }
+
+    private func copyToClipboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }

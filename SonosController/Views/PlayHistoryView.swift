@@ -117,7 +117,13 @@ struct PlayHistoryView: View {
 
             switch selectedTab {
             case 0:
-                PlayHistoryView2(entries: filteredEntries, expandedArtEntry: $expandedArtEntry, sourceLabel: sourceLabel)
+                PlayHistoryView2(entries: filteredEntries, expandedArtEntry: $expandedArtEntry, sourceLabel: sourceLabel) { action in
+                    switch action {
+                    case .search(let text): searchText = text
+                    case .room(let room): filterRoom = room
+                    case .source(let source): filterSource = source
+                    }
+                }
             default:
                 PlayHistoryDashboard(entries: filteredEntriesUnsorted, expandedArtEntry: $expandedArtEntry)
                     .environmentObject(historyManager)
