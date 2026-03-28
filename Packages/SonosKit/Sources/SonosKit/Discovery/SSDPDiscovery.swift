@@ -45,6 +45,13 @@ public final class SSDPDiscovery: @unchecked Sendable {
             startReceiving()
         }
         sendSearch()
+        // Close socket after receive window — speakers respond within MX:3 seconds
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 10) { [weak self] in
+            guard let self, self.isSearching, self.socket >= 0 else { return }
+            let sock = self.socket
+            self.socket = -1
+            close(sock)
+        }
     }
 
     private func createSocket() {
@@ -58,8 +65,9 @@ public final class SSDPDiscovery: @unchecked Sendable {
         setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
         setsockopt(socket, SOL_SOCKET, SO_REUSEPORT, &reuse, socklen_t(MemoryLayout<Int32>.size))
 
-        // Set receive timeout to 1 second so the receive loop can check isSearching
-        var timeout = timeval(tv_sec: 1, tv_usec: 0)
+        // Set receive timeout to 5 seconds — reduces thread wake frequency while still
+        // allowing the loop to check isSearching periodically
+        var timeout = timeval(tv_sec: 5, tv_usec: 0)
         setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
     }
 
