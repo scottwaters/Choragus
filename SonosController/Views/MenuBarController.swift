@@ -297,10 +297,14 @@ struct MenuBarPlayerView: View {
                 // Show main window
                 Button {
                     NSApp.activate(ignoringOtherApps: true)
-                    if let window = NSApp.windows.first(where: { $0.title.contains("Sonos") || $0.isKeyWindow }) {
+                    // Find existing main window or create new one
+                    if let window = NSApp.windows.first(where: {
+                        $0.title.contains("SonosController") && $0.contentView != nil
+                    }) {
                         window.makeKeyAndOrderFront(nil)
                     } else {
-                        NSApp.windows.first?.makeKeyAndOrderFront(nil)
+                        // No window exists — trigger SwiftUI to create a new one
+                        NSApp.sendAction(Selector(("newWindowForTab:")), to: nil, from: nil)
                     }
                 } label: {
                     HStack(spacing: 4) {
