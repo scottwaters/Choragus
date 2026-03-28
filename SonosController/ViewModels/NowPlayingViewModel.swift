@@ -453,10 +453,15 @@ final class NowPlayingViewModel {
                 artist: artist, album: searchTerm
             )
 
-            // If no result and search term has parentheses, try the text inside () as album
+            // If no result and search term has parentheses, try text inside ()
+            // If () content has a /, only use text before the /
+            // e.g. "ABC Classic FM 106.1 (Classical / Easy Listening)" → try "Classical"
             if foundArt == nil, let parenStart = searchTerm.firstIndex(of: "("),
                let parenEnd = searchTerm.firstIndex(of: ")"), parenStart < parenEnd {
-                let insideParens = String(searchTerm[searchTerm.index(after: parenStart)..<parenEnd]).trimmingCharacters(in: .whitespaces)
+                var insideParens = String(searchTerm[searchTerm.index(after: parenStart)..<parenEnd]).trimmingCharacters(in: .whitespaces)
+                if let slashIdx = insideParens.firstIndex(of: "/") {
+                    insideParens = String(insideParens[insideParens.startIndex..<slashIdx]).trimmingCharacters(in: .whitespaces)
+                }
                 if !insideParens.isEmpty {
                     foundArt = await AlbumArtSearchService.shared.searchArtwork(
                         artist: artist, album: insideParens
@@ -472,6 +477,13 @@ final class NowPlayingViewModel {
                         artist: artist, album: cleaned
                     )
                 }
+            }
+
+            // If still no result, try just artist + title (no album/station context)
+            if foundArt == nil, !artist.isEmpty {
+                foundArt = await AlbumArtSearchService.shared.searchArtwork(
+                    artist: artist, album: ""
+                )
             }
 
             if let artURL = foundArt {
