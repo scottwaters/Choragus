@@ -277,6 +277,10 @@ final class NowPlayingViewModel {
     /// Reset all local state when switching to a different group
     func resetForGroupChange() {
         isInitialized = false
+        isDraggingVolume = false
+        isDraggingSeek = false
+        volumeGraceUntil = .distantPast
+        muteGraceUntil = .distantPast
         speakerVolumes.removeAll()
         speakerMutes.removeAll()
         volume = 0
@@ -286,7 +290,6 @@ final class NowPlayingViewModel {
         lastPositionTimestamp = .distantPast
         crossfadeOn = false
         actionInFlight = nil
-        syncFromManager()
     }
 
     func syncFromManager() {
@@ -608,23 +611,37 @@ final class NowPlayingViewModel {
 
     // MARK: - Fetch Current State
 
-    /// Fetches live state for the selected group from speakers.
-    /// Delegates to SonosManager.scanGroup which updates all @Published state,
-    /// then syncs local ViewModel state from the updated values.
+    /// Fetches live state for the selected group directly from speakers.
+    /// Bypasses cache, grace periods, and thresholds — always sets exact current values.
     func fetchCurrentState() async {
-        // scanGroup fetches transport state, metadata, volume, mute for all members
+        // Direct speaker query for all state
         if let manager = sonosManager as? SonosManager {
             await manager.scanGroup(group)
         }
 
-        // Sync local state from updated @Published values
+        // Force-set local state from the just-fetched @Published values
+        // No grace period or threshold checks — this is an explicit user action
         let meta = sonosManager.groupTrackMetadata[group.coordinatorID] ?? TrackMetadata()
         lastKnownPosition = meta.position
         lastPositionTimestamp = Date()
         smoothPosition = meta.position
         crossfadeOn = (try? await sonosManager.getCrossfadeMode(group: group)) ?? false
-        syncVolumeFromManager()
-        syncMuteFromManager()
+
+        // Force volume/mute from live data — bypass grace periods
+        var totalVol = 0.0
+        for member in group.members {
+            let v = Double(sonosManager.deviceVolumes[member.id] ?? 0)
+            speakerVolumes[member.id] = v
+            speakerMutes[member.id] = sonosManager.deviceMutes[member.id] ?? false
+            totalVol += v
+        }
+        if group.members.count > 1 {
+            volume = totalVol / Double(group.members.count)
+        } else {
+            volume = totalVol
+        }
+        lastMasterVolume = volume
+        isMuted = group.members.allSatisfy { sonosManager.deviceMutes[$0.id] == true }
     }
 
 }
