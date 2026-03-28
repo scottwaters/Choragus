@@ -1277,8 +1277,8 @@ extension SonosManager: TransportStrategyDelegate {
                 return
             }
         }
-        groupTransportStates[groupID] = state
-        if state == .playing {
+        if groupTransportStates[groupID] != state { groupTransportStates[groupID] = state }
+        if state == .playing && awaitingPlayback[groupID] == true {
             awaitingPlayback[groupID] = false
         }
     }
@@ -1370,19 +1370,19 @@ extension SonosManager: TransportStrategyDelegate {
     public func transportDidUpdatePlayMode(_ groupID: String, mode: PlayMode) {
         let now = Date()
         if let grace = modeGraceUntils[groupID], now < grace { return }
-        groupPlayModes[groupID] = mode
+        if groupPlayModes[groupID] != mode { groupPlayModes[groupID] = mode }
     }
 
     public func transportDidUpdateVolume(_ deviceID: String, volume: Int) {
         let now = Date()
         if let grace = volumeGraceUntils[deviceID], now < grace { return }
-        deviceVolumes[deviceID] = volume
+        if deviceVolumes[deviceID] != volume { deviceVolumes[deviceID] = volume }
     }
 
     public func transportDidUpdateMute(_ deviceID: String, muted: Bool) {
         let now = Date()
         if let grace = muteGraceUntils[deviceID], now < grace { return }
-        deviceMutes[deviceID] = muted
+        if deviceMutes[deviceID] != muted { deviceMutes[deviceID] = muted }
     }
 
     public func transportDidUpdateTopology(_ groupData: [ZoneGroupData]) {
@@ -1420,8 +1420,9 @@ extension SonosManager: TransportStrategyDelegate {
     public func transportDidUpdatePosition(_ groupID: String, position: TimeInterval, duration: TimeInterval) {
         let now = Date()
         if let grace = positionGraceUntils[groupID], now < grace { return }
-        groupPositions[groupID] = position
-        groupDurations[groupID] = duration
+        // Only publish if values actually changed (avoids unnecessary SwiftUI re-renders)
+        if groupPositions[groupID] != position { groupPositions[groupID] = position }
+        if groupDurations[groupID] != duration { groupDurations[groupID] = duration }
     }
 
     public func getAVTransportService() -> AVTransportService {
