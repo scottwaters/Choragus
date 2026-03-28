@@ -465,39 +465,19 @@ final class NowPlayingViewModel {
         guard art.shouldSearch(key: key) else { return }
         art.setSearchKey(key)
         art.setWebArtResult(nil)
+        // Strip parenthetical content from search term — (Remix), (Live), (Godzilla) etc.
+        // are not useful for album art lookups and cause wrong results
+        let cleanedSearchTerm = searchTerm.replacingOccurrences(of: "\\s*\\([^)]*\\)", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        let effectiveSearch = cleanedSearchTerm.isEmpty ? searchTerm : cleanedSearchTerm
+
         Task {
-            // Try primary search term first
             var foundArt = await AlbumArtSearchService.shared.searchArtwork(
-                artist: artist, album: searchTerm
+                artist: artist, album: effectiveSearch
             )
 
-            // If no result and search term has parentheses, try text inside ()
-            // If () content has a /, only use text before the /
-            // e.g. "ABC Classic FM 106.1 (Classical / Easy Listening)" → try "Classical"
-            if foundArt == nil, let parenStart = searchTerm.firstIndex(of: "("),
-               let parenEnd = searchTerm.firstIndex(of: ")"), parenStart < parenEnd {
-                var insideParens = String(searchTerm[searchTerm.index(after: parenStart)..<parenEnd]).trimmingCharacters(in: .whitespaces)
-                if let slashIdx = insideParens.firstIndex(of: "/") {
-                    insideParens = String(insideParens[insideParens.startIndex..<slashIdx]).trimmingCharacters(in: .whitespaces)
-                }
-                if !insideParens.isEmpty {
-                    foundArt = await AlbumArtSearchService.shared.searchArtwork(
-                        artist: artist, album: insideParens
-                    )
-                }
-            }
-
-            // If still no result, try without parenthetical content
-            if foundArt == nil, searchTerm.contains("(") {
-                let cleaned = searchTerm.replacingOccurrences(of: "\\s*\\([^)]*\\)", with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-                if !cleaned.isEmpty && cleaned != searchTerm {
-                    foundArt = await AlbumArtSearchService.shared.searchArtwork(
-                        artist: artist, album: cleaned
-                    )
-                }
-            }
-
-            // If still no result, try just artist + title (no album/station context)
+            // If no result, try artist only
             if foundArt == nil, !artist.isEmpty {
                 foundArt = await AlbumArtSearchService.shared.searchArtwork(
                     artist: artist, album: ""
