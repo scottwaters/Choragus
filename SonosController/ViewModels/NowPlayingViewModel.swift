@@ -586,6 +586,7 @@ final class NowPlayingViewModel {
         }
         // Lightweight metadata poll for active group — catches radio track changes
         // that don't trigger UPnP events. Single getPositionInfo call every 5s.
+        // Updates display state only — history logging handled by TransportStrategy.
         metadataPollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
@@ -594,9 +595,13 @@ final class NowPlayingViewModel {
                 do {
                     let position = try await sonosManager.getPositionInfo(group: group)
                     let enriched = await enrichMetadata(position, state: transportState, coordinator: coordinator)
-                    sonosManager.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enriched)
+                    // Update display state directly — don't call transportDidUpdateTrackMetadata
+                    // to avoid duplicate history entries (TransportStrategy handles history)
+                    sonosManager.updateTransportState(group.coordinatorID, state: transportState)
                     lastKnownPosition = enriched.position
                     lastPositionTimestamp = Date()
+                    // Trigger view update via handleMetadataChanged
+                    handleMetadataChanged(enriched)
                 } catch {}
             }
         }
