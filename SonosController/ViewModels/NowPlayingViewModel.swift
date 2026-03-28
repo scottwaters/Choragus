@@ -572,18 +572,16 @@ final class NowPlayingViewModel {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 guard !Task.isCancelled, let self else { return }
-                guard let coordinator = group.coordinator else { continue }
+                guard let coordinator = group.coordinator else { return }
                 do {
                     let position = try await sonosManager.getPositionInfo(group: group)
                     let enriched = await enrichMetadata(position, state: transportState, coordinator: coordinator)
-                    // Update display state directly — don't call transportDidUpdateTrackMetadata
-                    // to avoid duplicate history entries (TransportStrategy handles history)
-                    sonosManager.updateTransportState(group.coordinatorID, state: transportState)
                     lastKnownPosition = enriched.position
                     lastPositionTimestamp = Date()
-                    // Trigger view update via handleMetadataChanged
                     handleMetadataChanged(enriched)
-                } catch {}
+                } catch {
+                    sonosDebugLog("[NOW-PLAYING] Metadata poll failed: \(error)")
+                }
             }
         }
     }
