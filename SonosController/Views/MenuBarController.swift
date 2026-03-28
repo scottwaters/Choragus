@@ -317,6 +317,7 @@ struct MenuBarPlayerView: View {
             }
             .padding(14)
         }
+        .tint(sonosManager.resolvedAccentColor ?? .accentColor)
         .onAppear { syncFromMainUI() }
     }
 }
