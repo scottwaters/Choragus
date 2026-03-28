@@ -511,7 +511,11 @@ final class NowPlayingViewModel {
             let now = Date()
             if now > positionFrozenUntil && transportState.isPlaying {
                 let elapsed = now.timeIntervalSince(lastPositionTimestamp)
-                smoothPosition = lastKnownPosition + elapsed
+                let newPosition = lastKnownPosition + elapsed
+                // Only update if changed by ≥0.5s to avoid unnecessary SwiftUI re-renders
+                if abs(newPosition - smoothPosition) >= 0.5 {
+                    smoothPosition = newPosition
+                }
             }
         }
     }

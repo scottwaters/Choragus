@@ -144,7 +144,7 @@ public enum Timing {
     public static let soapResourceTimeout: TimeInterval = 15
     public static let artSearchTimeout: TimeInterval = 5
     public static let positionFreezeAfterSeek: TimeInterval = 3
-    public static let progressTimerInterval: TimeInterval = 0.5
+    public static let progressTimerInterval: TimeInterval = 1.0
     public static let discoveryRescanInterval: TimeInterval = 30
     public static let artCacheDebounceSec: UInt64 = 2_000_000_000
     public static let subscriptionRenewalFraction: Double = 0.8
