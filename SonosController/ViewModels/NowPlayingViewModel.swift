@@ -461,11 +461,13 @@ final class NowPlayingViewModel {
         guard art.shouldSearch(key: key) else { return }
         art.setSearchKey(key)
         art.setWebArtResult(nil)
-        // Strip parenthetical content from search term — (Remix), (Live), (Godzilla) etc.
-        // are not useful for album art lookups and cause wrong results
-        let cleanedSearchTerm = searchTerm.replacingOccurrences(of: "\\s*\\([^)]*\\)", with: "", options: .regularExpression)
+        // Strip parenthetical content and everything after unclosed ( or [
+        var cleanedSearchTerm = searchTerm
+            .replacingOccurrences(of: "\\s*\\([^)]*\\)", with: "", options: .regularExpression)
             .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]", with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
+        if let p = cleanedSearchTerm.firstIndex(of: "(") { cleanedSearchTerm = String(cleanedSearchTerm[..<p]) }
+        if let b = cleanedSearchTerm.firstIndex(of: "[") { cleanedSearchTerm = String(cleanedSearchTerm[..<b]) }
+        cleanedSearchTerm = cleanedSearchTerm.trimmingCharacters(in: .whitespaces)
         let effectiveSearch = cleanedSearchTerm.isEmpty ? searchTerm : cleanedSearchTerm
 
         Task {

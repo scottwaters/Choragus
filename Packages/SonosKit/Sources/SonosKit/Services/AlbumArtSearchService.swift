@@ -137,9 +137,17 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
 
     /// Cleans a track title for deduplication/search: strips parenthetical/bracket suffixes
     public static func cleanTrackTitle(_ title: String) -> String {
-        title.replacingOccurrences(of: "\\s*\\([^)]*\\)\\s*$", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]\\s*$", with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
+        var cleaned = title
+            .replacingOccurrences(of: "\\s*\\([^)]*\\)", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]", with: "", options: .regularExpression)
+        // Handle unclosed parenthesis — strip from first ( onwards
+        if let parenIdx = cleaned.firstIndex(of: "(") {
+            cleaned = String(cleaned[cleaned.startIndex..<parenIdx])
+        }
+        if let bracketIdx = cleaned.firstIndex(of: "[") {
+            cleaned = String(cleaned[cleaned.startIndex..<bracketIdx])
+        }
+        return cleaned.trimmingCharacters(in: .whitespaces)
     }
 
     private func cacheSet(_ key: String, _ value: String?) {
