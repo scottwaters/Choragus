@@ -50,7 +50,7 @@ final class MenuBarController {
         } else {
             guard let sonosManager = sonosManager, let button = statusItem?.button else { return }
             let pop = NSPopover()
-            pop.contentSize = NSSize(width: 300, height: 340)
+            pop.contentSize = NSSize(width: 320, height: 380)
             pop.behavior = .transient
             pop.contentViewController = NSHostingController(
                 rootView: MenuBarPlayerView()
@@ -67,6 +67,7 @@ final class MenuBarController {
 struct MenuBarPlayerView: View {
     @EnvironmentObject var sonosManager: SonosManager
     @State private var selectedGroupID: String?
+    @State private var isHoveringArt = false
 
     private var selectedGroup: SonosGroup? {
         guard let id = selectedGroupID else { return sonosManager.groups.first }
@@ -96,151 +97,202 @@ struct MenuBarPlayerView: View {
         return vols.isEmpty ? 0 : Double(vols.reduce(0, +)) / Double(vols.count)
     }
 
+    private var isMuted: Bool {
+        guard let group = selectedGroup else { return false }
+        return group.members.contains { sonosManager.deviceMutes[$0.id] == true }
+    }
+
     var body: some View {
-        VStack(spacing: 12) {
-            // Room picker
-            if sonosManager.groups.count > 1 {
-                Picker("", selection: $selectedGroupID) {
-                    ForEach(sonosManager.groups.sorted { $0.name < $1.name }) { group in
-                        Text(group.name).tag(Optional(group.id))
-                    }
-                }
-                .labelsHidden()
-                .onChange(of: selectedGroupID) {
-                    UserDefaults.standard.set(selectedGroupID, forKey: UDKey.lastSelectedGroupID)
-                }
-            }
-
-            // Track info
-            HStack(spacing: 10) {
+        VStack(spacing: 0) {
+            // Album art + track info hero area
+            ZStack(alignment: .bottomLeading) {
+                // Art background (blurred)
                 if let artURI = trackMetadata.albumArtURI, let url = URL(string: artURI) {
-                    CachedAsyncImage(url: url, cornerRadius: 4)
-                        .frame(width: 48, height: 48)
+                    CachedAsyncImage(url: url, cornerRadius: 0)
+                        .frame(height: 140)
+                        .clipped()
+                        .blur(radius: 20)
+                        .overlay(Color.black.opacity(0.4))
                 } else {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(.quaternary)
-                        .overlay {
-                            Image(systemName: "music.note")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .frame(width: 48, height: 48)
+                    LinearGradient(colors: [.purple.opacity(0.4), .blue.opacity(0.4)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                        .frame(height: 140)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    if !trackMetadata.stationName.isEmpty {
-                        Text(trackMetadata.stationName)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Text(trackMetadata.title.isEmpty ? "Not Playing" : trackMetadata.title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                    if !trackMetadata.artist.isEmpty && !trackMetadata.artist.hasPrefix("RINCON_") {
-                        Text(trackMetadata.artist)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer()
-            }
-
-            Divider()
-
-            // Transport controls
-            HStack(spacing: 20) {
-                Button {
-                    guard let group = selectedGroup else { return }
-                    Task { try? await sonosManager.previous(group: group) }
-                } label: {
-                    Image(systemName: "backward.fill")
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    guard let group = selectedGroup else { return }
-                    Task {
-                        if transportState.isPlaying {
-                            try? await sonosManager.pause(group: group)
+                HStack(spacing: 12) {
+                    // Album art
+                    Group {
+                        if let artURI = trackMetadata.albumArtURI, let url = URL(string: artURI) {
+                            CachedAsyncImage(url: url, cornerRadius: 6)
                         } else {
-                            try? await sonosManager.play(group: group)
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(.ultraThinMaterial)
+                                .overlay {
+                                    Image(systemName: trackMetadata.stationName.isEmpty ? "music.note" : "radio")
+                                        .font(.title3)
+                                        .foregroundStyle(.white.opacity(0.6))
+                                }
                         }
                     }
-                } label: {
-                    Image(systemName: transportState.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 36))
-                }
-                .buttonStyle(.plain)
+                    .frame(width: 64, height: 64)
+                    .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
 
-                Button {
-                    guard let group = selectedGroup else { return }
-                    Task { try? await sonosManager.next(group: group) }
-                } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-            }
+                    // Track info
+                    VStack(alignment: .leading, spacing: 3) {
+                        if !trackMetadata.stationName.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "antenna.radiowaves.left.and.right")
+                                    .font(.system(size: 8))
+                                Text(trackMetadata.stationName)
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                            .foregroundStyle(.white.opacity(0.7))
+                            .lineLimit(1)
+                        }
 
-            // Volume
-            HStack(spacing: 8) {
-                Button {
-                    guard let group = selectedGroup else { return }
-                    let anyMuted = group.members.contains { sonosManager.deviceMutes[$0.id] == true }
-                    let newMuted = !anyMuted
-                    for member in group.members {
-                        sonosManager.updateDeviceMute(member.id, muted: newMuted)
-                        Task { try? await sonosManager.setMute(device: member, muted: newMuted) }
+                        Text(trackMetadata.title.isEmpty ? "Not Playing" : trackMetadata.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+
+                        if !trackMetadata.artist.isEmpty && !TrackMetadata.isDeviceID(trackMetadata.artist) {
+                            Text(trackMetadata.artist)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.8))
+                                .lineLimit(1)
+                        }
                     }
-                } label: {
-                    let anyMuted = selectedGroup?.members.contains { sonosManager.deviceMutes[$0.id] == true } ?? false
-                    Image(systemName: anyMuted ? "speaker.slash.fill" : "speaker.fill")
-                        .font(.caption)
-                        .foregroundStyle(anyMuted ? .red.opacity(0.8) : .secondary)
+
+                    Spacer()
                 }
-                .buttonStyle(.plain)
-                Slider(value: Binding(
-                    get: { volume },
-                    set: { newVol in
+                .padding(12)
+            }
+            .frame(height: 140)
+            .clipped()
+
+            VStack(spacing: 14) {
+                // Room picker
+                if sonosManager.groups.count > 1 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "hifispeaker")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                        Picker("", selection: $selectedGroupID) {
+                            ForEach(sonosManager.groups.sorted { $0.name < $1.name }) { group in
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(sonosManager.groupTransportStates[group.coordinatorID]?.isPlaying == true ? .green : .gray.opacity(0.4))
+                                        .frame(width: 6, height: 6)
+                                    Text(group.name)
+                                }
+                                .tag(Optional(group.id))
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .onChange(of: selectedGroupID) {
+                            UserDefaults.standard.set(selectedGroupID, forKey: UDKey.lastSelectedGroupID)
+                        }
+                    }
+                }
+
+                // Transport controls
+                HStack(spacing: 24) {
+                    Button {
                         guard let group = selectedGroup else { return }
-                        let intVol = Int(newVol)
-                        for member in group.members {
-                            sonosManager.updateDeviceVolume(member.id, volume: intVol)
-                            Task { try? await sonosManager.setVolume(device: member, volume: intVol) }
-                        }
+                        Task { try? await sonosManager.previous(group: group) }
+                    } label: {
+                        Image(systemName: "backward.fill")
+                            .font(.system(size: 16))
                     }
-                ), in: 0...100)
-                Image(systemName: "speaker.wave.3.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.primary)
 
-            Divider()
+                    Button {
+                        guard let group = selectedGroup else { return }
+                        Task {
+                            if transportState.isPlaying {
+                                try? await sonosManager.pause(group: group)
+                            } else {
+                                try? await sonosManager.play(group: group)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: transportState.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 38))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.primary)
 
-            // Show main window
-            Button {
-                NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first(where: { $0.title.contains("Sonos") || $0.isKeyWindow }) {
-                    window.makeKeyAndOrderFront(nil)
-                } else {
-                    NSApp.windows.first?.makeKeyAndOrderFront(nil)
+                    Button {
+                        guard let group = selectedGroup else { return }
+                        Task { try? await sonosManager.next(group: group) }
+                    } label: {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: 16))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.primary)
                 }
-            } label: {
-                Text("Show Main Window")
-                    .font(.caption)
+
+                // Volume
+                HStack(spacing: 8) {
+                    Button {
+                        guard let group = selectedGroup else { return }
+                        let newMuted = !isMuted
+                        for member in group.members {
+                            sonosManager.updateDeviceMute(member.id, muted: newMuted)
+                            Task { try? await sonosManager.setMute(device: member, muted: newMuted) }
+                        }
+                    } label: {
+                        Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(isMuted ? .red.opacity(0.8) : .secondary)
+                            .frame(width: 16)
+                    }
+                    .buttonStyle(.plain)
+
+                    Slider(value: Binding(
+                        get: { volume },
+                        set: { newVol in
+                            guard let group = selectedGroup else { return }
+                            let intVol = Int(newVol)
+                            for member in group.members {
+                                sonosManager.updateDeviceVolume(member.id, volume: intVol)
+                                Task { try? await sonosManager.setVolume(device: member, volume: intVol) }
+                            }
+                        }
+                    ), in: 0...100)
+
+                    Text("\(Int(volume))")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, alignment: .trailing)
+                }
+
+                // Show main window
+                Button {
+                    NSApp.activate(ignoringOtherApps: true)
+                    if let window = NSApp.windows.first(where: { $0.title.contains("Sonos") || $0.isKeyWindow }) {
+                        window.makeKeyAndOrderFront(nil)
+                    } else {
+                        NSApp.windows.first?.makeKeyAndOrderFront(nil)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "macwindow")
+                            .font(.system(size: 10))
+                        Text("Open SonosController")
+                            .font(.system(size: 11))
+                    }
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .padding(14)
         }
-        .padding(16)
-        .onAppear {
-            syncFromMainUI()
-        }
+        .onAppear { syncFromMainUI() }
     }
 }
