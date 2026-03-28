@@ -485,6 +485,7 @@ final class NowPlayingViewModel {
                 art.playHistoryManager?.updateArtwork(
                     forTitle: metadata.title, artist: metadata.artist, artURL: artURL
                 )
+                sonosManager.cacheArtURL(artURL, forURI: metadata.trackURI ?? "", title: metadata.title, itemID: "")
             } else {
                 art.setWebArtResult(nil)
             }
@@ -517,6 +518,8 @@ final class NowPlayingViewModel {
                 art.playHistoryManager?.updateArtwork(
                     forTitle: metadata.title, artist: metadata.artist, artURL: artURL
                 )
+                // Cache so menu bar and other views can find it
+                sonosManager.cacheArtURL(artURL, forURI: metadata.trackURI ?? "", title: metadata.title, itemID: "")
             } else {
                 art.setRadioTrackArt(nil)
             }
