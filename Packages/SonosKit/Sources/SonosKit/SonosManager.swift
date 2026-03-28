@@ -439,8 +439,8 @@ public class SonosManager: ObservableObject {
             // Start or update transport strategy
             await startOrUpdateTransportStrategy()
 
-            // Immediate scan of all groups for current status
-            await scanAllGroups()
+            // Scan all groups for current status in background (don't block UI)
+            Task { await scanAllGroups() }
         } catch {
             sonosDebugLog("[DISCOVERY] Topology fetch failed: \(error)")
         }
