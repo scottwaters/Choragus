@@ -66,10 +66,12 @@ final class ArtResolver {
             }
         }
 
-        // Capture station art from metadata (never from displayedArtURL — it may be stale)
+        // Capture station art — try metadata art first, then current displayed art
         if onRadio && radioStationArtURL == nil {
             if let metaArt = trackMetadata.albumArtURI, !metaArt.isEmpty, let url = URL(string: metaArt) {
                 radioStationArtURL = url
+            } else if let displayed = displayedArtURL {
+                radioStationArtURL = displayed
             }
         }
 
