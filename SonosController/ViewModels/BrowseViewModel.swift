@@ -150,8 +150,9 @@ final class BrowseViewModel {
             // Build DIDL metadata for playback
             let didlMeta: String?
             if let uri = playURI, !smapi.canBrowse {
+                let escapedID = xmlEscape(smapi.id)
                 didlMeta = """
-                <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(smapi.id)" parentID="-1" restricted="true"><dc:title>\(xmlEscape(smapi.title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON\(sid * 256 + 7)_X_#Svc\(sid * 256 + 7)-0-Token</desc></item></DIDL-Lite>
+                <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(escapedID)" parentID="-1" restricted="true"><dc:title>\(xmlEscape(smapi.title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON\(sid * 256 + 7)_X_#Svc\(sid * 256 + 7)-0-Token</desc></item></DIDL-Lite>
                 """
             } else {
                 didlMeta = nil

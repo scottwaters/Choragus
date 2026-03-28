@@ -40,17 +40,21 @@ public final class SSDPDiscovery: @unchecked Sendable {
     }
 
     public func rescan() {
-        if socket < 0 {
-            createSocket()
-            startReceiving()
-        }
-        sendSearch()
-        // Close socket after receive window — speakers respond within MX:3 seconds
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 10) { [weak self] in
-            guard let self, self.isSearching, self.socket >= 0 else { return }
-            let sock = self.socket
-            self.socket = -1
-            close(sock)
+        // Use receiveQueue for socket operations to avoid TOCTOU race
+        receiveQueue.async { [weak self] in
+            guard let self else { return }
+            if self.socket < 0 {
+                self.createSocket()
+                self.startReceiving()
+            }
+            self.sendSearch()
+            // Close socket after receive window — speakers respond within MX:3
+            self.receiveQueue.asyncAfter(deadline: .now() + 10) { [weak self] in
+                guard let self, self.isSearching, self.socket >= 0 else { return }
+                let sock = self.socket
+                self.socket = -1
+                Darwin.close(sock)
+            }
         }
     }
 
