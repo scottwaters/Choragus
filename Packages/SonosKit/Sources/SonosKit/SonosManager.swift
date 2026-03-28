@@ -1336,7 +1336,7 @@ extension SonosManager: TransportStrategyDelegate {
         }
         groupTrackMetadata[groupID] = updated
 
-        // Log to play history
+        // Log to play history for all groups
         if let group = groups.first(where: { $0.coordinatorID == groupID || $0.id == groupID }) {
             playHistoryManager?.trackMetadataChanged(
                 groupID: groupID,
