@@ -102,12 +102,27 @@ struct MenuBarPlayerView: View {
         return group.members.contains { sonosManager.deviceMutes[$0.id] == true }
     }
 
+    /// Resolved art URL — checks discovered art cache for better art (iTunes, radio track)
+    /// then falls back to metadata albumArtURI
+    private var resolvedArtURL: URL? {
+        let meta = trackMetadata
+        // Check cached art by title or URI
+        if let cached = sonosManager.lookupCachedArt(uri: meta.trackURI, title: meta.title),
+           let url = URL(string: cached) {
+            return url
+        }
+        if let art = meta.albumArtURI, !art.isEmpty {
+            return URL(string: art)
+        }
+        return nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Album art + track info hero area
             ZStack(alignment: .bottomLeading) {
                 // Art background (blurred)
-                if let artURI = trackMetadata.albumArtURI, let url = URL(string: artURI) {
+                if let url = resolvedArtURL {
                     CachedAsyncImage(url: url, cornerRadius: 0)
                         .frame(height: 140)
                         .clipped()
@@ -122,7 +137,7 @@ struct MenuBarPlayerView: View {
                 HStack(spacing: 12) {
                     // Album art
                     Group {
-                        if let artURI = trackMetadata.albumArtURI, let url = URL(string: artURI) {
+                        if let url = resolvedArtURL {
                             CachedAsyncImage(url: url, cornerRadius: 6)
                         } else {
                             RoundedRectangle(cornerRadius: 6)
