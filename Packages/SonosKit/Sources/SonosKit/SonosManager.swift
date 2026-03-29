@@ -249,6 +249,11 @@ public class SonosManager: ObservableObject {
     private lazy var musicServices = MusicServicesService(soap: soap)
 
     private var discoveredLocations: Set<String> = []  // de-dups SSDP responses
+
+    /// Cached track info by URI — populated when adding Service Search items to queue.
+    /// Used to recover title/artist when the speaker returns empty TrackMetaData.
+    struct CachedTrack { let title: String; let artist: String; let album: String; let artURL: String? }
+    private var cachedTrackInfo: [String: CachedTrack] = [:]
     private var refreshTimer: Timer?
     private var isRefreshingTopology = false  // serializes topology refreshes to prevent concurrent dictionary mutation
 
@@ -1069,6 +1074,14 @@ public class SonosManager: ObservableObject {
             cacheArtURL(art, forURI: item.resourceURI ?? "", title: item.title, itemID: item.objectID)
         }
 
+        // Cache track info for recovery when speaker returns empty metadata
+        if let uri = item.resourceURI, !item.title.isEmpty {
+            cachedTrackInfo[uri] = CachedTrack(
+                title: item.title, artist: item.artist ?? "",
+                album: item.album ?? "", artURL: item.albumArtURI
+            )
+        }
+
         // Build metadata from browse item for UI display
         let isRadioStream = item.resourceURI.map(URIPrefix.isRadio) ?? false
 
@@ -1170,6 +1183,14 @@ public class SonosManager: ObservableObject {
         guard let coordinator = group.coordinator else { return 0 }
 
         if let uri = item.resourceURI, !uri.isEmpty {
+            // Cache track info for later recovery when speaker returns empty metadata
+            if !item.title.isEmpty {
+                cachedTrackInfo[uri] = CachedTrack(
+                    title: item.title, artist: item.artist ?? "",
+                    album: item.album ?? "", artURL: item.albumArtURI
+                )
+            }
+
             // Unescape metadata — browse parser stores it XML-escaped
             var meta = item.resourceMetadata ?? ""
             if meta.contains("&lt;") {
@@ -1379,6 +1400,18 @@ extension SonosManager: TransportStrategyDelegate {
         }
 
         var updated = metadata
+
+        // If title is empty but we have a track URI, try to recover from cached metadata.
+        // This handles Apple Music/service queue tracks where the speaker returns
+        // empty or unresolved TrackMetaData in GetPositionInfo.
+        if updated.title.isEmpty, let uri = updated.trackURI, !uri.isEmpty {
+            if let cached = cachedTrackInfo[uri] {
+                updated.title = cached.title
+                if updated.artist.isEmpty { updated.artist = cached.artist }
+                if updated.album.isEmpty { updated.album = cached.album }
+                if updated.albumArtURI == nil { updated.albumArtURI = cached.artURL }
+            }
+        }
 
         // Detect if the track actually changed
         let trackChanged = updated.trackURI != existing.trackURI && updated.trackURI != nil
