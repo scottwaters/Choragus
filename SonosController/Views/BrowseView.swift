@@ -925,7 +925,25 @@ struct AppleMusicSearchView: View {
             let isTrack = item.itemClass == .musicTrack
             let isPlayable = item.resourceURI != nil
 
-            if isPlayable {
+            if isAlbum {
+                Button("Play Now") {
+                    Task { await playAlbumTracks(item, in: group, replace: true) }
+                }
+                Button("Play Next") {
+                    Task { await enqueueAlbumTracks(item, in: group, playNext: true) }
+                }
+                Button("Add to Queue") {
+                    Task { await enqueueAlbumTracks(item, in: group, playNext: false) }
+                }
+                Divider()
+                Button("Replace Queue") {
+                    Task { await playAlbumTracks(item, in: group, replace: true) }
+                }
+                Divider()
+                Button("Show Tracks") {
+                    handleTap(item)
+                }
+            } else if isPlayable {
                 Button("Play Now") {
                     Task { try? await sonosManager.playBrowseItem(item, in: group) }
                 }
@@ -935,11 +953,10 @@ struct AppleMusicSearchView: View {
                 Button("Add to Queue") {
                     Task { try? await sonosManager.addBrowseItemToQueue(item, in: group) }
                 }
-                if isAlbum || isTrack {
+                if isTrack {
                     Divider()
                     Button("Replace Queue") {
                         Task {
-                            guard let coordinator = group.coordinator else { return }
                             try? await sonosManager.clearQueue(group: group)
                             try? await sonosManager.addBrowseItemToQueue(item, in: group)
                             try? await sonosManager.play(group: group)
@@ -947,14 +964,31 @@ struct AppleMusicSearchView: View {
                     }
                 }
             }
-
-            if isAlbum {
-                Divider()
-                Button("Show Tracks") {
-                    handleTap(item)
-                }
-            }
         }
+    }
+
+    /// Resolve album tracks via iTunes API, then add each to queue in order.
+    /// Avoids slow/shuffled speaker-side container resolution.
+    private func enqueueAlbumTracks(_ album: BrowseItem, in group: SonosGroup, playNext: Bool) async {
+        guard let collectionId = Int(album.objectID.replacingOccurrences(of: "apple:album:", with: "")) else { return }
+        let tracks = await ServiceSearchProvider.shared.lookupAlbumTracks(collectionId: collectionId, sn: sn)
+        for track in tracks {
+            try? await sonosManager.addBrowseItemToQueue(track, in: group, playNext: playNext)
+        }
+    }
+
+    /// Clear queue, add album tracks in order, play from track 1.
+    private func playAlbumTracks(_ album: BrowseItem, in group: SonosGroup, replace: Bool) async {
+        guard let collectionId = Int(album.objectID.replacingOccurrences(of: "apple:album:", with: "")) else { return }
+        let tracks = await ServiceSearchProvider.shared.lookupAlbumTracks(collectionId: collectionId, sn: sn)
+        guard !tracks.isEmpty else { return }
+        if replace {
+            try? await sonosManager.clearQueue(group: group)
+        }
+        for track in tracks {
+            try? await sonosManager.addBrowseItemToQueue(track, in: group)
+        }
+        try? await sonosManager.play(group: group)
     }
 
     // MARK: - Data loading
