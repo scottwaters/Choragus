@@ -14,6 +14,12 @@ struct BrowseView: View {
 
     @State private var searchText = ""
     @State private var breadcrumbs: [BrowseDestination] = []
+    @State private var searchMode: SearchMode = .library
+
+    enum SearchMode: String, CaseIterable {
+        case library = "Library"
+        case appleMusic = "Apple Music"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,12 +62,23 @@ struct BrowseView: View {
 
                 Spacer()
 
+                // Search mode picker
+                Picker("", selection: $searchMode) {
+                    ForEach(SearchMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 150)
+                .controlSize(.mini)
+
                 // Search field
                 HStack(spacing: 4) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
                         .font(.caption)
-                    TextField(L10n.localSearch, text: $searchText)
+                    TextField(searchMode == .library ? L10n.localSearch : "Search Apple Music", text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.caption)
                         .onSubmit {
@@ -121,10 +138,18 @@ struct BrowseView: View {
     private func submitSearch() {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return }
-        breadcrumbs.append(BrowseDestination(
-            title: "Search: \(query)",
-            objectID: "SEARCH:\(query)"
-        ))
+        switch searchMode {
+        case .library:
+            breadcrumbs.append(BrowseDestination(
+                title: "Search: \(query)",
+                objectID: "SEARCH:\(query)"
+            ))
+        case .appleMusic:
+            breadcrumbs.append(BrowseDestination(
+                title: "Apple Music: \(query)",
+                objectID: "SERVICESEARCH:\(query)"
+            ))
+        }
     }
 }
 
@@ -400,6 +425,18 @@ struct BrowseListView: View {
             }
         }
         .onAppear {
+            // Configure service search serial number for Apple Music
+            if vm.isServiceSearch {
+                if smapiManager.serviceSerialNumbers.isEmpty {
+                    Task {
+                        await smapiManager.discoverSerialNumbers(using: sonosManager)
+                        vm.serviceSearchSN = smapiManager.serialNumber(for: ServiceID.appleMusic)
+                    }
+                } else {
+                    vm.serviceSearchSN = smapiManager.serialNumber(for: ServiceID.appleMusic)
+                }
+            }
+
             // Configure SMAPI if this is a service browse
             if let sid = smapiServiceID, let uri = smapiServiceURI {
                 vm.smapiServiceID = sid

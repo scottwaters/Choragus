@@ -42,8 +42,12 @@ final class BrowseViewModel {
     var smapiDeviceID: String = ""
     var smapiSerialNumber: Int = 0
 
+    // Service Search (direct API search — Apple Music via iTunes API)
+    var serviceSearchSN: Int = 0
+
     var isSMAPI: Bool { smapiServiceURI != nil }
     var isSearch: Bool { objectID.hasPrefix("SEARCH:") }
+    var isServiceSearch: Bool { objectID.hasPrefix("SERVICESEARCH:") }
 
     /// The SMAPI item ID to browse (extracted from "SMAPI:sid:itemID" format or just the raw objectID)
     var smapiItemID: String {
@@ -96,6 +100,11 @@ final class BrowseViewModel {
         do {
             if isSMAPI {
                 try await loadSMAPIItems()
+            } else if isServiceSearch {
+                let query = String(objectID.dropFirst("SERVICESEARCH:".count))
+                items = await ServiceSearchProvider.shared.searchAppleMusic(query: query, sn: serviceSearchSN)
+                totalItems = items.count
+                loadedCount = items.count
             } else if isSearch {
                 let query = String(objectID.dropFirst("SEARCH:".count))
                 async let artistResults = sonosManager.search(query: query, in: "A:ALBUMARTIST", start: 0, count: 20)
