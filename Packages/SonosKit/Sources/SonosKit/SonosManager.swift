@@ -1378,20 +1378,33 @@ extension SonosManager: TransportStrategyDelegate {
             return
         }
 
+        // Recover track info from cache first — Apple Music/service queue tracks
+        // often return empty TrackMetaData from GetPositionInfo.
+        var enriched = metadata
+        if enriched.title.isEmpty, let uri = enriched.trackURI, !uri.isEmpty {
+            if let cached = cachedTrackInfo[uri] {
+                enriched.title = cached.title
+                if enriched.artist.isEmpty { enriched.artist = cached.artist }
+                if enriched.album.isEmpty { enriched.album = cached.album }
+                if enriched.albumArtURI == nil { enriched.albumArtURI = cached.artURL }
+            }
+        }
+
         // Don't overwrite existing good metadata with empty or technical stream names
-        if !existing.title.isEmpty {
-            let newTitle = metadata.title
+        // BUT only if the track hasn't changed (same URI = same track, just a poll update)
+        let sameTrack = enriched.trackURI == existing.trackURI || enriched.trackURI == nil
+        if !existing.title.isEmpty && sameTrack {
+            let newTitle = enriched.title
             if newTitle.isEmpty || looksLikeTechnicalName(newTitle) {
                 var merged = existing
-                merged.position = metadata.position
-                merged.duration = metadata.duration
-                merged.trackNumber = metadata.trackNumber
-                merged.trackURI = metadata.trackURI
-                if !metadata.stationName.isEmpty {
-                    merged.stationName = metadata.stationName
+                merged.position = enriched.position
+                merged.duration = enriched.duration
+                merged.trackNumber = enriched.trackNumber
+                merged.trackURI = enriched.trackURI
+                if !enriched.stationName.isEmpty {
+                    merged.stationName = enriched.stationName
                 }
-                // Update art if new one is available
-                if let newArt = metadata.albumArtURI, !newArt.isEmpty {
+                if let newArt = enriched.albumArtURI, !newArt.isEmpty {
                     merged.albumArtURI = newArt
                 }
                 groupTrackMetadata[groupID] = merged
@@ -1399,19 +1412,7 @@ extension SonosManager: TransportStrategyDelegate {
             }
         }
 
-        var updated = metadata
-
-        // If title is empty but we have a track URI, try to recover from cached metadata.
-        // This handles Apple Music/service queue tracks where the speaker returns
-        // empty or unresolved TrackMetaData in GetPositionInfo.
-        if updated.title.isEmpty, let uri = updated.trackURI, !uri.isEmpty {
-            if let cached = cachedTrackInfo[uri] {
-                updated.title = cached.title
-                if updated.artist.isEmpty { updated.artist = cached.artist }
-                if updated.album.isEmpty { updated.album = cached.album }
-                if updated.albumArtURI == nil { updated.albumArtURI = cached.artURL }
-            }
-        }
+        var updated = enriched
 
         // Detect if the track actually changed
         let trackChanged = updated.trackURI != existing.trackURI && updated.trackURI != nil

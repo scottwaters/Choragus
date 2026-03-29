@@ -105,6 +105,12 @@ public final class AVTransportService {
         var metadata = TrackMetadata()
         metadata.trackURI = result["TrackURI"]
 
+        // Debug: log what the speaker returns for service tracks
+        if let uri = result["TrackURI"], uri.contains("x-sonos-http") {
+            let didlPreview = (result["TrackMetaData"] ?? "nil").prefix(200)
+            sonosDebugLog("[POSITION] Apple Music track — URI: \(uri.prefix(80)), Track#: \(result["Track"] ?? "nil"), DIDL: \(didlPreview)")
+        }
+
         if let didl = result["TrackMetaData"], !didl.isEmpty,
            didl != "NOT_IMPLEMENTED" {
             // Base DIDL extraction (title, artist, album, art)
@@ -130,7 +136,10 @@ public final class AVTransportService {
                 }
 
                 // Clear technical-looking names
-                if Self.looksLikeTechnicalTitle(metadata.title) { metadata.title = "" }
+                if Self.looksLikeTechnicalTitle(metadata.title) {
+                    sonosDebugLog("[POSITION] Cleared technical title: '\(metadata.title)'")
+                    metadata.title = ""
+                }
                 if Self.looksLikeTechnicalTitle(metadata.artist) { metadata.artist = "" }
 
                 // Fallback art via /getaa if DIDL had no art
@@ -163,6 +172,10 @@ public final class AVTransportService {
         }
         if let trackStr = result["Track"], let track = Int(trackStr) {
             metadata.trackNumber = track
+        }
+
+        if let uri = result["TrackURI"], uri.contains("x-sonos-http") {
+            sonosDebugLog("[POSITION] Result — title: '\(metadata.title)', artist: '\(metadata.artist)', album: '\(metadata.album)', track#: \(metadata.trackNumber)")
         }
 
         return metadata
