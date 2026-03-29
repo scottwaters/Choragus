@@ -11,11 +11,12 @@ public struct TrackMetadata: Equatable {
     public var queueSize: Int
     public var stationName: String
     public var trackURI: String?
+    public var isQueueSource: Bool  // true when CurrentURI is x-rincon-queue (playing from queue)
 
     public init(title: String = "", artist: String = "", album: String = "",
                 albumArtURI: String? = nil, duration: TimeInterval = 0,
                 position: TimeInterval = 0, trackNumber: Int = 0, queueSize: Int = 0,
-                stationName: String = "") {
+                stationName: String = "", isQueueSource: Bool = false) {
         self.title = title
         self.artist = artist
         self.album = album
@@ -25,6 +26,7 @@ public struct TrackMetadata: Equatable {
         self.trackNumber = trackNumber
         self.queueSize = queueSize
         self.stationName = stationName
+        self.isQueueSource = isQueueSource
     }
 
     // MARK: - Computed State
@@ -102,6 +104,14 @@ public struct TrackMetadata: Equatable {
     public mutating func enrichFromMediaInfo(_ mediaInfo: [String: String], device: SonosDevice) {
         guard let rawDIDL = mediaInfo["CurrentURIMetaData"] else { return }
         let currentURI = mediaInfo["CurrentURI"] ?? ""
+
+        // Detect if playing from queue vs direct stream/favorite
+        isQueueSource = currentURI.hasPrefix(URIPrefix.rinconQueue)
+
+        // Set queue size from NrTracks
+        if let nrTracks = mediaInfo["NrTracks"], let n = Int(nrTracks) {
+            queueSize = n
+        }
 
         // Save current title/artist — enrichFromDIDL only fills empty fields
         let hadTitle = !title.isEmpty

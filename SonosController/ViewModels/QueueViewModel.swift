@@ -14,18 +14,15 @@ final class QueueViewModel: ObservableObject {
     @Published var saveMessage: String?
     @Published var playingTrack: Int? // Track currently being started (shows spinner)
 
-    /// True when the speaker is playing a radio/stream, not the queue.
-    /// Uses trackNumber as the primary indicator: if trackNumber > 0, the speaker
-    /// is playing from the queue regardless of URI scheme. Apple Music queue tracks
-    /// resolve to x-sonosapi-hls-static: URIs which look like radio but aren't.
+    /// True when the speaker is NOT playing from the queue.
+    /// Uses CurrentURI-based detection: x-rincon-queue: means queue playback.
+    /// Favorites, radio, and direct streams are not queue sources.
     var isPlayingStation: Bool {
         let meta = sonosManager.groupTrackMetadata[group.coordinatorID]
-        // trackNumber > 0 means playing from the queue — not a station
-        if let trackNum = meta?.trackNumber, trackNum > 0 { return false }
-        // No track number — check if stationName is set (radio/stream)
-        if let stationName = meta?.stationName, !stationName.isEmpty { return true }
-        if let uri = meta?.trackURI, URIPrefix.isRadio(uri) { return true }
-        return false
+        // isQueueSource is set from GetMediaInfo CurrentURI (x-rincon-queue:)
+        if meta?.isQueueSource == true { return false }
+        // No queue source detected — not playing from queue
+        return true
     }
 
     init(sonosManager: any QueueServices, group: SonosGroup) {

@@ -1467,6 +1467,8 @@ extension SonosManager: TransportStrategyDelegate {
                 merged.duration = enriched.duration
                 merged.trackNumber = enriched.trackNumber
                 merged.trackURI = enriched.trackURI
+                merged.isQueueSource = enriched.isQueueSource
+                merged.queueSize = enriched.queueSize
                 if !enriched.stationName.isEmpty {
                     merged.stationName = enriched.stationName
                 }
