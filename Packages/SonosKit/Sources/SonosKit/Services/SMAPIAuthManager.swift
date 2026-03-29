@@ -116,9 +116,23 @@ public final class SMAPIAuthManager: ObservableObject {
         }
     }
 
-    /// Gets the account serial number for a service, defaulting to 0
+    /// Gets the account serial number for a service.
+    /// Defaults to 1 for subscription services (Apple Music, Spotify, etc.) when
+    /// no sn has been discovered yet — sn=0 causes auth failures on most services,
+    /// and sn=1 works for the common single-account setup.
     public func serialNumber(for serviceID: Int) -> Int {
-        serviceSerialNumbers[serviceID] ?? 0
+        let sn = serviceSerialNumbers[serviceID] ?? 0
+        if sn == 0 {
+            switch serviceID {
+            case ServiceID.appleMusic, ServiceID.spotify, ServiceID.amazonMusic,
+                 ServiceID.tidal, ServiceID.deezer, ServiceID.qobuz, ServiceID.soundCloud,
+                 ServiceID.youTubeMusic:
+                return 1
+            default:
+                return 0
+            }
+        }
+        return sn
     }
 
     /// Services that are already authenticated (with valid tokens), sorted alphabetically

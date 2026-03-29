@@ -1063,6 +1063,12 @@ public class SonosManager: ObservableObject {
         // Remember which favorite was played so art can be mapped back
         lastPlayedFavoriteID = item.objectID
 
+        // Cache external art URL (e.g. from iTunes Search API) so it persists
+        // in play history and NowPlaying even after the speaker returns different metadata
+        if let art = item.albumArtURI, art.hasPrefix("http"), !art.contains("/getaa?") {
+            cacheArtURL(art, forURI: item.resourceURI ?? "", title: item.title, itemID: item.objectID)
+        }
+
         // Build metadata from browse item for UI display
         let isRadioStream = item.resourceURI.map(URIPrefix.isRadio) ?? false
 
