@@ -6,13 +6,15 @@
 - SMAPI music service browsing — connect TuneIn, Spotify, Deezer, TIDAL, and 40+ services
 - Music Services setup guide with status indicators (Active / Needs Favorite / Connect)
 - Dashboard: top tracks, top stations, top albums, day-of-week, room usage, listening streaks
-- Quick stats pills (streak, avg/day, albums, stations)
+- Quick stats pills (streak, avg/day, albums, stations, starred count)
 - Card-based history timeline grouped by day
+- Star/favorite tracks — star button in Now Playing and menu bar, toggle on/off, starred filter in history
 - Custom date range filter with From/To date pickers
-- Menu bar redesign: hero art, room status dots, mute button, volume readout
+- Menu bar redesign: hero art, room status dots, star button, mute button, volume readout
 - Proportional group volume scaling (optional, toggle in Settings)
 - FlowLayout wrapping filter tags
 - Shuffle disabled popover explanation
+- App title changed to "The SonosController" (build number removed from title bar)
 
 ### Architecture
 - 11 ISP service protocols (Playback, Volume, EQ, Queue, Browsing, Grouping, Alarm, MusicServiceDetection, TransportStateProviding, ArtCache)

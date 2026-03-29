@@ -250,6 +250,7 @@ public class SonosManager: ObservableObject {
 
     private var discoveredLocations: Set<String> = []  // de-dups SSDP responses
     private var refreshTimer: Timer?
+    private var isRefreshingTopology = false  // serializes topology refreshes to prevent concurrent dictionary mutation
 
     // MARK: - Transport Strategy
 
@@ -388,6 +389,13 @@ public class SonosManager: ObservableObject {
     }
 
     public func refreshTopology(from device: SonosDevice) async {
+        // Serialize: only one topology refresh at a time. Concurrent calls get the
+        // same data anyway (topology is system-wide), and racing on dictionary
+        // mutations causes memory corruption (malloc free-list corruption).
+        guard !isRefreshingTopology else { return }
+        isRefreshingTopology = true
+        defer { isRefreshingTopology = false }
+
         do {
             let groupData = try await zoneTopology.getZoneGroupState(device: device)
 

@@ -1,4 +1,4 @@
-# SonosController
+# The SonosController
 
 A native macOS controller for Sonos speakers, built entirely in Swift and SwiftUI for Apple Silicon and Intel Macs.
 
@@ -37,9 +37,17 @@ Built interactively with [Claude Code](https://claude.ai/) and tested against a 
 - **Smart search** — strips parentheses, track suffixes (End Titles, Main Theme, Suite), handles unclosed parentheses
 - **Art caching** — discovered art shared across main player, menu bar, and history views
 
+### Star / Favorite Tracks
+- **Star any track** — star button in Now Playing and menu bar mini player
+- **Toggle on/off** — tap to star, tap again to unstar
+- **Starred filter** — filter play history to show only starred tracks
+- **Dashboard integration** — starred count shown in quick stats pills
+- **Persisted** — stars stored in SQLite alongside play history
+
 ### Menu Bar Redesign
 - **Hero art area** — blurred album art background with track info overlay
 - **Room picker** — green/gray dots showing playing status per zone
+- **Star button** — star/unstar the currently playing track
 - **Mute button** — speaker icon toggles mute for all group members
 - **Volume readout** — numeric display alongside slider
 - **Proportional scaling** — uses same linear/proportional mode as main player
@@ -123,6 +131,7 @@ Built interactively with [Claude Code](https://claude.ai/) and tested against a 
 - Dashboard with charts: listening activity, peak hours, top artists/tracks/stations/albums, day-of-week, room usage
 - Listening streaks (current + best)
 - Card-based timeline grouped by day
+- Star/favorite tracks with starred filter
 - Search, date range, room, and source filters
 - Export to CSV
 - Right-click: copy details, filter by artist/room/source
@@ -130,6 +139,7 @@ Built interactively with [Claude Code](https://claude.ai/) and tested against a 
 ### Menu Bar Mode
 - Hero art area with blurred background
 - Transport controls, volume slider with mute
+- Star button for current track
 - Room picker with playing status dots
 - Inherits accent color from main app
 
@@ -183,9 +193,9 @@ xcodebuild -scheme SonosController \
 
 ## Architecture
 
-- **SonosController** — SwiftUI app (26 view files, 6 ViewModels)
+- **SonosController** — SwiftUI app (26 view files, 4 ViewModels)
 - **SonosKit** — local Swift package (networking, protocols, models, caching, events, localization, services)
-- **22,000+ lines of Swift** across 80 source files
+- **21,000+ lines of Swift** across 80 source files
 - **100 unit tests**
 - **Zero external dependencies**
 

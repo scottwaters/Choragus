@@ -68,6 +68,7 @@ struct MenuBarPlayerView: View {
     @EnvironmentObject var sonosManager: SonosManager
     @State private var selectedGroupID: String?
     @State private var isHoveringArt = false
+    @State private var starRevision = 0
 
     private var selectedGroup: SonosGroup? {
         guard let id = selectedGroupID else { return sonosManager.groups.first }
@@ -248,6 +249,16 @@ struct MenuBarPlayerView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.primary)
+
+                    // Star current track
+                    Button { starCurrentTrack() } label: {
+                        Image(systemName: isCurrentTrackStarred ? "star.fill" : "star")
+                            .font(.system(size: 14))
+                            .foregroundStyle(isCurrentTrackStarred ? .yellow : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(trackMetadata.title.isEmpty)
+                    .opacity(trackMetadata.title.isEmpty ? 0.3 : 1)
                 }
 
                 // Volume
@@ -323,5 +334,26 @@ struct MenuBarPlayerView: View {
         }
         .tint(sonosManager.resolvedAccentColor ?? .accentColor)
         .onAppear { syncFromMainUI() }
+    }
+
+    // MARK: - Star
+
+    private var isCurrentTrackStarred: Bool {
+        _ = starRevision // force dependency on revision to trigger re-eval
+        guard !trackMetadata.title.isEmpty else { return false }
+        return sonosManager.playHistoryManager?.entries.contains {
+            $0.title == trackMetadata.title && $0.artist == trackMetadata.artist && $0.starred
+        } ?? false
+    }
+
+    private func starCurrentTrack() {
+        guard !trackMetadata.title.isEmpty,
+              let manager = sonosManager.playHistoryManager else { return }
+        if let entry = manager.entries.last(where: {
+            $0.title == trackMetadata.title && $0.artist == trackMetadata.artist
+        }) {
+            manager.toggleStar(id: entry.id)
+            starRevision += 1
+        }
     }
 }

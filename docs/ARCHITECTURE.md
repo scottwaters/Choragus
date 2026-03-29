@@ -1,6 +1,6 @@
 # Architecture
 
-Full source documentation for SonosController.
+Full source documentation for The SonosController.
 
 ## Project Structure
 
@@ -20,12 +20,12 @@ SonosController/
 │   ├── Info.plist
 │   ├── SonosController.entitlements
 │   ├── Assets.xcassets/
-│   ├── MenuBarController.swift      # Menu bar icon and dropdown controls
+│   ├── MenuBarController.swift      # Menu bar icon and dropdown controls (with star button)
 │   ├── WindowManager.swift          # AppKit-based window management
 │   └── Views/
 │       ├── ContentView.swift
 │       ├── RoomListView.swift
-│       ├── NowPlayingView.swift
+│       ├── NowPlayingView.swift     # Now Playing with star button
 │       ├── QueueView.swift
 │       ├── BrowseView.swift
 │       ├── GroupEditorView.swift
@@ -36,6 +36,10 @@ SonosController/
 │       ├── SleepTimerView.swift
 │       ├── SettingsView.swift
 │       ├── RecentlyPlayedView.swift # Recently played stations/tracks
+│       ├── PlayHistoryView.swift    # Play history filters and tab container
+│       ├── PlayHistoryView2.swift   # Card-based timeline grouped by day
+│       ├── PlayHistoryDashboard.swift # Dashboard stats, charts, quick pills
+│       ├── MusicServicesView.swift  # SMAPI setup guide and service management
 │       ├── CachedAsyncImage.swift
 │       ├── MarqueeText.swift        # Auto-scrolling text for long names
 │       └── HoverTooltip.swift       # Custom tooltip replacing .help()
@@ -87,11 +91,11 @@ The SwiftUI app layer. Contains views and the app entry point. All business logi
 
 ### SonosControllerApp.swift
 
-Entry point. Creates the `SonosManager` as a `@StateObject` and injects it into the view hierarchy via `@EnvironmentObject`. Starts speaker discovery on appear. Initializes `MenuBarController` and `WindowManager` for menu bar mode and AppKit-based window management.
+Entry point. Creates the `SonosManager` as a `@StateObject` and injects it into the view hierarchy via `@EnvironmentObject`. Starts speaker discovery on appear. Initializes `MenuBarController` and `WindowManager` for menu bar mode and AppKit-based window management. Window title is "The SonosController".
 
 ### MenuBarController.swift
 
-Manages the optional menu bar icon and its dropdown. Creates an `NSStatusItem` with a speaker icon. The dropdown provides quick playback controls (play/pause, next, previous), volume adjustment, and current track info without needing to bring the main window to the front.
+Manages the optional menu bar icon and its dropdown. Creates an `NSStatusItem` with a speaker icon. The dropdown provides quick playback controls (play/pause, next, previous), volume adjustment, star button for the current track, and current track info without needing to bring the main window to the front.
 
 ### WindowManager.swift
 
@@ -108,7 +112,7 @@ Main layout using `NavigationSplitView` (sidebar) + `HSplitView` (detail area). 
 Also renders:
 - Stale data warning banner (orange) when a cached device is unreachable
 - Cache status banner (blue) when using cached data on startup
-- Toolbar buttons: Browse, Queue, Alarms, Group Presets, Play History, Refresh, Settings
+- Toolbar buttons: Browse, Queue, Group Presets, Play History, Refresh, Settings
 
 #### RoomListView.swift
 Sidebar list of Sonos zones/groups. Each row shows the group name, speaker icon (single vs. multi), and speaker count. Binds selection to `selectedGroupID`. Animated sound wave indicators pulse on playing rooms. Context menu on each room provides play/pause, mute, group editor, ungroup, and home theater EQ options. Restores last selected zone on startup.
@@ -122,6 +126,7 @@ The main playback control view. Contains:
 - **Transport controls** — shuffle, previous, play/pause, next, repeat, crossfade. Each button uses `transportButton()` which shows a spinner overlay during network round-trips and dims the icon. Custom `HoverTooltip` on each control.
 - **Volume slider** — master volume for the group coordinator
 - **Per-speaker volume** — shown when the group has multiple visible members
+- **Star button** — star/unstar the currently playing track (persisted in play history)
 - **Action buttons** — Group, Sleep, EQ
 
 **Optimistic UI system:**
@@ -271,7 +276,7 @@ Represents a home theater configuration parsed from `HTSatChanMapSet` in the zon
 `Codable`. Represents a saved speaker group configuration. Fields: `id`, `name`, `coordinatorID`, `memberIDs: [String]`, `volumes: [String: Int]` (per-speaker volume map). Stored as JSON array via `PresetManager`.
 
 #### PlayHistoryEntry.swift
-`Codable`. Represents a single play history record. Fields: `id`, `timestamp`, `title`, `artist`, `album`, `albumArtURI`, `source` (service name), `roomName`, `duration`. Used by `PlayHistoryManager` for tracking and stats.
+`Codable`. Represents a single play history record. Fields: `id`, `timestamp`, `title`, `artist`, `album`, `albumArtURI`, `source` (service name), `roomName`, `duration`, `starred`. Used by `PlayHistoryManager` for tracking, starring, and stats.
 
 #### TransportState.swift
 Enum: `playing`, `paused`, `stopped`, `transitioning`, `noMedia`. Raw values match Sonos SOAP responses. Computed `isPlaying`.
@@ -295,7 +300,7 @@ Represents a browsable content item. Fields: `id` (objectID), `title`, `artist`,
 Manages saved group presets. Persists presets to `~/Library/Application Support/SonosController/group_presets.json`. Methods: `save(preset:)`, `load()`, `delete(id:)`, `apply(preset:manager:)`. Applying a preset ungroups all speakers, forms the saved group, and sets per-speaker volumes.
 
 #### PlayHistoryManager.swift
-Tracks play history with automatic deduplication (same track within a time window is not re-recorded). Persists to `~/Library/Application Support/SonosController/play_history.json`. Provides stats (top artists, top tracks, top sources, total play count) and CSV export. Filterable by room and service. Toggle on/off via Settings. Supports right-click copy of track details.
+Tracks play history with automatic deduplication (same track within a duration-based time window is not re-recorded). Persists to SQLite database. Provides stats (top artists, top tracks, top sources, total play count), star/favorite tracks (toggleStar, starCurrentTrack, starredEntries), and CSV export. SQL-based filtering by date range, room, source, and search text handles 50,000+ entries. Filterable by room, service, and starred status. Toggle on/off via Settings. Supports right-click copy of track details.
 
 #### PlaylistServiceScanner.swift
 Background scanner that determines which streaming service each track in a Sonos playlist belongs to. Browses playlist tracks via ContentDirectory, extracts service from URI pattern and SID metadata. Results cached to `~/Library/Application Support/SonosController/playlist_services_cache.json`. Scans one playlist at a time to limit network load. Results populate service badges in the browse list.
@@ -374,6 +379,15 @@ Control URL: `/MusicServices/Control`
 
 Single action: `ListAvailableServices`. Returns all streaming services available on the Sonos platform. Parses `Service` elements with ID, Name, URI attributes.
 
+#### SMAPIClient.swift
+SOAP client for Sonos Music API (SMAPI). Supports authenticated and anonymous browsing of music services. Methods: `getMetadata`, `getMediaMetadata`, `search`, `getMetadataAnonymous`, `searchAnonymous`. Builds SMAPI SOAP envelopes with device/session/credential headers. Parses `mediaCollection` and `mediaMetadata` results from DIDL-like XML responses. Falls back to `<logo>` element when `albumArtURI` is missing.
+
+#### SMAPIAuthManager.swift
+`@MainActor`, `ObservableObject`. Manages SMAPI service authentication flow (AppLink/DeviceLink). Handles service discovery, token acquisition, and service status tracking. Methods: `loadServices`, `initiateAuth`, `pollAuth`, `disconnect`. Publishes `services`, `isEnabled`, `authURL`.
+
+#### SMAPITokenStore.swift
+Keychain-based storage for SMAPI OAuth tokens. Stores access tokens keyed by service ID using `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`. Methods: `store`, `retrieve`, `delete`.
+
 ### Cache
 
 #### SonosCache.swift
@@ -400,8 +414,14 @@ Error types for cache staleness: `deviceUnreachable(roomName)`, `groupChanged(gr
 ### Tests
 
 #### SonosKitTests.swift
-Unit tests for:
+100 unit tests covering:
 - Zone group topology XML parsing (multi-group, multi-member)
 - DIDL-Lite metadata parsing (title, creator, album)
+- TrackMetadata enrichment, ad break detection, radio stream detection
 - Time string parsing (HH:MM:SS to TimeInterval)
 - TransportState enum mapping and `isPlaying`
+- URI prefix detection (radio, HLS, streaming services)
+- Art resolution and ArtResolver state management
+- Grace period system and state mutations
+- Protocol conformance (ISP service protocols)
+- MockSonosServices for testable ViewModels
