@@ -967,10 +967,10 @@ struct AppleMusicSearchView: View {
         }
     }
 
-    /// Resolve album tracks via iTunes API, then add each to queue sequentially.
-    /// Each addURIToQueue is awaited before the next to guarantee insertion order.
+    /// Resolve album tracks via iTunes API, then add each to queue at explicit positions.
     private func enqueueAlbumTracks(_ album: BrowseItem, in group: SonosGroup, playNext: Bool) async {
-        guard let collectionId = Int(album.objectID.replacingOccurrences(of: "apple:album:", with: "")) else { return }
+        guard let collectionId = Int(album.objectID.replacingOccurrences(of: "apple:album:", with: "")),
+              let coordinator = group.coordinator else { return }
         let tracks = await ServiceSearchProvider.shared.lookupAlbumTracks(collectionId: collectionId, sn: sn)
         guard !tracks.isEmpty else { return }
 
@@ -980,24 +980,31 @@ struct AppleMusicSearchView: View {
                 try? await sonosManager.addBrowseItemToQueue(track, in: group, playNext: true)
             }
         } else {
-            // Append at end — sequential awaits guarantee order
+            // Get current queue size, then insert at explicit positions
+            let queueTotal = (try? await sonosManager.getQueue(group: group, start: 0, count: 1))?.total ?? 0
+            var insertAt = queueTotal + 1
             for track in tracks {
-                try? await sonosManager.addBrowseItemToQueue(track, in: group)
+                try? await sonosManager.addBrowseItemToQueue(track, in: group, atPosition: insertAt)
+                insertAt += 1
             }
         }
     }
 
     /// Clear queue, add album tracks in order, play from track 1.
     private func playAlbumTracks(_ album: BrowseItem, in group: SonosGroup, replace: Bool) async {
-        guard let collectionId = Int(album.objectID.replacingOccurrences(of: "apple:album:", with: "")) else { return }
+        guard let collectionId = Int(album.objectID.replacingOccurrences(of: "apple:album:", with: "")),
+              let coordinator = group.coordinator else { return }
         let tracks = await ServiceSearchProvider.shared.lookupAlbumTracks(collectionId: collectionId, sn: sn)
         guard !tracks.isEmpty else { return }
         if replace {
             try? await sonosManager.clearQueue(group: group)
         }
-        // Sequential awaits guarantee order
+        // Get current queue size, then insert at explicit sequential positions
+        let queueTotal = (try? await sonosManager.getQueue(group: group, start: 0, count: 1))?.total ?? 0
+        var insertAt = queueTotal + 1
         for track in tracks {
-            try? await sonosManager.addBrowseItemToQueue(track, in: group)
+            try? await sonosManager.addBrowseItemToQueue(track, in: group, atPosition: insertAt)
+            insertAt += 1
         }
         try? await sonosManager.play(group: group)
     }
