@@ -1499,13 +1499,17 @@ extension SonosManager: TransportStrategyDelegate {
         // Detect if the track actually changed
         let trackChanged = updated.trackURI != existing.trackURI && updated.trackURI != nil
 
-        // Carry forward station name unless the source actually changed
-        let isStillRadio = updated.trackURI.map(URIPrefix.isRadio) ?? false
-        if updated.stationName.isEmpty && !existing.stationName.isEmpty && !trackChanged {
+        // Carry forward station name unless the source actually changed.
+        // Clear station name when playing from queue (isQueueSource) — Apple Music
+        // queue tracks use x-sonosapi-hls-static URIs that look like radio but aren't.
+        if updated.isQueueSource {
+            updated.stationName = ""
+        } else if updated.stationName.isEmpty && !existing.stationName.isEmpty && !trackChanged {
             updated.stationName = existing.stationName
         }
 
         // Only carry forward art if the track hasn't changed
+        let isStillRadio = !updated.stationName.isEmpty
         if updated.albumArtURI == nil, let existingArt = existing.albumArtURI, !trackChanged {
             if isStillRadio || existing.stationName.isEmpty {
                 updated.albumArtURI = existingArt

@@ -17,12 +17,13 @@ final class QueueViewModel: ObservableObject {
     /// True when the speaker is playing from the queue.
     var isPlayingFromQueue: Bool {
         let meta = sonosManager.groupTrackMetadata[group.coordinatorID]
-        // If playing a radio/station, never show queue indicator
+        // Explicit queue source from GetMediaInfo (authoritative)
+        if meta?.isQueueSource == true { return true }
+        // Radio/station — not queue. stationName is cleared by SonosManager
+        // when isQueueSource becomes true, so stale carry-forward is handled.
         if let station = meta?.stationName, !station.isEmpty { return false }
         if let uri = meta?.trackURI, URIPrefix.isRadio(uri) { return false }
-        // Explicit queue source detection from GetMediaInfo CurrentURI
-        if meta?.isQueueSource == true { return true }
-        // Fallback: trackNumber within queue range and queue is not empty
+        // trackNumber within queue range
         if let trackNum = meta?.trackNumber, trackNum > 0, !queueItems.isEmpty,
            trackNum <= queueItems.count {
             return true
@@ -40,7 +41,7 @@ final class QueueViewModel: ObservableObject {
         let meta = sonosManager.groupTrackMetadata[group.coordinatorID]
         let playing = isPlayingFromQueue
 
-        sonosDebugLog("[QUEUE] updateCurrentTrack: title='\(meta?.title ?? "nil")' trackNum=\(meta?.trackNumber ?? -1) isQueue=\(playing) isQueueSource=\(meta?.isQueueSource ?? false) currentTrack=\(currentTrack) queueCount=\(queueItems.count)")
+        sonosDebugLog("[QUEUE] updateCurrentTrack: title='\(meta?.title ?? "nil")' trackNum=\(meta?.trackNumber ?? -1) station='\(meta?.stationName ?? "")' isQueue=\(playing) isQueueSource=\(meta?.isQueueSource ?? false) uri=\(String(meta?.trackURI?.prefix(40) ?? "nil")) currentTrack=\(currentTrack) queueCount=\(queueItems.count)")
 
         guard playing else { return }
 
