@@ -240,6 +240,7 @@ public final class SMAPIAuthManager: ObservableObject {
     /// Sign out from a service
     public func signOut(serviceID: Int) {
         tokenStore.removeToken(for: serviceID)
+        objectWillChange.send()
     }
 
     // MARK: - Service Descriptor Parsing
