@@ -1041,54 +1041,102 @@ struct AppleMusicSearchView: View {
 
 // MARK: - TuneIn Radio Search
 
+// MARK: - TuneIn Radio
+
+private enum TuneInTab: String, CaseIterable {
+    case browse = "Browse"
+    case search = "Search"
+}
+
+private struct TuneInLevel: Equatable {
+    let title: String
+    let url: String?
+}
+
 struct TuneInSearchView: View {
     @EnvironmentObject var sonosManager: SonosManager
     let group: SonosGroup?
 
+    @State private var tab: TuneInTab = .browse
     @State private var searchText = ""
-    @State private var results: [BrowseItem] = []
-    @State private var isSearching = false
+    @State private var items: [BrowseItem] = []
+    @State private var isLoading = false
     @State private var hasSearched = false
+    @State private var navStack: [TuneInLevel] = []
 
     var body: some View {
         VStack(spacing: 0) {
-            // Search controls
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "radio")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                        TextField("Search TuneIn Radio...", text: $searchText)
-                            .textFieldStyle(.plain)
-                            .font(.callout)
-                            .onSubmit { performSearch() }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Color(nsColor: .quaternaryLabelColor).opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-
+            // Back button for drill-down
+            if !navStack.isEmpty {
+                HStack(spacing: 6) {
                     Button {
-                        performSearch()
+                        navStack.removeLast()
                     } label: {
-                        Text("Search")
-                            .font(.caption)
+                        Image(systemName: "chevron.backward")
+                            .font(.system(size: 14, weight: .semibold))
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(searchText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .buttonStyle(.plain)
+
+                    Text(navStack.last?.title ?? "")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+
+                    Spacer()
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+
+                Divider()
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
 
-            Divider()
+            // Tab picker + search (only at root level)
+            if navStack.isEmpty {
+                VStack(spacing: 8) {
+                    Picker("", selection: $tab) {
+                        ForEach(TuneInTab.allCases, id: \.self) { t in
+                            Text(t.rawValue).tag(t)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
 
-            // Results
-            if isSearching {
-                ProgressView("Searching TuneIn...")
+                    if tab == .search {
+                        HStack(spacing: 8) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(.secondary)
+                                    .font(.caption)
+                                TextField("Search stations...", text: $searchText)
+                                    .textFieldStyle(.plain)
+                                    .font(.callout)
+                                    .onSubmit { performSearch() }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Color(nsColor: .quaternaryLabelColor).opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+
+                            Button { performSearch() } label: {
+                                Text("Search").font(.caption)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(searchText.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+
+                Divider()
+            }
+
+            // Content
+            if isLoading {
+                ProgressView(tab == .search ? "Searching..." : "Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if results.isEmpty && hasSearched {
+            } else if items.isEmpty && (hasSearched || !navStack.isEmpty) {
                 VStack(spacing: 8) {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .font(.title)
@@ -1097,9 +1145,9 @@ struct TuneInSearchView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if results.isEmpty {
+            } else if items.isEmpty && tab == .search {
                 VStack(spacing: 8) {
-                    Image(systemName: "antenna.radiowaves.left.and.right")
+                    Image(systemName: "magnifyingglass")
                         .font(.title)
                         .foregroundStyle(.secondary)
                     Text("Search for radio stations")
@@ -1108,34 +1156,76 @@ struct TuneInSearchView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(results) { item in
+                List(items) { item in
                     BrowseItemRow(item: item)
                         .contentShape(Rectangle())
-                        .onTapGesture {
-                            guard let group = group else { return }
-                            Task { try? await sonosManager.playBrowseItem(item, in: group) }
-                        }
+                        .onTapGesture { handleTap(item) }
                         .contextMenu {
-                            if let group = group {
+                            if let group = group, item.isPlayable {
                                 Button("Play Now") {
                                     Task { try? await sonosManager.playBrowseItem(item, in: group) }
                                 }
+                            }
+                            if item.isContainer {
+                                Button("Browse") { handleTap(item) }
                             }
                         }
                 }
                 .listStyle(.plain)
             }
         }
+        .onAppear { loadBrowse() }
+        .onChange(of: tab) {
+            items = []
+            hasSearched = false
+            navStack.removeAll()
+            if tab == .browse { loadBrowse() }
+        }
+        .onChange(of: navStack) {
+            if let level = navStack.last {
+                loadCategory(url: level.url)
+            } else if tab == .browse {
+                loadBrowse()
+            }
+        }
+    }
+
+    private func handleTap(_ item: BrowseItem) {
+        if item.isContainer {
+            // album field stores the browse URL for categories
+            let browseURL = item.album.isEmpty ? nil : item.album
+            navStack.append(TuneInLevel(title: item.title, url: browseURL))
+        } else if let group = group, item.isPlayable {
+            Task { try? await sonosManager.playBrowseItem(item, in: group) }
+        }
+    }
+
+    private func loadBrowse() {
+        isLoading = true
+        Task {
+            items = await ServiceSearchProvider.shared.browseTuneIn()
+            isLoading = false
+        }
+    }
+
+    private func loadCategory(url: String?) {
+        isLoading = true
+        items = []
+        Task {
+            items = await ServiceSearchProvider.shared.browseTuneIn(url: url)
+            isLoading = false
+        }
     }
 
     private func performSearch() {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return }
-        isSearching = true
+        isLoading = true
         hasSearched = true
+        navStack.removeAll()
         Task {
-            results = await ServiceSearchProvider.shared.searchTuneIn(query: query)
-            isSearching = false
+            items = await ServiceSearchProvider.shared.searchTuneIn(query: query)
+            isLoading = false
         }
     }
 }

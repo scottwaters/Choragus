@@ -286,6 +286,84 @@ public final class ServiceSearchProvider {
         }
     }
 
+    /// Browse TuneIn categories or drill into a category URL.
+    /// Returns a mix of containers (categories) and stations (playable).
+    public func browseTuneIn(url browseURL: String? = nil) async -> [BrowseItem] {
+        let urlString = browseURL ?? "https://opml.radiotime.com/Browse.ashx?render=json"
+        // Ensure HTTPS and JSON render
+        var finalURL = urlString.replacingOccurrences(of: "http://opml", with: "https://opml")
+        if !finalURL.contains("render=json") {
+            finalURL += finalURL.contains("?") ? "&render=json" : "?render=json"
+        }
+
+        guard let url = URL(string: finalURL) else { return [] }
+
+        do {
+            let (data, response) = try await session.data(for: URLRequest(url: url))
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else { return [] }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let body = json["body"] as? [[String: Any]] else { return [] }
+
+            var results: [BrowseItem] = []
+
+            for item in body {
+                // Items with children: category group (e.g. "Stations", "Shows")
+                if let children = item["children"] as? [[String: Any]] {
+                    for child in children {
+                        if let bi = parseTuneInItem(child) { results.append(bi) }
+                    }
+                } else {
+                    if let bi = parseTuneInItem(item) { results.append(bi) }
+                }
+            }
+            return results
+        } catch {
+            sonosDebugLog("[SERVICE_SEARCH] TuneIn browse failed: \(error)")
+            return []
+        }
+    }
+
+    private func parseTuneInItem(_ item: [String: Any]) -> BrowseItem? {
+        let type = item["type"] as? String ?? ""
+        let text = item["text"] as? String ?? ""
+        guard !text.isEmpty else { return nil }
+
+        let guideId = item["guide_id"] as? String ?? ""
+        let imageURL = item["image"] as? String
+        let subtext = item["subtext"] as? String ?? ""
+        let browseURL = item["URL"] as? String
+
+        if type == "audio" {
+            // Playable station
+            let resourceURI = "x-sonosapi-stream:\(guideId)?sid=\(ServiceID.tuneIn)&flags=8224&sn=0"
+            let metadata = buildTuneInDIDL(guideId: guideId, title: text)
+            return BrowseItem(
+                id: "tunein:\(guideId)",
+                title: text,
+                artist: subtext,
+                album: "",
+                albumArtURI: imageURL,
+                itemClass: .radioStation,
+                resourceURI: resourceURI,
+                resourceMetadata: metadata
+            )
+        } else if type == "link", let url = browseURL {
+            // Browseable category/subcategory
+            return BrowseItem(
+                id: "tunein:cat:\(guideId.isEmpty ? text : guideId)",
+                title: text,
+                artist: subtext,
+                album: url,  // Store browse URL in album field for drill-down
+                albumArtURI: imageURL,
+                itemClass: .container,
+                resourceURI: nil,
+                resourceMetadata: nil
+            )
+        }
+        return nil
+    }
+
     // MARK: - DIDL Builders
 
     private func buildTrackDIDL(trackId: Int, collectionId: Int, title: String, artist: String, album: String, serviceType: Int) -> String {
