@@ -289,16 +289,16 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             // enrichFromDIDL only extracts dc:title (station name) — the actual song info
             // lives in r:streamContent which must be parsed separately.
             let unescaped = didlXML.contains("&lt;") ? XMLResponseParser.xmlUnescape(didlXML) : didlXML
-            if let parsed = XMLResponseParser.parseDIDLMetadata(unescaped) {
-                if !parsed.streamContent.isEmpty {
-                    let parts = parsed.streamContent.components(separatedBy: " - ")
-                    if parts.count >= 2 {
-                        metadata.artist = parts[0].trimmingCharacters(in: .whitespaces)
-                        metadata.title = parts.dropFirst().joined(separator: " - ").trimmingCharacters(in: .whitespaces)
-                    } else {
-                        metadata.title = parsed.streamContent
-                    }
-                }
+            let parsed = XMLResponseParser.parseDIDLMetadata(unescaped)
+            // Fallback: if streamContent is empty (bare & breaks XML parser), extract with string matching
+            let streamContent: String? = {
+                if let sc = parsed?.streamContent, !sc.isEmpty { return sc }
+                return XMLResponseParser.extractStreamContent(unescaped)
+            }()
+            if let content = streamContent, !content.isEmpty,
+               let stream = TrackMetadata.parseStreamContent(content) {
+                metadata.artist = stream.artist
+                metadata.title = stream.title
             }
 
             if let durStr = event.currentTrackDuration {
@@ -357,7 +357,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
         reconciliationTask?.cancel()
         reconciliationTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(15))
+                try? await Task.sleep(for: .seconds(Timing.reconciliationPolling))
                 guard let self = self, self.isRunning else { return }
                 await self.reconcileAllGroups()
             }
@@ -367,40 +367,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
     private func reconcileAllGroups() async {
         for group in currentGroups {
             guard !Task.isCancelled else { return }
-            guard let coordinator = group.coordinator else { continue }
-
-            do {
-                guard let delegate = await self.delegate else { return }
-
-                let avTransport = await delegate.getAVTransportService()
-                let renderingControl = await delegate.getRenderingControlService()
-
-                async let stateResult = avTransport.getTransportInfo(device: coordinator)
-                async let positionResult = avTransport.getPositionInfo(device: coordinator)
-                async let modeResult = avTransport.getTransportSettings(device: coordinator)
-
-                let (state, position, mode) = try await (stateResult, positionResult, modeResult)
-
-                var enrichedPosition = position
-                if state.isActive,
-                   let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator) {
-                    enrichedPosition.enrichFromMediaInfo(mediaInfo, device: coordinator)
-                }
-
-                await delegate.transportDidUpdateState(group.coordinatorID, state: state)
-                await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition)
-                await delegate.transportDidUpdatePlayMode(group.coordinatorID, mode: mode)
-                await delegate.transportDidUpdatePosition(group.coordinatorID, position: enrichedPosition.position, duration: enrichedPosition.duration)
-
-                for member in group.members {
-                    let vol = try await renderingControl.getVolume(device: member)
-                    let muted = try await renderingControl.getMute(device: member)
-                    await delegate.transportDidUpdateVolume(member.id, volume: vol)
-                    await delegate.transportDidUpdateMute(member.id, muted: muted)
-                }
-            } catch {
-                sonosDebugLog("[TRANSPORT] Reconciliation failed for group: \(error)")
-            }
+            await fetchGroupState(group, context: "Reconciliation")
         }
     }
 
@@ -408,46 +375,45 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
     private func fetchInitialState(groups: [SonosGroup]) async {
         for group in groups {
-            guard let coordinator = group.coordinator else {
-                continue
+            await fetchGroupState(group, context: "Initial state fetch")
+        }
+    }
+
+    /// Shared helper: fetches transport state, track metadata, play mode, volume, and mute
+    /// for a single group. Used by both initial fetch and reconciliation polling.
+    private func fetchGroupState(_ group: SonosGroup, context: String) async {
+        guard let coordinator = group.coordinator else { return }
+        do {
+            guard let delegate = await self.delegate else { return }
+
+            let avTransport = await delegate.getAVTransportService()
+            let renderingControl = await delegate.getRenderingControlService()
+
+            async let stateResult = avTransport.getTransportInfo(device: coordinator)
+            async let positionResult = avTransport.getPositionInfo(device: coordinator)
+            async let modeResult = avTransport.getTransportSettings(device: coordinator)
+
+            let (state, position, mode) = try await (stateResult, positionResult, modeResult)
+
+            var enrichedPosition = position
+            if state.isActive,
+               let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator) {
+                enrichedPosition.enrichFromMediaInfo(mediaInfo, device: coordinator)
             }
 
-            do {
-                guard let delegate = await self.delegate else {
-                    return
-                }
+            await delegate.transportDidUpdateState(group.coordinatorID, state: state)
+            await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition)
+            await delegate.transportDidUpdatePlayMode(group.coordinatorID, mode: mode)
+            await delegate.transportDidUpdatePosition(group.coordinatorID, position: enrichedPosition.position, duration: enrichedPosition.duration)
 
-                let avTransport = await delegate.getAVTransportService()
-                let renderingControl = await delegate.getRenderingControlService()
-
-                // Fetch transport state, position, and play mode concurrently
-                async let stateResult = avTransport.getTransportInfo(device: coordinator)
-                async let positionResult = avTransport.getPositionInfo(device: coordinator)
-                async let modeResult = avTransport.getTransportSettings(device: coordinator)
-
-                let (state, position, mode) = try await (stateResult, positionResult, modeResult)
-
-                var enrichedPosition = position
-                if state.isActive,
-                   let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator) {
-                    enrichedPosition.enrichFromMediaInfo(mediaInfo, device: coordinator)
-                }
-
-                await delegate.transportDidUpdateState(group.coordinatorID, state: state)
-                await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition)
-                await delegate.transportDidUpdatePlayMode(group.coordinatorID, mode: mode)
-                await delegate.transportDidUpdatePosition(group.coordinatorID, position: enrichedPosition.position, duration: enrichedPosition.duration)
-
-                // Fetch volume and mute for each member
-                for member in group.members {
-                    let vol = try await renderingControl.getVolume(device: member)
-                    let muted = try await renderingControl.getMute(device: member)
-                    await delegate.transportDidUpdateVolume(member.id, volume: vol)
-                    await delegate.transportDidUpdateMute(member.id, muted: muted)
-                }
-            } catch {
-                sonosDebugLog("[TRANSPORT] Initial state fetch failed for group: \(error)")
+            for member in group.members {
+                let vol = try await renderingControl.getVolume(device: member)
+                let muted = try await renderingControl.getMute(device: member)
+                await delegate.transportDidUpdateVolume(member.id, volume: vol)
+                await delegate.transportDidUpdateMute(member.id, muted: muted)
             }
+        } catch {
+            sonosDebugLog("[TRANSPORT] \(context) failed for group: \(error)")
         }
     }
 
@@ -509,7 +475,7 @@ public final class LegacyPollingTransport: TransportStrategy, @unchecked Sendabl
             while !Task.isCancelled {
                 guard let self = self, self.isRunning else { return }
                 await self.pollAllGroups()
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(Timing.legacyPolling))
             }
         }
     }

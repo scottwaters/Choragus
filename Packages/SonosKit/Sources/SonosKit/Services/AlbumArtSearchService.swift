@@ -262,17 +262,52 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
         return cleanForSearch(artist)
     }
 
-    /// Verified song search — checks that the result's track name loosely matches the search title
+    /// Verified song search — scans results for best track/album name match
     private func verifiedSongSearch(query: String, expectedTitle: String) async -> String? {
-        guard let result = await iTunesSearchFull(query: query, entity: "song", limit: 5) else { return nil }
-        let resultTrack = result.trackName.lowercased()
+        guard let results = await iTunesSearchAll(query: query, entity: "song", limit: 10) else { return nil }
         let expected = expectedTitle.lowercased()
-        // Accept if the result track name contains a significant portion of the expected title
         let expectedWords = expected.components(separatedBy: .whitespaces).filter { $0.count > 2 }
-        let matchCount = expectedWords.filter { resultTrack.contains($0) }.count
-        if expectedWords.isEmpty || matchCount >= max(1, expectedWords.count / 2) {
-            return result.artURL
+        guard !expectedWords.isEmpty else {
+            return results.first?.artURL
         }
-        return nil
+        // Low threshold — radio titles often contain multi-language text
+        // so only a few words may match the English iTunes result
+        let threshold = max(1, expectedWords.count / 4)
+        var bestURL: String?
+        var bestScore = 0
+        for result in results {
+            let trackWords = expectedWords.filter { result.trackName.lowercased().contains($0) }.count
+            let albumWords = expectedWords.filter { result.collectionName.lowercased().contains($0) }.count
+            let score = max(trackWords, albumWords)
+            if score > bestScore {
+                bestScore = score
+                bestURL = result.artURL
+            }
+        }
+        return bestScore >= threshold ? bestURL : nil
+    }
+
+    /// iTunes search returning all results for scoring
+    private func iTunesSearchAll(query: String, entity: String, limit: Int) async -> [(artURL: String, trackName: String, collectionName: String)]? {
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=\(limit)") else {
+            return nil
+        }
+        do {
+            let (data, response) = try await session.data(for: URLRequest(url: url))
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode),
+                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let items = json["results"] as? [[String: Any]] else { return nil }
+            return items.compactMap { item in
+                guard let art = item["artworkUrl100"] as? String else { return nil }
+                let upscaled = art.replacingOccurrences(of: "100x100", with: "600x600")
+                                  .replacingOccurrences(of: "60x60", with: "600x600")
+                                  .replacingOccurrences(of: "30x30", with: "600x600")
+                return (artURL: upscaled,
+                        trackName: item["trackName"] as? String ?? "",
+                        collectionName: item["collectionName"] as? String ?? "")
+            }
+        } catch { return nil }
     }
 }

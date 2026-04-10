@@ -25,21 +25,37 @@ struct ContentView: View {
         return sonosManager.groups.first { $0.id == id }
     }
 
-    private let nowPlayingMinWidth: CGFloat = 380
+    private let nowPlayingMinWidth: CGFloat = 640
     private let browseMinWidth: CGFloat = 260
     private let queueMinWidth: CGFloat = 280
     private let sidebarWidth: CGFloat = 200
 
-    /// Calculates browse panel width — takes ~40% of available space
-    private func browseWidth(totalWidth: CGFloat) -> CGFloat {
-        let available = totalWidth - nowPlayingMinWidth - (showQueue ? queueMinWidth : 0)
-        return max(browseMinWidth, min(available, totalWidth * 0.35))
-    }
+    /// Calculates panel widths ensuring now playing always gets at least its minimum.
+    /// Browse and queue share whatever space remains after now playing is guaranteed.
+    private func panelWidths(totalWidth: CGFloat) -> (browse: CGFloat, nowPlaying: CGFloat, queue: CGFloat) {
+        let remaining = totalWidth - nowPlayingMinWidth
+        // Ideal sizes for side panels
+        let idealBrowse = showBrowse ? min(totalWidth * 0.35, 400) : 0
+        let idealQueue = showQueue ? min(totalWidth * 0.3, 400) : 0
+        let idealTotal = idealBrowse + idealQueue
 
-    /// Calculates queue panel width — takes ~30% of available space
-    private func queueWidth(totalWidth: CGFloat) -> CGFloat {
-        let available = totalWidth * 0.3
-        return max(queueMinWidth, min(available, 400))
+        let bw: CGFloat
+        let qw: CGFloat
+        if idealTotal <= remaining {
+            // Enough room — use ideal sizes
+            bw = idealBrowse
+            qw = idealQueue
+        } else if idealTotal > 0 {
+            // Not enough room — shrink side panels proportionally, respecting minimums
+            let ratio = remaining / idealTotal
+            bw = showBrowse ? max(browseMinWidth, idealBrowse * ratio) : 0
+            qw = showQueue ? max(queueMinWidth, idealQueue * ratio) : 0
+        } else {
+            bw = 0
+            qw = 0
+        }
+        let nw = max(nowPlayingMinWidth, totalWidth - bw - qw)
+        return (bw, nw, qw)
     }
 
     /// Minimum window width needed for current panel configuration
@@ -147,21 +163,22 @@ struct ContentView: View {
             } detail: {
                 if let group = selectedGroup {
                     GeometryReader { geo in
+                        let sizes = panelWidths(totalWidth: geo.size.width)
                         HStack(spacing: 0) {
                             if showBrowse {
                                 BrowseView(group: group)
                                     .environmentObject(sonosManager)
-                                    .frame(width: browseWidth(totalWidth: geo.size.width))
+                                    .frame(width: sizes.browse)
                                 Divider()
                             }
 
                             NowPlayingView(group: group, sonosManager: sonosManager, playHistoryManager: playHistoryManager)
-                                .frame(minWidth: nowPlayingMinWidth, maxWidth: .infinity)
+                                .frame(width: sizes.nowPlaying)
 
                             if showQueue {
                                 Divider()
                                 QueueView(group: group, sonosManager: sonosManager)
-                                    .frame(width: queueWidth(totalWidth: geo.size.width))
+                                    .frame(width: sizes.queue)
                             }
                         }
                     }

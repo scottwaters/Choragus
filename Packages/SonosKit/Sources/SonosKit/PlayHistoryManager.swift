@@ -80,6 +80,11 @@ public final class PlayHistoryManager: ObservableObject {
                                      groupName: String, transportState: TransportState) {
         guard isEnabled else { return }
         guard transportState == .playing else { return }
+        // For radio with no track data, log the station name
+        var metadata = metadata
+        if metadata.title.isEmpty && !metadata.stationName.isEmpty {
+            metadata.title = metadata.stationName
+        }
         guard !metadata.title.isEmpty else { return }
         // Don't log radio ad breaks (no real track info)
         guard !metadata.isAdBreak else { return }
@@ -124,29 +129,49 @@ public final class PlayHistoryManager: ObservableObject {
         repo.insert(entry)
         entries.append(entry)
 
-        // If no art, search iTunes in background and backfill
-        if artURI == nil && !entry.title.isEmpty {
+        // Search for track-specific art if missing or only has a generic station logo
+        let needsArt = artURI == nil || (metadata.isRadioStream && !metadata.stationName.isEmpty)
+        if needsArt && !entry.title.isEmpty && entry.title != metadata.stationName {
             let title = entry.title
             let artist = entry.artist
+            let isRadio = metadata.isRadioStream
             Task {
-                if let artURL = await AlbumArtSearchService.shared.searchArtwork(
-                    artist: artist, album: entry.album.isEmpty ? title : entry.album
-                ) {
+                let artURL: String?
+                if isRadio {
+                    artURL = await AlbumArtSearchService.shared.searchRadioTrackArt(
+                        artist: artist, title: AlbumArtSearchService.cleanTrackTitle(title)
+                    )
+                } else {
+                    artURL = await AlbumArtSearchService.shared.searchArtwork(
+                        artist: artist, album: entry.album.isEmpty ? title : entry.album
+                    )
+                }
+                if let artURL {
                     updateArtwork(forTitle: title, artist: artist, artURL: artURL)
                 }
             }
         }
     }
 
-    /// Updates the album art URI for the most recent entry matching title+artist
+    /// Updates the album art URI for entries matching title+artist.
+    /// Also matches entries with empty artist (radio tracks logged before artist parsing was fixed).
     public func updateArtwork(forTitle title: String, artist: String, artURL: String) {
+        var didUpdate = false
         for i in entries.indices.reversed() {
-            if entries[i].title == title && entries[i].artist == artist {
+            let titleMatch = entries[i].title == title
+            let artistMatch = entries[i].artist == artist ||
+                              entries[i].artist.isEmpty || artist.isEmpty
+            if titleMatch && artistMatch {
                 if entries[i].albumArtURI != artURL {
                     entries[i].albumArtURI = artURL
                     repo.updateArtwork(id: entries[i].id, artURL: artURL)
+                    didUpdate = true
                 }
             }
+        }
+        // Trigger @Published notification so history view refreshes
+        if didUpdate {
+            entries = entries
         }
     }
 

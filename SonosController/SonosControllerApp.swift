@@ -38,7 +38,7 @@ struct SonosControllerApp: App {
                 .onChange(of: sonosManager.appearanceMode) {
                     WindowManager.shared.colorScheme = colorScheme
                 }
-                .frame(minWidth: 700, minHeight: 450)
+                .frame(minWidth: 640, minHeight: 450)
                 .navigationTitle("The SonosController")
                 .preferredColorScheme(colorScheme)
         }

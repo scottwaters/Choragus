@@ -176,7 +176,7 @@ public enum L10n {
     // MARK: - Translation Lookup
 
     private static func tr(_ key: String) -> String {
-        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
+        let lang = UserDefaults.standard.string(forKey: UDKey.appLanguage) ?? "en"
         return translations[key]?[lang] ?? translations[key]?["en"] ?? key
     }
 
@@ -745,19 +745,19 @@ public enum L10n {
             "zh-Hans": "\u{8FD4}\u{56DE}",
         ],
         "localSearch": [
-            "en": "Local Search",
-            "de": "Lokale Suche",
-            "fr": "Recherche locale",
-            "nl": "Lokaal zoeken",
-            "es": "B\u{00FA}squeda local",
-            "it": "Ricerca locale",
-            "sv": "Lokal s\u{00F6}kning",
-            "nb": "Lokalt s\u{00F8}k",
-            "da": "Lokal s\u{00F8}gning",
-            "ja": "\u{30ED}\u{30FC}\u{30AB}\u{30EB}\u{691C}\u{7D22}",
-            "pt": "Pesquisa local",
-            "pl": "Wyszukiwanie lokalne",
-            "zh-Hans": "\u{672C}\u{5730}\u{641C}\u{7D22}",
+            "en": "Local Library Search",
+            "de": "Lokale Bibliothek durchsuchen",
+            "fr": "Recherche biblioth\u{00E8}que locale",
+            "nl": "Lokale bibliotheek zoeken",
+            "es": "B\u{00FA}squeda biblioteca local",
+            "it": "Ricerca libreria locale",
+            "sv": "S\u{00F6}k lokalt bibliotek",
+            "nb": "S\u{00F8}k lokalt bibliotek",
+            "da": "S\u{00F8}g lokalt bibliotek",
+            "ja": "\u{30ED}\u{30FC}\u{30AB}\u{30EB}\u{30E9}\u{30A4}\u{30D6}\u{30E9}\u{30EA}\u{691C}\u{7D22}",
+            "pt": "Pesquisa biblioteca local",
+            "pl": "Wyszukiwanie biblioteki lokalnej",
+            "zh-Hans": "\u{672C}\u{5730}\u{5A92}\u{4F53}\u{5E93}\u{641C}\u{7D22}",
         ],
         "discoveringContent": [
             "en": "Discovering content...",

@@ -158,9 +158,11 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
                 if trimmed.hasPrefix("/") {
                     currentArtURI = "http://\(deviceIP):\(devicePort)\(trimmed)"
                 } else if !trimmed.isEmpty {
-                    // Upgrade external HTTP to HTTPS (ATS blocks HTTP to external hosts)
-                    if trimmed.hasPrefix("http://") && !trimmed.contains(deviceIP) {
-                        currentArtURI = trimmed.replacingOccurrences(of: "http://", with: "https://")
+                    // Upgrade external HTTP to HTTPS — only keep HTTP for local speaker URLs
+                    if trimmed.hasPrefix("http://"),
+                       let parsed = URL(string: trimmed),
+                       parsed.host != deviceIP {
+                        currentArtURI = trimmed.replacingOccurrences(of: "http://", with: "https://", options: [], range: trimmed.startIndex..<trimmed.index(trimmed.startIndex, offsetBy: 7))
                     } else {
                         currentArtURI = trimmed
                     }

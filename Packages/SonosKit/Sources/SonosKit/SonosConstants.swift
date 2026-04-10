@@ -155,6 +155,14 @@ public enum Timing {
     public static let rescanDebounce: UInt64 = 2_000_000_000
     public static let toastDismiss: TimeInterval = 2
     public static let statusMessageDismiss: TimeInterval = 3
+    public static let subscriptionRenewalCheck: TimeInterval = 60
+    public static let reconciliationPolling: TimeInterval = 15
+    public static let legacyPolling: TimeInterval = 5
+    public static let metadataPolling: UInt64 = 5_000_000_000
+    public static let musicServicesRetryDelay: TimeInterval = 3
+    public static let groupRefreshDelay: TimeInterval = 1
+    public static let searchDebounce: UInt64 = 300_000_000
+    public static let marqueeAnimationPause: UInt64 = 500_000_000
 }
 
 // MARK: - UserDefaults Keys
@@ -178,8 +186,48 @@ public enum UDKey {
     public static let customAccentColor = "customAccent"
     public static let proportionalGroupVolume = "proportionalGroupVolume"
     public static let artOverridePrefix = "artOverride:"
+    public static let tuneInSearchEnabled = "tuneInSearchEnabled"
+    public static let calmRadioEnabled = "calmRadioEnabled"
+    public static let appleMusicSearchEnabled = "appleMusicSearchEnabled"
+    public static let sonosRadioEnabled = "sonosRadioEnabled"
 }
 
+
+// MARK: - Browse Object IDs
+
+public enum BrowseID {
+    public static let favorites = "FV:2"
+    public static let playlists = "SQ:"
+    public static let libraryRoot = "A:"
+    public static let albumArtist = "A:ALBUMARTIST"
+    public static let album = "A:ALBUM"
+    public static let tracks = "A:TRACKS"
+    public static let shares = "S:"
+    public static let smapiRoot = "root"
+}
+
+// MARK: - Pagination Defaults
+
+public enum PageSize {
+    public static let browse = 100
+    public static let queue = 100
+    public static let search = 50
+    public static let searchArtist = 20
+    public static let searchAlbum = 20
+    public static let searchTrack = 30
+    public static let smapiAuth = 200
+}
+
+// MARK: - Cache Defaults
+
+public enum CacheDefaults {
+    public static let imageDiskMaxSizeMB = 500
+    public static let imageDiskMaxAgeDays = 30
+    public static let imageMemoryCountLimit = 200
+    public static let imageMemoryBytesLimit = 50 * 1024 * 1024
+    public static let imageEvictionFrequency = 50
+    public static let playHistoryMaxEntries = 50_000
+}
 
 // MARK: - UI Layout Constants
 

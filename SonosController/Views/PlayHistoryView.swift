@@ -83,7 +83,7 @@ struct PlayHistoryView: View {
     private func debouncedRefresh() {
         searchDebounceTask?.cancel()
         searchDebounceTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
+            try? await Task.sleep(nanoseconds: Timing.searchDebounce)
             guard !Task.isCancelled else { return }
             refreshFilteredEntries()
         }

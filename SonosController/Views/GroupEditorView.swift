@@ -150,7 +150,7 @@ struct GroupEditorView: View {
                 // Grouping failed — will continue with remaining devices
             }
         }
-        try? await Task.sleep(for: .seconds(1))
+        try? await Task.sleep(for: .seconds(Timing.groupRefreshDelay))
         if let dev = currentGroup?.coordinator ?? initialGroup.coordinator {
             await sonosManager.refreshTopology(from: dev)
         }
@@ -171,7 +171,7 @@ struct GroupEditorView: View {
                 // Ungrouping failed — will continue with remaining devices
             }
         }
-        try? await Task.sleep(for: .seconds(1))
+        try? await Task.sleep(for: .seconds(Timing.groupRefreshDelay))
         await sonosManager.refreshTopology(from: coordinator)
         pendingDeviceID = nil
     }
@@ -211,7 +211,7 @@ struct GroupEditorView: View {
 
             // The speaker may not have updated its topology yet.
             // Wait briefly then refresh again to catch the change.
-            try? await Task.sleep(for: .seconds(1))
+            try? await Task.sleep(for: .seconds(Timing.groupRefreshDelay))
             if let dev = currentGroup?.coordinator ?? initialGroup.coordinator {
                 await sonosManager.refreshTopology(from: dev)
             }

@@ -3,6 +3,7 @@
 /// Pauses at the start, slides to reveal the full text, pauses at the end,
 /// then resets and repeats. Static when the text fits within the available width.
 import SwiftUI
+import SonosKit
 
 struct MarqueeText: View {
     let text: String
@@ -103,7 +104,7 @@ struct MarqueeText: View {
                 withAnimation(.none) {
                     offset = 0
                 }
-                try? await Task.sleep(nanoseconds: 500_000_000) // brief pause before next cycle
+                try? await Task.sleep(nanoseconds: Timing.marqueeAnimationPause)
             }
         }
     }

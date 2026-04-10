@@ -43,6 +43,7 @@ struct NowPlayingView: View {
     @State private var showEQ = false
     @State private var showCopied = false
     @State private var showExpandedArt = false
+    @State private var showArtSearch = false
 
     // MARK: - Derived State (from ViewModel)
 
@@ -476,20 +477,38 @@ struct NowPlayingView: View {
             vm.handleMetadataChanged(meta)
         }
             .contextMenu {
+                Button("Search Artwork...") {
+                    showArtSearch = true
+                }
                 Button(L10n.refreshArtwork) {
                     vm.art.forceITunesArtSearch(trackMetadata: trackMetadata, displayArtist: vm.displayArtist, group: group)
                 }
-                if vm.art.webArtURL != nil || trackMetadata.albumArtURI != nil {
+                Divider()
+                Button("Ignore Artwork") {
+                    vm.art.ignoreArtwork(trackMetadata: trackMetadata)
+                }
+                if vm.art.webArtURL != nil || vm.art.isArtIgnored || trackMetadata.albumArtURI != nil {
                     Button(L10n.clearArtwork) {
-                        let searchTerm = !trackMetadata.title.isEmpty ? trackMetadata.title :
-                                         !trackMetadata.stationName.isEmpty ? trackMetadata.stationName : ""
+                        let searchTerm = vm.art.artOverrideKey(trackMetadata: trackMetadata)
                         if !searchTerm.isEmpty {
                             UserDefaults.standard.removeObject(forKey: "\(UDKey.artOverridePrefix)\(searchTerm.lowercased())")
                         }
+                        vm.art.isArtIgnored = false
                         vm.art.webArtURL = nil
                         vm.art.lastArtSearchKey = ""
                         vm.art.forceWebArt = false
+                        vm.art.updateDisplayedArt(trackMetadata: trackMetadata, group: group)
                     }
+                }
+            }
+            .sheet(isPresented: $showArtSearch) {
+                ArtworkSearchView(
+                    artist: vm.displayArtist,
+                    title: trackMetadata.title,
+                    album: trackMetadata.album
+                ) { selectedURL in
+                    vm.art.setManualArtwork(selectedURL, trackMetadata: trackMetadata, group: group)
+                    showArtSearch = false
                 }
             }
     }

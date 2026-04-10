@@ -6,11 +6,30 @@
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<!-- NSAllowsArbitraryLoads required: some music service CDNs (TuneIn radio logos)
-		     serve album art over HTTP. Local speaker access (UPnP/SOAP) also uses HTTP.
-		     NSAllowsLocalNetworking alone doesn't cover external HTTP art CDNs. -->
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>tunein.com</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>1.fm</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>radiotime.com</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>SonosController needs local network access to discover and control Sonos speakers.</string>

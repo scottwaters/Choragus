@@ -106,6 +106,8 @@ struct BrowseView: View {
                     TuneInSearchView(group: group)
                 } else if current.objectID == "CALMRADIOPROMPT:" {
                     CalmRadioBrowseView(group: group)
+                } else if current.objectID == "SONOSRADIOPROMPT:" {
+                    SonosRadioSearchView(group: group)
                 } else if current.objectID.hasPrefix("SMAPISEARCHPROMPT:") {
                     let sidStr = current.objectID.replacingOccurrences(of: "SMAPISEARCHPROMPT:", with: "")
                     let sid = Int(sidStr) ?? 0
@@ -221,6 +223,10 @@ struct BrowseSectionsView: View {
     @State private var isLoading = true
     @AppStorage("browse_serviceSearch_expanded") private var serviceSearchExpanded = true
     @AppStorage("browse_musicServices_expanded") private var musicServicesExpanded = true
+    @AppStorage(UDKey.tuneInSearchEnabled) private var tuneInEnabled = false
+    @AppStorage(UDKey.calmRadioEnabled) private var calmRadioEnabled = false
+    @AppStorage(UDKey.appleMusicSearchEnabled) private var appleMusicEnabled = false
+    @AppStorage(UDKey.sonosRadioEnabled) private var sonosRadioEnabled = false
     @AppStorage("browse_favorites_expanded") private var favoritesExpanded = true
     @AppStorage("browse_library_expanded") private var libraryExpanded = true
 
@@ -233,17 +239,25 @@ struct BrowseSectionsView: View {
         }
     }
 
-    /// All service search entries in user-defined order
+    /// All service search entries in user-defined order — only includes enabled services
     private var orderedServiceEntries: [ServiceSearchEntry] {
-        var entries: [ServiceSearchEntry] = [
-            ServiceSearchEntry(key: "applemusic", title: "Search Apple Music", objectID: "APPLEMUSICPROMPT:", icon: "magnifyingglass"),
-            ServiceSearchEntry(key: "tunein", title: "Search TuneIn Radio", objectID: "TUNEINPROMPT:", icon: "radio"),
-            ServiceSearchEntry(key: "calmradio", title: "Calm Radio", objectID: "CALMRADIOPROMPT:", icon: "leaf"),
-        ]
+        var entries: [ServiceSearchEntry] = []
+        if appleMusicEnabled {
+            entries.append(ServiceSearchEntry(key: "applemusic", title: "Apple Music", objectID: "APPLEMUSICPROMPT:", icon: "magnifyingglass"))
+        }
+        if tuneInEnabled {
+            entries.append(ServiceSearchEntry(key: "tunein", title: "TuneIn", objectID: "TUNEINPROMPT:", icon: "radio"))
+        }
+        if calmRadioEnabled {
+            entries.append(ServiceSearchEntry(key: "calmradio", title: "Calm Radio", objectID: "CALMRADIOPROMPT:", icon: "leaf"))
+        }
+        if sonosRadioEnabled {
+            entries.append(ServiceSearchEntry(key: "sonosradio", title: "Sonos Radio", objectID: "SONOSRADIOPROMPT:", icon: "antenna.radiowaves.left.and.right"))
+        }
         for service in smapiSearchableServices {
             entries.append(ServiceSearchEntry(
                 key: "smapi:\(service.id)",
-                title: "Search \(service.name)",
+                title: service.name,
                 objectID: "SMAPISEARCHPROMPT:\(service.id)",
                 icon: "magnifyingglass"
             ))
@@ -273,23 +287,25 @@ struct BrowseSectionsView: View {
                 }
             }
 
-            // Service Search — ordered, reorderable
-            Section {
-                CollapsibleSectionHeader(title: "Service Search", isExpanded: $serviceSearchExpanded)
-                if serviceSearchExpanded {
-                    ForEach(Array(orderedServiceEntries.enumerated()), id: \.element.id) { index, entry in
-                        Button {
-                            onNavigate(BrowseDestination(title: entry.title, objectID: entry.objectID))
-                        } label: {
-                            Label(entry.title, systemImage: entry.icon)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            if index > 0 {
-                                Button("Move Up") { moveServiceEntry(from: index, by: -1) }
+            // Service Search — ordered, reorderable — only shown if services are enabled
+            if !orderedServiceEntries.isEmpty {
+                Section {
+                    CollapsibleSectionHeader(title: "Service Search", isExpanded: $serviceSearchExpanded)
+                    if serviceSearchExpanded {
+                        ForEach(Array(orderedServiceEntries.enumerated()), id: \.element.id) { index, entry in
+                            Button {
+                                onNavigate(BrowseDestination(title: entry.title, objectID: entry.objectID))
+                            } label: {
+                                Label(entry.title, systemImage: entry.icon)
                             }
-                            if index < orderedServiceEntries.count - 1 {
-                                Button("Move Down") { moveServiceEntry(from: index, by: 1) }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                if index > 0 {
+                                    Button("Move Up") { moveServiceEntry(from: index, by: -1) }
+                                }
+                                if index < orderedServiceEntries.count - 1 {
+                                    Button("Move Down") { moveServiceEntry(from: index, by: 1) }
+                                }
                             }
                         }
                     }

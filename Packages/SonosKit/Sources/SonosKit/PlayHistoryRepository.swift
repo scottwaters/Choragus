@@ -10,7 +10,7 @@ public final class PlayHistoryRepository {
     private var db: OpaquePointer?
     private let dbPath: String
 
-    static let maxEntries = 50_000
+    static let maxEntries = CacheDefaults.playHistoryMaxEntries
 
     public init(dbPath: String) {
         self.dbPath = dbPath

@@ -431,15 +431,15 @@ final class NowPlayingViewModel {
     // MARK: - Art Search (orchestration — delegates to AlbumArtSearchService)
 
     private func searchWebArtIfNeeded(_ metadata: TrackMetadata) {
+        // Don't override manually chosen art
+        if art.forceWebArt { return }
+
         let hasArt = metadata.albumArtURI != nil && !(metadata.albumArtURI?.isEmpty ?? true)
         let isLocalFile = metadata.trackURI.map(URIPrefix.isLocal) ?? false
-        // Local files with art from /getaa — don't override with iTunes search
-        if hasArt && isLocalFile && !art.forceWebArt {
+        let hasLocalOnlyArt = hasArt && (metadata.albumArtURI?.contains("/getaa?") ?? false)
+        // For service tracks with persistent art URLs, no search needed
+        if hasArt && !hasLocalOnlyArt {
             art.clearWebArt()
-            return
-        }
-        if hasArt && !isLocalFile {
-            if !art.forceWebArt { art.clearWebArt() }
             return
         }
         art.clearWebArt()
@@ -483,15 +483,21 @@ final class NowPlayingViewModel {
             }
 
             if let artURL = foundArt {
-                art.setWebArtResult(URL(string: artURL))
+                // Always update history and cache with the found art
                 art.playHistoryManager?.updateArtwork(
                     forTitle: metadata.title, artist: metadata.artist, artURL: artURL
                 )
                 sonosManager.cacheArtURL(artURL, forURI: metadata.trackURI ?? "", title: metadata.title, itemID: "")
+                // Only update display if current art is missing or /getaa (ephemeral)
+                if !hasLocalOnlyArt || art.forceWebArt {
+                    art.setWebArtResult(URL(string: artURL))
+                    art.updateDisplayedArt(trackMetadata: metadata, group: group)
+                }
             } else {
-                art.setWebArtResult(nil)
+                if !hasLocalOnlyArt {
+                    art.setWebArtResult(nil)
+                }
             }
-            art.updateDisplayedArt(trackMetadata: metadata, group: group)
         }
     }
 
@@ -510,8 +516,9 @@ final class NowPlayingViewModel {
             art.radioStationArtURL = stationArt
         }
         let artist = TrackMetadata.filterDeviceID(metadata.artist)
-        let cleanTitle = AlbumArtSearchService.cleanTrackTitle(metadata.title)
-        let searchTitle = cleanTitle.isEmpty ? metadata.title : cleanTitle
+        // For radio streams, keep the full title including parenthetical content
+        // since it often contains the movie/album name (e.g. "Tristania (Troia Troy)")
+        let searchTitle = metadata.title
         Task {
             if let artURL = await AlbumArtSearchService.shared.searchRadioTrackArt(
                 artist: artist, title: searchTitle
@@ -570,7 +577,7 @@ final class NowPlayingViewModel {
         // Updates display state only — history logging handled by TransportStrategy.
         metadataPollingTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                try? await Task.sleep(nanoseconds: Timing.metadataPolling)
                 guard !Task.isCancelled, let self else { return }
                 guard let coordinator = group.coordinator else { return }
                 do {

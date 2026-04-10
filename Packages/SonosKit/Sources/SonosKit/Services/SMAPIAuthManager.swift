@@ -16,8 +16,8 @@ public final class SMAPIAuthManager: ObservableObject {
         set { UserDefaults.standard.set(newValue, forKey: UDKey.smapiEnabled); objectWillChange.send() }
     }
 
-    private var deviceID = ""
-    private var householdID = ""
+    public private(set) var deviceID: String?
+    public private(set) var householdID = ""
 
     /// Maps service ID to account serial number (sn) extracted from favorites/history
     @Published public var serviceSerialNumbers: [Int: Int] = [:]
@@ -84,7 +84,7 @@ public final class SMAPIAuthManager: ObservableObject {
 
         // Scan Sonos Favorites
         do {
-            let (items, _) = try await manager.browse(objectID: "FV:2", start: 0, count: 200)
+            let (items, _) = try await manager.browse(objectID: BrowseID.favorites, start: 0, count: PageSize.smapiAuth)
             for item in items {
                 extractSN(from: item.resourceURI, into: &snMap)
             }
@@ -94,7 +94,7 @@ public final class SMAPIAuthManager: ObservableObject {
 
         // Also scan play history URIs as fallback
         if let history = manager.playHistoryManager {
-            for entry in history.entries.suffix(200) {
+            for entry in history.entries.suffix(PageSize.smapiAuth) {
                 extractSN(from: entry.sourceURI, into: &snMap)
             }
         }
@@ -151,7 +151,7 @@ public final class SMAPIAuthManager: ObservableObject {
     /// Starts the AppLink authentication flow for a service.
     /// Returns the URL the user needs to visit to authorize.
     public func startAuth(service: SMAPIServiceDescriptor) async -> String? {
-        guard !deviceID.isEmpty, !householdID.isEmpty else {
+        guard let deviceID, !deviceID.isEmpty, !householdID.isEmpty else {
             authError = "Device identity not loaded. Try restarting the app."
             return nil
         }
@@ -200,6 +200,7 @@ public final class SMAPIAuthManager: ObservableObject {
 
     /// Polls the service for auth completion (user needs to authorize in browser)
     private func pollForAuth(service: SMAPIServiceDescriptor, linkCode: String) async {
+        guard let deviceID else { return }
         for _ in 0..<60 { // Poll for up to 5 minutes (60 * 5s)
             guard !Task.isCancelled else {
                 isAuthenticating = false

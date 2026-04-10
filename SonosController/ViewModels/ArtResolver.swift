@@ -5,6 +5,7 @@
 /// Does NOT do: ad break detection (TrackMetadata.isAdBreak), DIDL parsing
 /// (TrackMetadata.enrichFromDIDL), or search orchestration (NowPlayingViewModel).
 import Foundation
+import AppKit
 import SonosKit
 
 @MainActor
@@ -93,8 +94,9 @@ final class ArtResolver {
         }
     }
 
-    /// The art URL the view should show — accounts for ad breaks.
+    /// The art URL the view should show — accounts for ad breaks and ignore state.
     func artURLForDisplay(trackMetadata: TrackMetadata) -> URL? {
+        if isArtIgnored { return nil }
         if trackMetadata.isAdBreak {
             return radioStationArtURL
         }
@@ -118,44 +120,105 @@ final class ArtResolver {
         let currentURI = trackMetadata.trackURI ?? trackMetadata.title
         guard currentURI != lastTrackURI, !currentURI.isEmpty else { return }
         lastTrackURI = currentURI
-        if !forceWebArt {
-            webArtURL = nil
-            lastArtSearchKey = ""
-        }
+        // Reset all overrides — new track starts fresh
+        isArtIgnored = false
+        forceWebArt = false
+        webArtURL = nil
+        radioTrackArtURL = nil
+        lastArtSearchKey = ""
         displayedArtURL = trackMetadata.albumArtURI.flatMap { URL(string: $0) }
+        // Restore any persisted override for this specific track
         loadPersistedArtOverride(trackMetadata: trackMetadata, group: group)
     }
 
     // MARK: - Persistence
 
+    /// Sentinel value stored to indicate artwork should be ignored (show generic icon)
+    static let ignoreArtMarker = "IGNORE"
+
+    /// Whether artwork is currently being ignored for this track
+    var isArtIgnored = false
+
     func loadPersistedArtOverride(trackMetadata: TrackMetadata, group: SonosGroup) {
-        let searchTerm = !trackMetadata.title.isEmpty ? trackMetadata.title :
-                         !trackMetadata.stationName.isEmpty ? trackMetadata.stationName : ""
+        let searchTerm = artOverrideKey(trackMetadata: trackMetadata)
         guard !searchTerm.isEmpty else { return }
         let key = "\(UDKey.artOverridePrefix)\(searchTerm.lowercased())"
         if let saved = UserDefaults.standard.string(forKey: key) {
-            webArtURL = URL(string: saved)
-            forceWebArt = true
-            updateDisplayedArt(trackMetadata: trackMetadata, group: group)
+            if saved == Self.ignoreArtMarker {
+                isArtIgnored = true
+                webArtURL = nil
+                forceWebArt = false
+                displayedArtURL = nil
+            } else {
+                isArtIgnored = false
+                webArtURL = URL(string: saved)
+                forceWebArt = true
+                updateDisplayedArt(trackMetadata: trackMetadata, group: group)
+            }
         }
+    }
+
+    /// Persists an ignore marker so this track always shows the generic icon
+    func ignoreArtwork(trackMetadata: TrackMetadata) {
+        let searchTerm = artOverrideKey(trackMetadata: trackMetadata)
+        guard !searchTerm.isEmpty else { return }
+        let key = "\(UDKey.artOverridePrefix)\(searchTerm.lowercased())"
+        UserDefaults.standard.set(Self.ignoreArtMarker, forKey: key)
+        isArtIgnored = true
+        webArtURL = nil
+        forceWebArt = false
+        displayedArtURL = nil
+    }
+
+    /// Persists a manually chosen art URL and pre-caches the image
+    func setManualArtwork(_ artURL: String, trackMetadata: TrackMetadata, group: SonosGroup) {
+        let searchTerm = artOverrideKey(trackMetadata: trackMetadata)
+        guard !searchTerm.isEmpty else { return }
+        let key = "\(UDKey.artOverridePrefix)\(searchTerm.lowercased())"
+        UserDefaults.standard.set(artURL, forKey: key)
+        isArtIgnored = false
+        webArtURL = URL(string: artURL)
+        forceWebArt = true
+        // Clear radio track art so it doesn't override the manual choice
+        radioTrackArtURL = nil
+        displayedArtURL = webArtURL
+        updateDisplayedArt(trackMetadata: trackMetadata, group: group)
+
+        // Pre-cache the image so it's available immediately on future plays
+        if let url = URL(string: artURL) {
+            Task {
+                if ImageCache.shared.image(for: url) == nil {
+                    if let (data, _) = try? await URLSession.shared.data(from: url),
+                       let image = NSImage(data: data) {
+                        ImageCache.shared.store(image, for: url)
+                    }
+                }
+            }
+        }
+
+        // Update play history artwork for this track
+        playHistoryManager?.updateArtwork(
+            forTitle: trackMetadata.title, artist: trackMetadata.artist, artURL: artURL)
+    }
+
+    /// Consistent key for art override persistence
+    func artOverrideKey(trackMetadata: TrackMetadata) -> String {
+        !trackMetadata.title.isEmpty ? trackMetadata.title :
+        !trackMetadata.stationName.isEmpty ? trackMetadata.stationName : ""
     }
 
     func forceITunesArtSearch(trackMetadata: TrackMetadata, displayArtist: String, group: SonosGroup) {
         let artist = displayArtist
-        let searchTerm = !trackMetadata.title.isEmpty ? trackMetadata.title :
-                         !trackMetadata.stationName.isEmpty ? trackMetadata.stationName : ""
+        let searchTerm = artOverrideKey(trackMetadata: trackMetadata)
         guard !searchTerm.isEmpty else { return }
         lastArtSearchKey = ""
         forceWebArt = false
+        isArtIgnored = false
         Task {
             if let artURL = await AlbumArtSearchService.shared.searchArtwork(
                 artist: artist, album: searchTerm
             ) {
-                webArtURL = URL(string: artURL)
-                forceWebArt = true
-                let key = "\(UDKey.artOverridePrefix)\(searchTerm.lowercased())"
-                UserDefaults.standard.set(artURL, forKey: key)
-                updateDisplayedArt(trackMetadata: trackMetadata, group: group)
+                setManualArtwork(artURL, trackMetadata: trackMetadata, group: group)
             }
         }
     }
@@ -202,6 +265,7 @@ final class ArtResolver {
         radioStationArtURL = nil
         webArtURL = nil
         forceWebArt = false
+        isArtIgnored = false
         lastArtSearchKey = ""
         lastTrackURI = ""
         lastRadioTrackKey = ""

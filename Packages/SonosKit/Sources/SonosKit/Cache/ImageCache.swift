@@ -18,8 +18,8 @@ public final class ImageCache: ImageCacheProtocol {
 
     private static let maxSizeMBKey = "imageCacheMaxSizeMB"
     private static let maxAgeDaysKey = "imageCacheMaxAgeDays"
-    private static let defaultMaxSizeMB = 500
-    private static let defaultMaxAgeDays = 30
+    private static let defaultMaxSizeMB = CacheDefaults.imageDiskMaxSizeMB
+    private static let defaultMaxAgeDays = CacheDefaults.imageDiskMaxAgeDays
 
     public var maxSizeMB: Int {
         get {
@@ -48,8 +48,8 @@ public final class ImageCache: ImageCacheProtocol {
         diskCacheURL = AppPaths.appSupportDirectory.appendingPathComponent("ImageCache", isDirectory: true)
         try? fileManager.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
 
-        memoryCache.countLimit = 200
-        memoryCache.totalCostLimit = 50 * 1024 * 1024
+        memoryCache.countLimit = CacheDefaults.imageMemoryCountLimit
+        memoryCache.totalCostLimit = CacheDefaults.imageMemoryBytesLimit
 
         // Run eviction on startup in background
         DispatchQueue.global(qos: .utility).async { [weak self] in guard let self else { return };
@@ -109,11 +109,12 @@ public final class ImageCache: ImageCacheProtocol {
 
         let filePath = diskCacheURL.appendingPathComponent(key)
         try? data.write(to: filePath, options: .atomic)
+        try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: filePath.path)
 
         invalidateDiskStats()
 
         // Periodically evict (roughly every 50 stores)
-        if Int.random(in: 0..<50) == 0 {
+        if Int.random(in: 0..<CacheDefaults.imageEvictionFrequency) == 0 {
             DispatchQueue.global(qos: .utility).async { [weak self] in
                 guard let self else { return }
                 self.evictExpiredAndOversized()

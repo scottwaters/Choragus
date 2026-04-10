@@ -47,7 +47,7 @@ public final class PlaylistServiceScanner: ObservableObject {
             guard let manager else { return [] }
             var services = Set<String>()
             var start = 0
-            let batchSize = 100
+            let batchSize = PageSize.browse
 
             repeat {
                 guard let result = try? await manager.browse(objectID: objectID, start: start, count: batchSize) else { break }

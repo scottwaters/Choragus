@@ -135,6 +135,109 @@ public struct TrackMetadata: Equatable {
         return XMLResponseParser.parseDIDLMetadata(didl)?.title
     }
 
+    // MARK: - Stream Content Parsing
+
+    /// Parses "Artist - Title" from radio stream content, applying smartCase cleanup.
+    /// Single source of truth — called by AVTransportService and TransportStrategy.
+    public static func parseStreamContent(_ content: String) -> (artist: String, title: String)? {
+        guard !content.isEmpty else { return nil }
+        let parts = content.components(separatedBy: " - ")
+        if parts.count >= 2 {
+            let artist = smartCase(parts[0].trimmingCharacters(in: .whitespaces))
+            let title = smartCase(parts.dropFirst().joined(separator: " - ").trimmingCharacters(in: .whitespaces))
+            return (artist, title)
+        }
+        return (artist: "", title: smartCase(content))
+    }
+
+    // MARK: - Technical Name Detection
+
+    /// Detects technical stream/file names that should not be shown as track titles or artist names.
+    /// Single source of truth — replaces looksLikeTechnicalTitle and looksLikeTechnicalName.
+    public static func isTechnicalName(_ name: String) -> Bool {
+        guard !name.isEmpty else { return false }
+        let lower = name.lowercased()
+        // File extensions
+        if lower.hasSuffix(".mp3") || lower.hasSuffix(".mp4") || lower.hasSuffix(".m3u8") ||
+           lower.hasSuffix(".m3u") || lower.hasSuffix(".pls") || lower.hasSuffix(".aac") ||
+           lower.hasSuffix(".ogg") || lower.hasSuffix(".flac") || lower.hasSuffix(".wav") { return true }
+        // No spaces + has dot = filename
+        if name.contains(".") && !name.contains(" ") { return true }
+        // No spaces + has underscores = technical ID
+        if name.contains("_") && !name.contains(" ") { return true }
+        // URL-like (only flag & and ? when no spaces — real artist names like "Hall & Oates" have spaces)
+        if name.contains("://") { return true }
+        if (name.contains("?") || name.contains("&")) && !name.contains(" ") { return true }
+        if name.hasPrefix("http") || name.hasPrefix("x-") { return true }
+        // Single-character alphanumeric codes with digits (e.g. not real names)
+        if name.count == 1 && name.first?.isNumber == true { return true }
+        return false
+    }
+
+    // MARK: - Smart Case (Stream Metadata Cleanup)
+
+    private static let romanNumerals: Set<String> = [
+        "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
+        "XI", "XII", "XIII", "XIV", "XV", "XVI", "XX"
+    ]
+
+    /// Cleans up stream metadata text casing.
+    /// ALL CAPS text (>70% uppercase) is converted to Title Case, preserving Roman numerals.
+    /// First letter after brackets is capitalised.
+    public static func smartCase(_ text: String) -> String {
+        var result = text
+        let letters = text.filter { $0.isLetter }
+        if !letters.isEmpty {
+            let upperCount = letters.filter { $0.isUppercase }.count
+            if Double(upperCount) / Double(letters.count) > 0.7 {
+                result = text.lowercased().split(separator: " ").map { word in
+                    let str = String(word)
+                    let original = String(text[word.startIndex..<word.endIndex]).trimmingCharacters(in: .punctuationCharacters)
+                    if romanNumerals.contains(original.uppercased()) {
+                        let prefix = str.prefix(while: { !$0.isLetter })
+                        return prefix + original.uppercased()
+                    }
+                    return capitaliseFirstLetter(str)
+                }.joined(separator: " ")
+            }
+        }
+        result = fixBracketCapitalisation(result)
+        return result
+    }
+
+    private static func capitaliseFirstLetter(_ str: String) -> String {
+        var result = ""
+        var done = false
+        for char in str {
+            if !done && char.isLetter {
+                result.append(contentsOf: char.uppercased())
+                done = true
+            } else {
+                result.append(char)
+            }
+        }
+        return result
+    }
+
+    private static func fixBracketCapitalisation(_ text: String) -> String {
+        var result = ""
+        var capitaliseNext = false
+        for char in text {
+            if capitaliseNext && char.isLetter {
+                result.append(contentsOf: char.uppercased())
+                capitaliseNext = false
+            } else {
+                result.append(char)
+                if char == "(" || char == "[" || char == "/" {
+                    capitaliseNext = true
+                } else if char != " " {
+                    capitaliseNext = false
+                }
+            }
+        }
+        return result
+    }
+
     // MARK: - Time Parsing
 
     public static func parseTimeString(_ time: String) -> TimeInterval {

@@ -61,6 +61,24 @@ public enum XMLResponseParser {
         return parser.parse(didl)
     }
 
+    /// Extracts r:streamContent from DIDL using string matching when XML parsing fails.
+    /// Sonos stream metadata can contain bare & characters that break the XML parser.
+    public static func extractStreamContent(_ didl: String) -> String? {
+        // Try multiple tag formats: with and without namespace prefix
+        for openTag in ["<r:streamContent>", "<streamContent>"] {
+            let closeTag = openTag.replacingOccurrences(of: "<", with: "</")
+            if let startRange = didl.range(of: openTag),
+               let endRange = didl.range(of: closeTag, range: startRange.upperBound..<didl.endIndex) {
+                let content = String(didl[startRange.upperBound..<endRange.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !content.isEmpty {
+                    return xmlUnescape(content)
+                }
+            }
+        }
+        return nil
+    }
+
     // MARK: - Helpers
 
     public static func xmlUnescape(_ string: String) -> String {

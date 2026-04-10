@@ -34,7 +34,7 @@ public final class ContentDirectoryService {
         self.soap = soap
     }
 
-    public func browseQueue(device: SonosDevice, start: Int = 0, count: Int = 100) async throws -> (items: [QueueItem], total: Int) {
+    public func browseQueue(device: SonosDevice, start: Int = 0, count: Int = PageSize.queue) async throws -> (items: [QueueItem], total: Int) {
         let result = try await soap.send(
             to: device.baseURL,
             path: Self.path,
@@ -138,7 +138,7 @@ public final class ContentDirectoryService {
 
     // MARK: - Generic Browse
 
-    public func browse(device: SonosDevice, objectID: String, start: Int = 0, count: Int = 100) async throws -> (items: [BrowseItem], total: Int) {
+    public func browse(device: SonosDevice, objectID: String, start: Int = 0, count: Int = PageSize.browse) async throws -> (items: [BrowseItem], total: Int) {
         let result = try await soap.send(
             to: device.baseURL,
             path: Self.path,
@@ -267,7 +267,7 @@ public final class ContentDirectoryService {
     /// Sonos "search" is actually a Browse with a colon-delimited search term appended
     /// to the container ID (e.g. "A:ARTIST:Beatles"). This is a Sonos-specific convention,
     /// not standard UPnP Search.
-    public func search(device: SonosDevice, containerID: String = "A:TRACKS", searchTerm: String, start: Int = 0, count: Int = 50) async throws -> (items: [BrowseItem], total: Int) {
+    public func search(device: SonosDevice, containerID: String = BrowseID.tracks, searchTerm: String, start: Int = 0, count: Int = PageSize.search) async throws -> (items: [BrowseItem], total: Int) {
         let searchObjectID = "\(containerID):\(searchTerm)"
         let result = try await soap.send(
             to: device.baseURL,
@@ -376,8 +376,8 @@ private class QueueXMLParser: NSObject, XMLParserDelegate {
                 var artURI = currentArtURI
                 if artURI.isEmpty, !currentResURI.isEmpty,
                    URIPrefix.isLocal(currentResURI) {
-                    let encoded = currentResURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? currentResURI
-                    artURI = "http://\(deviceIP):\(devicePort)/getaa?s=1&u=\(encoded)"
+                    artURI = AlbumArtSearchService.getaaURL(
+                        speakerIP: deviceIP, port: devicePort, trackURI: currentResURI)
                 }
                 itemIndex += 1
                 items.append(QueueItem(

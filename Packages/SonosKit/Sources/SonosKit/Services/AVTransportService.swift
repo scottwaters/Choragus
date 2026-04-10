@@ -117,35 +117,39 @@ public final class AVTransportService {
             metadata.enrichFromDIDL(didl, device: device)
 
             // Radio/stream-specific: parse r:streamContent for current track info
-            if let parsed = XMLResponseParser.parseDIDLMetadata(didl) {
-                let trackURI = result["TrackURI"] ?? ""
-                let isRadio = URIPrefix.isRadio(trackURI) ||
-                              trackURI.hasSuffix(".m3u8") || trackURI.hasSuffix(".pls")
+            let parsed = XMLResponseParser.parseDIDLMetadata(didl)
+            // Fallback: if streamContent is empty (bare & breaks XML parser), extract with string matching
+            let streamContent: String? = {
+                if let sc = parsed?.streamContent, !sc.isEmpty { return sc }
+                return XMLResponseParser.extractStreamContent(didl)
+            }()
+            let trackURI = result["TrackURI"] ?? ""
+            let isRadio = URIPrefix.isRadio(trackURI) ||
+                          trackURI.hasSuffix(".m3u8") || trackURI.hasSuffix(".pls")
 
-                if !parsed.streamContent.isEmpty {
-                    let parts = parsed.streamContent.components(separatedBy: " - ")
-                    if parts.count >= 2 {
-                        metadata.artist = Self.smartCase(parts[0].trimmingCharacters(in: .whitespaces))
-                        metadata.title = Self.smartCase(parts.dropFirst().joined(separator: " - ").trimmingCharacters(in: .whitespaces))
-                    } else {
-                        metadata.title = Self.smartCase(parsed.streamContent)
-                    }
-                } else if isRadio {
-                    metadata.title = ""
-                    metadata.artist = ""
+            if let content = streamContent, !content.isEmpty {
+                if let stream = TrackMetadata.parseStreamContent(content) {
+                    metadata.artist = stream.artist
+                    metadata.title = stream.title
                 }
+            } else if isRadio {
+                metadata.title = ""
+                metadata.artist = ""
+            }
+
+            if let parsed {
 
                 // Clear technical-looking names
-                if Self.looksLikeTechnicalTitle(metadata.title) {
+                if TrackMetadata.isTechnicalName(metadata.title) {
                     sonosDebugLog("[POSITION] Cleared technical title: '\(metadata.title)'")
                     metadata.title = ""
                 }
-                if Self.looksLikeTechnicalTitle(metadata.artist) { metadata.artist = "" }
+                if TrackMetadata.isTechnicalName(metadata.artist) { metadata.artist = "" }
 
                 // Fallback art via /getaa if DIDL had no art
                 if metadata.albumArtURI == nil, !parsed.resourceURI.isEmpty {
-                    let encoded = parsed.resourceURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? parsed.resourceURI
-                    metadata.albumArtURI = "http://\(device.ip):\(device.port)/getaa?s=1&u=\(encoded)"
+                    metadata.albumArtURI = AlbumArtSearchService.getaaURL(
+                        speakerIP: device.ip, port: device.port, trackURI: parsed.resourceURI)
                 }
             }
         }
@@ -277,93 +281,6 @@ public final class AVTransportService {
                 ("CurrentURIMetaData", metadata)
             ]
         )
-    }
-
-    /// Detects technical stream/file names that shouldn't be shown as track titles.
-    private static func looksLikeTechnicalTitle(_ name: String) -> Bool {
-        guard !name.isEmpty else { return false }
-        let lower = name.lowercased()
-        // File extensions
-        if lower.hasSuffix(".mp3") || lower.hasSuffix(".mp4") || lower.hasSuffix(".m3u8") ||
-           lower.hasSuffix(".m3u") || lower.hasSuffix(".pls") || lower.hasSuffix(".aac") ||
-           lower.hasSuffix(".ogg") || lower.hasSuffix(".flac") || lower.hasSuffix(".wav") { return true }
-        // No spaces + has dot = filename
-        if name.contains(".") && !name.contains(" ") { return true }
-        // No spaces + has underscores = technical ID
-        if name.contains("_") && !name.contains(" ") { return true }
-        // URL-like
-        if name.contains("://") || name.contains("?") || name.contains("&") { return true }
-        if name.hasPrefix("http") || name.hasPrefix("x-") { return true }
-        return false
-    }
-
-    /// Cleans up stream metadata text casing.
-    /// - ALL CAPS text (>70% uppercase) is converted to Title Case, preserving Roman numerals.
-    /// - All text gets first-letter-after-bracket capitalisation (fixes stream metadata like "(os Caça" → "(Os Caça").
-    private static let romanNumerals: Set<String> = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XX"]
-
-    private static func smartCase(_ text: String) -> String {
-        var result = text
-
-        // Convert ALL CAPS to title case
-        let letters = text.filter { $0.isLetter }
-        if !letters.isEmpty {
-            let upperCount = letters.filter { $0.isUppercase }.count
-            if Double(upperCount) / Double(letters.count) > 0.7 {
-                result = text.lowercased().split(separator: " ").map { word in
-                    let str = String(word)
-                    // Preserve Roman numerals
-                    let stripped = str.trimmingCharacters(in: .punctuationCharacters)
-                    let original = String(text[word.startIndex..<word.endIndex]).trimmingCharacters(in: .punctuationCharacters)
-                    if romanNumerals.contains(original.uppercased()) {
-                        // Reattach any leading punctuation
-                        let prefix = str.prefix(while: { !$0.isLetter })
-                        return prefix + original.uppercased()
-                    }
-                    // Capitalise first letter (including after punctuation)
-                    return capitaliseFirstLetter(str)
-                }.joined(separator: " ")
-            }
-        }
-
-        // Always fix first letter after ( [ / — regardless of overall case
-        result = fixBracketCapitalisation(result)
-        return result
-    }
-
-    /// Capitalises the first letter in a string, even after leading punctuation
-    private static func capitaliseFirstLetter(_ str: String) -> String {
-        var result = ""
-        var done = false
-        for char in str {
-            if !done && char.isLetter {
-                result.append(contentsOf: char.uppercased())
-                done = true
-            } else {
-                result.append(char)
-            }
-        }
-        return result
-    }
-
-    /// Capitalises the first letter after ( [ /
-    private static func fixBracketCapitalisation(_ text: String) -> String {
-        var result = ""
-        var capitaliseNext = false
-        for char in text {
-            if capitaliseNext && char.isLetter {
-                result.append(contentsOf: char.uppercased())
-                capitaliseNext = false
-            } else {
-                result.append(char)
-                if char == "(" || char == "[" || char == "/" {
-                    capitaliseNext = true
-                } else if char != " " {
-                    capitaliseNext = false
-                }
-            }
-        }
-        return result
     }
 
     public func becomeCoordinatorOfStandaloneGroup(device: SonosDevice) async throws {

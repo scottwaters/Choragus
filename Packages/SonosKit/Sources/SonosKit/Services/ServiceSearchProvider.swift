@@ -525,6 +525,41 @@ public final class ServiceSearchProvider {
         }
     }
 
+    // MARK: - Anonymous SMAPI (for services like Sonos Radio)
+
+    /// Search an anonymous SMAPI service (no auth token needed)
+    public func searchSMAPIAnonymous(term: String, searchID: String = "track", serviceID: Int,
+                                     serviceURI: String, deviceID: String, householdID: String = "",
+                                     sn: Int, index: Int = 0, count: Int = 25) async -> [BrowseItem] {
+        let client = SMAPIClient()
+        do {
+            let result = try await client.searchAnonymous(serviceURI: serviceURI, deviceID: deviceID,
+                                                           householdID: householdID,
+                                                           searchID: searchID, term: term,
+                                                           index: index, count: count)
+            return result.items.map { smapiItemToBrowseItem($0, serviceID: serviceID, sn: sn) }
+        } catch {
+            sonosDebugLog("[SERVICE_SEARCH] Anonymous SMAPI search failed for sid=\(serviceID): \(error)")
+            return []
+        }
+    }
+
+    /// Browse an anonymous SMAPI service container
+    public func browseSMAPIAnonymous(id: String, serviceID: Int, serviceURI: String,
+                                     deviceID: String, householdID: String = "",
+                                     sn: Int, index: Int = 0, count: Int = 50) async -> [BrowseItem] {
+        let client = SMAPIClient()
+        do {
+            let result = try await client.getMetadataAnonymous(serviceURI: serviceURI, deviceID: deviceID,
+                                                                householdID: householdID,
+                                                                id: id, index: index, count: count)
+            return result.items.map { smapiItemToBrowseItem($0, serviceID: serviceID, sn: sn) }
+        } catch {
+            sonosDebugLog("[SERVICE_SEARCH] Anonymous SMAPI browse failed for sid=\(serviceID) id=\(id): \(error)")
+            return []
+        }
+    }
+
     // MARK: - DIDL Builders
 
     private func buildTrackDIDL(trackId: Int, collectionId: Int, title: String, artist: String, album: String, serviceType: Int) -> String {

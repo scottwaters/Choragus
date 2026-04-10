@@ -42,6 +42,8 @@
 		A10038 /* ArtResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10038; };
 		A10039 /* BrowseItemArtLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10039; };
 		A10040 /* PlayHistoryView2.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10040; };
+		A10041 /* ArtworkSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10041; };
+		A10042 /* SonosRadioSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10042; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -82,6 +84,8 @@
 		B10038 /* ArtResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtResolver.swift; sourceTree = "<group>"; };
 		B10039 /* BrowseItemArtLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseItemArtLoader.swift; sourceTree = "<group>"; };
 		B10040 /* PlayHistoryView2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayHistoryView2.swift; sourceTree = "<group>"; };
+		B10041 /* ArtworkSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkSearchView.swift; sourceTree = "<group>"; };
+		B10042 /* SonosRadioSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosRadioSearchView.swift; sourceTree = "<group>"; };
 		B10020 /* SonosController.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonosController.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -159,6 +163,8 @@
 				B10029 /* RecentlyPlayedView.swift */,
 				B10030 /* MenuBarController.swift */,
 				B10031 /* MusicServicesView.swift */,
+				B10041 /* ArtworkSearchView.swift */,
+				B10042 /* SonosRadioSearchView.swift */,
 				B10034 /* SliderPopup.swift */,
 				B10036 /* PlayHistoryDashboard.swift */,
 			);
@@ -270,6 +276,8 @@
 				A10029 /* RecentlyPlayedView.swift in Sources */,
 				A10030 /* MenuBarController.swift in Sources */,
 				A10031 /* MusicServicesView.swift in Sources */,
+				A10041 /* ArtworkSearchView.swift in Sources */,
+				A10042 /* SonosRadioSearchView.swift in Sources */,
 				A10032 /* NowPlayingViewModel.swift in Sources */,
 				A10033 /* QueueViewModel.swift in Sources */,
 				A10034 /* SliderPopup.swift in Sources */,

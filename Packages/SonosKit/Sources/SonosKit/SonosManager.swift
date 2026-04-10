@@ -517,7 +517,7 @@ public class SonosManager: ObservableObject {
 
             // Pre-fetch queue items so track info recovery works for service tracks
             if lastQueueItems[coordinator.id] == nil || lastQueueItems[coordinator.id]?.isEmpty == true {
-                if let queueResult = try? await contentDirectory.browseQueue(device: coordinator, start: 0, count: 100) {
+                if let queueResult = try? await contentDirectory.browseQueue(device: coordinator, start: 0, count: PageSize.queue) {
                     lastQueueItems[coordinator.id] = queueResult.items
                 }
             }
@@ -822,7 +822,7 @@ public class SonosManager: ObservableObject {
 
     // MARK: - Queue
 
-    public func getQueue(group: SonosGroup, start: Int = 0, count: Int = 100) async throws -> (items: [QueueItem], total: Int) {
+    public func getQueue(group: SonosGroup, start: Int = 0, count: Int = PageSize.queue) async throws -> (items: [QueueItem], total: Int) {
         guard let coordinator = group.coordinator else { return ([], 0) }
         let result = try await contentDirectory.browseQueue(device: coordinator, start: start, count: count)
         // Cache queue items for track info recovery (Apple Music tracks may have empty GetPositionInfo)
@@ -992,26 +992,26 @@ public class SonosManager: ObservableObject {
 
         var sections: [BrowseSection] = []
 
-        sections.append(BrowseSection(id: "favorites", title: "Sonos Favorites", objectID: "FV:2", icon: "star.fill"))
+        sections.append(BrowseSection(id: "favorites", title: "Sonos Favorites", objectID: BrowseID.favorites, icon: "star.fill"))
 
-        if let total = await probeContainer(device: anyDevice, objectID: "SQ:"), total > 0 {
-            sections.append(BrowseSection(id: "playlists", title: "Sonos Playlists", objectID: "SQ:", icon: "music.note.list"))
+        if let total = await probeContainer(device: anyDevice, objectID: BrowseID.playlists), total > 0 {
+            sections.append(BrowseSection(id: "playlists", title: "Sonos Playlists", objectID: BrowseID.playlists, icon: "music.note.list"))
         }
 
         do {
-            let (items, _) = try await contentDirectory.browse(device: anyDevice, objectID: "A:", start: 0, count: 20)
+            let (items, _) = try await contentDirectory.browse(device: anyDevice, objectID: BrowseID.libraryRoot, start: 0, count: 20)
             for item in items {
                 let icon = libraryIcon(for: item.objectID)
                 sections.append(BrowseSection(id: item.objectID, title: item.title, objectID: item.objectID, icon: icon))
             }
         } catch {
-            sections.append(BrowseSection(id: "artists", title: "Artists", objectID: "A:ALBUMARTIST", icon: "person.2"))
-            sections.append(BrowseSection(id: "albums", title: "Albums", objectID: "A:ALBUM", icon: "square.stack"))
-            sections.append(BrowseSection(id: "tracks", title: "Tracks", objectID: "A:TRACKS", icon: "music.note"))
+            sections.append(BrowseSection(id: "artists", title: "Artists", objectID: BrowseID.albumArtist, icon: "person.2"))
+            sections.append(BrowseSection(id: "albums", title: "Albums", objectID: BrowseID.album, icon: "square.stack"))
+            sections.append(BrowseSection(id: "tracks", title: "Tracks", objectID: BrowseID.tracks, icon: "music.note"))
         }
 
-        if let total = await probeContainer(device: anyDevice, objectID: "S:"), total > 0 {
-            sections.append(BrowseSection(id: "shares", title: "Music Library Folders", objectID: "S:", icon: "externaldrive.connected.to.line.below"))
+        if let total = await probeContainer(device: anyDevice, objectID: BrowseID.shares), total > 0 {
+            sections.append(BrowseSection(id: "shares", title: "Music Library Folders", objectID: BrowseID.shares, icon: "externaldrive.connected.to.line.below"))
         }
 
         // Radio directory (R:0) hidden — requires TuneIn/service integration not yet enabled
@@ -1027,7 +1027,7 @@ public class SonosManager: ObservableObject {
         guard musicServicesList.isEmpty else { return }
         for attempt in 0..<3 {
             if attempt > 0 {
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(for: .seconds(Timing.musicServicesRetryDelay))
             }
             do {
                 let all = try await getAvailableMusicServices()
@@ -1068,12 +1068,12 @@ public class SonosManager: ObservableObject {
         return try await contentDirectory.browseMetadata(device: anyDevice, objectID: objectID)
     }
 
-    public func browse(objectID: String, start: Int = 0, count: Int = 100) async throws -> (items: [BrowseItem], total: Int) {
+    public func browse(objectID: String, start: Int = 0, count: Int = PageSize.browse) async throws -> (items: [BrowseItem], total: Int) {
         guard let anyDevice = preferredDevice else { return ([], 0) }
         return try await contentDirectory.browse(device: anyDevice, objectID: objectID, start: start, count: count)
     }
 
-    public func search(query: String, in containerID: String = "A:TRACKS", start: Int = 0, count: Int = 50) async throws -> (items: [BrowseItem], total: Int) {
+    public func search(query: String, in containerID: String = BrowseID.tracks, start: Int = 0, count: Int = PageSize.search) async throws -> (items: [BrowseItem], total: Int) {
         guard let anyDevice = preferredDevice else { return ([], 0) }
         return try await contentDirectory.search(device: anyDevice, containerID: containerID, searchTerm: query, start: start, count: count)
     }
@@ -1477,7 +1477,7 @@ extension SonosManager: TransportStrategyDelegate {
         let sameTrack = enriched.trackURI == existing.trackURI || enriched.trackURI == nil
         if !existing.title.isEmpty && sameTrack {
             let newTitle = enriched.title
-            if newTitle.isEmpty || looksLikeTechnicalName(newTitle) {
+            if newTitle.isEmpty || TrackMetadata.isTechnicalName(newTitle) {
                 var merged = existing
                 merged.position = enriched.position
                 merged.duration = enriched.duration
@@ -1542,23 +1542,6 @@ extension SonosManager: TransportStrategyDelegate {
 
     /// Detects technical stream names that should not replace friendly titles.
     /// e.g. "moviesoundtracks_mobile_mp3", "s233145", "stream_128k"
-    private func looksLikeTechnicalName(_ name: String) -> Bool {
-        let lower = name.lowercased()
-        // Contains underscores but no spaces — likely a stream ID
-        if name.contains("_") && !name.contains(" ") { return true }
-        // Very short alphanumeric codes
-        if name.count < 4 && name.allSatisfy({ $0.isLetter || $0.isNumber }) { return true }
-        // URLs or URL-like strings
-        if name.contains("://") || name.contains("?") || name.contains("&") { return true }
-        if name.hasPrefix("http") || name.hasPrefix("x-") { return true }
-        // File extensions
-        if lower.hasSuffix(".mp3") || lower.hasSuffix(".mp4") || lower.hasSuffix(".pls") ||
-           lower.hasSuffix(".m3u") || lower.hasSuffix(".m3u8") || lower.hasSuffix(".aac") ||
-           lower.hasSuffix(".ogg") || lower.hasSuffix(".flac") || lower.hasSuffix(".wav") { return true }
-        // Looks like a filename with no spaces and a dot
-        if name.contains(".") && !name.contains(" ") { return true }
-        return false
-    }
 
     public func transportDidUpdatePlayMode(_ groupID: String, mode: PlayMode) {
         let now = Date()

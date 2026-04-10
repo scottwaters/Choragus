@@ -108,9 +108,9 @@ final class BrowseViewModel {
                 loadedCount = items.count
             } else if isSearch {
                 let query = String(objectID.dropFirst("SEARCH:".count))
-                async let artistResults = sonosManager.search(query: query, in: "A:ALBUMARTIST", start: 0, count: 20)
-                async let albumResults = sonosManager.search(query: query, in: "A:ALBUM", start: 0, count: 20)
-                async let trackResults = sonosManager.search(query: query, in: "A:TRACKS", start: 0, count: 30)
+                async let artistResults = sonosManager.search(query: query, in: BrowseID.albumArtist, start: 0, count: PageSize.searchArtist)
+                async let albumResults = sonosManager.search(query: query, in: BrowseID.album, start: 0, count: PageSize.searchAlbum)
+                async let trackResults = sonosManager.search(query: query, in: BrowseID.tracks, start: 0, count: PageSize.searchTrack)
                 let (artists, albums, tracks) = try await (artistResults, albumResults, trackResults)
                 items = artists.items + albums.items + tracks.items
                 totalItems = items.count
@@ -159,7 +159,7 @@ final class BrowseViewModel {
 
     func loadPlaylists() async {
         do {
-            let (result, _) = try await sonosManager.browse(objectID: "SQ:", start: 0, count: 100)
+            let (result, _) = try await sonosManager.browse(objectID: BrowseID.playlists, start: 0, count: PageSize.browse)
             playlists = result.filter { $0.isContainer }
         } catch {
             ErrorHandler.shared.handle(error, context: "BROWSE")

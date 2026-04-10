@@ -154,7 +154,7 @@ public final class SMAPIClient {
         return parseMediaList(result)
     }
 
-    public func getMetadata(serviceURI: String, token: SMAPIToken, id: String = "root",
+    public func getMetadata(serviceURI: String, token: SMAPIToken, id: String = BrowseID.smapiRoot,
                             index: Int = 0, count: Int = 20) async throws -> (items: [SMAPIMediaItem], total: Int) {
         let body = buildAuthenticatedEnvelope(token: token, bodyContent: """
         <s:getMetadata>
@@ -205,8 +205,10 @@ public final class SMAPIClient {
     }
 
     /// Anonymous SMAPI envelope — for services that don't require auth (e.g. TuneIn)
-    public func getMetadataAnonymous(serviceURI: String, deviceID: String, id: String = "root",
+    public func getMetadataAnonymous(serviceURI: String, deviceID: String, householdID: String = "",
+                                     id: String = BrowseID.smapiRoot,
                                      index: Int = 0, count: Int = 20) async throws -> (items: [SMAPIMediaItem], total: Int) {
+        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(householdID)</s:householdId>"
         let body = """
         <?xml version="1.0" encoding="utf-8"?>
         <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
@@ -215,6 +217,7 @@ public final class SMAPIClient {
         <s:credentials>
         <s:deviceId>\(deviceID)</s:deviceId>
         <s:deviceProvider>Sonos</s:deviceProvider>
+        \(householdElement)
         </s:credentials>
         </soap:Header>
         <soap:Body>
@@ -229,9 +232,11 @@ public final class SMAPIClient {
         return parseMediaList(result)
     }
 
-    public func searchAnonymous(serviceURI: String, deviceID: String, searchID: String = "artist",
+    public func searchAnonymous(serviceURI: String, deviceID: String, householdID: String = "",
+                                searchID: String = "artist",
                                 term: String, index: Int = 0, count: Int = 20) async throws -> (items: [SMAPIMediaItem], total: Int) {
         guard !term.trimmingCharacters(in: .whitespaces).isEmpty else { return ([], 0) }
+        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(householdID)</s:householdId>"
         let body = """
         <?xml version="1.0" encoding="utf-8"?>
         <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
@@ -240,6 +245,7 @@ public final class SMAPIClient {
         <s:credentials>
         <s:deviceId>\(deviceID)</s:deviceId>
         <s:deviceProvider>Sonos</s:deviceProvider>
+        \(householdElement)
         </s:credentials>
         </soap:Header>
         <soap:Body>

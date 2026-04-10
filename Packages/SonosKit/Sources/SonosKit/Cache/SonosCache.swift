@@ -79,6 +79,7 @@ public final class SonosCache: SonosCacheProtocol {
         do {
             let data = try JSONEncoder().encode(cached)
             try data.write(to: fileURL, options: .atomic)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
         } catch {
             sonosDebugLog("[CACHE] Topology save failed: \(error)")
         }
@@ -127,6 +128,7 @@ public final class SonosCache: SonosCacheProtocol {
         do {
             let data = try JSONEncoder().encode(urls)
             try data.write(to: artCacheURL, options: .atomic)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: artCacheURL.path)
         } catch {
             sonosDebugLog("[CACHE] Art URL save failed: \(error)")
         }

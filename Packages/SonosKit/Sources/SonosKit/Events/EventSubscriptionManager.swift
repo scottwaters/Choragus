@@ -207,7 +207,7 @@ public final class EventSubscriptionManager: @unchecked Sendable {
         stopRenewalLoop()
         renewalTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
+                try? await Task.sleep(for: .seconds(Timing.subscriptionRenewalCheck))
 
                 let now = Date()
                 let currentSubs: [EventSubscription]
