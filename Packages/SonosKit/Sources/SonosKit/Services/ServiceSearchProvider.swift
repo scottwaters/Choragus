@@ -105,6 +105,7 @@ public final class ServiceSearchProvider {
             let albumName = result["collectionName"] as? String ?? ""
             let collectionId = result["collectionId"] as? Int ?? 0
             let artURL = upscaleArt(result["artworkUrl100"] as? String)
+            let relDate = Self.parseISODate(result["releaseDate"] as? String)
 
             let resourceURI = "x-sonos-http:song%3a\(trackId).mp4?sid=\(sid)&flags=8224&sn=\(sn)"
             let metadata = buildTrackDIDL(trackId: trackId, collectionId: collectionId, title: trackName, artist: artistName, album: albumName, serviceType: serviceType)
@@ -117,7 +118,8 @@ public final class ServiceSearchProvider {
                 albumArtURI: artURL,
                 itemClass: .musicTrack,
                 resourceURI: resourceURI,
-                resourceMetadata: metadata
+                resourceMetadata: metadata,
+                releaseDate: relDate
             )
         }
     }
@@ -131,6 +133,7 @@ public final class ServiceSearchProvider {
             }
 
             let artURL = upscaleArt(result["artworkUrl100"] as? String)
+            let relDate = Self.parseISODate(result["releaseDate"] as? String)
 
             // Album container URI
             let resourceURI = "x-rincon-cpcontainer:1006206calbum%3a\(collectionId)?sid=\(sid)&flags=8300&sn=\(sn)"
@@ -144,7 +147,8 @@ public final class ServiceSearchProvider {
                 albumArtURI: artURL,
                 itemClass: .musicAlbum,
                 resourceURI: resourceURI,
-                resourceMetadata: metadata
+                resourceMetadata: metadata,
+                releaseDate: relDate
             )
         }
     }
@@ -660,6 +664,86 @@ public final class ServiceSearchProvider {
     private func upscaleArt(_ url: String?) -> String? {
         url?.replacingOccurrences(of: "100x100", with: "600x600")
            .replacingOccurrences(of: "60x60", with: "600x600")
+    }
+
+    // MARK: - Release Date Enrichment
+
+    /// Enriches browse items with release dates from iTunes Search API.
+    /// Used for SMAPI service results (Spotify, etc.) that don't include dates.
+    /// Returns updated items — call on background, update UI when complete.
+    public func enrichWithReleaseDates(_ items: [BrowseItem]) async -> [BrowseItem] {
+        var updated = items
+        // Batch unique album queries to avoid duplicate lookups
+        var albumDates: [String: Date] = [:] // "artist|album" -> date
+        var queries: [(index: Int, key: String)] = []
+
+        for (i, item) in items.enumerated() {
+            guard item.releaseDate == nil else { continue }
+            let artist = item.artist
+            let album = item.itemClass == .musicAlbum ? item.title : item.album
+            guard !album.isEmpty else { continue }
+            let key = "\(artist.lowercased())|\(album.lowercased())"
+            if albumDates[key] != nil { continue } // already queued
+            albumDates[key] = .distantPast // mark as pending
+            queries.append((i, key))
+        }
+
+        // Fetch dates concurrently (limit concurrency to avoid rate limiting)
+        await withTaskGroup(of: (String, Date?).self) { group in
+            for (_, key) in queries {
+                let parts = key.components(separatedBy: "|")
+                let artist = parts.first ?? ""
+                let album = parts.count > 1 ? parts[1] : ""
+                group.addTask {
+                    let query = [artist, album].filter { !$0.isEmpty }.joined(separator: " ")
+                    guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                          let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=album&limit=1") else {
+                        return (key, nil)
+                    }
+                    do {
+                        let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
+                        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let results = json["results"] as? [[String: Any]],
+                              let first = results.first,
+                              let dateStr = first["releaseDate"] as? String else {
+                            return (key, nil)
+                        }
+                        return (key, Self.parseISODate(dateStr))
+                    } catch {
+                        return (key, nil)
+                    }
+                }
+            }
+            for await (key, date) in group {
+                if let date {
+                    albumDates[key] = date
+                }
+            }
+        }
+
+        // Apply dates to items
+        for i in updated.indices {
+            guard updated[i].releaseDate == nil else { continue }
+            let artist = updated[i].artist
+            let album = updated[i].itemClass == .musicAlbum ? updated[i].title : updated[i].album
+            guard !album.isEmpty else { continue }
+            let key = "\(artist.lowercased())|\(album.lowercased())"
+            if let date = albumDates[key], date != .distantPast {
+                updated[i].releaseDate = date
+            }
+        }
+        return updated
+    }
+
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    private static func parseISODate(_ str: String?) -> Date? {
+        guard let str, !str.isEmpty else { return nil }
+        return isoFormatter.date(from: str) ?? ISO8601DateFormatter().date(from: str)
     }
 
     private func xmlEscape(_ str: String) -> String {

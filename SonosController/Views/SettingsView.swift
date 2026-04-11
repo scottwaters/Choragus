@@ -162,6 +162,12 @@ private struct TabContentView: View {
                     set: { playHistoryManager.isEnabled = $0 }
                 ))
 
+                Toggle("Ignore TV / HDMI / Line-In", isOn: Binding(
+                    get: { UserDefaults.standard.bool(forKey: UDKey.ignoreTV) },
+                    set: { UserDefaults.standard.set($0, forKey: UDKey.ignoreTV) }
+                ))
+                .font(.system(size: 12))
+
                 if playHistoryManager.totalEntries > 0 {
                     Text("\(playHistoryManager.totalEntries) entries, \(String(format: "%.1f", playHistoryManager.totalListeningHours)) hours")
                         .font(.caption)

@@ -80,6 +80,10 @@ public final class PlayHistoryManager: ObservableObject {
                                      groupName: String, transportState: TransportState) {
         guard isEnabled else { return }
         guard transportState == .playing else { return }
+        // Skip TV/Line-In if user opted out
+        if UserDefaults.standard.bool(forKey: UDKey.ignoreTV) {
+            if metadata.title == "TV" || metadata.title == "Line-In" { return }
+        }
         // For radio with no track data, log the station name
         var metadata = metadata
         if metadata.title.isEmpty && !metadata.stationName.isEmpty {
