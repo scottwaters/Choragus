@@ -262,17 +262,26 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
         return cleanForSearch(artist)
     }
 
-    /// Verified song search — scans results for best track/album name match
+    /// Verified song search — scans results for best track/album name match.
+    /// Requires at least 30% of significant words to match (track or album name).
+    /// Filters out common words to focus on distinguishing terms.
+    private static let commonWords: Set<String> = [
+        "the", "and", "for", "from", "with", "feat", "remix", "version",
+        "original", "motion", "picture", "soundtrack", "remaster", "remastered",
+        "edit", "mix", "live", "album", "single", "deluxe", "edition"
+    ]
+
     private func verifiedSongSearch(query: String, expectedTitle: String) async -> String? {
         guard let results = await iTunesSearchAll(query: query, entity: "song", limit: 10) else { return nil }
         let expected = expectedTitle.lowercased()
-        let expectedWords = expected.components(separatedBy: .whitespaces).filter { $0.count > 2 }
+        // Filter to significant words: > 2 chars and not common filler
+        let expectedWords = expected.components(separatedBy: .whitespaces)
+            .filter { $0.count > 2 && !Self.commonWords.contains($0) }
         guard !expectedWords.isEmpty else {
             return results.first?.artURL
         }
-        // Low threshold — radio titles often contain multi-language text
-        // so only a few words may match the English iTunes result
-        let threshold = max(1, expectedWords.count / 4)
+        // Require at least 30% of significant words to match
+        let threshold = max(1, (expectedWords.count * 3 + 9) / 10) // ceiling of count * 0.3
         var bestURL: String?
         var bestScore = 0
         for result in results {

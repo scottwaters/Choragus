@@ -102,16 +102,18 @@ public struct TrackMetadata: Equatable {
     /// Enriches metadata from GetMediaInfo's CurrentURIMetaData DIDL.
     /// Extracts station name for radio streams in addition to standard DIDL fields.
     public mutating func enrichFromMediaInfo(_ mediaInfo: [String: String], device: SonosDevice) {
-        guard let rawDIDL = mediaInfo["CurrentURIMetaData"] else { return }
         let currentURI = mediaInfo["CurrentURI"] ?? ""
 
         // Detect if playing from queue vs direct stream/favorite
+        // Must run BEFORE the guard — even if no DIDL, we need isQueueSource set
         isQueueSource = currentURI.hasPrefix(URIPrefix.rinconQueue)
 
         // Set queue size from NrTracks
         if let nrTracks = mediaInfo["NrTracks"], let n = Int(nrTracks) {
             queueSize = n
         }
+
+        guard let rawDIDL = mediaInfo["CurrentURIMetaData"] else { return }
 
         // Save current title/artist — enrichFromDIDL only fills empty fields
         let hadTitle = !title.isEmpty

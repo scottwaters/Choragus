@@ -14,25 +14,15 @@ final class QueueViewModel: ObservableObject {
     @Published var saveMessage: String?
     @Published var playingTrack: Int? // Track currently being started (shows spinner)
 
+    /// Optimistic flag set immediately when user taps a queue track,
+    /// before the next poll confirms isQueueSource from the speaker.
+    private var userStartedQueuePlayback = false
+
     /// True when the speaker is playing from the queue.
     var isPlayingFromQueue: Bool {
+        if userStartedQueuePlayback { return true }
         let meta = sonosManager.groupTrackMetadata[group.coordinatorID]
-        // Explicit queue source from GetMediaInfo (authoritative)
-        if meta?.isQueueSource == true { return true }
-        // Radio/station: must have BOTH stationName AND radio URI.
-        // Apple Music queue tracks use x-sonosapi-hls-static URIs (looks like radio)
-        // but have empty stationName — so URI alone is not enough to exclude.
-        let hasStation = !(meta?.stationName.isEmpty ?? true)
-        let hasRadioURI = meta?.trackURI.map(URIPrefix.isRadio) ?? false
-        if hasStation && hasRadioURI { return false }
-        // stationName alone (no radio URI) — likely carry-forward, not definitive
-        // radioURI alone (no stationName) — likely Apple Music HLS, not radio
-        // trackNumber within queue range
-        if let trackNum = meta?.trackNumber, trackNum > 0, !queueItems.isEmpty,
-           trackNum <= queueItems.count {
-            return true
-        }
-        return false
+        return meta?.isQueueSource == true
     }
 
     init(sonosManager: any QueueServices, group: SonosGroup) {
@@ -43,6 +33,10 @@ final class QueueViewModel: ObservableObject {
     /// Updates current track number from transport metadata
     func updateCurrentTrack() {
         let meta = sonosManager.groupTrackMetadata[group.coordinatorID]
+        // Clear optimistic flag once speaker confirms queue playback
+        if meta?.isQueueSource == true {
+            userStartedQueuePlayback = false
+        }
         let playing = isPlayingFromQueue
 
         sonosDebugLog("[QUEUE] updateCurrentTrack: title='\(meta?.title ?? "nil")' trackNum=\(meta?.trackNumber ?? -1) station='\(meta?.stationName ?? "")' isQueue=\(playing) isQueueSource=\(meta?.isQueueSource ?? false) uri=\(String(meta?.trackURI?.prefix(40) ?? "nil")) currentTrack=\(currentTrack) queueCount=\(queueItems.count)")
@@ -95,10 +89,12 @@ final class QueueViewModel: ObservableObject {
 
     func playTrack(_ trackNumber: Int) async {
         playingTrack = trackNumber
+        userStartedQueuePlayback = true
         do {
             try await sonosManager.playTrackFromQueue(group: group, trackNumber: trackNumber)
             currentTrack = trackNumber
         } catch {
+            userStartedQueuePlayback = false
             ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
         }
         playingTrack = nil
