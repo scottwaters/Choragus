@@ -523,8 +523,9 @@ public class SonosManager: ObservableObject {
             }
 
             var enriched = position
-            if state.isActive,
-               let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator) {
+            // Always fetch mediaInfo to set isQueueSource correctly
+            // (prevents queue metadata leaking into direct stream playback)
+            if let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator) {
                 enriched.enrichFromMediaInfo(mediaInfo, device: coordinator)
             }
             transportDidUpdateTrackMetadata(coordinator.id, metadata: enriched)
@@ -1437,11 +1438,17 @@ extension SonosManager: TransportStrategyDelegate {
 
         // Recover track info from cache — Apple Music/service queue tracks
         // often return empty TrackMetaData from GetPositionInfo.
+        // Position-based fallbacks blocked when actively playing a radio station
+        // (has stationName + radio URI), to prevent stale queue metadata from leaking.
+        // Apple Music queue tracks use x-sonosapi-hls-static URIs which look like radio
+        // but have no stationName — so stationName is the reliable discriminator.
         var enriched = metadata
         if enriched.title.isEmpty {
             var cached: CachedTrack?
+            let isActiveRadio = !enriched.stationName.isEmpty &&
+                                (enriched.trackURI.map(URIPrefix.isRadio) ?? false)
 
-            // Try URI match first (both encoded and decoded)
+            // Try URI match first (both encoded and decoded) — always safe
             if let uri = enriched.trackURI, !uri.isEmpty {
                 cached = cachedTrackInfo[uri]
                 if cached == nil, let decoded = uri.removingPercentEncoding {
@@ -1449,15 +1456,13 @@ extension SonosManager: TransportStrategyDelegate {
                 }
             }
 
-            // Fall back to queue position match (from addURIToQueue)
-            if cached == nil, enriched.trackNumber > 0 {
+            // Queue position fallbacks — blocked only for active radio streams
+            if cached == nil, !isActiveRadio, enriched.trackNumber > 0 {
                 cached = cachedTrackByPosition[groupID]?[enriched.trackNumber]
             }
-
-            // Fall back to last-fetched queue items (from getQueue/browseQueue)
-            if cached == nil, enriched.trackNumber > 0,
+            if cached == nil, !isActiveRadio, enriched.trackNumber > 0,
                let queueItems = lastQueueItems[groupID] {
-                let idx = enriched.trackNumber - 1 // queue items are 0-indexed, trackNumber is 1-indexed
+                let idx = enriched.trackNumber - 1
                 if idx >= 0 && idx < queueItems.count {
                     let qi = queueItems[idx]
                     cached = CachedTrack(title: qi.title, artist: qi.artist, album: qi.album, artURL: qi.albumArtURI)
@@ -1510,18 +1515,19 @@ extension SonosManager: TransportStrategyDelegate {
             updated.stationName = existing.stationName
         }
 
-        // Only carry forward art if the track hasn't changed
-        let isStillRadio = !updated.stationName.isEmpty
-        if updated.albumArtURI == nil, let existingArt = existing.albumArtURI, !trackChanged {
-            if isStillRadio || existing.stationName.isEmpty {
-                updated.albumArtURI = existingArt
+        // Art stability: for same track, don't let alternating poll results swap art.
+        // For new tracks, accept whatever art the speaker provides.
+        if !trackChanged {
+            if let existingArt = existing.albumArtURI, !existingArt.isEmpty {
+                // Keep existing art for same track — prevents CDN URL flipping
+                if updated.albumArtURI == nil || updated.albumArtURI?.contains("/getaa?") == true {
+                    updated.albumArtURI = existingArt
+                }
             }
         }
         groupTrackMetadata[groupID] = updated
 
-        // Ensure art URL from cache is available for history recording.
-        // Apple Music tracks may have /getaa? art (filtered by history) or no art,
-        // but we cached the iTunes art URL when adding to queue.
+        // Cache lookup for art — runs when art is missing or ephemeral
         if updated.albumArtURI == nil || updated.albumArtURI?.contains("/getaa?") == true {
             if let cachedArt = lookupCachedArt(uri: updated.trackURI, title: updated.title) {
                 updated.albumArtURI = cachedArt

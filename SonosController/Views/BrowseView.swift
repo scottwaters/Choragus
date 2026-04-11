@@ -699,13 +699,13 @@ struct BrowseItemRow: View {
     }
 
     private var artURL: URL? {
-        // Prefer cached art (discovered during playback) over item's original URL
-        // because the original URL may be stale/dead (404)
-        if let resolved = resolvedArtURL {
-            return resolved
-        }
+        // Service search results (Apple Music, Spotify) have authoritative art — use it directly
         if let direct = item.albumArtURI.flatMap({ URL(string: $0) }) {
             return direct
+        }
+        // For items without art (local library), use cached/resolved art
+        if let resolved = resolvedArtURL {
+            return resolved
         }
         return nil
     }
@@ -754,15 +754,15 @@ struct BrowseItemRow: View {
         }
         .padding(.vertical, 2)
         .onAppear {
+            // Only resolve art for items that don't already have service-provided art
+            guard item.albumArtURI == nil else { return }
             checkArtCache()
-            // Only attempt art loading if we have no resolved URL AND no DIDL art
-            if resolvedArtURL == nil, item.albumArtURI == nil, !didAttemptArtLoad {
+            if resolvedArtURL == nil, !didAttemptArtLoad {
                 didAttemptArtLoad = true
                 Task { await loadMissingArt() }
             }
         }
         .onReceive(sonosManager.$discoveredArtURLs) { _ in
-            // Only check cache if we don't already have art — prevents flash from URL identity change
             if resolvedArtURL == nil && item.albumArtURI == nil {
                 checkArtCache()
             }

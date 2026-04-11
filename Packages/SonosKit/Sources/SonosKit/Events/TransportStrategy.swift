@@ -396,8 +396,9 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             let (state, position, mode) = try await (stateResult, positionResult, modeResult)
 
             var enrichedPosition = position
-            if state.isActive,
-               let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator) {
+            // Always fetch mediaInfo to set isQueueSource correctly
+            // (prevents queue metadata leaking into direct stream playback)
+            if let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator) {
                 enrichedPosition.enrichFromMediaInfo(mediaInfo, device: coordinator)
             }
 
