@@ -17,11 +17,18 @@ public struct BrowseItem: Identifiable, Equatable {
     public var resourceURI: String? // playable URI
     public var resourceMetadata: String? // DIDL metadata for playback
     public var serviceDescriptor: String? // SA_RINCON descriptor from desc element
+    public var releaseDate: Date? // Release date from service API (iTunes, Spotify, etc.)
+
+    /// Release year extracted from releaseDate, or nil if unknown
+    public var releaseYear: Int? {
+        guard let date = releaseDate else { return nil }
+        return Calendar.current.component(.year, from: date)
+    }
 
     public init(id objectID: String, title: String = "", artist: String = "", album: String = "",
                 albumArtURI: String? = nil, itemClass: BrowseItemClass = .unknown,
                 resourceURI: String? = nil, resourceMetadata: String? = nil,
-                serviceDescriptor: String? = nil) {
+                serviceDescriptor: String? = nil, releaseDate: Date? = nil) {
         self.instanceID = UUID()
         self.objectID = objectID
         self.title = title
@@ -32,6 +39,7 @@ public struct BrowseItem: Identifiable, Equatable {
         self.resourceURI = resourceURI
         self.resourceMetadata = resourceMetadata
         self.serviceDescriptor = serviceDescriptor
+        self.releaseDate = releaseDate
     }
 
     public var isContainer: Bool {

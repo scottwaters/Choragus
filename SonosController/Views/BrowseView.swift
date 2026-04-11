@@ -143,6 +143,14 @@ struct BrowseView: View {
     }
 }
 
+enum SearchSortOrder: String, CaseIterable {
+    case relevance = "Relevance"
+    case newest = "Newest"
+    case oldest = "Oldest"
+    case title = "Title"
+    case artist = "Artist"
+}
+
 struct BrowseDestination: Hashable {
     let title: String
     let objectID: String
@@ -721,8 +729,11 @@ struct BrowseItemRow: View {
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
-                    if !item.artist.isEmpty || !item.album.isEmpty {
-                        Text([item.artist, item.album].filter { !$0.isEmpty }.joined(separator: " — "))
+                    if !item.artist.isEmpty || !item.album.isEmpty || item.releaseYear != nil {
+                        let parts = [item.artist, item.album].filter { !$0.isEmpty }
+                        let meta = parts.joined(separator: " — ")
+                        let yearStr = item.releaseYear.map { " (\($0))" } ?? ""
+                        Text(meta + yearStr)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -901,8 +912,24 @@ struct AppleMusicSearchView: View {
     @State private var sn = 0
     @State private var navStack: [AMLevel] = []
     @State private var itemsCache: [Int: [BrowseItem]] = [:]
+    @State private var sortOrder: SearchSortOrder = .relevance
 
     private var currentLevel: AMLevel { navStack.last ?? .search }
+
+    private var sortedItems: [BrowseItem] {
+        switch sortOrder {
+        case .relevance:
+            return items
+        case .newest:
+            return items.sorted { ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) }
+        case .oldest:
+            return items.sorted { ($0.releaseDate ?? .distantFuture) < ($1.releaseDate ?? .distantFuture) }
+        case .title:
+            return items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        case .artist:
+            return items.sorted { $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -969,6 +996,22 @@ struct AppleMusicSearchView: View {
                         .controlSize(.small)
                         .disabled(searchText.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
+
+                    if hasSearched && !items.isEmpty {
+                        HStack(spacing: 4) {
+                            Text("Sort:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Picker("", selection: $sortOrder) {
+                                ForEach(SearchSortOrder.allCases, id: \.self) { order in
+                                    Text(order.rawValue).tag(order)
+                                }
+                            }
+                            .labelsHidden()
+                            .controlSize(.small)
+                            .frame(maxWidth: 120)
+                        }
+                    }
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
@@ -1000,7 +1043,7 @@ struct AppleMusicSearchView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(items) { item in
+                List(sortedItems) { item in
                     BrowseItemRow(item: item)
                         .contentShape(Rectangle())
                         .onTapGesture { handleTap(item) }
@@ -1819,6 +1862,15 @@ struct SMAPIServiceSearchView: View {
             }
             itemsCache[0] = items
             isLoading = false
+            // TODO: Enrich SMAPI results with release dates from iTunes
+            // Commented out — only Apple Music has dates for now
+            // Task {
+            //     let enriched = await ServiceSearchProvider.shared.enrichWithReleaseDates(items)
+            //     if enriched.contains(where: { $0.releaseDate != nil }) {
+            //         self.items = enriched
+            //         self.itemsCache[0] = enriched
+            //     }
+            // }
         }
     }
 
