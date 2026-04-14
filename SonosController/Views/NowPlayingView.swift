@@ -56,35 +56,50 @@ struct NowPlayingView: View {
     private var currentServiceName: String? { vm.currentServiceName }
     private var displayArtist: String { vm.displayArtist }
 
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Album art and track info
-                HStack(spacing: 24) {
-                    if hasTrack {
-                        albumArtView
-                            .frame(width: UILayout.nowPlayingArtSize, height: UILayout.nowPlayingArtSize)
-                            .onTapGesture { showExpandedArt = true }
-                    } else if awaitingPlayback {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(.quaternary)
-                            .overlay {
-                                ProgressView()
-                                    .controlSize(.regular)
-                            }
-                            .frame(width: UILayout.nowPlayingArtSize, height: UILayout.nowPlayingArtSize)
-                    } else {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(.quaternary)
-                            .overlay {
-                                Image(systemName: "music.note")
-                                    .font(.system(size: 40))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .frame(width: UILayout.nowPlayingArtSize, height: UILayout.nowPlayingArtSize)
-                    }
+    // MARK: - Adaptive Art Size
 
-                    VStack(alignment: .leading, spacing: 8) {
+    private func adaptiveArtSize(for height: CGFloat) -> CGFloat {
+        // Reserve space for controls (seek + transport + volume) and track info + buttons.
+        // Remaining vertical space goes to album art.
+        let controlsAndInfo: CGFloat = 300
+        let available = height - controlsAndInfo
+        return min(max(available, 120), 360)
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let artSize = adaptiveArtSize(for: geo.size.height)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 16)
+
+                    // Album art, centered, adaptive size
+                    Group {
+                        if hasTrack {
+                            albumArtView
+                                .onTapGesture { showExpandedArt = true }
+                        } else if awaitingPlayback {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(.quaternary)
+                                .overlay {
+                                    ProgressView()
+                                        .controlSize(.regular)
+                                }
+                        } else {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(.quaternary)
+                                .overlay {
+                                    Image(systemName: "music.note")
+                                        .font(.system(size: 40))
+                                        .foregroundStyle(.tertiary)
+                                }
+                        }
+                    }
+                    .frame(width: artSize, height: artSize)
+
+                    // Track info, centered below art
+                    VStack(spacing: 6) {
                         // Station name for radio/streams
                         if !trackMetadata.stationName.isEmpty {
                             HStack(spacing: 6) {
@@ -157,213 +172,216 @@ struct NowPlayingView: View {
                                 .font(.body)
                                 .foregroundStyle(.tertiary)
                         }
+                    }
+                    .padding(.top, 16)
+                    .padding(.horizontal, UILayout.horizontalPadding)
 
-                        Spacer()
+                    // Action buttons
+                    HStack(spacing: 12) {
+                        Button { showGroupEditor = true } label: {
+                            Label(L10n.group, systemImage: "rectangle.stack")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
 
-                        HStack(spacing: 12) {
-                            Button { showGroupEditor = true } label: {
-                                Label(L10n.group, systemImage: "rectangle.stack")
+                        Button { showSleepTimer = true } label: {
+                            Label(L10n.sleep, systemImage: "moon.zzz")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Button {
+                            if sonosManager.htSatChannelMaps[group.coordinatorID] != nil {
+                                WindowManager.shared.openHomeTheaterEQ()
+                            } else {
+                                showEQ = true
+                            }
+                        } label: {
+                            Label(L10n.eq, systemImage: "slider.horizontal.3")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .popover(isPresented: $showEQ) {
+                            EQView(group: group)
+                                .environmentObject(sonosManager)
+                        }
+
+                        if hasTrack {
+                            Button { copyTrackInfo() } label: {
+                                Label(showCopied ? L10n.copied : L10n.copyTrackInfo, systemImage: showCopied ? "checkmark" : "doc.on.doc")
                                     .font(.caption)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
 
-                            Button { showSleepTimer = true } label: {
-                                Label(L10n.sleep, systemImage: "moon.zzz")
+                            Button { starCurrentTrack() } label: {
+                                Image(systemName: isCurrentTrackStarred ? "star.fill" : "star")
                                     .font(.caption)
+                                    .foregroundStyle(isCurrentTrackStarred ? .yellow : .secondary)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
-
-                            Button {
-                                if sonosManager.htSatChannelMaps[group.coordinatorID] != nil {
-                                    WindowManager.shared.openHomeTheaterEQ()
-                                } else {
-                                    showEQ = true
-                                }
-                            } label: {
-                                Label(L10n.eq, systemImage: "slider.horizontal.3")
-                                    .font(.caption)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .popover(isPresented: $showEQ) {
-                                EQView(group: group)
-                                    .environmentObject(sonosManager)
-                            }
-
-                            if hasTrack {
-                                Button { copyTrackInfo() } label: {
-                                    Label(showCopied ? L10n.copied : L10n.copyTrackInfo, systemImage: showCopied ? "checkmark" : "doc.on.doc")
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-
-                                Button { starCurrentTrack() } label: {
-                                    Image(systemName: isCurrentTrackStarred ? "star.fill" : "star")
-                                        .font(.caption)
-                                        .foregroundStyle(isCurrentTrackStarred ? .yellow : .secondary)
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                                .tooltip(isCurrentTrackStarred ? "Starred" : "Star this track")
-                            }
+                            .tooltip(isCurrentTrackStarred ? "Starred" : "Star this track")
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(24)
+                    .padding(.top, 12)
 
-                Divider()
+                    Spacer(minLength: 16)
 
-                // Time/seek area — fixed height to prevent layout shift
-                VStack(spacing: 4) {
-                    if trackMetadata.duration > 0 {
-                        SliderWithPopup(
-                            value: Binding(get: { vm.smoothPosition }, set: { vm.smoothPosition = $0 }),
-                            range: 0...trackMetadata.duration,
-                            format: { formatTime($0) }
-                        ) { editing in
-                            vm.isDraggingSeek = editing
-                            if !editing {
-                                seekToPosition(vm.smoothPosition)
-                            }
-                        }
-                    }
-
-                    HStack {
-                        Text(transportState.isActive ? smoothPositionString : " ")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                        Spacer()
+                    // Time/seek area
+                    VStack(spacing: 4) {
                         if trackMetadata.duration > 0 {
-                            Text(trackMetadata.durationString)
+                            SliderWithPopup(
+                                value: Binding(get: { vm.smoothPosition }, set: { vm.smoothPosition = $0 }),
+                                range: 0...trackMetadata.duration,
+                                format: { formatTime($0) }
+                            ) { editing in
+                                vm.isDraggingSeek = editing
+                                if !editing {
+                                    seekToPosition(vm.smoothPosition)
+                                }
+                            }
+                        }
+
+                        HStack {
+                            Text(transportState.isActive ? smoothPositionString : " ")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
-                        } else if transportState.isActive {
-                            Text(L10n.live)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(.horizontal, UILayout.horizontalPadding)
-                .padding(.top, 12)
-
-                // Transport controls — play/pause centered above volume slider center
-                HStack(spacing: 24) {
-                    // Left side: shuffle + previous
-                    HStack(spacing: 24) {
-                        if UserDefaults.standard.bool(forKey: UDKey.classicShuffleEnabled) {
-                            transportButton("shuffle", icon: "shuffle", size: .body,
-                                            tint: playMode.isShuffled ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
-                                toggleShuffle()
+                            Spacer()
+                            if trackMetadata.duration > 0 {
+                                Text(trackMetadata.durationString)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            } else if transportState.isActive {
+                                Text(L10n.live)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
-                            .tooltip(L10n.shuffle)
-                        } else {
-                            Image(systemName: "shuffle")
-                                .font(.body)
-                                .foregroundStyle(.tertiary)
-                                .frame(minWidth: 32, minHeight: 32)
-                                .contentShape(Rectangle())
-                                .onTapGesture { showShuffleHint = true }
-                                .popover(isPresented: $showShuffleHint, arrowEdge: .bottom) {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text("Shuffle is disabled")
-                                            .font(.caption)
-                                            .fontWeight(.semibold)
-                                        Text("Use the shuffle button in the Queue panel to physically reorder tracks, or enable Classic Shuffle Mode in Settings.")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    }
-                                    .frame(width: 240)
-                                    .padding(12)
-                                }
                         }
-
-                        transportButton("previous", icon: "backward.fill", size: .title2) {
-                            performAction("previous") { try await sonosManager.previous(group: group) }
-                        }
-                        .tooltip("Previous")
                     }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, UILayout.horizontalPadding)
+                    .padding(.top, 12)
 
-                    // Center: play/pause
-                    transportButton("playPause",
-                                    icon: transportState.isPlaying ? "pause.circle.fill" : "play.circle.fill",
-                                    size: .system(size: 44)) {
-                        togglePlayPause()
-                    }
-                    .tooltip(transportState.isPlaying ? "Pause" : "Play")
-                    .keyboardShortcut(.space, modifiers: [])
-
-                    // Right side: next + repeat + crossfade
+                    // Transport controls
                     HStack(spacing: 24) {
-                        transportButton("next", icon: "forward.fill", size: .title2) {
-                            performAction("next") { try await sonosManager.next(group: group) }
-                        }
-                        .tooltip("Next")
+                        // Left side: shuffle + previous
+                        HStack(spacing: 24) {
+                            if UserDefaults.standard.bool(forKey: UDKey.classicShuffleEnabled) {
+                                transportButton("shuffle", icon: "shuffle", size: .body,
+                                                tint: playMode.isShuffled ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
+                                    toggleShuffle()
+                                }
+                                .tooltip(L10n.shuffle)
+                            } else {
+                                Image(systemName: "shuffle")
+                                    .font(.body)
+                                    .foregroundStyle(.tertiary)
+                                    .frame(minWidth: 32, minHeight: 32)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { showShuffleHint = true }
+                                    .popover(isPresented: $showShuffleHint, arrowEdge: .bottom) {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text("Shuffle is disabled")
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                            Text("Use the shuffle button in the Queue panel to physically reorder tracks, or enable Classic Shuffle Mode in Settings.")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                        .frame(width: 240)
+                                        .padding(12)
+                                    }
+                            }
 
-                        transportButton("repeat", icon: repeatIcon, size: .body,
-                                        tint: playMode.repeatMode != .off ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
-                            cycleRepeat()
+                            transportButton("previous", icon: "backward.fill", size: .title2) {
+                                performAction("previous") { try await sonosManager.previous(group: group) }
+                            }
+                            .tooltip("Previous")
                         }
-                        .tooltip(L10n.repeat_)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
 
-                        transportButton("crossfade", icon: "arrow.triangle.swap", size: .caption,
-                                        tint: crossfadeOn ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
-                            toggleCrossfade()
+                        // Center: play/pause
+                        transportButton("playPause",
+                                        icon: transportState.isPlaying ? "pause.circle.fill" : "play.circle.fill",
+                                        size: .system(size: 44)) {
+                            togglePlayPause()
                         }
-                        .tooltip("Crossfade")
+                        .tooltip(transportState.isPlaying ? "Pause" : "Play")
+                        .keyboardShortcut(.space, modifiers: [])
+
+                        // Right side: next + repeat + crossfade
+                        HStack(spacing: 24) {
+                            transportButton("next", icon: "forward.fill", size: .title2) {
+                                performAction("next") { try await sonosManager.next(group: group) }
+                            }
+                            .tooltip("Next")
+
+                            transportButton("repeat", icon: repeatIcon, size: .body,
+                                            tint: playMode.repeatMode != .off ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
+                                cycleRepeat()
+                            }
+                            .tooltip(L10n.repeat_)
+
+                            transportButton("crossfade", icon: "arrow.triangle.swap", size: .caption,
+                                            tint: crossfadeOn ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
+                                toggleCrossfade()
+                            }
+                            .tooltip("Crossfade")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.vertical, 16)
-                .padding(.horizontal, UILayout.horizontalPadding)
+                    .padding(.vertical, 16)
+                    .padding(.horizontal, UILayout.horizontalPadding)
 
-                // Volume
-                HStack(spacing: 12) {
-                    Button { toggleMute() } label: {
-                        Image(systemName: isMuted ? "speaker.slash.fill" : volumeIcon)
-                            .frame(width: 20)
-                    }
-                    .buttonStyle(.plain)
-
-                    SliderWithPopup(
-                        value: Binding(get: { vm.volume }, set: { vm.volume = $0 }),
-                        range: 0...100
-                    ) { editing in
-                        vm.isDraggingVolume = editing
-                        if !editing {
-                            vm.setVolume()
-                            vm.commitVolume()
+                    // Volume
+                    HStack(spacing: 12) {
+                        Button { toggleMute() } label: {
+                            Image(systemName: isMuted ? "speaker.slash.fill" : volumeIcon)
+                                .frame(width: 20)
                         }
+                        .buttonStyle(.plain)
+
+                        SliderWithPopup(
+                            value: Binding(get: { vm.volume }, set: { vm.volume = $0 }),
+                            range: 0...100
+                        ) { editing in
+                            vm.isDraggingVolume = editing
+                            if !editing {
+                                vm.setVolume()
+                                vm.commitVolume()
+                            }
+                        }
+                        .frame(maxWidth: 300)
+
+                        Text("\(Int(volume))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 28, alignment: .trailing)
                     }
-                    .frame(maxWidth: 300)
+                    .padding(.horizontal, UILayout.horizontalPadding)
+                    .padding(.bottom, 8)
 
-                    Text("\(Int(volume))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .frame(width: 28, alignment: .trailing)
+                    // Per-speaker volumes for grouped speakers
+                    if group.members.count > 1 {
+                        VolumeControlView(group: group,
+                                          speakerVolumes: Binding(get: { vm.speakerVolumes }, set: { vm.speakerVolumes = $0 }),
+                                          speakerMutes: Binding(get: { vm.speakerMutes }, set: { vm.speakerMutes = $0 }),
+                                          accentColor: sonosManager.resolvedAccentColor ?? .accentColor,
+                                          onSetVolume: { device, vol in await vm.setSpeakerVolume(device: device, volume: vol) },
+                                          onToggleMute: { device, muted in await vm.setSpeakerMute(device: device, muted: muted) },
+                                          onDragStateChanged: { dragging in vm.isDraggingVolume = dragging })
+                    }
                 }
-                .padding(.horizontal, UILayout.horizontalPadding)
-
-                // Per-speaker volumes for grouped speakers
-                if group.members.count > 1 {
-                    VolumeControlView(group: group,
-                                      speakerVolumes: Binding(get: { vm.speakerVolumes }, set: { vm.speakerVolumes = $0 }),
-                                      speakerMutes: Binding(get: { vm.speakerMutes }, set: { vm.speakerMutes = $0 }),
-                                      accentColor: sonosManager.resolvedAccentColor ?? .accentColor,
-                                      onSetVolume: { device, vol in await vm.setSpeakerVolume(device: device, volume: vol) },
-                                      onToggleMute: { device, muted in await vm.setSpeakerMute(device: device, muted: muted) },
-                                      onDragStateChanged: { dragging in vm.isDraggingVolume = dragging })
-                }
+                .frame(minHeight: geo.size.height)
             }
+            .scrollBounceBehavior(.basedOnSize)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .tint(sonosManager.resolvedAccentColor)
