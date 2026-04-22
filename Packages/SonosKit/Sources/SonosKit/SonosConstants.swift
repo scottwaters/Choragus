@@ -191,6 +191,8 @@ public enum UDKey {
     public static let appleMusicSearchEnabled = "appleMusicSearchEnabled"
     public static let sonosRadioEnabled = "sonosRadioEnabled"
     public static let ignoreTV = "ignoreTV"
+    public static let realtimeStats = "realtimeStats"
+    public static let rollupInterval = "rollupInterval"
 }
 
 

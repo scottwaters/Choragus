@@ -5,6 +5,19 @@
 import Foundation
 import SQLite3
 
+public struct DailySummary {
+    public let date: Date
+    public let playCount: Int
+    public let totalDuration: Double
+    public let uniqueArtists: Int
+    public let uniqueAlbums: Int
+    public let uniqueStations: Int
+    public let uniqueRooms: Int
+    public let topArtist: String
+    public let topTrack: String
+    public let starredCount: Int
+}
+
 @MainActor
 public final class PlayHistoryRepository {
     private var db: OpaquePointer?
@@ -53,6 +66,22 @@ public final class PlayHistoryRepository {
         exec("CREATE INDEX IF NOT EXISTS idx_history_artist ON history(artist)")
         exec("CREATE INDEX IF NOT EXISTS idx_history_group ON history(group_name)")
         exec("CREATE INDEX IF NOT EXISTS idx_history_title ON history(title)")
+
+        // Daily summary rollup table
+        exec("""
+            CREATE TABLE IF NOT EXISTS daily_summary (
+                date TEXT PRIMARY KEY,
+                play_count INTEGER NOT NULL DEFAULT 0,
+                total_duration REAL NOT NULL DEFAULT 0,
+                unique_artists INTEGER NOT NULL DEFAULT 0,
+                unique_albums INTEGER NOT NULL DEFAULT 0,
+                unique_stations INTEGER NOT NULL DEFAULT 0,
+                unique_rooms INTEGER NOT NULL DEFAULT 0,
+                top_artist TEXT NOT NULL DEFAULT '',
+                top_track TEXT NOT NULL DEFAULT '',
+                starred_count INTEGER NOT NULL DEFAULT 0
+            )
+        """)
     }
 
     // MARK: - CRUD
@@ -260,6 +289,24 @@ public final class PlayHistoryRepository {
         exec("DELETE FROM history")
     }
 
+    func deleteByIDs(_ ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        // Batch delete in chunks to avoid SQL parameter limits
+        let chunkSize = 500
+        for chunk in stride(from: 0, to: ids.count, by: chunkSize) {
+            let batch = Array(ids[chunk..<min(chunk + chunkSize, ids.count)])
+            let placeholders = batch.map { _ in "?" }.joined(separator: ",")
+            let sql = "DELETE FROM history WHERE id IN (\(placeholders))"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { continue }
+            defer { sqlite3_finalize(stmt) }
+            for (i, id) in batch.enumerated() {
+                sqlite3_bind_text(stmt, Int32(i + 1), (id.uuidString as NSString).utf8String, -1, nil)
+            }
+            sqlite3_step(stmt)
+        }
+    }
+
     func updateArtwork(id: UUID, artURL: String) {
         let sql = "UPDATE history SET album_art_uri = ? WHERE id = ?"
         var stmt: OpaquePointer?
@@ -292,6 +339,112 @@ public final class PlayHistoryRepository {
             insert(entry)
         }
         exec("COMMIT")
+    }
+
+    // MARK: - Daily Summary Rollup
+
+    /// Rebuilds daily_summary for all dates, or a specific date
+    func rebuildDailySummary(for date: String? = nil) {
+        if let date {
+            exec("DELETE FROM daily_summary WHERE date = '\(date)'")
+            rebuildSummaryForDate(date)
+        } else {
+            exec("DELETE FROM daily_summary")
+            // Get all distinct dates
+            let sql = "SELECT DISTINCT date(timestamp, 'unixepoch', 'localtime') as d FROM history ORDER BY d"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            var dates: [String] = []
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                if let cStr = sqlite3_column_text(stmt, 0) {
+                    dates.append(String(cString: cStr))
+                }
+            }
+            for d in dates {
+                rebuildSummaryForDate(d)
+            }
+        }
+    }
+
+    private func rebuildSummaryForDate(_ date: String) {
+        let sql = """
+        INSERT OR REPLACE INTO daily_summary (date, play_count, total_duration, unique_artists, unique_albums, unique_stations, unique_rooms, top_artist, top_track, starred_count)
+        SELECT
+            date(timestamp, 'unixepoch', 'localtime') as d,
+            COUNT(*) as play_count,
+            COALESCE(SUM(duration), 0) as total_duration,
+            COUNT(DISTINCT CASE WHEN artist != '' THEN artist END) as unique_artists,
+            COUNT(DISTINCT CASE WHEN album != '' THEN album END) as unique_albums,
+            COUNT(DISTINCT CASE WHEN station_name != '' THEN station_name END) as unique_stations,
+            COUNT(DISTINCT CASE WHEN group_name != '' THEN group_name END) as unique_rooms,
+            COALESCE((SELECT artist FROM history WHERE date(timestamp, 'unixepoch', 'localtime') = ? AND artist != '' GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 1), '') as top_artist,
+            COALESCE((SELECT title FROM history WHERE date(timestamp, 'unixepoch', 'localtime') = ? AND title != '' GROUP BY title ORDER BY COUNT(*) DESC LIMIT 1), '') as top_track,
+            COALESCE(SUM(starred), 0) as starred_count
+        FROM history
+        WHERE date(timestamp, 'unixepoch', 'localtime') = ?
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, (date as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 2, (date as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 3, (date as NSString).utf8String, -1, nil)
+        sqlite3_step(stmt)
+    }
+
+    /// Returns daily summary data for dashboard charts
+    func loadDailySummary(since: Date? = nil) -> [DailySummary] {
+        var sql = "SELECT date, play_count, total_duration, unique_artists, unique_albums, unique_stations, unique_rooms, top_artist, top_track, starred_count FROM daily_summary"
+        if let since {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            sql += " WHERE date >= '\(formatter.string(from: since))'"
+        }
+        sql += " ORDER BY date"
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        var results: [DailySummary] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let dateStr = sqlite3_column_text(stmt, 0) else { continue }
+            let date = formatter.date(from: String(cString: dateStr)) ?? Date()
+            results.append(DailySummary(
+                date: date,
+                playCount: Int(sqlite3_column_int(stmt, 1)),
+                totalDuration: sqlite3_column_double(stmt, 2),
+                uniqueArtists: Int(sqlite3_column_int(stmt, 3)),
+                uniqueAlbums: Int(sqlite3_column_int(stmt, 4)),
+                uniqueStations: Int(sqlite3_column_int(stmt, 5)),
+                uniqueRooms: Int(sqlite3_column_int(stmt, 6)),
+                topArtist: sqlite3_column_text(stmt, 7).map { String(cString: $0) } ?? "",
+                topTrack: sqlite3_column_text(stmt, 8).map { String(cString: $0) } ?? "",
+                starredCount: Int(sqlite3_column_int(stmt, 9))
+            ))
+        }
+        return results
+    }
+
+    /// Summary totals from the rollup table
+    func summaryTotals() -> (plays: Int, duration: Double, artists: Int, albums: Int, stations: Int, rooms: Int, starred: Int) {
+        let sql = "SELECT COALESCE(SUM(play_count),0), COALESCE(SUM(total_duration),0), COUNT(*), COALESCE(SUM(starred_count),0) FROM daily_summary"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            return (0, 0, 0, 0, 0, 0, 0)
+        }
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return (0, 0, 0, 0, 0, 0, 0) }
+        return (
+            plays: Int(sqlite3_column_int(stmt, 0)),
+            duration: sqlite3_column_double(stmt, 1),
+            artists: 0, albums: 0, stations: 0, rooms: 0, // These need distinct counts across days
+            starred: Int(sqlite3_column_int(stmt, 3))
+        )
     }
 
     // MARK: - Internal

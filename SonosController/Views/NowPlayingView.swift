@@ -289,6 +289,7 @@ struct NowPlayingView: View {
                             performAction("previous") { try await sonosManager.previous(group: group) }
                         }
                         .tooltip("Previous")
+                        .disabled(trackMetadata.isRadioStream || !trackMetadata.stationName.isEmpty)
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
@@ -307,6 +308,7 @@ struct NowPlayingView: View {
                             performAction("next") { try await sonosManager.next(group: group) }
                         }
                         .tooltip("Next")
+                        .disabled(trackMetadata.isRadioStream || !trackMetadata.stationName.isEmpty)
 
                         transportButton("repeat", icon: repeatIcon, size: .body,
                                         tint: playMode.repeatMode != .off ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {

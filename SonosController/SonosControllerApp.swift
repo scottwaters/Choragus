@@ -8,6 +8,10 @@ import SwiftUI
 import SonosKit
 
 
+extension Notification.Name {
+    static let openSettings = Notification.Name("openSettings")
+}
+
 @main
 struct SonosControllerApp: App {
     @StateObject private var sonosManager = SonosManager()
@@ -45,7 +49,7 @@ struct SonosControllerApp: App {
         .windowStyle(.titleBar)
         .defaultSize(width: 900, height: 550)
         .commands {
-            // Hide default menus — only the system app menu ("SonosController") remains
+            // Hide default menus that don't apply
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .undoRedo) {}
             CommandGroup(replacing: .pasteboard) {}
@@ -53,6 +57,14 @@ struct SonosControllerApp: App {
             CommandGroup(replacing: .windowSize) {}
             CommandGroup(replacing: .windowList) {}
             CommandGroup(replacing: .help) {}
+
+            // Settings in app menu (Cmd+,)
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings...") {
+                    NotificationCenter.default.post(name: .openSettings, object: nil)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 

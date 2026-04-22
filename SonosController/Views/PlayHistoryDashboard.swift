@@ -81,6 +81,7 @@ struct PlayHistoryDashboard: View {
     @State private var showCustomEditor = false
     @State private var hoveredDay: Date?
     @State private var hoveredHour: Int?
+    @State private var isRefreshingStats = false
 
     private var theme: ChartTheme {
         ChartTheme(rawValue: selectedTheme) ?? .ocean
@@ -138,6 +139,15 @@ struct PlayHistoryDashboard: View {
 
     private func recomputeStats() {
         stats = DashboardStats(entries: entries, historyManager: historyManager)
+    }
+
+    private func refreshStatsAsync() {
+        isRefreshingStats = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            historyManager.refreshDailySummary()
+            recomputeStats()
+            isRefreshingStats = false
+        }
     }
 
     private func recentlyPlayed(limit: Int) -> [PlayHistoryEntry] {
@@ -212,6 +222,42 @@ struct PlayHistoryDashboard: View {
                 Text("Theme")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if UserDefaults.standard.bool(forKey: UDKey.realtimeStats) {
+                    if isRefreshingStats {
+                        HStack(spacing: 4) {
+                            ProgressView()
+                                .controlSize(.mini)
+                            Text("Updating...")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Button {
+                            refreshStatsAsync()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 10))
+                                Text("Refresh Stats")
+                                    .font(.system(size: 10))
+                            }
+                            .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Refresh daily summary and recalculate stats")
+                    }
+
+                    if let lastRollup = historyManager.lastRollupDate {
+                        Text(lastRollup.formatted(date: .omitted, time: .shortened))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+
+                Spacer()
 
                 ForEach(ChartTheme.allCases) { t in
                     Button {

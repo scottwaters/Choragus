@@ -17,6 +17,8 @@ public final class PlayHistoryManager: ObservableObject {
     private let repo: PlayHistoryRepository
     private var lastLoggedTrack: [String: String] = [:]
     private var reloadTask: Task<Void, Never>?
+    private var rollupTimer: Timer?
+    @Published public var lastRollupDate: Date?
 
     // Legacy JSON path for migration
     private let legacyJSONURL: URL
@@ -34,6 +36,10 @@ public final class PlayHistoryManager: ObservableObject {
 
         migrateFromJSONIfNeeded()
         loadEntries()
+        if UserDefaults.standard.bool(forKey: UDKey.realtimeStats) {
+            startRollupTimer()
+            refreshDailySummary()
+        }
     }
 
     // MARK: - Loading
@@ -229,6 +235,50 @@ public final class PlayHistoryManager: ObservableObject {
         entries.removeAll()
         lastLoggedTrack.removeAll()
         repo.deleteAll()
+    }
+
+    /// Deletes specific entries by ID and removes them from the in-memory array
+    public func deleteEntries(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        repo.deleteByIDs(Array(ids))
+        entries.removeAll { ids.contains($0.id) }
+    }
+
+    // MARK: - Daily Summary Rollup
+
+    private func startRollupTimer() {
+        guard UserDefaults.standard.bool(forKey: UDKey.realtimeStats) else { return }
+        rollupTimer?.invalidate()
+        let minutes = UserDefaults.standard.integer(forKey: UDKey.rollupInterval)
+        guard minutes > 0 else { return } // manual only
+        let interval = TimeInterval(minutes * 60)
+        rollupTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshDailySummary()
+            }
+        }
+    }
+
+    /// Rebuilds summary for today (and yesterday to catch late entries)
+    public func refreshDailySummary() {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let today = formatter.string(from: Date())
+        let yesterday = formatter.string(from: Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date())
+        repo.rebuildDailySummary(for: today)
+        repo.rebuildDailySummary(for: yesterday)
+        lastRollupDate = Date()
+    }
+
+    /// Full rebuild of all daily summaries
+    public func rebuildAllSummaries() {
+        repo.rebuildDailySummary()
+        lastRollupDate = Date()
+    }
+
+    /// Returns daily summary data for dashboard charts
+    public func dailySummary(since: Date? = nil) -> [DailySummary] {
+        repo.loadDailySummary(since: since)
     }
 
     // MARK: - Stats

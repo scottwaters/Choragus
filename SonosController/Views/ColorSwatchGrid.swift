@@ -9,8 +9,6 @@ struct ColorSwatchGrid: View {
     @Binding var storedColor: StoredColor
     let allowSystem: Bool
 
-    @State private var pickerColor: Color = .blue
-
     private static let presets: [(String, Color, StoredColor)] = [
         ("Blue",   .blue,   StoredColor(red: 0.0,  green: 0.48, blue: 1.0)),
         ("Purple", .purple, StoredColor(red: 0.69, green: 0.32, blue: 0.87)),
@@ -102,11 +100,6 @@ struct ColorSwatchGrid: View {
                 customPickerButton
             }
         }
-        .onAppear {
-            if !storedColor.isSystem {
-                pickerColor = Color(red: storedColor.red, green: storedColor.green, blue: storedColor.blue)
-            }
-        }
     }
 
     // MARK: - Swatch Button
@@ -136,36 +129,56 @@ struct ColorSwatchGrid: View {
         return !Self.presets.contains { isMatch($0.2) }
     }
 
+    @State private var lastCustomColor = StoredColor(red: 0.5, green: 0.5, blue: 0.5)
+    @State private var colorPanelObserver: Any?
+
     private var customPickerButton: some View {
-        ZStack {
-            // The native ColorPicker scaled down and clipped to a circle
-            ColorPicker("", selection: $pickerColor, supportsOpacity: false)
-                .labelsHidden()
-                .scaleEffect(1.5)
-                .frame(width: 16, height: 16)
-                .clipShape(Circle())
-                .onChange(of: pickerColor) {
-                    if let c = pickerColor.cgColor?.components, c.count >= 3 {
-                        storedColor = StoredColor(red: c[0], green: c[1], blue: c[2])
-                    }
+        HStack(spacing: 2) {
+            // Swatch: click to re-select existing custom colour
+            swatchButton(
+                isSelected: isCustomSelected,
+                content: AnyView(Circle().fill(Color(red: lastCustomColor.red, green: lastCustomColor.green, blue: lastCustomColor.blue))),
+                help: "Custom color"
+            ) {
+                storedColor = lastCustomColor
+            }
+
+            // Edit button: opens NSColorPanel to change the custom colour
+            Button {
+                let panel = NSColorPanel.shared
+                panel.color = NSColor(red: lastCustomColor.red, green: lastCustomColor.green, blue: lastCustomColor.blue, alpha: 1)
+                panel.showsAlpha = false
+                panel.orderFront(nil)
+                // Observe color changes
+                colorPanelObserver = NotificationCenter.default.addObserver(
+                    forName: NSColorPanel.colorDidChangeNotification,
+                    object: panel, queue: .main
+                ) { _ in
+                    let c = panel.color.usingColorSpace(.sRGB) ?? panel.color
+                    let custom = StoredColor(red: c.redComponent, green: c.greenComponent, blue: c.blueComponent)
+                    storedColor = custom
+                    lastCustomColor = custom
                 }
-
-            // Paintbrush overlay to indicate it's a custom picker
-            Image(systemName: "paintbrush.pointed.fill")
-                .font(.system(size: 7))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 0.5)
-                .allowsHitTesting(false)
-
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .frame(width: 16, height: 16)
+            .help("Change custom color")
+        }
+        .onAppear {
             if isCustomSelected {
-                Circle()
-                    .strokeBorder(.primary, lineWidth: 2)
-                    .frame(width: 22, height: 22)
-                    .allowsHitTesting(false)
+                lastCustomColor = storedColor
             }
         }
-        .frame(width: 26, height: 26)
-        .help("Custom color")
+        .onDisappear {
+            if let obs = colorPanelObserver {
+                NotificationCenter.default.removeObserver(obs)
+                colorPanelObserver = nil
+            }
+        }
     }
 
     private func isMatch(_ other: StoredColor) -> Bool {

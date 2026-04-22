@@ -15,6 +15,16 @@ struct BrowseView: View {
     @State private var searchText = ""
     @State private var breadcrumbs: [BrowseDestination] = []
 
+    /// True when drilled into a service view that has its own search
+    private var isInServiceView: Bool {
+        guard let current = breadcrumbs.last else { return false }
+        let id = current.objectID
+        return id == "APPLEMUSICPROMPT:" || id == "TUNEINPROMPT:" ||
+               id == "CALMRADIOPROMPT:" || id == "SONOSRADIOPROMPT:" ||
+               id == "RECENT:" || id.hasPrefix("SMAPISEARCHPROMPT:") ||
+               id.hasPrefix("SMAPI:") || id.hasPrefix("SERVICESEARCH:")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header bar
@@ -56,32 +66,34 @@ struct BrowseView: View {
 
                 Spacer()
 
-                // Search field
-                HStack(spacing: 4) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                    TextField(L10n.localSearch, text: $searchText)
-                        .textFieldStyle(.plain)
-                        .font(.caption)
-                        .onSubmit {
-                            submitSearch()
-                        }
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
+                // Local library search — hidden when inside a service view with its own search
+                if !isInServiceView {
+                    HStack(spacing: 4) {
+                        Image(systemName: "magnifyingglass")
                             .foregroundStyle(.secondary)
                             .font(.caption)
+                        TextField(L10n.localSearch, text: $searchText)
+                            .textFieldStyle(.plain)
+                            .font(.caption)
+                            .onSubmit {
+                                submitSearch()
+                            }
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
+                        .opacity(searchText.isEmpty ? 0 : 1)
                     }
-                    .buttonStyle(.plain)
-                    .opacity(searchText.isEmpty ? 0 : 1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(nsColor: .quaternaryLabelColor).opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+                    .frame(maxWidth: 180)
+                    .animation(nil, value: searchText)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(nsColor: .quaternaryLabelColor).opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-                .frame(maxWidth: 180)
-                .animation(nil, value: searchText)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -1451,9 +1463,9 @@ struct CalmRadioBrowseView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Category picker
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
+                // Category picker — wrapping flow layout
+                ScrollView {
+                    FlowLayout(spacing: 6) {
                         ForEach(categories) { cat in
                             Button {
                                 selectedCategory = cat
@@ -1473,12 +1485,13 @@ struct CalmRadioBrowseView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                 }
+                .frame(maxHeight: 120)
 
                 Divider()
 
                 // Channel list
                 if let cat = selectedCategory {
-                    List(cat.channels) { item in
+                    List(cat.channels.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }) { item in
                         BrowseItemRow(item: item)
                             .contentShape(Rectangle())
                             .onTapGesture {

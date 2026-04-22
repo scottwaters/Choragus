@@ -13,6 +13,7 @@ struct PlayHistoryView: View {
     @State private var filterDateRange: DateRange = .all
     @State private var sortNewestFirst = true
     @State private var showClearConfirm = false
+    @State private var showDeleteFilteredConfirm = false
     @State private var selectedTab = 1
     @State private var expandedArtEntry: PlayHistoryEntry?
     @State private var customDateFrom: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
@@ -30,6 +31,11 @@ struct PlayHistoryView: View {
         case month = "This Month"
         case quarter = "3 Months"
         case custom = "Custom Range"
+    }
+
+    private var hasActiveFilter: Bool {
+        filterRoom != nil || filterSource != nil || filterStarred ||
+        filterDateRange != .all || !searchText.isEmpty
     }
 
     private func sourceLabel(for entry: PlayHistoryEntry) -> String {
@@ -138,14 +144,24 @@ struct PlayHistoryView: View {
             }
         }
         .frame(minWidth: 700, minHeight: 500)
+        .toolbarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
                     exportCSV()
                 } label: {
-                    Label("Export CSV", systemImage: "square.and.arrow.up")
+                    Label("Export", systemImage: "square.and.arrow.up")
                 }
                 .disabled(historyManager.entries.isEmpty)
+
+                if hasActiveFilter {
+                    Button {
+                        showDeleteFilteredConfirm = true
+                    } label: {
+                        Label("Delete \(cachedFilteredEntries.count) Shown", systemImage: "xmark.bin")
+                    }
+                    .disabled(cachedFilteredEntries.isEmpty)
+                }
 
                 Button {
                     showClearConfirm = true
@@ -154,6 +170,16 @@ struct PlayHistoryView: View {
                 }
                 .disabled(historyManager.entries.isEmpty)
             }
+        }
+        .alert("Delete \(cachedFilteredEntries.count) Filtered Entries?", isPresented: $showDeleteFilteredConfirm) {
+            Button(L10n.cancel, role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                let ids = Set(cachedFilteredEntries.map(\.id))
+                historyManager.deleteEntries(ids)
+                refreshFilteredEntries()
+            }
+        } message: {
+            Text("This will permanently remove the \(cachedFilteredEntries.count) entries matching your current filters.")
         }
         .alert("Clear Play History?", isPresented: $showClearConfirm) {
             Button(L10n.cancel, role: .cancel) {}

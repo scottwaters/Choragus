@@ -22,6 +22,8 @@ final class ArtResolver {
 
     var lastArtSearchKey = ""
     var lastTrackURI = ""
+    var lastTrackTitle = ""
+    var lastTrackArtist = ""
     var lastRadioTrackKey = ""
     var lastStationName = ""
 
@@ -119,8 +121,17 @@ final class ArtResolver {
     func handleTrackURIChanged(trackMetadata: TrackMetadata, group: SonosGroup) {
         let currentURI = trackMetadata.trackURI ?? trackMetadata.title
         guard currentURI != lastTrackURI, !currentURI.isEmpty else { return }
+        let previousTitle = lastTrackTitle
+        let previousArtist = lastTrackArtist
         lastTrackURI = currentURI
-        // Reset all overrides — new track starts fresh
+        lastTrackTitle = trackMetadata.title
+        lastTrackArtist = trackMetadata.artist
+        // Same song but URI rotated (common with radio HLS streams) — keep radio art
+        let sameSong = !trackMetadata.title.isEmpty &&
+                       trackMetadata.title == previousTitle &&
+                       trackMetadata.artist == previousArtist
+        if sameSong { return }
+        // New track — reset all overrides
         isArtIgnored = false
         forceWebArt = false
         webArtURL = nil
@@ -268,6 +279,8 @@ final class ArtResolver {
         isArtIgnored = false
         lastArtSearchKey = ""
         lastTrackURI = ""
+        lastTrackTitle = ""
+        lastTrackArtist = ""
         lastRadioTrackKey = ""
         lastStationName = ""
     }

@@ -35,6 +35,7 @@ final class WindowManager {
             .environmentObject(manager)
             .preferredColorScheme(colorScheme)
         let window = createWindow(title: "Listening Stats", content: view, width: 960, height: 720)
+        window.toolbar?.displayMode = .iconAndLabel
         playHistoryWindow = window
     }
 

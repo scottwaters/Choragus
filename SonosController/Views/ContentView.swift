@@ -27,32 +27,21 @@ struct ContentView: View {
 
     private let nowPlayingMinWidth: CGFloat = 640
     private let browseMinWidth: CGFloat = 260
+    private let browseMaxWidth: CGFloat = 600
     private let queueMinWidth: CGFloat = 280
     private let sidebarWidth: CGFloat = 200
+    @State private var userBrowseWidth: CGFloat?
 
     /// Calculates panel widths ensuring now playing always gets at least its minimum.
-    /// Browse and queue share whatever space remains after now playing is guaranteed.
+    /// Browse width is user-adjustable via drag handle.
     private func panelWidths(totalWidth: CGFloat) -> (browse: CGFloat, nowPlaying: CGFloat, queue: CGFloat) {
-        let remaining = totalWidth - nowPlayingMinWidth
-        // Ideal sizes for side panels
-        let idealBrowse = showBrowse ? min(totalWidth * 0.35, 400) : 0
-        let idealQueue = showQueue ? min(totalWidth * 0.3, 400) : 0
-        let idealTotal = idealBrowse + idealQueue
-
+        let qw: CGFloat = showQueue ? max(queueMinWidth, min(totalWidth * 0.3, 400)) : 0
         let bw: CGFloat
-        let qw: CGFloat
-        if idealTotal <= remaining {
-            // Enough room — use ideal sizes
-            bw = idealBrowse
-            qw = idealQueue
-        } else if idealTotal > 0 {
-            // Not enough room — shrink side panels proportionally, respecting minimums
-            let ratio = remaining / idealTotal
-            bw = showBrowse ? max(browseMinWidth, idealBrowse * ratio) : 0
-            qw = showQueue ? max(queueMinWidth, idealQueue * ratio) : 0
+        if showBrowse {
+            let userWidth = userBrowseWidth ?? min(totalWidth * 0.35, 400)
+            bw = max(browseMinWidth, min(userWidth, browseMaxWidth))
         } else {
             bw = 0
-            qw = 0
         }
         let nw = max(nowPlayingMinWidth, totalWidth - bw - qw)
         return (bw, nw, qw)
@@ -169,7 +158,37 @@ struct ContentView: View {
                                 BrowseView(group: group)
                                     .environmentObject(sonosManager)
                                     .frame(width: sizes.browse)
-                                Divider()
+
+                                // Draggable resize handle
+                                Rectangle()
+                                    .fill(Color.clear)
+                                    .frame(width: 6)
+                                    .contentShape(Rectangle())
+                                    .onHover { inside in
+                                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                                    }
+                                    .overlay(Divider())
+                                    .gesture(
+                                        DragGesture(minimumDistance: 1)
+                                            .onChanged { value in
+                                                let newWidth = (userBrowseWidth ?? sizes.browse) + value.translation.width
+                                                let clamped = max(browseMinWidth, min(newWidth, browseMaxWidth))
+                                                let neededWindow = sidebarWidth + clamped + (showQueue ? queueMinWidth : 0) + nowPlayingMinWidth
+                                                // Grow window if player would be squeezed
+                                                if let window = NSApp.mainWindow, neededWindow > window.frame.width {
+                                                    var frame = window.frame
+                                                    let growth = neededWindow - frame.width
+                                                    frame.size.width = neededWindow
+                                                    frame.origin.x -= growth / 2
+                                                    if let screen = window.screen {
+                                                        if frame.origin.x < screen.visibleFrame.minX { frame.origin.x = screen.visibleFrame.minX }
+                                                        if frame.maxX > screen.visibleFrame.maxX { frame.origin.x = screen.visibleFrame.maxX - frame.width }
+                                                    }
+                                                    window.setFrame(frame, display: true)
+                                                }
+                                                userBrowseWidth = clamped
+                                            }
+                                    )
                             }
 
                             NowPlayingView(group: group, sonosManager: sonosManager, playHistoryManager: playHistoryManager)
@@ -309,6 +328,9 @@ struct ContentView: View {
                             .environmentObject(smapiManager)
                     }
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openSettings)) { _ in
+                showSettings = true
             }
         }
     }

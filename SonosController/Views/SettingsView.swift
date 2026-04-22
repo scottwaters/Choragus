@@ -131,6 +131,7 @@ private struct TabContentView: View {
     // MARK: - Music Tab
 
     @State private var showClearHistoryConfirm = false
+    @State private var isRebuildingSummaries = false
 
     private var musicTab: some View {
         Group {
@@ -167,6 +168,69 @@ private struct TabContentView: View {
                     set: { UserDefaults.standard.set($0, forKey: UDKey.ignoreTV) }
                 ))
                 .font(.system(size: 12))
+
+                Divider().padding(.vertical, 4)
+
+                Toggle("Realtime Dashboard Summaries", isOn: Binding(
+                    get: { UserDefaults.standard.bool(forKey: UDKey.realtimeStats) },
+                    set: { newValue in
+                        UserDefaults.standard.set(newValue, forKey: UDKey.realtimeStats)
+                        if newValue {
+                            isRebuildingSummaries = true
+                            // Delay rebuild to let UI render first
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                playHistoryManager.rebuildAllSummaries()
+                                isRebuildingSummaries = false
+                            }
+                        }
+                    }
+                ))
+                .font(.system(size: 12))
+
+                if UserDefaults.standard.bool(forKey: UDKey.realtimeStats) {
+                    if isRebuildingSummaries {
+                        HStack(spacing: 4) {
+                            ProgressView().controlSize(.mini)
+                            Text("Building summaries...")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+
+                    settingsRow("Interval") {
+                        Picker("", selection: Binding(
+                            get: { UserDefaults.standard.integer(forKey: UDKey.rollupInterval) == 0 ? 60 : UserDefaults.standard.integer(forKey: UDKey.rollupInterval) },
+                            set: { UserDefaults.standard.set($0, forKey: UDKey.rollupInterval) }
+                        )) {
+                            Text("30 min").tag(30)
+                            Text("1 hour").tag(60)
+                            Text("Manual only").tag(0)
+                        }
+                        .frame(maxWidth: 140)
+                    }
+
+                    Button("Rebuild All Summaries") {
+                        isRebuildingSummaries = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            playHistoryManager.rebuildAllSummaries()
+                            isRebuildingSummaries = false
+                        }
+                    }
+                    .controlSize(.small)
+                    .disabled(isRebuildingSummaries)
+
+                    if let lastRollup = playHistoryManager.lastRollupDate {
+                        Text("Last updated: \(lastRollup.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    Text("Pre-computes daily statistics in the background for faster dashboard loading. Recommended when history exceeds 10,000 entries.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+
+                Divider().padding(.vertical, 4)
 
                 if playHistoryManager.totalEntries > 0 {
                     Text("\(playHistoryManager.totalEntries) entries, \(String(format: "%.1f", playHistoryManager.totalListeningHours)) hours")
