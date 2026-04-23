@@ -12,6 +12,7 @@ final class WindowManager {
 
     private var playHistoryWindow: NSWindow?
     private var homeTheaterWindow: NSWindow?
+    private var helpWindow: NSWindow?
 
     func openPlayHistory() {
         if let existing = playHistoryWindow, existing.isVisible {
@@ -37,6 +38,16 @@ final class WindowManager {
         let window = createWindow(title: "Listening Stats", content: view, width: 960, height: 720)
         window.toolbar?.displayMode = .iconAndLabel
         playHistoryWindow = window
+    }
+
+    func openHelp() {
+        if let existing = helpWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+        let view = HelpView().preferredColorScheme(colorScheme)
+        let window = createWindow(title: "SonosController Help", content: view, width: 820, height: 560)
+        helpWindow = window
     }
 
     func openHomeTheaterEQ() {

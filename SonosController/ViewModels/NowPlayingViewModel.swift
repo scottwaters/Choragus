@@ -502,6 +502,13 @@ final class NowPlayingViewModel {
     }
 
     private func searchRadioTrackArt(_ metadata: TrackMetadata) {
+        // While paused on a radio stream, metadata can churn — title briefly
+        // goes empty between stream-content pings and then repopulates. Each
+        // oscillation would otherwise clear radioTrackArtURL, then search,
+        // then set it again, producing a visible artwork flicker. Don't
+        // re-evaluate radio track art while paused; the existing art stays.
+        guard transportState.isActive else { return }
+
         guard !metadata.stationName.isEmpty,
               !metadata.title.isEmpty,
               metadata.title != metadata.stationName,

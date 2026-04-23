@@ -44,6 +44,9 @@
 		A10040 /* PlayHistoryView2.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10040; };
 		A10041 /* ArtworkSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10041; };
 		A10042 /* SonosRadioSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10042; };
+		A10043 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10043; };
+		A10044 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10044; };
+		A10045 /* FirstRunWelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10045; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -86,6 +89,9 @@
 		B10040 /* PlayHistoryView2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayHistoryView2.swift; sourceTree = "<group>"; };
 		B10041 /* ArtworkSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkSearchView.swift; sourceTree = "<group>"; };
 		B10042 /* SonosRadioSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosRadioSearchView.swift; sourceTree = "<group>"; };
+		B10043 /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
+		B10044 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
+		B10045 /* FirstRunWelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunWelcomeView.swift; sourceTree = "<group>"; };
 		B10020 /* SonosController.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonosController.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -167,6 +173,9 @@
 				B10042 /* SonosRadioSearchView.swift */,
 				B10034 /* SliderPopup.swift */,
 				B10036 /* PlayHistoryDashboard.swift */,
+				B10043 /* HelpView.swift */,
+				B10044 /* UpdateChecker.swift */,
+				B10045 /* FirstRunWelcomeView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -286,6 +295,9 @@
 				A10037 /* AlarmsViewModel.swift in Sources */,
 				A10038 /* ArtResolver.swift in Sources */,
 				A10039 /* BrowseItemArtLoader.swift in Sources */,
+				A10043 /* HelpView.swift in Sources */,
+				A10044 /* UpdateChecker.swift in Sources */,
+				A10045 /* FirstRunWelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -351,18 +363,19 @@
 				CODE_SIGN_ENTITLEMENTS = SonosController/SonosController.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SonosController/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_CFBundleDisplayName = SonosController;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 3.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sonoscontroller.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -378,18 +391,19 @@
 				CODE_SIGN_ENTITLEMENTS = SonosController/SonosController.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SonosController/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_CFBundleDisplayName = SonosController;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 3.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sonoscontroller.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

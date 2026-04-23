@@ -10,6 +10,13 @@ import SonosKit
 
 extension Notification.Name {
     static let openSettings = Notification.Name("openSettings")
+    static let menuPlayPause = Notification.Name("menuPlayPause")
+    static let menuNextTrack = Notification.Name("menuNextTrack")
+    static let menuPreviousTrack = Notification.Name("menuPreviousTrack")
+    static let menuToggleMute = Notification.Name("menuToggleMute")
+    static let menuToggleBrowse = Notification.Name("menuToggleBrowse")
+    static let menuToggleQueue = Notification.Name("menuToggleQueue")
+    static let menuShowStats = Notification.Name("menuShowStats")
 }
 
 @main
@@ -38,6 +45,8 @@ struct SonosControllerApp: App {
                     WindowManager.shared.playHistoryManager = playHistoryManager
                     WindowManager.shared.sonosManager = sonosManager
                     WindowManager.shared.colorScheme = colorScheme
+                    // Check GitHub for a newer release at most once per 24h.
+                    UpdateChecker.shared.checkInBackgroundIfDue()
                 }
                 .onChange(of: sonosManager.appearanceMode) {
                     WindowManager.shared.colorScheme = colorScheme
@@ -49,21 +58,105 @@ struct SonosControllerApp: App {
         .windowStyle(.titleBar)
         .defaultSize(width: 900, height: 550)
         .commands {
-            // Hide default menus that don't apply
+            // Hide default menus that don't apply to a media controller with no
+            // documents or text editing. Window is left at its macOS defaults
+            // per Apple HIG — every app is expected to expose Minimize/Zoom/
+            // Bring All to Front.
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .undoRedo) {}
             CommandGroup(replacing: .pasteboard) {}
             CommandGroup(replacing: .textEditing) {}
-            CommandGroup(replacing: .windowSize) {}
-            CommandGroup(replacing: .windowList) {}
-            CommandGroup(replacing: .help) {}
 
-            // Settings in app menu (Cmd+,)
+            // Custom About panel — adds a clickable GitHub link to the credits.
+            CommandGroup(replacing: .appInfo) {
+                Button(L10n.aboutSonosController) {
+                    showAboutPanel()
+                }
+            }
+
+            // Check for Updates — sits just below the About item in the app menu.
+            CommandGroup(after: .appInfo) {
+                Button(L10n.checkForUpdates) {
+                    UpdateChecker.shared.checkNow()
+                }
+            }
+
+            // Help menu — replaces the default to surface real help content and
+            // a link to the project's GitHub repository.
+            CommandGroup(replacing: .help) {
+                Button(L10n.sonosControllerHelp) {
+                    WindowManager.shared.openHelp()
+                }
+                .keyboardShortcut("?", modifiers: .command)
+
+                Divider()
+
+                Button(L10n.viewSourceOnGitHub) {
+                    if let url = AppLinks.repositoryURL { NSWorkspace.shared.open(url) }
+                }
+
+                Button(L10n.reportAnIssue) {
+                    if let url = AppLinks.issuesURL { NSWorkspace.shared.open(url) }
+                }
+            }
+
+            // Settings — app menu, ⌘,
             CommandGroup(replacing: .appSettings) {
-                Button("Settings...") {
+                Button("\(L10n.settings)\u{2026}") {
                     NotificationCenter.default.post(name: .openSettings, object: nil)
                 }
                 .keyboardShortcut(",", modifiers: .command)
+            }
+
+            // View — panel toggles. Items are injected into the system-provided
+            // View menu (via the .sidebar placement) instead of creating a
+            // duplicate top-level "View" menu. Shortcuts chosen to avoid Apple
+            // Music/Finder conflicts: ⌘B (Browse), ⌥⌘U (Up Next / queue),
+            // ⇧⌘S (Stats).
+            CommandGroup(after: .sidebar) {
+                Divider()
+
+                Button(L10n.toggleBrowseLibrary) {
+                    NotificationCenter.default.post(name: .menuToggleBrowse, object: nil)
+                }
+                .keyboardShortcut("b", modifiers: .command)
+
+                Button(L10n.togglePlayQueue) {
+                    NotificationCenter.default.post(name: .menuToggleQueue, object: nil)
+                }
+                .keyboardShortcut("u", modifiers: [.command, .option])
+
+                Button(L10n.listeningStats) {
+                    NotificationCenter.default.post(name: .menuShowStats, object: nil)
+                }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+            }
+
+            // Controls — playback. Shortcuts match Apple Music conventions:
+            // ⌘→ next, ⌘← previous, ⌥⌘↓ mute. Play/Pause uses Space globally
+            // in NowPlayingView; the menu item provides a discoverable equivalent.
+            CommandMenu(L10n.controls) {
+                Button(L10n.playPause) {
+                    NotificationCenter.default.post(name: .menuPlayPause, object: nil)
+                }
+                .keyboardShortcut("p", modifiers: .command)
+
+                Button(L10n.nextTrack) {
+                    NotificationCenter.default.post(name: .menuNextTrack, object: nil)
+                }
+                .keyboardShortcut(.rightArrow, modifiers: .command)
+
+                Button(L10n.previousTrack) {
+                    NotificationCenter.default.post(name: .menuPreviousTrack, object: nil)
+                }
+                .keyboardShortcut(.leftArrow, modifiers: .command)
+
+                Divider()
+
+                Button(L10n.muteUnmute) {
+                    NotificationCenter.default.post(name: .menuToggleMute, object: nil)
+                }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
             }
         }
     }
@@ -75,4 +168,27 @@ struct SonosControllerApp: App {
         case .dark: return .dark
         }
     }
+}
+
+/// Opens the macOS standard About panel with custom credits containing a
+/// clickable link to the project's GitHub repository. The standard panel
+/// auto-populates name, icon, version, and copyright from Info.plist.
+@MainActor
+private func showAboutPanel() {
+    let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+    let credits = NSMutableAttributedString(
+        string: "\(L10n.aboutTagline)\n\n",
+        attributes: [.font: font, .foregroundColor: NSColor.labelColor]
+    )
+    if let url = AppLinks.repositoryURL {
+        credits.append(NSAttributedString(
+            string: "github.com/scottwaters/SonosController",
+            attributes: [.font: font, .link: url, .foregroundColor: NSColor.linkColor]
+        ))
+    }
+    NSApp.orderFrontStandardAboutPanel(options: [
+        .credits: credits,
+        .applicationName: "SonosController"
+    ])
+    NSApp.activate(ignoringOtherApps: true)
 }

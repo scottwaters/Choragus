@@ -346,6 +346,10 @@ struct NowPlayingView: View {
                         }
                     }
                     .frame(maxWidth: 300)
+                    // Explicit tint — the outer ScrollView tint can fall through
+                    // to the system accent when resolvedAccentColor is nil, which
+                    // loses the user's customization on the main volume slider.
+                    .tint(sonosManager.resolvedAccentColor ?? .accentColor)
 
                     Text("\(Int(volume))")
                         .font(.caption)
@@ -463,13 +467,17 @@ struct NowPlayingView: View {
                             .foregroundStyle(.white.opacity(0.6))
                     }
             }
-            if vm.art.shouldShowStationBadge(trackMetadata: trackMetadata),
-               let stationArt = vm.art.radioStationArtURL {
-                CachedAsyncImage(url: stationArt, cornerRadius: 4)
-                    .frame(width: 36, height: 36)
-                    .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
-                    .padding(6)
-            }
+            // Station-art mini badge on the bottom-right of the album art is
+            // disabled — its resolution heuristic is flaky and it was flickering.
+            // Leaving the shouldShowStationBadge/radioStationArtURL APIs in place
+            // so this can be re-enabled with one-line change when fixed.
+            // if vm.art.shouldShowStationBadge(trackMetadata: trackMetadata),
+            //    let stationArt = vm.art.radioStationArtURL {
+            //     CachedAsyncImage(url: stationArt, cornerRadius: 4)
+            //         .frame(width: 36, height: 36)
+            //         .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+            //         .padding(6)
+            // }
         }
         .onAppear {
             vm.onArtAppear()

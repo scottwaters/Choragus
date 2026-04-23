@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showPresetManager = false
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var showFirstRunWelcome = false
 
     private var selectedGroup: SonosGroup? {
         guard let id = selectedGroupID else { return nil }
@@ -231,6 +232,28 @@ struct ContentView: View {
                 if selectedGroupID == nil {
                     sidebarVisibility = .all
                 }
+                // Show the welcome popup once, on the very first launch.
+                if !FirstRunWelcome.hasBeenShown {
+                    // Small delay so the main window finishes appearing first.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showFirstRunWelcome = true
+                    }
+                }
+            }
+            .sheet(isPresented: $showFirstRunWelcome) {
+                FirstRunWelcomeView(
+                    onOpenSettings: {
+                        FirstRunWelcome.markShown()
+                        showFirstRunWelcome = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            showSettings = true
+                        }
+                    },
+                    onDismiss: {
+                        FirstRunWelcome.markShown()
+                        showFirstRunWelcome = false
+                    }
+                )
             }
             .onChange(of: selectedGroupID) {
                 UserDefaults.standard.set(selectedGroupID, forKey: UDKey.lastSelectedGroupID)
@@ -331,6 +354,55 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .openSettings)) { _ in
                 showSettings = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleBrowse)) { _ in
+                showBrowse.toggle()
+                if showBrowse {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleQueue)) { _ in
+                showQueue.toggle()
+                if showQueue {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuShowStats)) { _ in
+                WindowManager.shared.togglePlayHistory()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuPlayPause)) { _ in
+                handlePlayPause()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuNextTrack)) { _ in
+                guard let group = selectedGroup else { return }
+                Task { await ErrorHandler.shared.handleAsync("PLAYBACK") { try await sonosManager.next(group: group) } }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuPreviousTrack)) { _ in
+                guard let group = selectedGroup else { return }
+                Task { await ErrorHandler.shared.handleAsync("PLAYBACK") { try await sonosManager.previous(group: group) } }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleMute)) { _ in
+                guard let group = selectedGroup else { return }
+                let allMuted = group.members.allSatisfy { sonosManager.deviceMutes[$0.id] == true }
+                Task {
+                    for member in group.members {
+                        try? await sonosManager.setMute(device: member, muted: !allMuted)
+                    }
+                }
+            }
+        }
+    }
+
+    private func handlePlayPause() {
+        guard let group = selectedGroup else { return }
+        let isPlaying = sonosManager.groupTransportStates[group.coordinatorID]?.isActive ?? false
+        Task {
+            await ErrorHandler.shared.handleAsync("PLAYBACK") {
+                if isPlaying {
+                    try await sonosManager.pause(group: group)
+                } else {
+                    try await sonosManager.play(group: group)
+                }
             }
         }
     }

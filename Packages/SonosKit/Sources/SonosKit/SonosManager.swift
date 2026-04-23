@@ -259,7 +259,13 @@ public class SonosManager: ObservableObject {
     /// Last-fetched queue items per group — used for track info recovery
     private var lastQueueItems: [String: [QueueItem]] = [:]
     private var refreshTimer: Timer?
-    private var isRefreshingTopology = false  // serializes topology refreshes to prevent concurrent dictionary mutation
+    private var refreshingHouseholds: Set<String> = []  // serializes topology refreshes per household (S1/S2 coexist)
+
+    /// Last time each group ID appeared in a topology response. Used to
+    /// smooth over the Sonos quirk where different speakers in the same
+    /// household report slightly different ZoneGroupState views.
+    private var groupLastSeenInTopology: [String: Date] = [:]
+    private let groupRemovalGrace: TimeInterval = 30  // seconds
 
     // MARK: - Transport Strategy
 
@@ -381,16 +387,35 @@ public class SonosManager: ObservableObject {
         do {
             guard let desc = try await DeviceDescriptionParser.fetch(from: location) else { return }
 
-            let device = SonosDevice(
+            var device = SonosDevice(
                 id: desc.uuid,
                 ip: ip,
                 port: port,
                 roomName: desc.roomName,
                 modelName: desc.modelName,
-                modelNumber: desc.modelNumber
+                modelNumber: desc.modelNumber,
+                softwareVersion: desc.softwareVersion,
+                swGen: desc.swGen
             )
 
-            devices[device.id] = device
+            // Preserve any previously-resolved household on transient fetch failure.
+            // Without this, a GetHouseholdID timeout on rescan would wipe the stored
+            // household and cause the device to drop out of its section until the
+            // next successful fetch — the speaker-flicker failure mode.
+            let existing = devices[device.id]
+            device.householdID = existing?.householdID
+            if let resolved = try? await zoneTopology.getHouseholdID(device: device), !resolved.isEmpty {
+                device.householdID = resolved
+            }
+
+            sonosDebugLog("[DISCOVERY] \(desc.roomName) swGen=\(desc.swGen) softwareVersion=\(desc.softwareVersion) household=\(device.householdID ?? "<nil>")")
+
+            // Guard the write — @Published fires on every assignment, even
+            // when values are identical. Unnecessary fires cascade re-renders
+            // through every @EnvironmentObject observer of SonosManager.
+            if devices[device.id] != device {
+                devices[device.id] = device
+            }
             await refreshTopology(from: device)
         } catch {
             sonosDebugLog("[DISCOVERY] Device description fetch failed: \(error)")
@@ -398,52 +423,141 @@ public class SonosManager: ObservableObject {
     }
 
     public func refreshTopology(from device: SonosDevice) async {
-        // Serialize: only one topology refresh at a time. Concurrent calls get the
-        // same data anyway (topology is system-wide), and racing on dictionary
-        // mutations causes memory corruption (malloc free-list corruption).
-        guard !isRefreshingTopology else { return }
-        isRefreshingTopology = true
-        defer { isRefreshingTopology = false }
+        // Serialize per-household so S1 and S2 refreshes don't block each other but also
+        // don't race within a single household (main-actor re-entry across awaits).
+        // Use source device UUID when householdID is not yet known (first discovery).
+        let refreshKey = device.householdID ?? device.id
+        guard !refreshingHouseholds.contains(refreshKey) else { return }
+        refreshingHouseholds.insert(refreshKey)
+        defer { refreshingHouseholds.remove(refreshKey) }
 
         do {
             let groupData = try await zoneTopology.getZoneGroupState(device: device)
+
+            // Members inherit the source device's household — all groups returned by
+            // GetZoneGroupState belong to the same Sonos system (S1 or S2).
+            // If the source's household is unknown (GetHouseholdID failed), abort
+            // the merge rather than wipe S1/S2 partitioning with nil-tagged groups.
+            guard let household = device.householdID else {
+                sonosDebugLog("[DISCOVERY] Skipping topology merge — source device \(device.id) has no household yet")
+                self.isRefreshing = false
+                return
+            }
+            let sourceSoftwareVersion = device.softwareVersion
+            let sourceSwGen = device.swGen
 
             var newGroups: [SonosGroup] = []
             for gd in groupData {
                 var members: [SonosDevice] = []
                 for md in gd.members {
+                    // Preserve existing per-device fields if we've already fetched them
+                    // (members may be full devices discovered via SSDP, not just topology stubs).
+                    // Empty strings should not block the household-wide fallback, so prefer
+                    // non-empty existing values and fall back to the source device.
+                    let existing = devices[md.uuid]
+                    let existingSoftwareVersion = existing?.softwareVersion ?? ""
+                    let existingSwGen = existing?.swGen ?? ""
+                    let softwareVersion = existingSoftwareVersion.isEmpty ? sourceSoftwareVersion : existingSoftwareVersion
+                    let swGen = existingSwGen.isEmpty ? sourceSwGen : existingSwGen
                     let dev = SonosDevice(
                         id: md.uuid,
                         ip: md.ip,
                         port: md.port,
                         roomName: md.zoneName,
+                        modelName: existing?.modelName ?? "",
+                        modelNumber: existing?.modelNumber ?? "",
+                        softwareVersion: softwareVersion,
+                        swGen: swGen,
+                        householdID: household,
                         isCoordinator: md.uuid == gd.coordinatorUUID,
                         groupID: gd.id
                     )
-                    devices[dev.id] = dev
+                    // Guard the write to avoid spurious @Published fires that
+                    // cascade through @EnvironmentObject re-renders and can
+                    // cause onChange-driven scroll animations to trigger
+                    // even when the topology is unchanged.
+                    if devices[dev.id] != dev {
+                        devices[dev.id] = dev
+                    }
                     // Invisible members are Sub/Surround satellites — hide from UI
                     if !md.isInvisible {
                         members.append(dev)
                     }
                 }
-                let group = SonosGroup(id: gd.id, coordinatorID: gd.coordinatorUUID, members: members)
+                // Sort members by id so the stored order is deterministic regardless
+                // of the order the speaker returned them in — otherwise the equality
+                // check below can false-positive on a pure reorder and cause flicker.
+                let stableMembers = members.sorted { $0.id < $1.id }
+                let group = SonosGroup(id: gd.id, coordinatorID: gd.coordinatorUUID,
+                                       members: stableMembers, householdID: household)
                 newGroups.append(group)
             }
 
-            let sortedGroups = newGroups.sorted { $0.name < $1.name }
+            // Backfill nil householdID on legacy (pre-upgrade) cached groups whose
+            // coordinator is now a known device with a household. Without this, stale
+            // cache entries would surface as an "Unknown" tab after the first refresh.
+            let backfilledGroups = groups.map { g -> SonosGroup in
+                guard g.householdID == nil else { return g }
+                guard let coord = devices[g.coordinatorID], let hh = coord.householdID else { return g }
+                var patched = g
+                patched.householdID = hh
+                return patched
+            }
 
-            // Only update groups if topology actually changed — prevents UI flash
-            let changed = sortedGroups.count != groups.count ||
-                zip(sortedGroups, groups).contains { new, old in
-                    new.id != old.id ||
-                    new.coordinatorID != old.coordinatorID ||
-                    new.members.count != old.members.count ||
-                    zip(new.members, old.members).contains { $0.id != $1.id }
+            // Refresh last-seen timestamps for every group in this response.
+            let now = Date()
+            let newGroupIDs = Set(newGroups.map(\.id))
+            for id in newGroupIDs { groupLastSeenInTopology[id] = now }
+
+            // Grace window: keep any group from THIS household that's missing from
+            // the new response but was seen recently by another source. Different
+            // Sonos speakers can return subtly different ZoneGroupState views, so
+            // a single source's topology must not be treated as authoritative for
+            // immediate removal — otherwise groups flicker in and out as different
+            // speakers trigger refreshes across the 30 s rescan cycle.
+            let retainedMissingGroups = backfilledGroups.filter { existing in
+                existing.householdID == household &&
+                !newGroupIDs.contains(existing.id) &&
+                (groupLastSeenInTopology[existing.id].map { now.timeIntervalSince($0) < groupRemovalGrace } ?? false)
+            }
+
+            // Merge by household: replace groups belonging to the source's household
+            // (except the ones retained by the grace window), preserve groups from
+            // other households (S1 and S2 coexist on same LAN).
+            let otherHouseholdGroups = backfilledGroups.filter { $0.householdID != household }
+            let mergedGroups = (otherHouseholdGroups + newGroups + retainedMissingGroups)
+                .sorted { $0.name < $1.name }
+
+            // Only update groups if topology actually changed — prevents UI flash.
+            // SonosGroup is Equatable by synthesis (all fields Equatable), so full
+            // value equality on the sorted array is both correct and order-tolerant
+            // now that member arrays are stably sorted above.
+            let didChange = mergedGroups != groups
+            if didChange {
+                // Diff the sets so we can see exactly which groups appeared or
+                // disappeared — the "speaker disappearing then coming back"
+                // symptom shows up as alternating added/removed for the same id.
+                let oldIDs = Set(groups.map(\.id))
+                let newIDs = Set(mergedGroups.map(\.id))
+                let added = newIDs.subtracting(oldIDs).sorted()
+                let removed = oldIDs.subtracting(newIDs).sorted()
+                // For groups present in both, log any member-list differences.
+                let newByID = Dictionary(uniqueKeysWithValues: mergedGroups.map { ($0.id, $0) })
+                let oldByID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0) })
+                var memberDiffs: [String] = []
+                for id in newIDs.intersection(oldIDs).sorted() {
+                    guard let n = newByID[id], let o = oldByID[id] else { continue }
+                    if n != o {
+                        let newMembers = n.members.map(\.roomName).joined(separator: ",")
+                        let oldMembers = o.members.map(\.roomName).joined(separator: ",")
+                        memberDiffs.append("\(id): [\(oldMembers)] -> [\(newMembers)]")
+                    }
                 }
-
-            if changed {
-                self.groups = sortedGroups
+                sonosDebugLog("[MERGE] household=\(household) newCount=\(newGroups.count) retained=\(retainedMissingGroups.count) totalCount=\(mergedGroups.count) changed=true added=\(added) removed=\(removed) memberDiffs=\(memberDiffs)")
+                self.groups = mergedGroups
                 saveCache()
+            } else {
+                sonosDebugLog("[MERGE] household=\(household) newCount=\(newGroups.count) retained=\(retainedMissingGroups.count) totalCount=\(mergedGroups.count) changed=false")
             }
 
             // Parse home theater channel maps

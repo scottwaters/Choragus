@@ -135,7 +135,12 @@ final class ArtResolver {
         isArtIgnored = false
         forceWebArt = false
         webArtURL = nil
-        radioTrackArtURL = nil
+        // Don't clear radioTrackArtURL here. For radio streams, clearing it now
+        // forces a brief revert to station art during the ~1 s window it takes
+        // for searchRadioTrackArt to return iTunes results, producing a visible
+        // flicker (old track art → station art → new track art). Instead, let
+        // searchRadioTrackArt update it when the new result arrives, or clear
+        // it explicitly if iTunes returns no match or the track leaves radio.
         lastArtSearchKey = ""
         displayedArtURL = trackMetadata.albumArtURI.flatMap { URL(string: $0) }
         // Restore any persisted override for this specific track

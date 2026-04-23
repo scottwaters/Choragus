@@ -20,22 +20,78 @@ struct RoomListView: View {
         sonosManager.resolvedAccentColor ?? .accentColor
     }
 
+    /// Groups partitioned by household, ordered S2 → S1 → Unknown.
+    /// Groups with no visible members are excluded, and households whose only
+    /// groups are empty are dropped entirely so no orphan header appears.
+    /// When only a single household remains, callers render without the header.
+    private var sections: [HouseholdSection] {
+        var buckets: [String: HouseholdSection] = [:]
+        for group in sonosManager.groups where !group.members.isEmpty {
+            let key = group.householdID ?? ""
+            if buckets[key] == nil {
+                buckets[key] = HouseholdSection(
+                    householdID: key,
+                    version: group.systemVersion,
+                    groups: []
+                )
+            }
+            // Upgrade the section's version if a later group has better signal
+            if buckets[key]?.version == .unknown, group.systemVersion != .unknown {
+                buckets[key]?.version = group.systemVersion
+            }
+            buckets[key]?.groups.append(group)
+        }
+        let order: [SonosSystemVersion: Int] = [.s2: 0, .s1: 1, .unknown: 2]
+        return buckets.values
+            .filter { !$0.groups.isEmpty }
+            .map { section -> HouseholdSection in
+                var s = section
+                s.groups.sort { $0.name < $1.name }
+                return s
+            }
+            .sorted { lhs, rhs in
+                let lo = order[lhs.version] ?? 3
+                let ro = order[rhs.version] ?? 3
+                if lo != ro { return lo < ro }
+                return lhs.householdID < rhs.householdID
+            }
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 1) {
-                    ForEach(sonosManager.groups) { group in
-                        let isPlaying = playingCoordinatorIDs.contains(group.coordinatorID)
-                        let isSelected = selectedGroupID == group.id
-
-                        Button {
-                            selectedGroupID = group.id
-                        } label: {
-                            roomRow(group: group, isPlaying: isPlaying, isSelected: isSelected)
+                    let allSections = sections
+                    let showHeaders = allSections.count > 1
+                    ForEach(Array(allSections.enumerated()), id: \.element.householdID) { index, section in
+                        if showHeaders {
+                            if index > 0 {
+                                Divider()
+                                    .padding(.vertical, 4)
+                            }
+                            Text(section.version.displayLabel)
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .padding(.top, index == 0 ? 4 : 0)
+                                .padding(.bottom, 2)
                         }
-                        .buttonStyle(.plain)
-                        .id(group.id)
-                        .contextMenu { roomContextMenu(group: group, isPlaying: isPlaying) }
+
+                        ForEach(section.groups) { group in
+                            let isPlaying = playingCoordinatorIDs.contains(group.coordinatorID)
+                            let isSelected = selectedGroupID == group.id
+
+                            Button {
+                                selectedGroupID = group.id
+                            } label: {
+                                roomRow(group: group, isPlaying: isPlaying, isSelected: isSelected)
+                            }
+                            .buttonStyle(.plain)
+                            .id(group.id)
+                            .contextMenu { roomContextMenu(group: group, isPlaying: isPlaying) }
+                        }
                     }
                 }
                 .padding(.vertical, 4)
@@ -217,6 +273,13 @@ struct RoomListView: View {
             }
         }
     }
+}
+
+/// Partition of rooms belonging to one Sonos household (S1 or S2 system).
+private struct HouseholdSection {
+    let householdID: String
+    var version: SonosSystemVersion
+    var groups: [SonosGroup]
 }
 
 /// Animated sound waves that gently pulse opacity

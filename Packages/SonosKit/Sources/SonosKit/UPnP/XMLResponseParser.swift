@@ -37,7 +37,9 @@ public enum XMLResponseParser {
             roomName: parser.elements["roomName"] ?? parser.elements["friendlyName"] ?? "Unknown",
             modelName: parser.elements["modelName"] ?? "",
             modelNumber: parser.elements["modelNumber"] ?? "",
-            displayName: parser.elements["displayName"] ?? ""
+            displayName: parser.elements["displayName"] ?? "",
+            softwareVersion: parser.elements["softwareVersion"] ?? "",
+            swGen: parser.elements["swGen"] ?? ""
         )
     }
 
@@ -99,6 +101,8 @@ public struct DeviceDescription {
     public let modelName: String
     public let modelNumber: String
     public let displayName: String
+    public let softwareVersion: String
+    public let swGen: String
 }
 
 public struct ZoneGroupData {

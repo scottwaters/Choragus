@@ -7,11 +7,15 @@ public struct SonosDevice: Identifiable, Hashable {
     public var roomName: String
     public var modelName: String
     public var modelNumber: String
+    public var softwareVersion: String
+    public var swGen: String // "1" for S1, "2" for S2, empty when unknown
+    public var householdID: String?
     public var isCoordinator: Bool
     public var groupID: String?
 
     public init(id: String, ip: String, port: Int = SonosProtocol.defaultPort, roomName: String = "",
-                modelName: String = "", modelNumber: String = "",
+                modelName: String = "", modelNumber: String = "", softwareVersion: String = "",
+                swGen: String = "", householdID: String? = nil,
                 isCoordinator: Bool = false, groupID: String? = nil) {
         self.id = id
         self.ip = ip
@@ -19,8 +23,18 @@ public struct SonosDevice: Identifiable, Hashable {
         self.roomName = roomName
         self.modelName = modelName
         self.modelNumber = modelNumber
+        self.softwareVersion = softwareVersion
+        self.swGen = swGen
+        self.householdID = householdID
         self.isCoordinator = isCoordinator
         self.groupID = groupID
+    }
+
+    /// Sonos S1 vs S2 classification. Prefers the canonical `<swGen>` tag
+    /// ("1" = S1, "2" = S2); falls back to parsing the firmware major version.
+    /// Returns .unknown only when both signals are missing.
+    public var systemVersion: SonosSystemVersion {
+        SonosSystemVersion.classify(swGen: swGen, softwareVersion: softwareVersion)
     }
 
     // swiftlint:disable:next force_unwrapping
