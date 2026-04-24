@@ -43,12 +43,12 @@ public final class LastFMScrobbler: ObservableObject, ScrobbleService {
         }
         NSWorkspace.shared.open(url)
 
-        // Poll auth.getSession every 2 s for up to 90 s. User has to approve
-        // in the browser; as soon as they do, getSession returns the key.
+        // Poll auth.getSession until the user approves in the browser.
+        // Cadence and timeout are centralized in `Timing` so they're
+        // discoverable alongside other app-wide timers.
         let start = Date()
-        let timeout: TimeInterval = 90
-        while Date().timeIntervalSince(start) < timeout {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        while Date().timeIntervalSince(start) < Timing.lastFMAuthTimeout {
+            try? await Task.sleep(nanoseconds: Timing.lastFMAuthPollInterval)
             if let result = try await client.pollForSession(token: token) {
                 tokenStore.sessionKey = result.sessionKey
                 tokenStore.username = result.username

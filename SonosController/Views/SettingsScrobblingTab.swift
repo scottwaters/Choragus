@@ -349,32 +349,33 @@ struct SettingsScrobblingTab: View {
     private var pendingPreview: some View {
         let preview = scrobbleManager.previewPending(for: lastfm)
         if preview.examined > 0 && preview.eligible < preview.examined {
-            DisclosureGroup("Filter preview (next \(preview.examined) pending)") {
+            DisclosureGroup("\(L10n.filterPreviewTitle) (\(preview.examined))") {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 14) {
-                        Label("\(preview.eligible) would send", systemImage: "arrow.up.circle")
+                        Label("\(preview.eligible) \(L10n.wouldSend)", systemImage: "arrow.up.circle")
                             .foregroundStyle(.green)
-                        Label("\(preview.filteredByRoom) room-blocked", systemImage: "house.slash")
+                        Label("\(preview.filteredByRoom) \(L10n.roomBlocked)", systemImage: "house.slash")
                             .foregroundStyle(.orange)
-                        Label("\(preview.filteredByMusicService) service-blocked",
+                        Label("\(preview.filteredByMusicService) \(L10n.serviceBlocked)",
                               systemImage: "music.note.list")
                             .foregroundStyle(.orange)
-                        Label("\(preview.permanentlyIneligible) structural",
+                        Label("\(preview.permanentlyIneligible) \(L10n.structuralIneligible)",
                               systemImage: "slash.circle")
                             .foregroundStyle(.secondary)
                     }
                     .font(.caption)
 
                     if !preview.sampleFilteredByRoom.isEmpty {
+                        let rooms = scrobbleManager.enabledRooms.sorted().joined(separator: ", ")
                         previewBucket(
-                            title: "Room-blocked examples (current filter: \(scrobbleManager.enabledRooms.sorted().joined(separator: ", ")))",
+                            title: "\(L10n.roomBlockedExamples) (\(L10n.currentFilterPrefix): \(rooms))",
                             entries: preview.sampleFilteredByRoom,
                             detail: { "group: \($0.groupName)" }
                         )
                     }
                     if !preview.sampleFilteredByMusicService.isEmpty {
                         previewBucket(
-                            title: "Service-blocked examples",
+                            title: L10n.serviceBlockedExamples,
                             entries: preview.sampleFilteredByMusicService,
                             detail: { "source: \($0.sourceURI ?? "(none)")" }
                         )

@@ -272,10 +272,10 @@ struct NowPlayingView: View {
                                 .onTapGesture { showShuffleHint = true }
                                 .popover(isPresented: $showShuffleHint, arrowEdge: .bottom) {
                                     VStack(alignment: .leading, spacing: 6) {
-                                        Text("Shuffle is disabled")
+                                        Text(L10n.shuffleDisabledTitle)
                                             .font(.caption)
                                             .fontWeight(.semibold)
-                                        Text("Use the shuffle button in the Queue panel to physically reorder tracks, or enable Classic Shuffle Mode in Settings.")
+                                        Text(L10n.shuffleDisabledBody)
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                             .fixedSize(horizontal: false, vertical: true)
@@ -511,14 +511,14 @@ struct NowPlayingView: View {
             vm.handleMetadataChanged(meta)
         }
             .contextMenu {
-                Button("Search Artwork...") {
+                Button(L10n.searchArtwork) {
                     showArtSearch = true
                 }
                 Button(L10n.refreshArtwork) {
                     vm.art.forceITunesArtSearch(trackMetadata: trackMetadata, displayArtist: vm.displayArtist, group: group)
                 }
                 Divider()
-                Button("Ignore Artwork") {
+                Button(L10n.ignoreArtwork) {
                     vm.art.ignoreArtwork(trackMetadata: trackMetadata)
                 }
                 if vm.art.webArtURL != nil || vm.art.isArtIgnored || trackMetadata.albumArtURI != nil {
@@ -668,7 +668,7 @@ struct ExpandedArtView: View {
                 }
             }
 
-            Button("Close") { dismiss() }
+            Button(L10n.close) { dismiss() }
                 .keyboardShortcut(.cancelAction)
                 .buttonStyle(.bordered)
                 .controlSize(.small)

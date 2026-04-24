@@ -163,6 +163,20 @@ public enum Timing {
     public static let groupRefreshDelay: TimeInterval = 1
     public static let searchDebounce: UInt64 = 300_000_000
     public static let marqueeAnimationPause: UInt64 = 500_000_000
+
+    // MARK: Scrobbling (added v3.6)
+    /// Auto-scrobble timer cadence (seconds). Runs the pending queue
+    /// periodically without user action when the toggle is on.
+    public static let autoScrobbleInterval: TimeInterval = 300
+    /// Poll cadence while waiting for the user to approve Last.fm auth
+    /// in their browser.
+    public static let lastFMAuthPollInterval: UInt64 = 2_000_000_000
+    /// How long we'll keep polling after opening the browser before
+    /// giving up on `auth.getSession`.
+    public static let lastFMAuthTimeout: TimeInterval = 90
+    /// Debounce between scroll-wheel deltas and the SOAP volume commit —
+    /// lets a rapid flick coalesce to one write instead of 10+.
+    public static let scrollVolumeCommitDelay: UInt64 = 300_000_000
 }
 
 // MARK: - UserDefaults Keys

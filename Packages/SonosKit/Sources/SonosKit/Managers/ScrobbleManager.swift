@@ -395,7 +395,9 @@ public final class ScrobbleManager: ObservableObject {
     private func startAutoScrobbleTimerIfEnabled() {
         stopAutoScrobbleTimer()
         guard autoScrobbleEnabled else { return }
-        autoScrobbleTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+        autoScrobbleTimer = Timer.scheduledTimer(
+            withTimeInterval: Timing.autoScrobbleInterval, repeats: true
+        ) { [weak self] _ in
             Task { @MainActor [weak self] in await self?.scrobblePending() }
         }
     }

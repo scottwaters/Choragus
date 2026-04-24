@@ -266,6 +266,23 @@ public enum L10n {
     public static var recentNonScrobbled: String { tr("recentNonScrobbled") }
     public static var noReasonRecorded: String { tr("noReasonRecorded") }
 
+    // MARK: - NowPlaying popovers / menus (reviewed v3.6)
+    public static var shuffleDisabledTitle: String { tr("shuffleDisabledTitle") }
+    public static var shuffleDisabledBody: String { tr("shuffleDisabledBody") }
+    public static var searchArtwork: String { tr("searchArtwork") }
+    public static var ignoreArtwork: String { tr("ignoreArtwork") }
+    public static var close: String { tr("close") }
+
+    // MARK: - Filter preview (v3.6)
+    public static var filterPreviewTitle: String { tr("filterPreviewTitle") }
+    public static var wouldSend: String { tr("wouldSend") }
+    public static var roomBlocked: String { tr("roomBlocked") }
+    public static var serviceBlocked: String { tr("serviceBlocked") }
+    public static var structuralIneligible: String { tr("structuralIneligible") }
+    public static var roomBlockedExamples: String { tr("roomBlockedExamples") }
+    public static var serviceBlockedExamples: String { tr("serviceBlockedExamples") }
+    public static var currentFilterPrefix: String { tr("currentFilterPrefix") }
+
     // MARK: - Translation Lookup
 
     private static func tr(_ key: String) -> String {
@@ -3210,6 +3227,169 @@ public enum L10n {
             "pt": "sem motivo registrado",
             "pl": "brak zarejestrowanego powodu",
             "zh-Hans": "\u{672A}\u{8BB0}\u{5F55}\u{539F}\u{56E0}",
+        ],
+
+        // ========================
+        // MARK: NowPlaying + misc (v3.6 audit)
+        // ========================
+
+        "shuffleDisabledTitle": [
+            "en": "Shuffle is disabled",
+            "de": "Zufallswiedergabe deaktiviert",
+            "fr": "Lecture al\u{00E9}atoire d\u{00E9}sactiv\u{00E9}e",
+            "nl": "Shuffle uitgeschakeld",
+            "es": "Aleatorio desactivado",
+            "it": "Riproduzione casuale disattivata",
+            "sv": "Blandning avaktiverad",
+            "nb": "Tilfeldig avspilling deaktivert",
+            "da": "Tilf\u{00E6}ldig afspilning deaktiveret",
+            "ja": "\u{30B7}\u{30E3}\u{30C3}\u{30D5}\u{30EB}\u{306F}\u{7121}\u{52B9}\u{3067}\u{3059}",
+            "pt": "Reprodu\u{00E7}\u{00E3}o aleat\u{00F3}ria desativada",
+            "pl": "Losowe odtwarzanie wy\u{0142}\u{0105}czone",
+            "zh-Hans": "\u{968F}\u{673A}\u{64AD}\u{653E}\u{5DF2}\u{7981}\u{7528}",
+        ],
+        "shuffleDisabledBody": [
+            "en": "Use the shuffle button in the Queue panel to physically reorder tracks, or enable Classic Shuffle Mode in Settings.",
+            "de": "Verwende die Zufallswiedergabe-Taste im Warteschlangenbereich, um Titel physisch neu anzuordnen, oder aktiviere den klassischen Zufallsmodus in den Einstellungen.",
+            "fr": "Utilisez le bouton de lecture al\u{00E9}atoire du panneau File d\u{2019}attente pour r\u{00E9}ordonner physiquement les pistes, ou activez le mode al\u{00E9}atoire classique dans les R\u{00E9}glages.",
+            "nl": "Gebruik de shuffle-knop in het wachtrij-paneel om tracks fysiek opnieuw te rangschikken, of schakel Klassieke Shuffle-modus in via Instellingen.",
+            "es": "Usa el bot\u{00F3}n de orden aleatorio en el panel de cola para reorganizar las pistas, o activa el modo aleatorio cl\u{00E1}sico en Ajustes.",
+            "it": "Usa il pulsante di riproduzione casuale nel pannello Coda per riordinare fisicamente i brani, oppure abilita la modalit\u{00E0} Casuale Classica nelle Impostazioni.",
+            "sv": "Anv\u{00E4}nd blandningsknappen i k\u{00F6}panelen f\u{00F6}r att ordna om sp\u{00E5}ren fysiskt, eller aktivera Klassiskt blandningsl\u{00E4}ge i Inst\u{00E4}llningar.",
+            "nb": "Bruk tilfeldig-knappen i k\u{00F8}panelet for \u{00E5} omorganisere sporene fysisk, eller aktiver Klassisk tilfeldig modus i Innstillinger.",
+            "da": "Brug tilf\u{00E6}ldig-knappen i k\u{00F8}panelet for at omarrangere numrene fysisk, eller aktiv\u{00E9}r Klassisk tilf\u{00E6}ldig tilstand i Indstillinger.",
+            "ja": "\u{30AD}\u{30E5}\u{30FC}\u{30D1}\u{30CD}\u{30EB}\u{306E}\u{30B7}\u{30E3}\u{30C3}\u{30D5}\u{30EB}\u{30DC}\u{30BF}\u{30F3}\u{3067}\u{30C8}\u{30E9}\u{30C3}\u{30AF}\u{3092}\u{7269}\u{7406}\u{7684}\u{306B}\u{4E26}\u{3073}\u{66FF}\u{3048}\u{308B}\u{304B}\u{3001}\u{8A2D}\u{5B9A}\u{3067}\u{30AF}\u{30E9}\u{30B7}\u{30C3}\u{30AF}\u{30B7}\u{30E3}\u{30C3}\u{30D5}\u{30EB}\u{30E2}\u{30FC}\u{30C9}\u{3092}\u{6709}\u{52B9}\u{306B}\u{3057}\u{3066}\u{304F}\u{3060}\u{3055}\u{3044}\u{3002}",
+            "pt": "Use o bot\u{00E3}o de reprodu\u{00E7}\u{00E3}o aleat\u{00F3}ria no painel da Fila para reordenar as faixas fisicamente, ou ative o Modo Aleat\u{00F3}rio Cl\u{00E1}ssico em Configura\u{00E7}\u{00F5}es.",
+            "pl": "U\u{017C}yj przycisku losowania w panelu Kolejki, aby fizycznie zmieni\u{0107} kolejno\u{015B}\u{0107} utwor\u{00F3}w, lub w\u{0142}\u{0105}cz Klasyczny tryb losowy w Ustawieniach.",
+            "zh-Hans": "\u{4F7F}\u{7528}\u{961F}\u{5217}\u{9762}\u{677F}\u{4E2D}\u{7684}\u{968F}\u{673A}\u{6309}\u{94AE}\u{4EE5}\u{5B9E}\u{9645}\u{91CD}\u{65B0}\u{6392}\u{5E8F}\u{66F2}\u{76EE}\u{FF0C}\u{6216}\u{5728}\u{8BBE}\u{7F6E}\u{4E2D}\u{542F}\u{7528}\u{7ECF}\u{5178}\u{968F}\u{673A}\u{6A21}\u{5F0F}\u{3002}",
+        ],
+        "searchArtwork": [
+            "en": "Search Artwork\u{2026}", "de": "Cover suchen\u{2026}",
+            "fr": "Rechercher une pochette\u{2026}", "nl": "Hoes zoeken\u{2026}",
+            "es": "Buscar portada\u{2026}", "it": "Cerca copertina\u{2026}",
+            "sv": "S\u{00F6}k omslag\u{2026}", "nb": "S\u{00F8}k omslag\u{2026}",
+            "da": "S\u{00F8}g omslag\u{2026}",
+            "ja": "\u{30A2}\u{30FC}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{3092}\u{691C}\u{7D22}\u{2026}",
+            "pt": "Buscar arte\u{2026}", "pl": "Wyszukaj ok\u{0142}adk\u{0119}\u{2026}",
+            "zh-Hans": "\u{641C}\u{7D22}\u{5C01}\u{9762}\u{2026}",
+        ],
+        "ignoreArtwork": [
+            "en": "Ignore Artwork", "de": "Cover ignorieren",
+            "fr": "Ignorer la pochette", "nl": "Hoes negeren",
+            "es": "Ignorar portada", "it": "Ignora copertina",
+            "sv": "Ignorera omslag", "nb": "Ignorer omslag",
+            "da": "Ignor\u{00E9}r omslag",
+            "ja": "\u{30A2}\u{30FC}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{3092}\u{7121}\u{8996}",
+            "pt": "Ignorar arte", "pl": "Ignoruj ok\u{0142}adk\u{0119}",
+            "zh-Hans": "\u{5FFD}\u{7565}\u{5C01}\u{9762}",
+        ],
+        "close": [
+            "en": "Close", "de": "Schlie\u{00DF}en", "fr": "Fermer",
+            "nl": "Sluiten", "es": "Cerrar", "it": "Chiudi",
+            "sv": "St\u{00E4}ng", "nb": "Lukk", "da": "Luk",
+            "ja": "\u{9589}\u{3058}\u{308B}",
+            "pt": "Fechar", "pl": "Zamknij",
+            "zh-Hans": "\u{5173}\u{95ED}",
+        ],
+        "filterPreviewTitle": [
+            "en": "Filter preview",
+            "de": "Filter-Vorschau",
+            "fr": "Aper\u{00E7}u du filtre",
+            "nl": "Filter voorvertoning",
+            "es": "Vista previa del filtro",
+            "it": "Anteprima filtro",
+            "sv": "F\u{00F6}rhandsvisning av filter",
+            "nb": "Forh\u{00E5}ndsvisning av filter",
+            "da": "Forh\u{00E5}ndsvisning af filter",
+            "ja": "\u{30D5}\u{30A3}\u{30EB}\u{30BF}\u{30FC}\u{30D7}\u{30EC}\u{30D3}\u{30E5}\u{30FC}",
+            "pt": "Pr\u{00E9}-visualiza\u{00E7}\u{00E3}o do filtro",
+            "pl": "Podgl\u{0105}d filtra",
+            "zh-Hans": "\u{7B5B}\u{9009}\u{9884}\u{89C8}",
+        ],
+        "wouldSend": [
+            "en": "would send", "de": "w\u{00FC}rden gesendet",
+            "fr": "\u{00E0} envoyer", "nl": "zou worden verzonden",
+            "es": "se enviar\u{00ED}an", "it": "da inviare",
+            "sv": "skulle skickas", "nb": "ville bli sendt",
+            "da": "ville blive sendt",
+            "ja": "\u{9001}\u{4FE1}\u{4E88}\u{5B9A}",
+            "pt": "seriam enviados", "pl": "zostanie wys\u{0142}anych",
+            "zh-Hans": "\u{5C06}\u{53D1}\u{9001}",
+        ],
+        "roomBlocked": [
+            "en": "room-blocked", "de": "Raum gesperrt",
+            "fr": "bloqu\u{00E9}s par la pi\u{00E8}ce", "nl": "kamer-geblokkeerd",
+            "es": "bloqueados por sala", "it": "bloccati dalla stanza",
+            "sv": "rumsblockerade", "nb": "romblokkert",
+            "da": "rumblokeret",
+            "ja": "\u{90E8}\u{5C4B}\u{30D5}\u{30A3}\u{30EB}\u{30BF}",
+            "pt": "bloqueados por sala", "pl": "zablokowane przez pok\u{00F3}j",
+            "zh-Hans": "\u{623F}\u{95F4}\u{5C4F}\u{853D}",
+        ],
+        "serviceBlocked": [
+            "en": "service-blocked", "de": "Dienst gesperrt",
+            "fr": "bloqu\u{00E9}s par le service", "nl": "dienst-geblokkeerd",
+            "es": "bloqueados por servicio", "it": "bloccati dal servizio",
+            "sv": "tj\u{00E4}nstblockerade", "nb": "tjenesteblokkert",
+            "da": "tjenesteblokeret",
+            "ja": "\u{30B5}\u{30FC}\u{30D3}\u{30B9}\u{30D5}\u{30A3}\u{30EB}\u{30BF}",
+            "pt": "bloqueados por servi\u{00E7}o", "pl": "zablokowane przez us\u{0142}ug\u{0119}",
+            "zh-Hans": "\u{670D}\u{52A1}\u{5C4F}\u{853D}",
+        ],
+        "structuralIneligible": [
+            "en": "structural", "de": "strukturell",
+            "fr": "structurels", "nl": "structureel",
+            "es": "estructurales", "it": "strutturali",
+            "sv": "strukturella", "nb": "strukturelle",
+            "da": "strukturelle",
+            "ja": "\u{69CB}\u{9020}\u{7684}",
+            "pt": "estruturais", "pl": "strukturalne",
+            "zh-Hans": "\u{7ED3}\u{6784}\u{6027}",
+        ],
+        "roomBlockedExamples": [
+            "en": "Room-blocked examples",
+            "de": "Raum-gesperrte Beispiele",
+            "fr": "Exemples bloqu\u{00E9}s par la pi\u{00E8}ce",
+            "nl": "Kamer-geblokkeerde voorbeelden",
+            "es": "Ejemplos bloqueados por sala",
+            "it": "Esempi bloccati dalla stanza",
+            "sv": "Exempel p\u{00E5} rumsblockerade",
+            "nb": "Romblokkerte eksempler",
+            "da": "Rumblokerede eksempler",
+            "ja": "\u{90E8}\u{5C4B}\u{30D5}\u{30A3}\u{30EB}\u{30BF}\u{306E}\u{4F8B}",
+            "pt": "Exemplos bloqueados por sala",
+            "pl": "Przyk\u{0142}ady zablokowane przez pok\u{00F3}j",
+            "zh-Hans": "\u{623F}\u{95F4}\u{5C4F}\u{853D}\u{793A}\u{4F8B}",
+        ],
+        "serviceBlockedExamples": [
+            "en": "Service-blocked examples",
+            "de": "Dienst-gesperrte Beispiele",
+            "fr": "Exemples bloqu\u{00E9}s par le service",
+            "nl": "Dienst-geblokkeerde voorbeelden",
+            "es": "Ejemplos bloqueados por servicio",
+            "it": "Esempi bloccati dal servizio",
+            "sv": "Exempel p\u{00E5} tj\u{00E4}nstblockerade",
+            "nb": "Tjenesteblokkerte eksempler",
+            "da": "Tjenesteblokerede eksempler",
+            "ja": "\u{30B5}\u{30FC}\u{30D3}\u{30B9}\u{30D5}\u{30A3}\u{30EB}\u{30BF}\u{306E}\u{4F8B}",
+            "pt": "Exemplos bloqueados por servi\u{00E7}o",
+            "pl": "Przyk\u{0142}ady zablokowane przez us\u{0142}ug\u{0119}",
+            "zh-Hans": "\u{670D}\u{52A1}\u{5C4F}\u{853D}\u{793A}\u{4F8B}",
+        ],
+        "currentFilterPrefix": [
+            "en": "current filter",
+            "de": "aktueller Filter",
+            "fr": "filtre actuel",
+            "nl": "huidig filter",
+            "es": "filtro actual",
+            "it": "filtro attuale",
+            "sv": "aktuellt filter",
+            "nb": "n\u{00E5}v\u{00E6}rende filter",
+            "da": "aktuelt filter",
+            "ja": "\u{73FE}\u{5728}\u{306E}\u{30D5}\u{30A3}\u{30EB}\u{30BF}",
+            "pt": "filtro atual",
+            "pl": "bie\u{017C}\u{0105}cy filtr",
+            "zh-Hans": "\u{5F53}\u{524D}\u{7B5B}\u{9009}",
         ],
     ]
     // swiftlint:enable function_body_length

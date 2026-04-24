@@ -184,7 +184,7 @@ final class NowPlayingViewModel {
         setVolume()
         scrollVolumeCommitTask?.cancel()
         scrollVolumeCommitTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(nanoseconds: Timing.scrollVolumeCommitDelay)
             guard !Task.isCancelled, let self else { return }
             self.commitVolume()
         }
