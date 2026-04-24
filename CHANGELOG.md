@@ -1,4 +1,14 @@
+
 # Changelog
+
+## v3.71 — 2026-04-25
+
+- **SoundCloud moved to blocked list.** `getAppLink` returns
+  `Client.NOT_AUTHORIZED` (403) to non-Sonos clients, so SoundCloud
+  can't be driven by a third-party controller. It was incorrectly shown
+  in the "Connect" section in v3.7. Now correctly grouped with Amazon
+  Music and YouTube Music as Sonos-identity-gated. Service-status matrix
+  updated; Plex now listed as a working AppLink service.
 
 ## v3.7 — 2026-04-25
 

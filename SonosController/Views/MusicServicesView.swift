@@ -33,6 +33,7 @@ struct MusicServicesSettingsSection: View {
         ServiceID.appleMusic,   // Handled separately via iTunes API
         ServiceID.amazonMusic,  // Returns empty auth URL
         ServiceID.youTubeMusic, // Returns empty auth URL
+        ServiceID.soundCloud,   // getAppLink returns Client.NOT_AUTHORIZED (403) to non-Sonos clients
         ServiceID.sonosRadio,   // Search works anonymously, browse requires DeviceLink (not supported)
     ]
 
@@ -249,9 +250,9 @@ struct MusicServicesSettingsSection: View {
             Group {
                 statusRow(color: .green, text: "TuneIn, Calm Radio — no connection needed, full browse and playback")
                 statusRow(color: .green, text: "Apple Music — search via iTunes API, playback works if connected in Sonos app with one favorited song")
-                statusRow(color: .green, text: "Spotify — tested and working with AppLink auth")
+                statusRow(color: .green, text: "Spotify, Plex — tested and working with AppLink auth")
                 statusRow(color: .green, text: "Sonos Radio — search only (browsing categories requires unsupported DeviceLink auth)")
-                statusRow(color: .orange, text: "Amazon Music, YouTube Music — blocked (require native OAuth)")
+                statusRow(color: .orange, text: "Amazon Music, YouTube Music, SoundCloud — blocked by Sonos-identity gate")
                 statusRow(color: .gray, text: "Other services — untested, may work via AppLink")
             }
         }
