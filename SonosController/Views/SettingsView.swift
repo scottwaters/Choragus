@@ -7,6 +7,8 @@ struct SettingsView: View {
     @EnvironmentObject var sonosManager: SonosManager
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
+    @EnvironmentObject var scrobbleManager: ScrobbleManager
+    @EnvironmentObject var lastFMScrobbler: LastFMScrobbler
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTab = 0
 
@@ -31,6 +33,7 @@ struct SettingsView: View {
             Picker("", selection: $selectedTab) {
                 Label("Display", systemImage: "paintbrush").tag(0)
                 Label("Music", systemImage: "music.note").tag(1)
+                Label(L10n.scrobbling, systemImage: "waveform").tag(3)
                 Label("System", systemImage: "gearshape").tag(2)
             }
             .pickerStyle(.segmented)
@@ -42,6 +45,8 @@ struct SettingsView: View {
                 .environmentObject(sonosManager)
                 .environmentObject(playHistoryManager)
                 .environmentObject(smapiManager)
+                .environmentObject(scrobbleManager)
+                .environmentObject(lastFMScrobbler)
         }
         .frame(width: 560, height: 720)
         .onDisappear {
@@ -56,6 +61,8 @@ private struct TabContentView: View {
     @EnvironmentObject var sonosManager: SonosManager
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
+    @EnvironmentObject var scrobbleManager: ScrobbleManager
+    @EnvironmentObject var lastFMScrobbler: LastFMScrobbler
     @Environment(\.dismiss) private var dismiss
     let tab: Int
 
@@ -65,6 +72,7 @@ private struct TabContentView: View {
                 switch tab {
                 case 0: displayTab
                 case 1: musicTab
+                case 3: scrobblingTab
                 default: systemTab
                 }
             }
@@ -267,6 +275,12 @@ private struct TabContentView: View {
                     .environmentObject(smapiManager)
             }
         }
+    }
+
+    // MARK: - Scrobbling Tab
+
+    private var scrobblingTab: some View {
+        SettingsScrobblingTab(lastfm: lastFMScrobbler)
     }
 
     // MARK: - System Tab

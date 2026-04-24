@@ -18,6 +18,28 @@ public struct DailySummary {
     public let starredCount: Int
 }
 
+/// Outcome of a scrobble submission for one (history entry, service) pair.
+/// Mirrors the three states the `scrobble_log` table records:
+/// - `sent`: accepted by the service.
+/// - `ignoredByService`: service rejected but don't retry (bad timestamp, duplicate, etc.).
+/// - `failedRetryable`: transient failure, try again later up to retry cap.
+public enum ScrobbleLogState: Int {
+    case sent = 0
+    case ignoredByService = 1
+    case failedRetryable = 2
+}
+
+/// Persisted row from `scrobble_log` — used mainly for stats display in the
+/// Scrobbling settings tab and for retry policy decisions.
+public struct ScrobbleLogEntry {
+    public let historyID: String
+    public let service: String
+    public let sentAt: Date
+    public let state: ScrobbleLogState
+    public let error: String?
+    public let retryCount: Int
+}
+
 @MainActor
 public final class PlayHistoryRepository {
     private var db: OpaquePointer?
@@ -82,6 +104,27 @@ public final class PlayHistoryRepository {
                 starred_count INTEGER NOT NULL DEFAULT 0
             )
         """)
+
+        // Scrobble log — one row per (history entry, scrobbling service) pair.
+        // Composite PK means the same history entry can be independently
+        // scrobbled to multiple services (Last.fm, ListenBrainz, etc.).
+        // `service` is a short identifier ("lastfm", "listenbrainz").
+        // `state` follows ScrobbleLogState: 0 sent, 1 ignored-by-service,
+        // 2 failed-retryable. `ON DELETE CASCADE` — clearing play history
+        // clears the log with it.
+        exec("""
+            CREATE TABLE IF NOT EXISTS scrobble_log (
+                history_id   TEXT NOT NULL,
+                service      TEXT NOT NULL,
+                sent_at      INTEGER NOT NULL,
+                state        INTEGER NOT NULL,
+                error        TEXT,
+                retry_count  INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (history_id, service),
+                FOREIGN KEY (history_id) REFERENCES history(id) ON DELETE CASCADE
+            )
+        """)
+        exec("CREATE INDEX IF NOT EXISTS idx_scrobble_service_state ON scrobble_log(service, state)")
     }
 
     // MARK: - CRUD
@@ -445,6 +488,237 @@ public final class PlayHistoryRepository {
             artists: 0, albums: 0, stations: 0, rooms: 0, // These need distinct counts across days
             starred: Int(sqlite3_column_int(stmt, 3))
         )
+    }
+
+    // MARK: - Scrobble Log
+
+    /// Returns history entries that are candidates for scrobbling to `service`:
+    /// never sent OR previously failed with retries remaining. Caller applies
+    /// business-level eligibility on top (duration, age window, artist/title
+    /// presence, source/room filters).
+    ///
+    /// Ordered by timestamp ascending so older entries are scrobbled first —
+    /// important when there are more pending than one batch can hold.
+    public func unscrobbledEntries(
+        service: String,
+        maxRetries: Int = 3,
+        limit: Int = 500
+    ) -> [PlayHistoryEntry] {
+        let sql = """
+            SELECT h.id, h.timestamp, h.title, h.artist, h.album, h.station_name,
+                   h.source_uri, h.group_name, h.duration, h.album_art_uri, h.starred
+            FROM history h
+            LEFT JOIN scrobble_log s
+              ON s.history_id = h.id AND s.service = ?
+            WHERE s.history_id IS NULL
+               OR (s.state = \(ScrobbleLogState.failedRetryable.rawValue) AND s.retry_count < ?)
+            ORDER BY h.timestamp ASC
+            LIMIT ?
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, nil)
+        sqlite3_bind_int(stmt, 2, Int32(maxRetries))
+        sqlite3_bind_int(stmt, 3, Int32(limit))
+
+        var entries: [PlayHistoryEntry] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let entry = PlayHistoryEntry(
+                id: UUID(uuidString: String(cString: sqlite3_column_text(stmt, 0))) ?? UUID(),
+                timestamp: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1)),
+                title: String(cString: sqlite3_column_text(stmt, 2)),
+                artist: String(cString: sqlite3_column_text(stmt, 3)),
+                album: String(cString: sqlite3_column_text(stmt, 4)),
+                stationName: String(cString: sqlite3_column_text(stmt, 5)),
+                sourceURI: sqlite3_column_type(stmt, 6) != SQLITE_NULL ? String(cString: sqlite3_column_text(stmt, 6)) : nil,
+                groupName: String(cString: sqlite3_column_text(stmt, 7)),
+                duration: sqlite3_column_double(stmt, 8),
+                albumArtURI: sqlite3_column_type(stmt, 9) != SQLITE_NULL ? String(cString: sqlite3_column_text(stmt, 9)) : nil,
+                starred: sqlite3_column_int(stmt, 10) != 0
+            )
+            entries.append(entry)
+        }
+        return entries
+    }
+
+    /// Records the outcome of a scrobble submission. Uses UPSERT semantics —
+    /// later state replaces earlier state for the same (history_id, service).
+    /// `retry_count` increments automatically when re-recording a failure.
+    public func recordScrobbleResult(
+        historyID: UUID,
+        service: String,
+        state: ScrobbleLogState,
+        error: String? = nil
+    ) {
+        let sql = """
+            INSERT INTO scrobble_log (history_id, service, sent_at, state, error, retry_count)
+            VALUES (?, ?, ?, ?, ?, 0)
+            ON CONFLICT(history_id, service) DO UPDATE SET
+                sent_at = excluded.sent_at,
+                state = excluded.state,
+                error = excluded.error,
+                retry_count = CASE
+                    WHEN excluded.state = \(ScrobbleLogState.failedRetryable.rawValue)
+                    THEN scrobble_log.retry_count + 1
+                    ELSE scrobble_log.retry_count
+                END
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            sonosDebugLog("[SCROBBLE] Prepare recordScrobbleResult failed: \(String(cString: sqlite3_errmsg(db)))")
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_text(stmt, 1, (historyID.uuidString as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 2, (service as NSString).utf8String, -1, nil)
+        sqlite3_bind_int64(stmt, 3, Int64(Date().timeIntervalSince1970))
+        sqlite3_bind_int(stmt, 4, Int32(state.rawValue))
+        if let error {
+            sqlite3_bind_text(stmt, 5, (error as NSString).utf8String, -1, nil)
+        } else {
+            sqlite3_bind_null(stmt, 5)
+        }
+
+        if sqlite3_step(stmt) != SQLITE_DONE {
+            sonosDebugLog("[SCROBBLE] Record failed: \(String(cString: sqlite3_errmsg(db)))")
+        }
+    }
+
+    /// Pending (unscrobbled eligible) count for a service — for UI display.
+    /// Cheaper than fetching the entries; uses same join predicate.
+    public func pendingScrobbleCount(service: String, maxRetries: Int = 3) -> Int {
+        let sql = """
+            SELECT COUNT(*) FROM history h
+            LEFT JOIN scrobble_log s
+              ON s.history_id = h.id AND s.service = ?
+            WHERE s.history_id IS NULL
+               OR (s.state = \(ScrobbleLogState.failedRetryable.rawValue) AND s.retry_count < ?)
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, nil)
+        sqlite3_bind_int(stmt, 2, Int32(maxRetries))
+        return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
+    }
+
+    /// Counts by state for a service — for UI display.
+    public func scrobbleStats(service: String) -> (sent: Int, ignored: Int, failed: Int) {
+        let sql = """
+            SELECT state, COUNT(*) FROM scrobble_log
+            WHERE service = ?
+            GROUP BY state
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return (0, 0, 0) }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, nil)
+
+        var sent = 0, ignored = 0, failed = 0
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let state = Int(sqlite3_column_int(stmt, 0))
+            let count = Int(sqlite3_column_int(stmt, 1))
+            switch ScrobbleLogState(rawValue: state) {
+            case .sent: sent = count
+            case .ignoredByService: ignored = count
+            case .failedRetryable: failed = count
+            case nil: break
+            }
+        }
+        return (sent, ignored, failed)
+    }
+
+    /// Deletes `scrobble_log` rows for a service in the `ignoredByService`
+    /// state — called when the user changes their room/service filters and
+    /// wants previously filter-excluded rows to be re-evaluated. Returns
+    /// the number of rows cleared so the UI can confirm how many will be
+    /// reconsidered on the next run. `sent` rows are preserved (never
+    /// re-scrobble a successful submission).
+    @discardableResult
+    public func resetIgnoredScrobbles(service: String) -> Int {
+        let sql = """
+            DELETE FROM scrobble_log
+            WHERE service = ? AND state = \(ScrobbleLogState.ignoredByService.rawValue)
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, nil)
+        guard sqlite3_step(stmt) == SQLITE_DONE else { return 0 }
+        return Int(sqlite3_changes(db))
+    }
+
+    /// One row of a recent non-sent scrobble for the Settings diagnostic list.
+    /// Joins `scrobble_log` back to `history` so the UI can render why a
+    /// specific track was dropped (instead of a bare count).
+    public struct ScrobbleDiagnosticRow: Identifiable {
+        public let id: UUID
+        public let timestamp: Date
+        public let title: String
+        public let artist: String
+        public let state: ScrobbleLogState
+        public let reason: String?
+    }
+
+    /// Returns the most recent scrobble_log rows that are NOT in the `sent`
+    /// state — the ones the user wants to see when they ask "why didn't my
+    /// tracks go?". Ordered newest first so the likeliest recent culprit is
+    /// at the top.
+    public func recentNonSentScrobbles(
+        service: String,
+        limit: Int = 50
+    ) -> [ScrobbleDiagnosticRow] {
+        let sql = """
+            SELECT s.history_id, h.timestamp, h.title, h.artist, s.state, s.error
+            FROM scrobble_log s
+            JOIN history h ON h.id = s.history_id
+            WHERE s.service = ?
+              AND s.state != \(ScrobbleLogState.sent.rawValue)
+            ORDER BY s.sent_at DESC
+            LIMIT ?
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, nil)
+        sqlite3_bind_int(stmt, 2, Int32(limit))
+
+        var rows: [ScrobbleDiagnosticRow] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let id = UUID(uuidString: String(cString: sqlite3_column_text(stmt, 0))) ?? UUID()
+            let ts = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1))
+            let title = String(cString: sqlite3_column_text(stmt, 2))
+            let artist = String(cString: sqlite3_column_text(stmt, 3))
+            let rawState = Int(sqlite3_column_int(stmt, 4))
+            let state = ScrobbleLogState(rawValue: rawState) ?? .ignoredByService
+            let reason: String? = sqlite3_column_type(stmt, 5) != SQLITE_NULL
+                ? String(cString: sqlite3_column_text(stmt, 5)) : nil
+            rows.append(ScrobbleDiagnosticRow(
+                id: id, timestamp: ts, title: title, artist: artist,
+                state: state, reason: reason
+            ))
+        }
+        return rows
+    }
+
+    /// Returns the set of distinct `group_name` values seen in history — used
+    /// to populate the room-selection UI in Scrobbling settings.
+    public func distinctGroupNames() -> [String] {
+        let sql = "SELECT DISTINCT group_name FROM history WHERE group_name != '' ORDER BY group_name"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        var names: [String] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let cStr = sqlite3_column_text(stmt, 0) {
+                names.append(String(cString: cStr))
+            }
+        }
+        return names
     }
 
     // MARK: - Internal

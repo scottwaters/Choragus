@@ -150,25 +150,6 @@ struct PlayHistoryDashboard: View {
         }
     }
 
-    private func recentlyPlayed(limit: Int) -> [PlayHistoryEntry] {
-        var seen = Set<String>()
-        var result: [PlayHistoryEntry] = []
-        for entry in entries.sorted(by: { $0.timestamp > $1.timestamp }) {
-            guard !entry.title.isEmpty else { continue }
-            let key: String
-            if !entry.stationName.isEmpty {
-                key = "station:\(entry.stationName)"
-            } else {
-                key = "track:\(entry.title)|\(entry.artist)"
-            }
-            guard !seen.contains(key) else { continue }
-            seen.insert(key)
-            result.append(entry)
-            if result.count >= limit { break }
-        }
-        return result
-    }
-
     // MARK: - Body
 
     var body: some View {
@@ -650,7 +631,7 @@ struct PlayHistoryDashboard: View {
                 Label("Recent Activity", systemImage: "clock.arrow.circlepath")
                     .font(.headline)
 
-                let recent = recentlyPlayed(limit: 10)
+                let recent = historyManager.recentlyPlayed(limit: 10)
                 ForEach(Array(recent.enumerated()), id: \.element.id) { idx, entry in
                     HStack(spacing: 12) {
                         Text(entry.timestamp, format: .relative(presentation: .named))

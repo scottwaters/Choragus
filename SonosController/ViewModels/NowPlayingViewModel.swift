@@ -167,6 +167,29 @@ final class NowPlayingViewModel {
         }
     }
 
+    private var scrollVolumeCommitTask: Task<Void, Never>?
+
+    /// Applies a scroll-wheel volume step to the coordinator's master volume
+    /// and debounces the SOAP commit. Called from the mouse-wheel capture in
+    /// NowPlayingView — intentionally not exposed to any other path so the
+    /// debounce window (300 ms of quiet) can't interact with the drag-slider
+    /// commit-on-release flow. Pure step application: uses the same
+    /// `setVolume()` routing as the slider (grace periods, proportional
+    /// group volume, per-speaker fan-out) to stay feature-consistent.
+    func applyScrollVolumeStep(_ step: Int) {
+        let current = volume
+        let next = max(0, min(100, current + Double(step)))
+        guard next != current else { return }
+        volume = next
+        setVolume()
+        scrollVolumeCommitTask?.cancel()
+        scrollVolumeCommitTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Timing.scrollVolumeCommitDelay)
+            guard !Task.isCancelled, let self else { return }
+            self.commitVolume()
+        }
+    }
+
     func setVolume() {
         let now = Date()
         volumeGraceUntil = now.addingTimeInterval(Timing.playbackGracePeriod)

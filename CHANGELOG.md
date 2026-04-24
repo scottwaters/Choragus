@@ -1,5 +1,79 @@
 # Changelog
 
+## v3.6 — 2026-04-24
+
+Scrobbling, keychain consolidation, scroll-wheel volume, and a round of
+correctness fixes around music-service filtering.
+
+### Last.fm scrobbling
+- **Settings → Scrobbling** — new tab. BYO Last.fm API app (register at
+  last.fm/api/account/create, paste API key + shared secret). Test
+  credentials, browser-based OAuth via `auth.getSession`, no bundled
+  credentials, no shared-key exposure.
+- **Generic `ScrobbleService` protocol** — Last.fm is the only
+  implementation today but the manager, persistence, and UI all go through
+  the protocol so additional services can be dropped in without touching
+  the orchestration layer.
+- **Batch submission, 50 tracks per call** (Last.fm's documented cap),
+  with per-track acknowledgement parsing and retry-classified failures.
+- **Filter by room** — substring match, case-insensitive, covers single
+  playback, grouped playback (`"Office + Kitchen"`), and custom group
+  names. Earlier split-equality match was replaced after it missed most
+  real-world group names.
+- **Filter by music service** — sid-mapped against the authoritative Sonos
+  service IDs (Apple Music 204, Spotify 12, TuneIn 254, SoundCloud 160,
+  YouTube Music 284, Sonos Radio 303, Calm Radio 144, Amazon Music 201,
+  Local Library). Earlier keyword-only match silently dropped Apple Music
+  and YouTube Music tracks — their URIs never contain the literal
+  service name.
+- **Permanent vs filter ineligibility** — structural rejections (< 30 s
+  with known duration, > 14 days, missing artist/title) persist to
+  `scrobble_log` so we stop re-considering them; filter-driven skips
+  don't persist, so a filter change re-qualifies the row on the next run.
+- **Reset ignored** button — clears prior ignore decisions when filters
+  change.
+- **Filter preview** diagnostic — shows, for the next N pending rows, how
+  many would send, how many are blocked by room filter (with sample
+  rows), how many by service filter (with sample URIs). Answers "why
+  isn't this scrobbling?" without log-diving.
+- **Recent non-scrobbled list** — shows Last.fm's per-track rejections
+  (timestamp, artist/title, reason text straight from their response).
+- **Radio streams now eligible** — duration=0 is treated as "unknown,
+  assume OK" instead of "< 30 s, reject". Continuous streams submit
+  without the duration parameter.
+
+### Unified secrets store
+- All credentials (Last.fm + SMAPI tokens for every service) now live in
+  a single Keychain item. One authorization prompt per rebuild instead of
+  one per stored item. Existing items under the old per-service
+  namespaces migrate automatically on first launch.
+
+### Scroll-wheel volume + middle-click mute
+- Mouse scroll on the selected speaker adjusts volume with a 300 ms
+  debounce on the SOAP commit so fast flicks don't stack calls.
+- Middle-click toggles mute.
+- Queue/stream next/prev button enablement corrected — previously
+  group playback of a queue was treated as a radio stream when the
+  track carried piggybacked station metadata.
+
+### Localization
+- Scrobbling UI strings added to every supported locale (13 languages).
+
+### Fixes
+- **Paste in Settings** — the Edit menu had been hidden globally, which
+  unintentionally broke `⌘V` resolution in credential fields.
+- **Last.fm error 13 on batches containing `+`** — form-encode now uses
+  the RFC 3986 unreserved character set. `+` percent-encodes to `%2B`
+  instead of round-tripping as a space. Tracks like "Mike + the
+  Mechanics" were failing the whole batch they were in.
+
+### Known not-viable
+- Amazon Music, YouTube Music, SoundCloud, and Apple Music (as a
+  Sonos SMAPI service) are gated on Sonos-identity authentication —
+  confirmed by live probe of `getAppLink` against each. Third-party
+  apps cannot drive these services. Scrobbling of listens via the
+  official Sonos app still works. See `docs/TODO.md` for details.
+
 ## v3.51 — 2026-04-23
 
 Performance-focused maintenance release targeting Sonos S1 hardware and other

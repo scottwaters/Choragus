@@ -272,10 +272,10 @@ struct NowPlayingView: View {
                                 .onTapGesture { showShuffleHint = true }
                                 .popover(isPresented: $showShuffleHint, arrowEdge: .bottom) {
                                     VStack(alignment: .leading, spacing: 6) {
-                                        Text("Shuffle is disabled")
+                                        Text(L10n.shuffleDisabledTitle)
                                             .font(.caption)
                                             .fontWeight(.semibold)
-                                        Text("Use the shuffle button in the Queue panel to physically reorder tracks, or enable Classic Shuffle Mode in Settings.")
+                                        Text(L10n.shuffleDisabledBody)
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                             .fixedSize(horizontal: false, vertical: true)
@@ -289,7 +289,14 @@ struct NowPlayingView: View {
                             performAction("previous") { try await sonosManager.previous(group: group) }
                         }
                         .tooltip("Previous")
-                        .disabled(trackMetadata.isRadioStream || !trackMetadata.stationName.isEmpty)
+                        // Queue playback supports next/prev regardless of any
+                        // station metadata that might be piggybacked on the
+                        // track (some service tracks carry a stationName value
+                        // from the music provider that doesn't mean "radio").
+                        // Disable only when we're in a non-queue radio/stream
+                        // context where next/prev aren't meaningful.
+                        .disabled(!trackMetadata.isQueueSource &&
+                                  (trackMetadata.isRadioStream || !trackMetadata.stationName.isEmpty))
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
@@ -308,7 +315,14 @@ struct NowPlayingView: View {
                             performAction("next") { try await sonosManager.next(group: group) }
                         }
                         .tooltip("Next")
-                        .disabled(trackMetadata.isRadioStream || !trackMetadata.stationName.isEmpty)
+                        // Queue playback supports next/prev regardless of any
+                        // station metadata that might be piggybacked on the
+                        // track (some service tracks carry a stationName value
+                        // from the music provider that doesn't mean "radio").
+                        // Disable only when we're in a non-queue radio/stream
+                        // context where next/prev aren't meaningful.
+                        .disabled(!trackMetadata.isQueueSource &&
+                                  (trackMetadata.isRadioStream || !trackMetadata.stationName.isEmpty))
 
                         transportButton("repeat", icon: repeatIcon, size: .body,
                                         tint: playMode.repeatMode != .off ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
@@ -373,6 +387,16 @@ struct NowPlayingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .tint(sonosManager.resolvedAccentColor)
+        // Scroll-wheel anywhere on the Now Playing panel adjusts the group
+        // coordinator's master volume; middle-click toggles mute. Applied at
+        // the outermost level so the whole panel is scroll-sensitive. The
+        // overlay uses selective hit-testing — only scroll and middle-click
+        // are captured; all other mouse events pass through to the SwiftUI
+        // content so buttons, sliders, drags, right-clicks keep working.
+        .volumeScrollControl(
+            onVolumeStep: { vm.applyScrollVolumeStep($0) },
+            onToggleMute: { vm.toggleMute() }
+        )
         .onAppear {
             startProgressTimer()
             syncFromManager()
@@ -449,7 +473,7 @@ struct NowPlayingView: View {
     // MARK: - Album Art (layout in view, logic in ViewModel)
 
     private var albumArtView: some View {
-        return ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .bottomTrailing) {
             if let url = vm.art.artURLForDisplay(trackMetadata: trackMetadata) {
                 CachedAsyncImage(url: url, cornerRadius: 8)
             } else {
@@ -487,14 +511,14 @@ struct NowPlayingView: View {
             vm.handleMetadataChanged(meta)
         }
             .contextMenu {
-                Button("Search Artwork...") {
+                Button(L10n.searchArtwork) {
                     showArtSearch = true
                 }
                 Button(L10n.refreshArtwork) {
                     vm.art.forceITunesArtSearch(trackMetadata: trackMetadata, displayArtist: vm.displayArtist, group: group)
                 }
                 Divider()
-                Button("Ignore Artwork") {
+                Button(L10n.ignoreArtwork) {
                     vm.art.ignoreArtwork(trackMetadata: trackMetadata)
                 }
                 if vm.art.webArtURL != nil || vm.art.isArtIgnored || trackMetadata.albumArtURI != nil {
@@ -644,7 +668,7 @@ struct ExpandedArtView: View {
                 }
             }
 
-            Button("Close") { dismiss() }
+            Button(L10n.close) { dismiss() }
                 .keyboardShortcut(.cancelAction)
                 .buttonStyle(.bordered)
                 .controlSize(.small)

@@ -163,6 +163,20 @@ public enum Timing {
     public static let groupRefreshDelay: TimeInterval = 1
     public static let searchDebounce: UInt64 = 300_000_000
     public static let marqueeAnimationPause: UInt64 = 500_000_000
+
+    // MARK: Scrobbling (added v3.6)
+    /// Auto-scrobble timer cadence (seconds). Runs the pending queue
+    /// periodically without user action when the toggle is on.
+    public static let autoScrobbleInterval: TimeInterval = 300
+    /// Poll cadence while waiting for the user to approve Last.fm auth
+    /// in their browser.
+    public static let lastFMAuthPollInterval: UInt64 = 2_000_000_000
+    /// How long we'll keep polling after opening the browser before
+    /// giving up on `auth.getSession`.
+    public static let lastFMAuthTimeout: TimeInterval = 90
+    /// Debounce between scroll-wheel deltas and the SOAP volume commit —
+    /// lets a rapid flick coalesce to one write instead of 10+.
+    public static let scrollVolumeCommitDelay: UInt64 = 300_000_000
 }
 
 // MARK: - UserDefaults Keys
@@ -191,6 +205,21 @@ public enum UDKey {
     public static let appleMusicSearchEnabled = "appleMusicSearchEnabled"
     public static let sonosRadioEnabled = "sonosRadioEnabled"
     public static let ignoreTV = "ignoreTV"
+
+    // MARK: - Scrobbling (added v3.6)
+    /// Per-service enable toggle. Pattern: `scrobbling.<serviceID>.enabled`.
+    /// Example: `scrobbling.lastfm.enabled`.
+    public static func scrobblingEnabled(for serviceID: String) -> String {
+        "scrobbling.\(serviceID).enabled"
+    }
+    /// Comma-separated list of rooms (group-name substrings) the user wants
+    /// to scrobble. Empty = scrobble all rooms.
+    public static let scrobblingEnabledRooms = "scrobbling.enabledRooms"
+    /// Comma-separated list of music-service sources to scrobble (e.g.
+    /// "Sonos Radio,TuneIn,Local Library"). Empty = scrobble all.
+    public static let scrobblingEnabledMusicServices = "scrobbling.enabledMusicServices"
+    /// Auto-scrobble timer (5-min cadence) on/off. Default off.
+    public static let scrobblingAutoScrobble = "scrobbling.autoScrobble"
     public static let realtimeStats = "realtimeStats"
     public static let rollupInterval = "rollupInterval"
 }

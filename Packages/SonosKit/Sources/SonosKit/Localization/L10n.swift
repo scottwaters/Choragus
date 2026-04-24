@@ -225,6 +225,64 @@ public enum L10n {
     /// Tagline used in About panel credits.
     public static var aboutTagline: String { tr("aboutTagline") }
 
+    // MARK: - Scrobbling (added v3.6)
+    //
+    // Brand terms that stay English in all locales (per Last.fm's own
+    // localized sites): "Scrobble", "Scrobbling", "Last.fm". Translations
+    // verified against Apple's macOS localization glossary and standard
+    // translations from Spotify / Apple Music UI where analogous concepts
+    // exist. Count+noun pairs (pending/sent/ignored/failed) use post-count
+    // adjective/noun form for straightforward interpolation.
+    public static var scrobbling: String { tr("scrobbling") }
+    public static var scrobblingIntro: String { tr("scrobblingIntro") }
+    public static var enableLastFM: String { tr("enableLastFM") }
+    public static var lastFMCredentialsIntro: String { tr("lastFMCredentialsIntro") }
+    public static var openLastFMRegistration: String { tr("openLastFMRegistration") }
+    public static var apiKey: String { tr("apiKey") }
+    public static var sharedSecret: String { tr("sharedSecret") }
+    public static var apiKeyPlaceholder: String { tr("apiKeyPlaceholder") }
+    public static var sharedSecretPlaceholder: String { tr("sharedSecretPlaceholder") }
+    public static var testCredentials: String { tr("testCredentials") }
+    public static var credentialsValid: String { tr("credentialsValid") }
+    public static var waitingForBrowser: String { tr("waitingForBrowser") }
+    public static var connectToLastFM: String { tr("connectToLastFM") }
+    public static var disconnect: String { tr("disconnect") }
+    public static var doubleScrobbleWarning: String { tr("doubleScrobbleWarning") }
+    public static var sources: String { tr("sources") }
+    public static var sourcesDescription: String { tr("sourcesDescription") }
+    public static var noRoomsInHistory: String { tr("noRoomsInHistory") }
+    public static var musicServicesToScrobble: String { tr("musicServicesToScrobble") }
+    public static var musicServicesDescription: String { tr("musicServicesDescription") }
+    public static var autoScrobbleEveryFiveMinutes: String { tr("autoScrobbleEveryFiveMinutes") }
+    public static var scrobblePendingNow: String { tr("scrobblePendingNow") }
+    public static var scrobblingProgress: String { tr("scrobblingProgress") }
+    public static var pending: String { tr("pending") }
+    public static var sent: String { tr("sent") }
+    public static var ignored: String { tr("ignored") }
+    public static var failed: String { tr("failed") }
+    public static var resetIgnored: String { tr("resetIgnored") }
+    public static var resetIgnoredTooltip: String { tr("resetIgnoredTooltip") }
+    public static var lastRunLabel: String { tr("lastRunLabel") }
+    public static var recentNonScrobbled: String { tr("recentNonScrobbled") }
+    public static var noReasonRecorded: String { tr("noReasonRecorded") }
+
+    // MARK: - NowPlaying popovers / menus (reviewed v3.6)
+    public static var shuffleDisabledTitle: String { tr("shuffleDisabledTitle") }
+    public static var shuffleDisabledBody: String { tr("shuffleDisabledBody") }
+    public static var searchArtwork: String { tr("searchArtwork") }
+    public static var ignoreArtwork: String { tr("ignoreArtwork") }
+    public static var close: String { tr("close") }
+
+    // MARK: - Filter preview (v3.6)
+    public static var filterPreviewTitle: String { tr("filterPreviewTitle") }
+    public static var wouldSend: String { tr("wouldSend") }
+    public static var roomBlocked: String { tr("roomBlocked") }
+    public static var serviceBlocked: String { tr("serviceBlocked") }
+    public static var structuralIneligible: String { tr("structuralIneligible") }
+    public static var roomBlockedExamples: String { tr("roomBlockedExamples") }
+    public static var serviceBlockedExamples: String { tr("serviceBlockedExamples") }
+    public static var currentFilterPrefix: String { tr("currentFilterPrefix") }
+
     // MARK: - Translation Lookup
 
     private static func tr(_ key: String) -> String {
@@ -2790,6 +2848,548 @@ public enum L10n {
             "pt": "Um controlador macOS nativo para alto-falantes Sonos.\nN\u{00E3}o afiliado \u{00E0} Sonos, Inc.",
             "pl": "Natywny kontroler macOS dla g\u{0142}o\u{015B}nik\u{00F3}w Sonos.\nNiepowi\u{0105}zany z Sonos, Inc.",
             "zh-Hans": "\u{4E00}\u{6B3E}\u{4E3A} Sonos \u{626C}\u{58F0}\u{5668}\u{8BBE}\u{8BA1}\u{7684}\u{539F}\u{751F} macOS \u{63A7}\u{5236}\u{5668}\u{3002}\n\u{4E0E} Sonos, Inc. \u{65E0}\u{5173}\u{3002}",
+        ],
+
+        // ========================
+        // MARK: Scrobbling (v3.6)
+        // ========================
+        // "Scrobble" / "Scrobbling" / "Last.fm" are brand terms — verified
+        // untranslated on Last.fm's own localized sites (de/fr/es/ja/zh).
+        // "API key" / "shared secret" follow standard developer vernacular
+        // per each locale's norms (e.g. de: API-Schl\u{00FC}ssel, not "API-Key").
+
+        "scrobbling": [
+            "en": "Scrobbling", "de": "Scrobbling", "fr": "Scrobbling", "nl": "Scrobbling",
+            "es": "Scrobbling", "it": "Scrobbling", "sv": "Scrobbling", "nb": "Scrobbling",
+            "da": "Scrobbling", "ja": "\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EA}\u{30F3}\u{30B0}",
+            "pt": "Scrobbling", "pl": "Scrobbling",
+            "zh-Hans": "Scrobble",
+        ],
+        "scrobblingIntro": [
+            "en": "Scrobbling sends what you listen to on Sonos to an external service so it shows up in your listening profile. All submissions come from local play history — no new network taps on your speakers.",
+            "de": "Scrobbling sendet, was du auf Sonos h\u{00F6}rst, an einen externen Dienst, sodass es in deinem H\u{00F6}rprofil erscheint. Alle \u{00DC}bertragungen stammen aus dem lokalen Wiedergabeverlauf \u{2014} keine zus\u{00E4}tzlichen Netzwerkanfragen an deine Lautsprecher.",
+            "fr": "Le scrobbling envoie ce que vous \u{00E9}coutez sur Sonos \u{00E0} un service externe afin qu\u{2019}il appara\u{00EE}sse dans votre profil d\u{2019}\u{00E9}coute. Toutes les soumissions proviennent de l\u{2019}historique de lecture local \u{2014} aucune nouvelle interception r\u{00E9}seau sur vos enceintes.",
+            "nl": "Scrobbling stuurt wat je op Sonos afspeelt naar een externe dienst, zodat het in je luisterprofiel verschijnt. Alle inzendingen komen uit de lokale afspeelgeschiedenis \u{2014} geen nieuwe netwerkverbindingen met je luidsprekers.",
+            "es": "El scrobbling env\u{00ED}a lo que escuchas en Sonos a un servicio externo para que aparezca en tu perfil de escucha. Todos los env\u{00ED}os provienen del historial local \u{2014} sin nuevas conexiones a tus altavoces.",
+            "it": "Lo scrobbling invia ci\u{00F2} che ascolti su Sonos a un servizio esterno, cos\u{00EC} da apparire nel tuo profilo di ascolto. Tutti gli invii provengono dalla cronologia locale \u{2014} nessuna nuova connessione ai tuoi altoparlanti.",
+            "sv": "Scrobbling skickar det du lyssnar p\u{00E5} i Sonos till en extern tj\u{00E4}nst s\u{00E5} det visas i din lyssnarprofil. Alla \u{00F6}verf\u{00F6}ringar kommer fr\u{00E5}n den lokala uppspelningshistoriken \u{2014} inga nya n\u{00E4}tverksanslutningar till dina h\u{00F6}gtalare.",
+            "nb": "Scrobbling sender det du lytter til p\u{00E5} Sonos til en ekstern tjeneste slik at det vises i lytteprofilen din. Alle innsendinger kommer fra lokal avspillingslogg \u{2014} ingen nye nettverkshenvendelser til h\u{00F8}yttalerne dine.",
+            "da": "Scrobbling sender det, du lytter til p\u{00E5} Sonos, til en ekstern tjeneste, s\u{00E5} det vises i din lytteprofil. Alle indsendelser kommer fra den lokale afspilningshistorik \u{2014} ingen nye netv\u{00E6}rksforesp\u{00F8}rgsler til dine h\u{00F8}jttalere.",
+            "ja": "\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EA}\u{30F3}\u{30B0}\u{306F} Sonos \u{3067}\u{518D}\u{751F}\u{3057}\u{305F}\u{5185}\u{5BB9}\u{3092}\u{5916}\u{90E8}\u{30B5}\u{30FC}\u{30D3}\u{30B9}\u{306B}\u{9001}\u{4FE1}\u{3057}\u{3001}\u{30EA}\u{30B9}\u{30CB}\u{30F3}\u{30B0}\u{30D7}\u{30ED}\u{30D5}\u{30A3}\u{30FC}\u{30EB}\u{306B}\u{53CD}\u{6620}\u{3057}\u{307E}\u{3059}\u{3002}\u{3059}\u{3079}\u{3066}\u{306E}\u{9001}\u{4FE1}\u{306F}\u{30ED}\u{30FC}\u{30AB}\u{30EB}\u{306E}\u{518D}\u{751F}\u{5C65}\u{6B74}\u{304B}\u{3089}\u{884C}\u{308F}\u{308C}\u{3001}\u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}\u{3078}\u{306E}\u{65B0}\u{305F}\u{306A}\u{30CD}\u{30C3}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{30A2}\u{30AF}\u{30BB}\u{30B9}\u{306F}\u{767A}\u{751F}\u{3057}\u{307E}\u{305B}\u{3093}\u{3002}",
+            "pt": "O scrobbling envia o que voc\u{00EA} ouve no Sonos para um servi\u{00E7}o externo para aparecer no seu perfil de audi\u{00E7}\u{00E3}o. Todos os envios v\u{00EA}m do hist\u{00F3}rico local \u{2014} sem novas conex\u{00F5}es de rede aos seus alto-falantes.",
+            "pl": "Scrobbling wysy\u{0142}a to, czego s\u{0142}uchasz w Sonos, do zewn\u{0119}trznej us\u{0142}ugi, aby pojawi\u{0142}o si\u{0119} w Twoim profilu ods\u{0142}uchu. Wszystkie zg\u{0142}oszenia pochodz\u{0105} z lokalnej historii \u{2014} bez nowych po\u{0142}\u{0105}cze\u{0144} sieciowych z g\u{0142}o\u{015B}nikami.",
+            "zh-Hans": "Scrobble \u{4F1A}\u{5C06}\u{60A8}\u{5728} Sonos \u{4E0A}\u{6536}\u{542C}\u{7684}\u{5185}\u{5BB9}\u{53D1}\u{9001}\u{5230}\u{5916}\u{90E8}\u{670D}\u{52A1}\u{FF0C}\u{4F7F}\u{5176}\u{663E}\u{793A}\u{5728}\u{60A8}\u{7684}\u{6536}\u{542C}\u{6863}\u{6848}\u{4E2D}\u{3002}\u{6240}\u{6709}\u{63D0}\u{4EA4}\u{5747}\u{6765}\u{81EA}\u{672C}\u{5730}\u{64AD}\u{653E}\u{5386}\u{53F2}\u{2014}\u{2014}\u{4E0D}\u{4F1A}\u{5BF9}\u{60A8}\u{7684}\u{97F3}\u{7BB1}\u{53D1}\u{8D77}\u{65B0}\u{7684}\u{7F51}\u{7EDC}\u{8BF7}\u{6C42}\u{3002}",
+        ],
+        "enableLastFM": [
+            "en": "Enable Last.fm", "de": "Last.fm aktivieren", "fr": "Activer Last.fm",
+            "nl": "Last.fm inschakelen", "es": "Activar Last.fm", "it": "Attiva Last.fm",
+            "sv": "Aktivera Last.fm", "nb": "Aktiver Last.fm", "da": "Aktiv\u{00E9}r Last.fm",
+            "ja": "Last.fm \u{3092}\u{6709}\u{52B9}\u{306B}\u{3059}\u{308B}",
+            "pt": "Ativar Last.fm", "pl": "W\u{0142}\u{0105}cz Last.fm",
+            "zh-Hans": "\u{542F}\u{7528} Last.fm",
+        ],
+        "lastFMCredentialsIntro": [
+            "en": "Scrobbling to Last.fm requires your own API app. Register one here, then paste the API key and shared secret below:",
+            "de": "F\u{00FC}r das Scrobbeln zu Last.fm ben\u{00F6}tigst du eine eigene API-App. Registriere hier eine und f\u{00FC}ge unten den API-Schl\u{00FC}ssel und das gemeinsame Geheimnis ein:",
+            "fr": "Le scrobbling vers Last.fm n\u{00E9}cessite votre propre application API. Enregistrez-en une ici, puis collez la cl\u{00E9} API et le secret partag\u{00E9} ci-dessous\u{00A0}:",
+            "nl": "Scrobblen naar Last.fm vereist je eigen API-app. Registreer er hier een en plak vervolgens de API-sleutel en het gedeelde geheim hieronder:",
+            "es": "Para hacer scrobble a Last.fm necesitas tu propia aplicaci\u{00F3}n API. Reg\u{00ED}strala aqu\u{00ED} y luego pega la clave API y el secreto compartido abajo:",
+            "it": "Per fare scrobble su Last.fm serve la tua app API. Registrane una qui e poi incolla la chiave API e il segreto condiviso sotto:",
+            "sv": "F\u{00F6}r att scrobbla till Last.fm beh\u{00F6}ver du en egen API-app. Registrera en h\u{00E4}r och klistra sedan in API-nyckeln och den delade hemligheten nedan:",
+            "nb": "Scrobbling til Last.fm krever din egen API-app. Registrer en her, og lim deretter inn API-n\u{00F8}kkelen og den delte hemmeligheten nedenfor:",
+            "da": "Scrobbling til Last.fm kr\u{00E6}ver din egen API-app. Registr\u{00E9}r en her, og inds\u{00E6}t derefter API-n\u{00F8}glen og den delte hemmelighed nedenfor:",
+            "ja": "Last.fm \u{3078}\u{306E}\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EB}\u{306B}\u{306F}\u{72EC}\u{81EA}\u{306E} API \u{30A2}\u{30D7}\u{30EA}\u{304C}\u{5FC5}\u{8981}\u{3067}\u{3059}\u{3002}\u{3053}\u{3053}\u{3067}\u{767B}\u{9332}\u{3057}\u{3001}\u{4E0B}\u{306B} API \u{30AD}\u{30FC}\u{3068}\u{5171}\u{6709}\u{30B7}\u{30FC}\u{30AF}\u{30EC}\u{30C3}\u{30C8}\u{3092}\u{8CBC}\u{308A}\u{4ED8}\u{3051}\u{3066}\u{304F}\u{3060}\u{3055}\u{3044}:",
+            "pt": "O scrobble para o Last.fm requer seu pr\u{00F3}prio app de API. Registre um aqui e depois cole a chave de API e o segredo compartilhado abaixo:",
+            "pl": "Scrobblowanie do Last.fm wymaga w\u{0142}asnej aplikacji API. Zarejestruj jedn\u{0105} tutaj, a nast\u{0119}pnie wklej klucz API i wsp\u{00F3}lny sekret poni\u{017C}ej:",
+            "zh-Hans": "Scrobble \u{81F3} Last.fm \u{9700}\u{8981}\u{60A8}\u{81EA}\u{5DF1}\u{7684} API \u{5E94}\u{7528}\u{3002}\u{8BF7}\u{5728}\u{6B64}\u{6CE8}\u{518C}\u{4E00}\u{4E2A}\u{FF0C}\u{7136}\u{540E}\u{5728}\u{4E0B}\u{65B9}\u{7C98}\u{8D34} API \u{5BC6}\u{94A5}\u{548C}\u{5171}\u{4EAB}\u{5BC6}\u{94A5}\u{FF1A}",
+        ],
+        "openLastFMRegistration": [
+            "en": "Open last.fm/api/account/create",
+            "de": "last.fm/api/account/create \u{00F6}ffnen",
+            "fr": "Ouvrir last.fm/api/account/create",
+            "nl": "last.fm/api/account/create openen",
+            "es": "Abrir last.fm/api/account/create",
+            "it": "Apri last.fm/api/account/create",
+            "sv": "\u{00D6}ppna last.fm/api/account/create",
+            "nb": "\u{00C5}pne last.fm/api/account/create",
+            "da": "\u{00C5}bn last.fm/api/account/create",
+            "ja": "last.fm/api/account/create \u{3092}\u{958B}\u{304F}",
+            "pt": "Abrir last.fm/api/account/create",
+            "pl": "Otw\u{00F3}rz last.fm/api/account/create",
+            "zh-Hans": "\u{6253}\u{5F00} last.fm/api/account/create",
+        ],
+        "apiKey": [
+            "en": "API key", "de": "API-Schl\u{00FC}ssel", "fr": "Cl\u{00E9} API",
+            "nl": "API-sleutel", "es": "Clave API", "it": "Chiave API",
+            "sv": "API-nyckel", "nb": "API-n\u{00F8}kkel", "da": "API-n\u{00F8}gle",
+            "ja": "API \u{30AD}\u{30FC}", "pt": "Chave de API", "pl": "Klucz API",
+            "zh-Hans": "API \u{5BC6}\u{94A5}",
+        ],
+        "sharedSecret": [
+            "en": "Shared secret", "de": "Gemeinsames Geheimnis", "fr": "Secret partag\u{00E9}",
+            "nl": "Gedeeld geheim", "es": "Secreto compartido", "it": "Segreto condiviso",
+            "sv": "Delad hemlighet", "nb": "Delt hemmelighet", "da": "Delt hemmelighed",
+            "ja": "\u{5171}\u{6709}\u{30B7}\u{30FC}\u{30AF}\u{30EC}\u{30C3}\u{30C8}",
+            "pt": "Segredo compartilhado", "pl": "Wsp\u{00F3}lny sekret",
+            "zh-Hans": "\u{5171}\u{4EAB}\u{5BC6}\u{94A5}",
+        ],
+        "apiKeyPlaceholder": [
+            "en": "your API key", "de": "dein API-Schl\u{00FC}ssel", "fr": "votre cl\u{00E9} API",
+            "nl": "uw API-sleutel", "es": "tu clave API", "it": "la tua chiave API",
+            "sv": "din API-nyckel", "nb": "din API-n\u{00F8}kkel", "da": "din API-n\u{00F8}gle",
+            "ja": "API \u{30AD}\u{30FC}\u{3092}\u{5165}\u{529B}",
+            "pt": "sua chave de API", "pl": "tw\u{00F3}j klucz API",
+            "zh-Hans": "\u{60A8}\u{7684} API \u{5BC6}\u{94A5}",
+        ],
+        "sharedSecretPlaceholder": [
+            "en": "your shared secret", "de": "dein gemeinsames Geheimnis",
+            "fr": "votre secret partag\u{00E9}", "nl": "uw gedeelde geheim",
+            "es": "tu secreto compartido", "it": "il tuo segreto condiviso",
+            "sv": "din delade hemlighet", "nb": "din delte hemmelighet",
+            "da": "din delte hemmelighed",
+            "ja": "\u{5171}\u{6709}\u{30B7}\u{30FC}\u{30AF}\u{30EC}\u{30C3}\u{30C8}\u{3092}\u{5165}\u{529B}",
+            "pt": "seu segredo compartilhado", "pl": "tw\u{00F3}j wsp\u{00F3}lny sekret",
+            "zh-Hans": "\u{60A8}\u{7684}\u{5171}\u{4EAB}\u{5BC6}\u{94A5}",
+        ],
+        "testCredentials": [
+            "en": "Test Credentials", "de": "Anmeldedaten testen",
+            "fr": "Tester les identifiants", "nl": "Inloggegevens testen",
+            "es": "Probar credenciales", "it": "Prova credenziali",
+            "sv": "Testa inloggning", "nb": "Test p\u{00E5}loggingsinformasjon",
+            "da": "Test legitimationsoplysninger",
+            "ja": "\u{8A8D}\u{8A3C}\u{60C5}\u{5831}\u{3092}\u{30C6}\u{30B9}\u{30C8}",
+            "pt": "Testar credenciais", "pl": "Testuj dane logowania",
+            "zh-Hans": "\u{6D4B}\u{8BD5}\u{51ED}\u{8BC1}",
+        ],
+        "credentialsValid": [
+            "en": "Credentials valid", "de": "Anmeldedaten g\u{00FC}ltig",
+            "fr": "Identifiants valides", "nl": "Inloggegevens geldig",
+            "es": "Credenciales v\u{00E1}lidas", "it": "Credenziali valide",
+            "sv": "Inloggning giltig", "nb": "P\u{00E5}loggingsinformasjon gyldig",
+            "da": "Legitimationsoplysninger gyldige",
+            "ja": "\u{8A8D}\u{8A3C}\u{60C5}\u{5831}\u{306F}\u{6709}\u{52B9}\u{3067}\u{3059}",
+            "pt": "Credenciais v\u{00E1}lidas", "pl": "Dane logowania prawid\u{0142}owe",
+            "zh-Hans": "\u{51ED}\u{8BC1}\u{6709}\u{6548}",
+        ],
+        "waitingForBrowser": [
+            "en": "Waiting for browser\u{2026}", "de": "Warten auf Browser\u{2026}",
+            "fr": "En attente du navigateur\u{2026}", "nl": "Wachten op browser\u{2026}",
+            "es": "Esperando al navegador\u{2026}", "it": "In attesa del browser\u{2026}",
+            "sv": "V\u{00E4}ntar p\u{00E5} webbl\u{00E4}saren\u{2026}",
+            "nb": "Venter p\u{00E5} nettleser\u{2026}",
+            "da": "Venter p\u{00E5} browseren\u{2026}",
+            "ja": "\u{30D6}\u{30E9}\u{30A6}\u{30B6}\u{3092}\u{5F85}\u{6A5F}\u{4E2D}\u{2026}",
+            "pt": "Aguardando o navegador\u{2026}",
+            "pl": "Oczekiwanie na przegl\u{0105}dark\u{0119}\u{2026}",
+            "zh-Hans": "\u{6B63}\u{5728}\u{7B49}\u{5F85}\u{6D4F}\u{89C8}\u{5668}\u{2026}",
+        ],
+        "connectToLastFM": [
+            "en": "Connect to Last.fm", "de": "Mit Last.fm verbinden",
+            "fr": "Se connecter \u{00E0} Last.fm", "nl": "Verbinden met Last.fm",
+            "es": "Conectar con Last.fm", "it": "Connetti a Last.fm",
+            "sv": "Anslut till Last.fm", "nb": "Koble til Last.fm",
+            "da": "Opret forbindelse til Last.fm",
+            "ja": "Last.fm \u{306B}\u{63A5}\u{7D9A}",
+            "pt": "Conectar ao Last.fm", "pl": "Po\u{0142}\u{0105}cz z Last.fm",
+            "zh-Hans": "\u{8FDE}\u{63A5}\u{5230} Last.fm",
+        ],
+        "disconnect": [
+            "en": "Disconnect", "de": "Trennen", "fr": "D\u{00E9}connecter",
+            "nl": "Verbinding verbreken", "es": "Desconectar", "it": "Disconnetti",
+            "sv": "Koppla fr\u{00E5}n", "nb": "Koble fra", "da": "Afbryd",
+            "ja": "\u{5207}\u{65AD}", "pt": "Desconectar", "pl": "Roz\u{0142}\u{0105}cz",
+            "zh-Hans": "\u{65AD}\u{5F00}\u{8FDE}\u{63A5}",
+        ],
+        "doubleScrobbleWarning": [
+            "en": "If Spotify, Apple Music, or another music service is already scrobbling to Last.fm, enabling it here will produce duplicates. Exclude those services below, or leave this disabled.",
+            "de": "Wenn Spotify, Apple Music oder ein anderer Musikdienst bereits zu Last.fm scrobbelt, erzeugt eine Aktivierung hier Duplikate. Schlie\u{00DF}e diese Dienste unten aus oder lasse dies deaktiviert.",
+            "fr": "Si Spotify, Apple Music ou un autre service musical scrobble d\u{00E9}j\u{00E0} vers Last.fm, l\u{2019}activer ici cr\u{00E9}era des doublons. Excluez ces services ci-dessous ou laissez cette option d\u{00E9}sactiv\u{00E9}e.",
+            "nl": "Als Spotify, Apple Music of een andere muziekdienst al scrobblet naar Last.fm, zorgt inschakelen hier voor duplicaten. Sluit die diensten hieronder uit of laat dit uitgeschakeld.",
+            "es": "Si Spotify, Apple Music u otro servicio ya hace scrobble a Last.fm, activarlo aqu\u{00ED} generar\u{00E1} duplicados. Excluye esos servicios abajo o deja esto desactivado.",
+            "it": "Se Spotify, Apple Music o un altro servizio sta gi\u{00E0} facendo scrobble su Last.fm, abilitarlo qui produrr\u{00E0} duplicati. Escludi quei servizi di seguito o lascia disattivato.",
+            "sv": "Om Spotify, Apple Music eller en annan musiktj\u{00E4}nst redan scrobblar till Last.fm ger aktivering h\u{00E4}r dubbletter. Uteslut dem nedan eller l\u{00E5}t detta vara avaktiverat.",
+            "nb": "Hvis Spotify, Apple Music eller en annen musikktjeneste allerede scrobbler til Last.fm, vil aktivering her gi duplikater. Ekskluder dem nedenfor, eller la dette v\u{00E6}re deaktivert.",
+            "da": "Hvis Spotify, Apple Music eller en anden musiktjeneste allerede scrobbler til Last.fm, vil aktivering her give dubletter. Udeluk dem nedenfor, eller lad dette v\u{00E6}re deaktiveret.",
+            "ja": "Spotify\u{3001}Apple Music \u{306A}\u{3069}\u{306E}\u{4ED6}\u{30B5}\u{30FC}\u{30D3}\u{30B9}\u{304C}\u{65E2}\u{306B} Last.fm \u{306B}\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EB}\u{3057}\u{3066}\u{3044}\u{308B}\u{5834}\u{5408}\u{3001}\u{3053}\u{3053}\u{3067}\u{6709}\u{52B9}\u{306B}\u{3059}\u{308B}\u{3068}\u{91CD}\u{8907}\u{3057}\u{307E}\u{3059}\u{3002}\u{305D}\u{308C}\u{3089}\u{3092}\u{4E0B}\u{3067}\u{9664}\u{5916}\u{3059}\u{308B}\u{304B}\u{3001}\u{7121}\u{52B9}\u{306E}\u{307E}\u{307E}\u{306B}\u{3057}\u{3066}\u{304F}\u{3060}\u{3055}\u{3044}\u{3002}",
+            "pt": "Se o Spotify, Apple Music ou outro servi\u{00E7}o j\u{00E1} faz scrobble para o Last.fm, ativ\u{00E1}-lo aqui gerar\u{00E1} duplicatas. Exclua esses servi\u{00E7}os abaixo ou deixe desativado.",
+            "pl": "Je\u{015B}li Spotify, Apple Music lub inna us\u{0142}uga ju\u{017C} scrobbluje do Last.fm, w\u{0142}\u{0105}czenie tego tutaj spowoduje duplikaty. Wyklucz te us\u{0142}ugi poni\u{017C}ej lub pozostaw to wy\u{0142}\u{0105}czone.",
+            "zh-Hans": "\u{5982}\u{679C} Spotify\u{3001}Apple Music \u{6216}\u{5176}\u{4ED6}\u{97F3}\u{4E50}\u{670D}\u{52A1}\u{5DF2}\u{5728} Scrobble \u{81F3} Last.fm\u{FF0C}\u{5728}\u{6B64}\u{542F}\u{7528}\u{4F1A}\u{4EA7}\u{751F}\u{91CD}\u{590D}\u{3002}\u{8BF7}\u{5728}\u{4E0B}\u{65B9}\u{6392}\u{9664}\u{8FD9}\u{4E9B}\u{670D}\u{52A1}\u{FF0C}\u{6216}\u{4FDD}\u{6301}\u{6B64}\u{9879}\u{7981}\u{7528}\u{3002}",
+        ],
+        "sources": [
+            "en": "Sources", "de": "Quellen", "fr": "Sources", "nl": "Bronnen",
+            "es": "Fuentes", "it": "Sorgenti", "sv": "K\u{00E4}llor", "nb": "Kilder",
+            "da": "Kilder", "ja": "\u{30BD}\u{30FC}\u{30B9}", "pt": "Fontes",
+            "pl": "\u{017A}r\u{00F3}d\u{0142}a",
+            "zh-Hans": "\u{6765}\u{6E90}",
+        ],
+        "sourcesDescription": [
+            "en": "Which speakers/rooms' history to scrobble. Group playback matches any member.",
+            "de": "Welcher Lautsprecher/Raum-Verlauf gescrobbelt wird. Gruppenwiedergabe passt auf beliebige Mitglieder.",
+            "fr": "Quels haut-parleurs/pi\u{00E8}ces dont l\u{2019}historique sera scrobbl\u{00E9}. La lecture group\u{00E9}e correspond \u{00E0} n\u{2019}importe quel membre.",
+            "nl": "Welke luidsprekers/kamers\u{2019} geschiedenis gescrobbled wordt. Groepsafspelen matcht elk lid.",
+            "es": "De qu\u{00E9} altavoces/habitaciones se env\u{00ED}a el historial. La reproducci\u{00F3}n en grupo coincide con cualquier miembro.",
+            "it": "Di quali altoparlanti/stanze inviare la cronologia. La riproduzione in gruppo corrisponde a qualsiasi membro.",
+            "sv": "Vilka h\u{00F6}gtalares/rums historik att scrobbla. Gruppuppspelning matchar vilken medlem som helst.",
+            "nb": "Hvilke h\u{00F8}yttaleres/rommenes logg som scrobbles. Gruppeavspilling samsvarer med ethvert medlem.",
+            "da": "Hvilke h\u{00F8}jttaleres/rums historik der scrobbles. Gruppeafspilning matcher ethvert medlem.",
+            "ja": "\u{3069}\u{306E}\u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}/\u{90E8}\u{5C4B}\u{306E}\u{5C65}\u{6B74}\u{3092}\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EB}\u{3059}\u{308B}\u{304B}\u{3002}\u{30B0}\u{30EB}\u{30FC}\u{30D7}\u{518D}\u{751F}\u{306F}\u{3044}\u{305A}\u{308C}\u{304B}\u{306E}\u{30E1}\u{30F3}\u{30D0}\u{30FC}\u{306B}\u{4E00}\u{81F4}\u{3057}\u{307E}\u{3059}\u{3002}",
+            "pt": "De quais alto-falantes/salas enviar o hist\u{00F3}rico. A reprodu\u{00E7}\u{00E3}o em grupo corresponde a qualquer membro.",
+            "pl": "Historia kt\u{00F3}rych g\u{0142}o\u{015B}nik\u{00F3}w/pokoi ma by\u{0107} scrobblowana. Odtwarzanie grupowe pasuje do dowolnego cz\u{0142}onka.",
+            "zh-Hans": "\u{8981} Scrobble \u{7684}\u{97F3}\u{7BB1}/\u{623F}\u{95F4}\u{5386}\u{53F2}\u{3002}\u{7FA4}\u{7EC4}\u{64AD}\u{653E}\u{5339}\u{914D}\u{4EFB}\u{4E00}\u{6210}\u{5458}\u{3002}",
+        ],
+        "noRoomsInHistory": [
+            "en": "No rooms in play history yet.",
+            "de": "Noch keine R\u{00E4}ume im Wiedergabeverlauf.",
+            "fr": "Aucune pi\u{00E8}ce dans l\u{2019}historique de lecture.",
+            "nl": "Nog geen kamers in afspeelgeschiedenis.",
+            "es": "A\u{00FA}n no hay habitaciones en el historial.",
+            "it": "Nessuna stanza ancora nella cronologia.",
+            "sv": "Inga rum i uppspelningshistoriken \u{00E4}n.",
+            "nb": "Ingen rom i avspillingsloggen ennu.",
+            "da": "Ingen rum i afspilningshistorikken endnu.",
+            "ja": "\u{518D}\u{751F}\u{5C65}\u{6B74}\u{306B}\u{307E}\u{3060}\u{90E8}\u{5C4B}\u{304C}\u{3042}\u{308A}\u{307E}\u{305B}\u{3093}\u{3002}",
+            "pt": "Ainda n\u{00E3}o h\u{00E1} salas no hist\u{00F3}rico.",
+            "pl": "Jeszcze \u{017C}adnych pokoi w historii.",
+            "zh-Hans": "\u{64AD}\u{653E}\u{5386}\u{53F2}\u{4E2D}\u{6682}\u{65E0}\u{623F}\u{95F4}\u{3002}",
+        ],
+        "musicServicesToScrobble": [
+            "en": "Music services to scrobble",
+            "de": "Zu scrobbelnde Musikdienste",
+            "fr": "Services musicaux \u{00E0} scrobbler",
+            "nl": "Muziekdiensten om te scrobblen",
+            "es": "Servicios musicales para scrobble",
+            "it": "Servizi musicali da scrobblare",
+            "sv": "Musiktj\u{00E4}nster att scrobbla",
+            "nb": "Musikktjenester for scrobbling",
+            "da": "Musiktjenester at scrobble",
+            "ja": "\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EB}\u{3059}\u{308B}\u{97F3}\u{697D}\u{30B5}\u{30FC}\u{30D3}\u{30B9}",
+            "pt": "Servi\u{00E7}os musicais para scrobble",
+            "pl": "Us\u{0142}ugi muzyczne do scrobblowania",
+            "zh-Hans": "\u{8981} Scrobble \u{7684}\u{97F3}\u{4E50}\u{670D}\u{52A1}",
+        ],
+        "musicServicesDescription": [
+            "en": "Leave all unchecked to scrobble everything regardless of source.",
+            "de": "Lasse alle deaktiviert, um unabh\u{00E4}ngig von der Quelle alles zu scrobbeln.",
+            "fr": "Laissez tout d\u{00E9}coch\u{00E9} pour scrobbler tout, quelle que soit la source.",
+            "nl": "Laat alles uitgevinkt om alles te scrobblen ongeacht de bron.",
+            "es": "Deja todo sin marcar para hacer scrobble de todo sin importar la fuente.",
+            "it": "Lascia tutto deselezionato per fare scrobble di tutto indipendentemente dalla fonte.",
+            "sv": "L\u{00E4}mna alla omarkerade f\u{00F6}r att scrobbla allt oavsett k\u{00E4}lla.",
+            "nb": "La alle v\u{00E6}re umerket for \u{00E5} scrobble alt uavhengig av kilde.",
+            "da": "Lad alle v\u{00E6}re umarkerede for at scrobble alt uanset kilden.",
+            "ja": "\u{3059}\u{3079}\u{3066}\u{30C1}\u{30A7}\u{30C3}\u{30AF}\u{3092}\u{5916}\u{3059}\u{3068}\u{3001}\u{30BD}\u{30FC}\u{30B9}\u{306B}\u{95A2}\u{4FC2}\u{306A}\u{304F}\u{3059}\u{3079}\u{3066}\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EB}\u{3057}\u{307E}\u{3059}\u{3002}",
+            "pt": "Deixe tudo desmarcado para fazer scrobble de tudo, independentemente da fonte.",
+            "pl": "Pozostaw wszystko odznaczone, aby scrobblowa\u{0107} wszystko niezale\u{017C}nie od \u{017A}r\u{00F3}d\u{0142}a.",
+            "zh-Hans": "\u{5168}\u{90E8}\u{4E0D}\u{52FE}\u{9009}\u{5219}\u{6309}\u{4EFB}\u{4F55}\u{6765}\u{6E90} Scrobble \u{6240}\u{6709}\u{5185}\u{5BB9}\u{3002}",
+        ],
+        "autoScrobbleEveryFiveMinutes": [
+            "en": "Auto-scrobble (every 5 minutes)",
+            "de": "Automatisch scrobbeln (alle 5 Minuten)",
+            "fr": "Scrobble auto (toutes les 5 minutes)",
+            "nl": "Automatisch scrobblen (elke 5 minuten)",
+            "es": "Scrobble autom\u{00E1}tico (cada 5 minutos)",
+            "it": "Scrobble automatico (ogni 5 minuti)",
+            "sv": "Auto-scrobbla (var 5:e minut)",
+            "nb": "Auto-scrobbling (hvert 5. minutt)",
+            "da": "Auto-scrobble (hvert 5. minut)",
+            "ja": "\u{81EA}\u{52D5}\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EB}\u{FF085}\u{5206}\u{3054}\u{3068}\u{FF09}",
+            "pt": "Scrobble autom\u{00E1}tico (a cada 5 minutos)",
+            "pl": "Auto-scrobble (co 5 minut)",
+            "zh-Hans": "\u{81EA}\u{52A8} Scrobble\u{FF08}\u{6BCF} 5 \u{5206}\u{949F}\u{FF09}",
+        ],
+        "scrobblePendingNow": [
+            "en": "Scrobble Pending Now",
+            "de": "Ausstehende jetzt scrobbeln",
+            "fr": "Scrobbler les en attente",
+            "nl": "Openstaande nu scrobblen",
+            "es": "Scrobble pendientes ahora",
+            "it": "Scrobble in sospeso ora",
+            "sv": "Scrobbla v\u{00E4}ntande nu",
+            "nb": "Scrobble ventende n\u{00E5}",
+            "da": "Scrobble afventende nu",
+            "ja": "\u{4FDD}\u{7559}\u{4E2D}\u{3092}\u{4ECA}\u{3059}\u{3050}\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EB}",
+            "pt": "Scrobble pendentes agora",
+            "pl": "Scrobbluj oczekuj\u{0105}ce teraz",
+            "zh-Hans": "\u{7ACB}\u{5373} Scrobble \u{5F85}\u{5904}\u{7406}\u{9879}",
+        ],
+        "scrobblingProgress": [
+            "en": "Scrobbling\u{2026}", "de": "Scrobbeln\u{2026}",
+            "fr": "Scrobbling\u{2026}", "nl": "Bezig met scrobblen\u{2026}",
+            "es": "Enviando scrobbles\u{2026}", "it": "Scrobble in corso\u{2026}",
+            "sv": "Scrobblar\u{2026}", "nb": "Scrobbler\u{2026}", "da": "Scrobbler\u{2026}",
+            "ja": "\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EB}\u{4E2D}\u{2026}",
+            "pt": "Enviando scrobbles\u{2026}", "pl": "Scrobblowanie\u{2026}",
+            "zh-Hans": "Scrobble \u{4E2D}\u{2026}",
+        ],
+        "pending": [
+            "en": "pending", "de": "ausstehend", "fr": "en attente",
+            "nl": "openstaand", "es": "pendientes", "it": "in sospeso",
+            "sv": "v\u{00E4}ntande", "nb": "ventende", "da": "afventende",
+            "ja": "\u{4FDD}\u{7559}\u{4E2D}",
+            "pt": "pendentes", "pl": "oczekuj\u{0105}cych",
+            "zh-Hans": "\u{5F85}\u{5904}\u{7406}",
+        ],
+        "sent": [
+            "en": "sent", "de": "gesendet", "fr": "envoy\u{00E9}s",
+            "nl": "verzonden", "es": "enviados", "it": "inviati",
+            "sv": "skickade", "nb": "sendt", "da": "sendt",
+            "ja": "\u{9001}\u{4FE1}\u{6E08}\u{307F}",
+            "pt": "enviados", "pl": "wys\u{0142}anych",
+            "zh-Hans": "\u{5DF2}\u{53D1}\u{9001}",
+        ],
+        "ignored": [
+            "en": "ignored", "de": "ignoriert", "fr": "ignor\u{00E9}s",
+            "nl": "genegeerd", "es": "ignorados", "it": "ignorati",
+            "sv": "ignorerade", "nb": "ignorert", "da": "ignoreret",
+            "ja": "\u{7121}\u{8996}\u{6E08}\u{307F}",
+            "pt": "ignorados", "pl": "zignorowanych",
+            "zh-Hans": "\u{5DF2}\u{5FFD}\u{7565}",
+        ],
+        "failed": [
+            "en": "failed", "de": "fehlgeschlagen", "fr": "\u{00E9}chou\u{00E9}s",
+            "nl": "mislukt", "es": "fallidos", "it": "falliti",
+            "sv": "misslyckade", "nb": "mislyktes", "da": "mislykkedes",
+            "ja": "\u{5931}\u{6557}",
+            "pt": "falhados", "pl": "nieudanych",
+            "zh-Hans": "\u{5931}\u{8D25}",
+        ],
+        "resetIgnored": [
+            "en": "Reset ignored",
+            "de": "Ignorierte zur\u{00FC}cksetzen",
+            "fr": "R\u{00E9}initialiser les ignor\u{00E9}s",
+            "nl": "Genegeerde herstellen",
+            "es": "Restablecer ignorados",
+            "it": "Reimposta ignorati",
+            "sv": "\u{00C5}terst\u{00E4}ll ignorerade",
+            "nb": "Tilbakestill ignorerte",
+            "da": "Nulstil ignorerede",
+            "ja": "\u{7121}\u{8996}\u{3092}\u{30EA}\u{30BB}\u{30C3}\u{30C8}",
+            "pt": "Redefinir ignorados",
+            "pl": "Zresetuj zignorowane",
+            "zh-Hans": "\u{91CD}\u{7F6E}\u{5DF2}\u{5FFD}\u{7565}\u{9879}",
+        ],
+        "resetIgnoredTooltip": [
+            "en": "Clear previously-ignored rows so they'll be re-evaluated against the current filters on the next run. Sent rows are preserved.",
+            "de": "Zuvor ignorierte Eintr\u{00E4}ge l\u{00F6}schen, damit sie beim n\u{00E4}chsten Lauf gegen die aktuellen Filter neu bewertet werden. Gesendete Eintr\u{00E4}ge bleiben erhalten.",
+            "fr": "Effacer les entr\u{00E9}es pr\u{00E9}c\u{00E9}demment ignor\u{00E9}es pour qu\u{2019}elles soient r\u{00E9}\u{00E9}valu\u{00E9}es avec les filtres actuels \u{00E0} la prochaine ex\u{00E9}cution. Les entr\u{00E9}es envoy\u{00E9}es sont conserv\u{00E9}es.",
+            "nl": "Wis eerder genegeerde rijen zodat ze bij de volgende uitvoering opnieuw worden beoordeeld tegen de huidige filters. Verzonden rijen blijven behouden.",
+            "es": "Borra las filas previamente ignoradas para que se reeval\u{00FA}en con los filtros actuales en la pr\u{00F3}xima ejecuci\u{00F3}n. Las filas enviadas se conservan.",
+            "it": "Cancella le voci precedentemente ignorate per rivalutarle con i filtri attuali alla prossima esecuzione. Le voci inviate vengono mantenute.",
+            "sv": "Rensa tidigare ignorerade rader s\u{00E5} de omv\u{00E4}rderas mot aktuella filter vid n\u{00E4}sta k\u{00F6}rning. Skickade rader beh\u{00E5}lls.",
+            "nb": "Fjern tidligere ignorerte rader slik at de vurderes p\u{00E5} nytt mot n\u{00E5}v\u{00E6}rende filtre ved neste kj\u{00F8}ring. Sendte rader beholdes.",
+            "da": "Ryd tidligere ignorerede r\u{00E6}kker, s\u{00E5} de revurderes mod de aktuelle filtre ved n\u{00E6}ste k\u{00F8}rsel. Sendte r\u{00E6}kker bevares.",
+            "ja": "\u{4EE5}\u{524D}\u{306B}\u{7121}\u{8996}\u{3055}\u{308C}\u{305F}\u{9805}\u{76EE}\u{3092}\u{30AF}\u{30EA}\u{30A2}\u{3057}\u{3001}\u{6B21}\u{56DE}\u{306E}\u{5B9F}\u{884C}\u{6642}\u{306B}\u{73FE}\u{5728}\u{306E}\u{30D5}\u{30A3}\u{30EB}\u{30BF}\u{3067}\u{518D}\u{8A55}\u{4FA1}\u{3057}\u{307E}\u{3059}\u{3002}\u{9001}\u{4FE1}\u{6E08}\u{307F}\u{306E}\u{9805}\u{76EE}\u{306F}\u{4FDD}\u{6301}\u{3055}\u{308C}\u{307E}\u{3059}\u{3002}",
+            "pt": "Limpa as linhas anteriormente ignoradas para serem reavaliadas com os filtros atuais na pr\u{00F3}xima execu\u{00E7}\u{00E3}o. As linhas enviadas s\u{00E3}o preservadas.",
+            "pl": "Wyczy\u{015B}\u{0107} wcze\u{015B}niej zignorowane wiersze, aby zosta\u{0142}y ponownie ocenione wzgl\u{0119}dem bie\u{017C}\u{0105}cych filtr\u{00F3}w przy nast\u{0119}pnym uruchomieniu. Wys\u{0142}ane wiersze pozostaj\u{0105}.",
+            "zh-Hans": "\u{6E05}\u{9664}\u{5148}\u{524D}\u{88AB}\u{5FFD}\u{7565}\u{7684}\u{8BB0}\u{5F55}\u{FF0C}\u{4F7F}\u{5176}\u{5728}\u{4E0B}\u{6B21}\u{8FD0}\u{884C}\u{65F6}\u{6309}\u{5F53}\u{524D}\u{7B5B}\u{9009}\u{6761}\u{4EF6}\u{91CD}\u{65B0}\u{8BC4}\u{4F30}\u{3002}\u{5DF2}\u{53D1}\u{9001}\u{7684}\u{8BB0}\u{5F55}\u{5C06}\u{4FDD}\u{7559}\u{3002}",
+        ],
+        "lastRunLabel": [
+            "en": "Last run:",
+            "de": "Letzter Lauf:",
+            "fr": "Derni\u{00E8}re ex\u{00E9}cution\u{00A0}:",
+            "nl": "Laatste uitvoering:",
+            "es": "\u{00DA}ltima ejecuci\u{00F3}n:",
+            "it": "Ultima esecuzione:",
+            "sv": "Senaste k\u{00F6}rning:",
+            "nb": "Siste kj\u{00F8}ring:",
+            "da": "Seneste k\u{00F8}rsel:",
+            "ja": "\u{524D}\u{56DE}:",
+            "pt": "\u{00DA}ltima execu\u{00E7}\u{00E3}o:",
+            "pl": "Ostatnie uruchomienie:",
+            "zh-Hans": "\u{4E0A}\u{6B21}\u{8FD0}\u{884C}\u{FF1A}",
+        ],
+        "recentNonScrobbled": [
+            "en": "Recent non-scrobbled",
+            "de": "Zuletzt nicht gescrobbelt",
+            "fr": "R\u{00E9}cemment non scrobbl\u{00E9}s",
+            "nl": "Recent niet gescrobbled",
+            "es": "Recientes no enviados",
+            "it": "Recenti non scrobblati",
+            "sv": "Senaste ej scrobblade",
+            "nb": "Nylig ikke scrobblet",
+            "da": "Seneste ikke scrobblet",
+            "ja": "\u{6700}\u{8FD1}\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EB}\u{3055}\u{308C}\u{306A}\u{304B}\u{3063}\u{305F}\u{3082}\u{306E}",
+            "pt": "Recentes n\u{00E3}o enviados",
+            "pl": "Ostatnie niescrobblowane",
+            "zh-Hans": "\u{6700}\u{8FD1}\u{672A} Scrobble",
+        ],
+        "noReasonRecorded": [
+            "en": "no reason recorded",
+            "de": "kein Grund aufgezeichnet",
+            "fr": "aucune raison enregistr\u{00E9}e",
+            "nl": "geen reden geregistreerd",
+            "es": "sin motivo registrado",
+            "it": "nessun motivo registrato",
+            "sv": "ingen orsak registrerad",
+            "nb": "ingen grunn registrert",
+            "da": "ingen \u{00E5}rsag registreret",
+            "ja": "\u{8A18}\u{9332}\u{3055}\u{308C}\u{305F}\u{7406}\u{7531}\u{306A}\u{3057}",
+            "pt": "sem motivo registrado",
+            "pl": "brak zarejestrowanego powodu",
+            "zh-Hans": "\u{672A}\u{8BB0}\u{5F55}\u{539F}\u{56E0}",
+        ],
+
+        // ========================
+        // MARK: NowPlaying + misc (v3.6 audit)
+        // ========================
+
+        "shuffleDisabledTitle": [
+            "en": "Shuffle is disabled",
+            "de": "Zufallswiedergabe deaktiviert",
+            "fr": "Lecture al\u{00E9}atoire d\u{00E9}sactiv\u{00E9}e",
+            "nl": "Shuffle uitgeschakeld",
+            "es": "Aleatorio desactivado",
+            "it": "Riproduzione casuale disattivata",
+            "sv": "Blandning avaktiverad",
+            "nb": "Tilfeldig avspilling deaktivert",
+            "da": "Tilf\u{00E6}ldig afspilning deaktiveret",
+            "ja": "\u{30B7}\u{30E3}\u{30C3}\u{30D5}\u{30EB}\u{306F}\u{7121}\u{52B9}\u{3067}\u{3059}",
+            "pt": "Reprodu\u{00E7}\u{00E3}o aleat\u{00F3}ria desativada",
+            "pl": "Losowe odtwarzanie wy\u{0142}\u{0105}czone",
+            "zh-Hans": "\u{968F}\u{673A}\u{64AD}\u{653E}\u{5DF2}\u{7981}\u{7528}",
+        ],
+        "shuffleDisabledBody": [
+            "en": "Use the shuffle button in the Queue panel to physically reorder tracks, or enable Classic Shuffle Mode in Settings.",
+            "de": "Verwende die Zufallswiedergabe-Taste im Warteschlangenbereich, um Titel physisch neu anzuordnen, oder aktiviere den klassischen Zufallsmodus in den Einstellungen.",
+            "fr": "Utilisez le bouton de lecture al\u{00E9}atoire du panneau File d\u{2019}attente pour r\u{00E9}ordonner physiquement les pistes, ou activez le mode al\u{00E9}atoire classique dans les R\u{00E9}glages.",
+            "nl": "Gebruik de shuffle-knop in het wachtrij-paneel om tracks fysiek opnieuw te rangschikken, of schakel Klassieke Shuffle-modus in via Instellingen.",
+            "es": "Usa el bot\u{00F3}n de orden aleatorio en el panel de cola para reorganizar las pistas, o activa el modo aleatorio cl\u{00E1}sico en Ajustes.",
+            "it": "Usa il pulsante di riproduzione casuale nel pannello Coda per riordinare fisicamente i brani, oppure abilita la modalit\u{00E0} Casuale Classica nelle Impostazioni.",
+            "sv": "Anv\u{00E4}nd blandningsknappen i k\u{00F6}panelen f\u{00F6}r att ordna om sp\u{00E5}ren fysiskt, eller aktivera Klassiskt blandningsl\u{00E4}ge i Inst\u{00E4}llningar.",
+            "nb": "Bruk tilfeldig-knappen i k\u{00F8}panelet for \u{00E5} omorganisere sporene fysisk, eller aktiver Klassisk tilfeldig modus i Innstillinger.",
+            "da": "Brug tilf\u{00E6}ldig-knappen i k\u{00F8}panelet for at omarrangere numrene fysisk, eller aktiv\u{00E9}r Klassisk tilf\u{00E6}ldig tilstand i Indstillinger.",
+            "ja": "\u{30AD}\u{30E5}\u{30FC}\u{30D1}\u{30CD}\u{30EB}\u{306E}\u{30B7}\u{30E3}\u{30C3}\u{30D5}\u{30EB}\u{30DC}\u{30BF}\u{30F3}\u{3067}\u{30C8}\u{30E9}\u{30C3}\u{30AF}\u{3092}\u{7269}\u{7406}\u{7684}\u{306B}\u{4E26}\u{3073}\u{66FF}\u{3048}\u{308B}\u{304B}\u{3001}\u{8A2D}\u{5B9A}\u{3067}\u{30AF}\u{30E9}\u{30B7}\u{30C3}\u{30AF}\u{30B7}\u{30E3}\u{30C3}\u{30D5}\u{30EB}\u{30E2}\u{30FC}\u{30C9}\u{3092}\u{6709}\u{52B9}\u{306B}\u{3057}\u{3066}\u{304F}\u{3060}\u{3055}\u{3044}\u{3002}",
+            "pt": "Use o bot\u{00E3}o de reprodu\u{00E7}\u{00E3}o aleat\u{00F3}ria no painel da Fila para reordenar as faixas fisicamente, ou ative o Modo Aleat\u{00F3}rio Cl\u{00E1}ssico em Configura\u{00E7}\u{00F5}es.",
+            "pl": "U\u{017C}yj przycisku losowania w panelu Kolejki, aby fizycznie zmieni\u{0107} kolejno\u{015B}\u{0107} utwor\u{00F3}w, lub w\u{0142}\u{0105}cz Klasyczny tryb losowy w Ustawieniach.",
+            "zh-Hans": "\u{4F7F}\u{7528}\u{961F}\u{5217}\u{9762}\u{677F}\u{4E2D}\u{7684}\u{968F}\u{673A}\u{6309}\u{94AE}\u{4EE5}\u{5B9E}\u{9645}\u{91CD}\u{65B0}\u{6392}\u{5E8F}\u{66F2}\u{76EE}\u{FF0C}\u{6216}\u{5728}\u{8BBE}\u{7F6E}\u{4E2D}\u{542F}\u{7528}\u{7ECF}\u{5178}\u{968F}\u{673A}\u{6A21}\u{5F0F}\u{3002}",
+        ],
+        "searchArtwork": [
+            "en": "Search Artwork\u{2026}", "de": "Cover suchen\u{2026}",
+            "fr": "Rechercher une pochette\u{2026}", "nl": "Hoes zoeken\u{2026}",
+            "es": "Buscar portada\u{2026}", "it": "Cerca copertina\u{2026}",
+            "sv": "S\u{00F6}k omslag\u{2026}", "nb": "S\u{00F8}k omslag\u{2026}",
+            "da": "S\u{00F8}g omslag\u{2026}",
+            "ja": "\u{30A2}\u{30FC}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{3092}\u{691C}\u{7D22}\u{2026}",
+            "pt": "Buscar arte\u{2026}", "pl": "Wyszukaj ok\u{0142}adk\u{0119}\u{2026}",
+            "zh-Hans": "\u{641C}\u{7D22}\u{5C01}\u{9762}\u{2026}",
+        ],
+        "ignoreArtwork": [
+            "en": "Ignore Artwork", "de": "Cover ignorieren",
+            "fr": "Ignorer la pochette", "nl": "Hoes negeren",
+            "es": "Ignorar portada", "it": "Ignora copertina",
+            "sv": "Ignorera omslag", "nb": "Ignorer omslag",
+            "da": "Ignor\u{00E9}r omslag",
+            "ja": "\u{30A2}\u{30FC}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{3092}\u{7121}\u{8996}",
+            "pt": "Ignorar arte", "pl": "Ignoruj ok\u{0142}adk\u{0119}",
+            "zh-Hans": "\u{5FFD}\u{7565}\u{5C01}\u{9762}",
+        ],
+        "close": [
+            "en": "Close", "de": "Schlie\u{00DF}en", "fr": "Fermer",
+            "nl": "Sluiten", "es": "Cerrar", "it": "Chiudi",
+            "sv": "St\u{00E4}ng", "nb": "Lukk", "da": "Luk",
+            "ja": "\u{9589}\u{3058}\u{308B}",
+            "pt": "Fechar", "pl": "Zamknij",
+            "zh-Hans": "\u{5173}\u{95ED}",
+        ],
+        "filterPreviewTitle": [
+            "en": "Filter preview",
+            "de": "Filter-Vorschau",
+            "fr": "Aper\u{00E7}u du filtre",
+            "nl": "Filter voorvertoning",
+            "es": "Vista previa del filtro",
+            "it": "Anteprima filtro",
+            "sv": "F\u{00F6}rhandsvisning av filter",
+            "nb": "Forh\u{00E5}ndsvisning av filter",
+            "da": "Forh\u{00E5}ndsvisning af filter",
+            "ja": "\u{30D5}\u{30A3}\u{30EB}\u{30BF}\u{30FC}\u{30D7}\u{30EC}\u{30D3}\u{30E5}\u{30FC}",
+            "pt": "Pr\u{00E9}-visualiza\u{00E7}\u{00E3}o do filtro",
+            "pl": "Podgl\u{0105}d filtra",
+            "zh-Hans": "\u{7B5B}\u{9009}\u{9884}\u{89C8}",
+        ],
+        "wouldSend": [
+            "en": "would send", "de": "w\u{00FC}rden gesendet",
+            "fr": "\u{00E0} envoyer", "nl": "zou worden verzonden",
+            "es": "se enviar\u{00ED}an", "it": "da inviare",
+            "sv": "skulle skickas", "nb": "ville bli sendt",
+            "da": "ville blive sendt",
+            "ja": "\u{9001}\u{4FE1}\u{4E88}\u{5B9A}",
+            "pt": "seriam enviados", "pl": "zostanie wys\u{0142}anych",
+            "zh-Hans": "\u{5C06}\u{53D1}\u{9001}",
+        ],
+        "roomBlocked": [
+            "en": "room-blocked", "de": "Raum gesperrt",
+            "fr": "bloqu\u{00E9}s par la pi\u{00E8}ce", "nl": "kamer-geblokkeerd",
+            "es": "bloqueados por sala", "it": "bloccati dalla stanza",
+            "sv": "rumsblockerade", "nb": "romblokkert",
+            "da": "rumblokeret",
+            "ja": "\u{90E8}\u{5C4B}\u{30D5}\u{30A3}\u{30EB}\u{30BF}",
+            "pt": "bloqueados por sala", "pl": "zablokowane przez pok\u{00F3}j",
+            "zh-Hans": "\u{623F}\u{95F4}\u{5C4F}\u{853D}",
+        ],
+        "serviceBlocked": [
+            "en": "service-blocked", "de": "Dienst gesperrt",
+            "fr": "bloqu\u{00E9}s par le service", "nl": "dienst-geblokkeerd",
+            "es": "bloqueados por servicio", "it": "bloccati dal servizio",
+            "sv": "tj\u{00E4}nstblockerade", "nb": "tjenesteblokkert",
+            "da": "tjenesteblokeret",
+            "ja": "\u{30B5}\u{30FC}\u{30D3}\u{30B9}\u{30D5}\u{30A3}\u{30EB}\u{30BF}",
+            "pt": "bloqueados por servi\u{00E7}o", "pl": "zablokowane przez us\u{0142}ug\u{0119}",
+            "zh-Hans": "\u{670D}\u{52A1}\u{5C4F}\u{853D}",
+        ],
+        "structuralIneligible": [
+            "en": "structural", "de": "strukturell",
+            "fr": "structurels", "nl": "structureel",
+            "es": "estructurales", "it": "strutturali",
+            "sv": "strukturella", "nb": "strukturelle",
+            "da": "strukturelle",
+            "ja": "\u{69CB}\u{9020}\u{7684}",
+            "pt": "estruturais", "pl": "strukturalne",
+            "zh-Hans": "\u{7ED3}\u{6784}\u{6027}",
+        ],
+        "roomBlockedExamples": [
+            "en": "Room-blocked examples",
+            "de": "Raum-gesperrte Beispiele",
+            "fr": "Exemples bloqu\u{00E9}s par la pi\u{00E8}ce",
+            "nl": "Kamer-geblokkeerde voorbeelden",
+            "es": "Ejemplos bloqueados por sala",
+            "it": "Esempi bloccati dalla stanza",
+            "sv": "Exempel p\u{00E5} rumsblockerade",
+            "nb": "Romblokkerte eksempler",
+            "da": "Rumblokerede eksempler",
+            "ja": "\u{90E8}\u{5C4B}\u{30D5}\u{30A3}\u{30EB}\u{30BF}\u{306E}\u{4F8B}",
+            "pt": "Exemplos bloqueados por sala",
+            "pl": "Przyk\u{0142}ady zablokowane przez pok\u{00F3}j",
+            "zh-Hans": "\u{623F}\u{95F4}\u{5C4F}\u{853D}\u{793A}\u{4F8B}",
+        ],
+        "serviceBlockedExamples": [
+            "en": "Service-blocked examples",
+            "de": "Dienst-gesperrte Beispiele",
+            "fr": "Exemples bloqu\u{00E9}s par le service",
+            "nl": "Dienst-geblokkeerde voorbeelden",
+            "es": "Ejemplos bloqueados por servicio",
+            "it": "Esempi bloccati dal servizio",
+            "sv": "Exempel p\u{00E5} tj\u{00E4}nstblockerade",
+            "nb": "Tjenesteblokkerte eksempler",
+            "da": "Tjenesteblokerede eksempler",
+            "ja": "\u{30B5}\u{30FC}\u{30D3}\u{30B9}\u{30D5}\u{30A3}\u{30EB}\u{30BF}\u{306E}\u{4F8B}",
+            "pt": "Exemplos bloqueados por servi\u{00E7}o",
+            "pl": "Przyk\u{0142}ady zablokowane przez us\u{0142}ug\u{0119}",
+            "zh-Hans": "\u{670D}\u{52A1}\u{5C4F}\u{853D}\u{793A}\u{4F8B}",
+        ],
+        "currentFilterPrefix": [
+            "en": "current filter",
+            "de": "aktueller Filter",
+            "fr": "filtre actuel",
+            "nl": "huidig filter",
+            "es": "filtro actual",
+            "it": "filtro attuale",
+            "sv": "aktuellt filter",
+            "nb": "n\u{00E5}v\u{00E6}rende filter",
+            "da": "aktuelt filter",
+            "ja": "\u{73FE}\u{5728}\u{306E}\u{30D5}\u{30A3}\u{30EB}\u{30BF}",
+            "pt": "filtro atual",
+            "pl": "bie\u{017C}\u{0105}cy filtr",
+            "zh-Hans": "\u{5F53}\u{524D}\u{7B5B}\u{9009}",
         ],
     ]
     // swiftlint:enable function_body_length

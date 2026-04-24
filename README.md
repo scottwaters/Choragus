@@ -105,15 +105,25 @@ Services are managed in **Settings → Music**. Each can be individually enabled
 
 #### Available — Connection Required (Untested)
 
-40+ additional services are available via SMAPI AppLink/DeviceLink authentication including Deezer, TIDAL, Qobuz, SoundCloud, iHeartRadio, Plex, Pocket Casts, and others. These can be connected from **Settings → Music → Other Services**. Results are not guaranteed.
+| Service | Likely to work | Notes |
+|---------|:-------------:|-------|
+| **Plex** (sid=212) | ✓ | SMAPI AppLink returns a usable Plex `regUrl` when probed — integration planned for a future release (see TODO.md) |
+
+40+ additional services are available via SMAPI AppLink/DeviceLink and may work — connect via **Settings → Music → Other Services**. Results are not guaranteed.
 
 #### Not Available
 
-| Service | Reason |
-|---------|--------|
-| **Amazon Music** | Requires Amazon's native OAuth — returns empty auth URL via SMAPI |
-| **YouTube Music** | Requires Google's native OAuth — returns empty auth URL via SMAPI |
-| **Sonos Radio browsing** | Category browsing requires DeviceLink auth (search works) |
+Confirmed by live probe against the Sonos `ListAvailableServices` + `getAppLink` endpoints (2026-04-24). These services ship encrypted API keys in their Sonos manifest (`cf.ws.sonos.com/p/m/<uuid>`) that only Sonos's app and speaker firmware can decrypt — third-party clients receive `403 / NOT_AUTHORIZED` from the SMAPI endpoint before auth can begin.
+
+| Service | SID | Response | Workaround |
+|---------|:---:|----------|------------|
+| **Apple Music** (as SMAPI service) | 204 | `SonosError 999` | iTunes Search API fallback already used for search |
+| **Amazon Music** | 201 | Same class of Sonos-identity gate | — |
+| **YouTube Music** | 284 | GCP `403 PERMISSION_DENIED` (no API key) | — |
+| **SoundCloud** | 160 | `Client.NOT_AUTHORIZED` (403) | Scrobbling of SoundCloud listens via the Sonos app works |
+| **Sonos Radio browsing** | 303 | Category browsing requires DeviceLink (search works) | — |
+
+**Scrobbling remains possible for all services above** — play history is recorded from whatever the Sonos app plays, regardless of whether this app can directly browse/search that service.
 
 ### Listening History
 

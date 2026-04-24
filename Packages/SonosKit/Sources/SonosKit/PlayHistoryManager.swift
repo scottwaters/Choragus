@@ -14,7 +14,11 @@ public final class PlayHistoryManager: ObservableObject {
         set { UserDefaults.standard.set(newValue, forKey: UDKey.playHistoryEnabled); objectWillChange.send() }
     }
 
-    private let repo: PlayHistoryRepository
+    /// Exposed so the scrobble subsystem can share the same SQLite connection
+    /// (reads the same `history` table, writes to the sibling `scrobble_log`
+    /// table added in v3.6). No other external reads should go through this —
+    /// use `entries` or the public manager methods.
+    public let repo: PlayHistoryRepository
     private var lastLoggedTrack: [String: String] = [:]
     private var reloadTask: Task<Void, Never>?
     private var rollupTimer: Timer?
@@ -298,30 +302,28 @@ public final class PlayHistoryManager: ObservableObject {
     }
 
     /// Returns the most recent unique tracks/stations, deduplicated.
+    ///
+    /// Previously this filtered out radio-URI entries that lacked a
+    /// populated `stationName` field, which left the sidebar empty for
+    /// users whose listening was mostly radio. Unified now with the
+    /// equivalent logic in the Listening Stats dashboard: include
+    /// everything with a non-empty title, dedup by (stationName) for
+    /// radio rows and (title + artist) for tracks, sort by timestamp
+    /// descending so the result doesn't depend on the source array's
+    /// sort order.
     public func recentlyPlayed(limit: Int = 20) -> [PlayHistoryEntry] {
         var seen = Set<String>()
-        var seenStations = Set<String>()
         var result: [PlayHistoryEntry] = []
-        for entry in entries.reversed() {
+        for entry in entries.sorted(by: { $0.timestamp > $1.timestamp }) {
             guard !entry.title.isEmpty else { continue }
-
+            let key: String
             if !entry.stationName.isEmpty {
-                let key = "station:\(entry.stationName)"
-                guard !seen.contains(key) else { continue }
-                seen.insert(key)
-                seenStations.insert(entry.stationName)
-                var stationEntry = entry
-                stationEntry.title = entry.stationName
-                result.append(stationEntry)
-            } else if let uri = entry.sourceURI, URIPrefix.isRadio(uri) {
-                continue
+                key = "station:\(entry.stationName)"
             } else {
-                let key = "track:\(entry.title)|\(entry.artist)"
-                guard !seen.contains(key) else { continue }
-                seen.insert(key)
-                result.append(entry)
+                key = "track:\(entry.title)|\(entry.artist)"
             }
-
+            guard seen.insert(key).inserted else { continue }
+            result.append(entry)
             if result.count >= limit { break }
         }
         return result

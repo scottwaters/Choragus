@@ -1,7 +1,10 @@
 /// SMAPITokenStore.swift — Secure storage for SMAPI authentication tokens.
-/// Uses macOS Keychain for token/key storage. Service metadata stored in JSON.
+///
+/// Tokens and private keys live in the app-wide unified `SecretsStore`
+/// (single keychain item). Non-sensitive metadata (service id, name,
+/// device id, etc.) lives in a JSON file under Application Support —
+/// reading it doesn't trigger a keychain prompt.
 import Foundation
-import Security
 
 public struct SMAPIToken: Codable {
     public let serviceID: Int
@@ -28,34 +31,39 @@ public struct SMAPIToken: Codable {
 public final class SMAPITokenStore: ObservableObject {
     @Published public var authenticatedServices: [Int: SMAPIToken] = [:]
     private let fileURL: URL
+    private let secrets: SecretsStore
 
-    public init() {
+    public init(secrets: SecretsStore = .shared) {
+        self.secrets = secrets
         self.fileURL = AppPaths.appSupportDirectory.appendingPathComponent("smapi_tokens.json")
         load()
     }
+
+    // Key naming: keep dot-separated style consistent with the unified
+    // secrets dict so migrate-from-legacy handles both halves uniformly.
+    private func tokenKey(_ serviceID: Int) -> String { "smapi.token.\(serviceID)" }
+    private func keyKey(_ serviceID: Int) -> String { "smapi.key.\(serviceID)" }
 
     // MARK: - Public API
 
     public func store(token: SMAPIToken) {
         authenticatedServices[token.serviceID] = token
-        // Store token/key in Keychain
-        setKeychainItem(key: "smapi_token_\(token.serviceID)", value: token.authToken)
-        setKeychainItem(key: "smapi_key_\(token.serviceID)", value: token.privateKey)
+        secrets.set(tokenKey(token.serviceID), token.authToken)
+        secrets.set(keyKey(token.serviceID), token.privateKey)
         save()
     }
 
     public func getToken(for serviceID: Int) -> SMAPIToken? {
         guard var token = authenticatedServices[serviceID] else { return nil }
-        // Retrieve actual token/key from Keychain
-        if let t = getKeychainItem(key: "smapi_token_\(serviceID)") { token.authToken = t }
-        if let k = getKeychainItem(key: "smapi_key_\(serviceID)") { token.privateKey = k }
+        if let t = secrets.get(tokenKey(serviceID)) { token.authToken = t }
+        if let k = secrets.get(keyKey(serviceID)) { token.privateKey = k }
         return token
     }
 
     public func removeToken(for serviceID: Int) {
         authenticatedServices.removeValue(forKey: serviceID)
-        deleteKeychainItem(key: "smapi_token_\(serviceID)")
-        deleteKeychainItem(key: "smapi_key_\(serviceID)")
+        secrets.set(tokenKey(serviceID), nil)
+        secrets.set(keyKey(serviceID), nil)
         save()
     }
 
@@ -65,8 +73,8 @@ public final class SMAPITokenStore: ObservableObject {
             token.privateKey = privateKey
             token.lastRefreshed = Date()
             authenticatedServices[serviceID] = token
-            setKeychainItem(key: "smapi_token_\(serviceID)", value: authToken)
-            setKeychainItem(key: "smapi_key_\(serviceID)", value: privateKey)
+            secrets.set(tokenKey(serviceID), authToken)
+            secrets.set(keyKey(serviceID), privateKey)
             save()
         }
     }
@@ -91,57 +99,4 @@ public final class SMAPITokenStore: ObservableObject {
         authenticatedServices = decoded
     }
 
-    // MARK: - Keychain
-
-    private let keychainService = "com.sonoscontroller.smapi"
-
-    private func setKeychainItem(key: String, value: String) {
-        guard let data = value.data(using: .utf8) else { return }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: key,
-        ]
-        SecItemDelete(query as CFDictionary)
-        var addQuery = query
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
-        if status != errSecSuccess {
-            sonosDebugLog("[KEYCHAIN] Store failed for \(key): OSStatus \(status)")
-        }
-    }
-
-    private func getKeychainItem(key: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: key,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess,
-              let data = item as? Data,
-              let str = String(data: data, encoding: .utf8) else {
-            if status != errSecItemNotFound {
-                sonosDebugLog("[KEYCHAIN] Read failed for \(key): OSStatus \(status)")
-            }
-            return nil
-        }
-        return str
-    }
-
-    private func deleteKeychainItem(key: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: key,
-        ]
-        let status = SecItemDelete(query as CFDictionary)
-        if status != errSecSuccess && status != errSecItemNotFound {
-            sonosDebugLog("[KEYCHAIN] Delete failed for \(key): OSStatus \(status)")
-        }
-    }
 }

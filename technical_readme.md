@@ -95,7 +95,8 @@ All cache files are created with `0o600` permissions.
 
 ### Security
 
-- **Keychain** — SMAPI tokens stored with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, per-device-only. Metadata (which services are connected) stored separately.
+- **Keychain** — all credentials (SMAPI tokens, Last.fm API app credentials, Last.fm session keys) live in a single unified `SecretsStore` Keychain item with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`. One ACL means one authorization prompt per rebuild instead of one per credential. Legacy per-service Keychain items migrate automatically on first launch. Metadata (which services are connected) stored separately in Application Support JSON.
+- **Scrobbling credentials** — BYO-only. The app ships no bundled Last.fm API key; users register their own at last.fm/api/account/create and paste it into Settings. Submissions are computed entirely from the local `play_history` table — no new network taps on the speakers.
 - **App sandbox** — network client + server entitlements only. No filesystem, no contacts, no other apps.
 - **ATS hardened** — specific domain exceptions for legacy HTTP radio services (TuneIn, 1.fm, radiotime.com), no blanket `NSAllowsArbitraryLoads`.
 - **Error sanitization** — SOAP faults/HTTP errors surface user-friendly messages; raw details never exposed.

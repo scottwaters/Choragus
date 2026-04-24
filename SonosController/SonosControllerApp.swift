@@ -26,6 +26,12 @@ struct SonosControllerApp: App {
     @StateObject private var playHistoryManager = PlayHistoryManager()
     @StateObject private var playlistScanner = PlaylistServiceScanner()
     @StateObject private var smapiManager = SMAPIAuthManager()
+    @StateObject private var lastFMScrobbler = LastFMScrobbler()
+    /// Holds scrobble-manager init deferred until playHistoryManager is ready.
+    /// Using @StateObject with a lazy init workaround: we build it inside a
+    /// container and pass it in.
+    @StateObject private var scrobbleManagerHolder = ScrobbleManagerHolder()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -34,6 +40,8 @@ struct SonosControllerApp: App {
                 .environmentObject(playHistoryManager)
                 .environmentObject(playlistScanner)
                 .environmentObject(smapiManager)
+                .environmentObject(lastFMScrobbler)
+                .environmentObject(scrobbleManagerHolder.ensureReady(playHistory: playHistoryManager, lastfm: lastFMScrobbler))
                 .onAppear {
                     sonosManager.playHistoryManager = playHistoryManager
                     sonosManager.startDiscovery()
@@ -58,14 +66,12 @@ struct SonosControllerApp: App {
         .windowStyle(.titleBar)
         .defaultSize(width: 900, height: 550)
         .commands {
-            // Hide default menus that don't apply to a media controller with no
-            // documents or text editing. Window is left at its macOS defaults
-            // per Apple HIG — every app is expected to expose Minimize/Zoom/
-            // Bring All to Front.
+            // No document model, so hide File > New. Keep the Edit menu
+            // (undo/redo, cut/copy/paste, select-all) intact — Settings has
+            // text fields for credentials, and replacing those groups breaks
+            // ⌘V keyboard-shortcut resolution even if the menu items aren't
+            // used otherwise.
             CommandGroup(replacing: .newItem) {}
-            CommandGroup(replacing: .undoRedo) {}
-            CommandGroup(replacing: .pasteboard) {}
-            CommandGroup(replacing: .textEditing) {}
 
             // Custom About panel — adds a clickable GitHub link to the credits.
             CommandGroup(replacing: .appInfo) {
@@ -167,6 +173,27 @@ struct SonosControllerApp: App {
         case .light: return .light
         case .dark: return .dark
         }
+    }
+}
+
+/// Holds the `ScrobbleManager` as an `ObservableObject` that gets lazily
+/// initialized with its dependencies on first access. `ScrobbleManager` needs
+/// `PlayHistoryManager` (for the repository) and a list of concrete
+/// `ScrobbleService` implementations — those aren't available during
+/// `@StateObject`'s default-construction phase, so we defer instantiation
+/// until the view body runs (where the other managers are already alive).
+@MainActor
+final class ScrobbleManagerHolder: ObservableObject {
+    private var instance: ScrobbleManager?
+
+    func ensureReady(playHistory: PlayHistoryManager, lastfm: LastFMScrobbler) -> ScrobbleManager {
+        if let instance { return instance }
+        let manager = ScrobbleManager(
+            repository: playHistory.repo,
+            services: [lastfm]
+        )
+        self.instance = manager
+        return manager
     }
 }
 
