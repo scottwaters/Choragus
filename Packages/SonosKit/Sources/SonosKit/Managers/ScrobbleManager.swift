@@ -266,14 +266,20 @@ public final class ScrobbleManager: ObservableObject {
     /// services fall through to a plain-keyword check against the name
     /// itself, which still works for Spotify / SoundCloud / TuneIn etc.
     /// whose name does appear in their URIs.
+    // SIDs confirmed by live ListAvailableServices call against a Sonos One
+    // on this household. Lowercased because matching is done against a
+    // lowercased sourceURI. Keywords are kept as fallbacks in case a URI
+    // happens to include the service name (SoundCloud does; TuneIn doesn't
+    // always).
     static let knownServiceURIPatterns: [String: [String]] = [
         "apple music": ["sid=204"],
-        "spotify": ["sid=9", "sid=12", "spotify"],
-        "tunein": ["sid=65031", "tunein"],
-        "sonos radio": ["x-sonosapi-radio:", "sonosradio"],
-        "calm radio": ["calmradio"],
-        "soundcloud": ["sid=151", "soundcloud"],
-        "youtube music": ["sid=77", "sid=284", "youtube"],
+        "amazon music": ["sid=201"],
+        "spotify": ["sid=12", "spotify"],
+        "tunein": ["sid=254", "tunein"],
+        "sonos radio": ["sid=303", "x-sonosapi-radio:", "sonosradio"],
+        "calm radio": ["sid=144", "calmradio"],
+        "soundcloud": ["sid=160", "soundcloud"],
+        "youtube music": ["sid=284"],
         "local library": ["x-file-cifs:", "x-sonos-http:library"],
     ]
 

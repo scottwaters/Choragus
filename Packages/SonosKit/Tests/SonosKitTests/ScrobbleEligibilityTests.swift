@@ -179,6 +179,33 @@ final class ScrobbleEligibilityTests: XCTestCase {
         XCTAssertTrue(isEligible(e, services: ["Apple Music"]))
     }
 
+    func testServiceSIDsFromLiveSonosHousehold() {
+        // These SIDs were confirmed by a live `ListAvailableServices` call
+        // against a Sonos One (household firmware 94.1). Earlier guesses
+        // (TuneIn=65031, SoundCloud=151) silently broke filtering for
+        // those services — these assertions pin the real values.
+        XCTAssertTrue(isEligible(
+            makeEntry(sourceURI: "x-sonosapi-stream:s12345?sid=254&flags=32"),
+            services: ["TuneIn"]
+        ))
+        XCTAssertTrue(isEligible(
+            makeEntry(sourceURI: "x-sonos-http:track%3a123.mp4?sid=160&flags=8232"),
+            services: ["SoundCloud"]
+        ))
+        XCTAssertTrue(isEligible(
+            makeEntry(sourceURI: "x-sonos-http:song%3a99?sid=201"),
+            services: ["Amazon Music"]
+        ))
+        XCTAssertTrue(isEligible(
+            makeEntry(sourceURI: "x-sonosapi-stream:xyz?sid=144"),
+            services: ["Calm Radio"]
+        ))
+        XCTAssertTrue(isEligible(
+            makeEntry(sourceURI: "x-sonosapi-hls:radio?sid=303"),
+            services: ["Sonos Radio"]
+        ))
+    }
+
     func testUnknownServiceFallsBackToKeywordMatch() {
         // Services not in the SID map (new/niche additions) still get a
         // best-effort keyword match so adding a service name to the UI

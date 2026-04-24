@@ -39,7 +39,7 @@ struct SettingsScrobblingTab: View {
     private let knownMusicServices: [String] = [
         "Local Library",
         "TuneIn", "Sonos Radio", "Calm Radio",
-        "Apple Music", "Spotify", "SoundCloud", "YouTube Music"
+        "Apple Music", "Amazon Music", "Spotify", "SoundCloud", "YouTube Music"
     ]
 
     enum TestStatus: Equatable {
