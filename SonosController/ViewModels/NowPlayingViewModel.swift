@@ -436,6 +436,29 @@ final class NowPlayingViewModel {
             if art.displayedArtURL != url && !art.forceWebArt {
                 art.displayedArtURL = url
             }
+            // The speaker's reported art is the source of truth. If we had
+            // previously pinned a different URL for this track (e.g. an early
+            // metadata frame during a queue advance held a stale /getaa URL
+            // from the previous track until Sonos refreshed its internal
+            // art), invalidate that stale pin so the next resolution starts
+            // fresh from the current metadata.
+            if let pinned = art.pinnedURL(for: metadata), pinned != url, !art.forceWebArt {
+                art.invalidateArtResolution(for: metadata)
+            }
+        } else if !art.forceWebArt {
+            // Speaker now reports no art at all for this track. Any pin set
+            // from an earlier (stale) metadata frame is wrong — clear it.
+            if art.pinnedURL(for: metadata) != nil {
+                art.invalidateArtResolution(for: metadata)
+            }
+            // Also clear displayedArtURL: updateDisplayedArt's sticky guard
+            // (currentURI == lastTrackURI && resolved == nil) preserves the
+            // previous frame's URL across same-track metadata polls, which
+            // here would keep showing the stale URL after the speaker
+            // reverted to "no art". Sync to truth.
+            if art.displayedArtURL != nil {
+                art.displayedArtURL = nil
+            }
         }
 
         // Search for web art if metadata art is missing
@@ -478,15 +501,18 @@ final class NowPlayingViewModel {
             }
             return
         }
-        // For /getaa? fallbacks, check the persistent art cache for a
-        // previously-resolved URL before triggering iTunes. If we find one,
-        // pin and use it — no search needed.
-        if hasLocalOnlyArt,
-           let cached = sonosManager.lookupCachedArt(uri: metadata.trackURI, title: metadata.title),
-           let cachedURL = URL(string: cached) {
-            art.setWebArtResult(cachedURL)
-            art.markArtResolved(for: metadata, url: cachedURL)
-            art.updateDisplayedArt(trackMetadata: metadata, group: group)
+        // Trust whatever art the speaker is serving via /getaa? — that's
+        // either the file's embedded art (local files), the album folder
+        // image, or service-supplied art proxied through the speaker
+        // (Spotify, Apple Music, Tidal, etc.). Only fall through to iTunes
+        // when the speaker has no art at all. This avoids generic
+        // title-collision results (e.g. "This Christmas" returning a
+        // Toni Braxton album for a Joe track) from overriding correct art.
+        if hasLocalOnlyArt {
+            art.clearWebArt()
+            if let artStr = metadata.albumArtURI, let url = URL(string: artStr) {
+                art.markArtResolved(for: metadata, url: url)
+            }
             return
         }
         art.clearWebArt()

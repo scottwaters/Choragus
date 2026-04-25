@@ -1777,11 +1777,16 @@ extension SonosManager: TransportStrategyDelegate {
                 }
             }
 
-            // Queue position fallbacks — blocked only for active radio streams
-            if cached == nil, !isActiveRadio, enriched.trackNumber > 0 {
+            // Queue position fallbacks — only valid when actually playing from
+            // a queue. Direct-play tracks (browse → play, no queue) often report
+            // trackNumber=1 from getPositionInfo, which previously caused them
+            // to inherit title/artist/art from the user's last queue position 1.
+            // isQueueSource is the reliable discriminator and is set by
+            // enrichFromMediaInfo based on the speaker's CurrentURI.
+            if cached == nil, !isActiveRadio, enriched.isQueueSource, enriched.trackNumber > 0 {
                 cached = cachedTrackByPosition[groupID]?[enriched.trackNumber]
             }
-            if cached == nil, !isActiveRadio, enriched.trackNumber > 0,
+            if cached == nil, !isActiveRadio, enriched.isQueueSource, enriched.trackNumber > 0,
                let queueItems = lastQueueItems[groupID] {
                 let idx = enriched.trackNumber - 1
                 if idx >= 0 && idx < queueItems.count {

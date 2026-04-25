@@ -103,17 +103,20 @@ struct MenuBarPlayerView: View {
         return group.members.contains { sonosManager.deviceMutes[$0.id] == true }
     }
 
-    /// Resolved art URL — checks discovered art cache for better art (iTunes, radio track)
-    /// then falls back to metadata albumArtURI
+    /// Resolved art URL — speaker's albumArtURI is authoritative. The
+    /// discoveredArtURLs cache is keyed by lowercase title and would
+    /// conflate different versions of the same-titled track (e.g. every
+    /// "This Christmas" gets the first one ever cached), so it's only
+    /// consulted when the speaker has no art.
     private var resolvedArtURL: URL? {
         let meta = trackMetadata
-        // Check cached art by title or URI
+        if let art = meta.albumArtURI, !art.isEmpty,
+           let url = URL(string: art) {
+            return url
+        }
         if let cached = sonosManager.lookupCachedArt(uri: meta.trackURI, title: meta.title),
            let url = URL(string: cached) {
             return url
-        }
-        if let art = meta.albumArtURI, !art.isEmpty {
-            return URL(string: art)
         }
         return nil
     }

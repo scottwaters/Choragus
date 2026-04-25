@@ -63,6 +63,13 @@ struct CachedAsyncImage: View {
             return
         }
 
+        // Cache miss for the new URL — clear the previously-loaded image
+        // immediately. Without this, a failed fetch (or one that returns
+        // bytes that don't decode to NSImage, e.g. an empty body for a
+        // file with no embedded art) leaves the previous track's image
+        // on screen because `image` is only ever assigned on success.
+        image = nil
+
         guard !isLoading else { return }
         isLoading = true
 

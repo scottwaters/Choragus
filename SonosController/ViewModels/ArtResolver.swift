@@ -136,7 +136,23 @@ final class ArtResolver {
             if let trackArt = radioTrackArtURL, !trackMetadata.stationName.isEmpty {
                 return trackArt
             }
-            return pinnedURL(for: trackMetadata) ?? radioStationArtURL
+            // Speaker's current albumArtURI is the source of truth — read it
+            // directly so the inline view stays in sync with menubar/popup.
+            if let metaArt = trackMetadata.albumArtURI, !metaArt.isEmpty,
+               let url = URL(string: metaArt) {
+                return url
+            }
+            // Speaker reports no art for this track. A pinned /getaa? URL
+            // is almost always stale here (queue-advance transitions can
+            // briefly leak the previous track's /getaa URL into metadata
+            // before Sonos refreshes its internal art; that frame can pin
+            // the wrong URL). A non-/getaa pin is a legitimate iTunes
+            // result for a track without speaker art — keep that.
+            if let pin = pinnedURL(for: trackMetadata),
+               !pin.absoluteString.contains("/getaa?") {
+                return pin
+            }
+            return radioStationArtURL
         }
         if let trackArt = radioTrackArtURL, !trackMetadata.stationName.isEmpty {
             return trackArt
@@ -319,6 +335,13 @@ final class ArtResolver {
                 artist: artist, album: searchTerm
             ) {
                 setManualArtwork(artURL, trackMetadata: trackMetadata, group: group)
+            } else {
+                // No iTunes match. Clear any stale displayed art and webArt
+                // so the view shows the placeholder rather than the previous
+                // track's URL. Without this, Refresh Artwork on a track with
+                // no findable art appears to "do nothing".
+                displayedArtURL = nil
+                webArtURL = nil
             }
         }
     }
