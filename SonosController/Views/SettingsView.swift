@@ -322,6 +322,16 @@ private struct TabContentView: View {
                     .frame(maxWidth: 240)
                 }
 
+                Divider()
+
+                settingsRow(L10n.discovery) {
+                    Picker("", selection: $sonosManager.discoveryMode) {
+                        ForEach(DiscoveryMode.allCases, id: \.self) { Text($0 == .mdns ? L10n.bonjourDiscovery : L10n.legacyMulticast).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 260)
+                }
+
                 infoToggle(isExpanded: $showNetworkInfo, label: L10n.aboutNetwork,
                            text: L10n.aboutNetworkBody)
             }

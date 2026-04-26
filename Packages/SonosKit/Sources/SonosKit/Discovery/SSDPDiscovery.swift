@@ -6,7 +6,7 @@
 /// socket state is confined to receiveQueue.
 import Foundation
 
-public final class SSDPDiscovery: @unchecked Sendable {
+public final class SSDPDiscovery: SpeakerDiscovery, @unchecked Sendable {
     // Standard SSDP multicast address and port (UPnP spec)
     private let multicastGroup = "239.255.255.250"
     private let multicastPort: UInt16 = 1900
@@ -17,8 +17,6 @@ public final class SSDPDiscovery: @unchecked Sendable {
     private var isSearching = false
     private var receiveQueue = DispatchQueue(label: "ssdp.receive", qos: .userInitiated)
 
-    /// Callback: (locationURL, ipAddress, port)
-    public typealias DeviceFoundHandler = (String, String, Int) -> Void
     public var onDeviceFound: DeviceFoundHandler?
 
     public init() {}

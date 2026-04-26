@@ -38,6 +38,11 @@ public enum CommunicationMode: String, CaseIterable {
     case legacyPolling = "Legacy Polling"
 }
 
+public enum DiscoveryMode: String, CaseIterable {
+    case mdns = "Bonjour"
+    case ssdp = "Legacy Multicast"
+}
+
 public enum AppearanceMode: String, CaseIterable {
     case system = "System"
     case light = "Light"
@@ -224,6 +229,13 @@ public class SonosManager: ObservableObject {
         }
     }
 
+    @Published public var discoveryMode: DiscoveryMode {
+        didSet {
+            UserDefaults.standard.set(discoveryMode.rawValue, forKey: UDKey.discoveryMode)
+            Task { await switchDiscoveryStrategy() }
+        }
+    }
+
     @Published public var appearanceMode: AppearanceMode {
         didSet { UserDefaults.standard.set(appearanceMode.rawValue, forKey: UDKey.appearanceMode) }
     }
@@ -244,7 +256,7 @@ public class SonosManager: ObservableObject {
 
     // MARK: - Services (injectable for testability)
 
-    private let discovery = SSDPDiscovery()
+    private var discovery: any SpeakerDiscovery
     private let soap: SOAPClient
     private let cache: SonosCache
     // Lazy so services share a single SOAPClient (and its URLSession)
@@ -298,7 +310,7 @@ public class SonosManager: ObservableObject {
         (transportStrategy as? HybridEventFirstTransport)?.callbackURLString ?? "Not available"
     }
 
-    /// Default init with production services
+    /// Default init with production services (uses SSDP discovery)
     public convenience init() {
         self.init(soap: SOAPClient(), cache: SonosCache())
     }
@@ -313,6 +325,11 @@ public class SonosManager: ObservableObject {
 
         let savedComms = UserDefaults.standard.string(forKey: UDKey.communicationMode) ?? CommunicationMode.hybridEventFirst.rawValue
         self.communicationMode = CommunicationMode(rawValue: savedComms) ?? .hybridEventFirst
+
+        let savedDiscovery = UserDefaults.standard.string(forKey: UDKey.discoveryMode) ?? DiscoveryMode.ssdp.rawValue
+        let discoveryMode = DiscoveryMode(rawValue: savedDiscovery) ?? .ssdp // need local to use createDiscovery method
+        self.discoveryMode = discoveryMode
+        self.discovery = SonosManager.createDiscovery(for: discoveryMode)
 
         let savedAppearance = UserDefaults.standard.string(forKey: UDKey.appearanceMode) ?? AppearanceMode.system.rawValue
         self.appearanceMode = AppearanceMode(rawValue: savedAppearance) ?? .system
@@ -729,6 +746,17 @@ public class SonosManager: ObservableObject {
             return HybridEventFirstTransport()
         case .legacyPolling:
             return LegacyPollingTransport()
+        }
+    }
+    
+    private func switchDiscoveryStrategy() async {
+        discovery = SonosManager.createDiscovery(for: discoveryMode)
+    }
+
+    private static func createDiscovery(for mode: DiscoveryMode) -> any SpeakerDiscovery {
+        switch mode {
+        case .mdns:  return MDNSDiscovery()
+        case .ssdp:  return SSDPDiscovery()
         }
     }
 

@@ -184,6 +184,7 @@ public enum Timing {
 public enum UDKey {
     public static let startupMode = "startupMode"
     public static let communicationMode = "communicationMode"
+    public static let discoveryMode = "discoveryMode"
     public static let appearanceMode = "appearanceMode"
     public static let appLanguage = "appLanguage"
     public static let lastSelectedGroupID = "lastSelectedGroupID"

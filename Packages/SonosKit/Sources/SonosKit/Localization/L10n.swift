@@ -169,6 +169,13 @@ public enum L10n {
     public static var eventDriven: String { tr("eventDriven") }
     public static var legacyPolling: String { tr("legacyPolling") }
 
+    // MARK: - Discovery
+    public static var discovery: String { tr("discovery") }
+
+    // MARK: - Discovery Modes
+    public static var bonjourDiscovery: String { tr("bonjourDiscovery") }
+    public static var legacyMulticast: String { tr("legacyMulticast") }
+
     // MARK: - Startup Modes
     public static var quickStart: String { tr("quickStart") }
     public static var classic: String { tr("classic") }
@@ -2657,6 +2664,61 @@ public enum L10n {
         ],
 
         // ========================
+        // MARK: Discovery
+        // ========================
+
+        "discovery": [
+            "en": "Discovery",
+            "de": "Netzwerkerkennung",
+            "fr": "D\u{00E9}couverte",
+            "nl": "Netwerkdetectie",
+            "es": "Detecci\u{00F3}n",
+            "it": "Rilevamento",
+            "sv": "Uppt\u{00E4}ckt",
+            "nb": "Oppdagelse",
+            "da": "Opdagelse",
+            "ja": "\u{30C7}\u{30D0}\u{30A4}\u{30B9}\u{691C}\u{51FA}",
+            "pt": "Descoberta",
+            "pl": "Wykrywanie",
+            "zh-Hans": "\u{53D1}\u{73B0}",
+        ],
+
+        // ========================
+        // MARK: Discovery Modes
+        // ========================
+
+        "bonjourDiscovery": [
+            "en": "Bonjour",
+            "de": "Bonjour",
+            "fr": "Bonjour",
+            "nl": "Bonjour",
+            "es": "Bonjour",
+            "it": "Bonjour",
+            "sv": "Bonjour",
+            "nb": "Bonjour",
+            "da": "Bonjour",
+            "ja": "Bonjour",
+            "pt": "Bonjour",
+            "pl": "Bonjour",
+            "zh-Hans": "Bonjour",
+        ],
+        "legacyMulticast": [
+            "en": "Legacy Multicast",
+            "de": "Veraltetes Multicast",
+            "fr": "Multidiffusion h\u{00E9}rit\u{00E9}e",
+            "nl": "Verouderd multicast",
+            "es": "Multidifusi\u{00F3}n heredada",
+            "it": "Multicast legacy",
+            "sv": "\u{00C4}ldre multicast",
+            "nb": "Eldre multicast",
+            "da": "\u{00C6}ldre multicast",
+            "ja": "\u{30EC}\u{30AC}\u{30B7}\u{30FC}\u{30DE}\u{30EB}\u{30C1}\u{30AD}\u{30E3}\u{30B9}\u{30C8}",
+            "pt": "Multicast legado",
+            "pl": "Starsze multicast",
+            "zh-Hans": "\u{4F20}\u{7EDF}\u{591A}\u{64AD}",
+        ],
+
+        // ========================
         // MARK: Startup Modes
         // ========================
 
@@ -4750,19 +4812,19 @@ public enum L10n {
             "zh-Hans": "\u{5B9E}\u{65F6}\u{4EEA}\u{8868}\u{6458}\u{8981}",
         ],
         "aboutNetworkBody": [
-            "en": "**Event-Driven** — Real-time UPnP subscriptions. Lower traffic, faster response.\n\n**Legacy Polling** — Queries every 2 seconds. More predictable on problematic networks.\n\n**Quick Start** — Instant UI from cache, verified in background.\n\n**Classic** — Waits for live discovery. Always accurate.",
-            "de": "**Ereignisgesteuert** — Echtzeit-UPnP-Abonnements. Weniger Traffic, schnellere Reaktion.\n\n**Legacy-Abfrage** — Alle 2 Sekunden. Vorhersagbarer bei problematischen Netzwerken.\n\n**Schnellstart** — Sofortige UI aus dem Cache, im Hintergrund \u{00FC}berpr\u{00FC}ft.\n\n**Klassisch** — Wartet auf Live-Erkennung. Immer aktuell.",
-            "fr": "**Ev\u{00E9}nementiel** — Abonnements UPnP en temps r\u{00E9}el. Moins de trafic, r\u{00E9}ponse plus rapide.\n\n**Sondage legacy** — Toutes les 2 secondes. Plus pr\u{00E9}visible sur r\u{00E9}seaux probl\u{00E9}matiques.\n\n**D\u{00E9}marrage rapide** — UI instantan\u{00E9}e depuis le cache, v\u{00E9}rifi\u{00E9}e en arri\u{00E8}re-plan.\n\n**Classique** — Attend la d\u{00E9}couverte en direct. Toujours pr\u{00E9}cis.",
-            "nl": "**Event-gestuurd** — Realtime UPnP-abonnementen. Minder verkeer, snellere respons.\n\n**Legacy polling** — Elke 2 seconden. Voorspelbaarder op probleem-netwerken.\n\n**Snelle start** — Directe UI uit cache, op achtergrond geverifieerd.\n\n**Klassiek** — Wacht op live-detectie. Altijd accuraat.",
-            "es": "**Event-Driven** — Suscripciones UPnP en tiempo real. Menos tr\u{00E1}fico, respuesta m\u{00E1}s r\u{00E1}pida.\n\n**Sondeo legacy** — Cada 2 segundos. M\u{00E1}s predecible en redes problem\u{00E1}ticas.\n\n**Arranque r\u{00E1}pido** — UI instant\u{00E1}nea desde cach\u{00E9}, verificada en segundo plano.\n\n**Cl\u{00E1}sico** — Espera a descubrimiento en vivo. Siempre preciso.",
-            "it": "**Event-Driven** — Sottoscrizioni UPnP in tempo reale. Meno traffico, risposta pi\u{00F9} rapida.\n\n**Polling legacy** — Ogni 2 secondi. Pi\u{00F9} prevedibile su reti problematiche.\n\n**Avvio rapido** — UI istantanea da cache, verificata in background.\n\n**Classico** — Attende la scoperta in tempo reale. Sempre accurato.",
-            "sv": "**H\u{00E4}ndelsedriven** — UPnP-prenumerationer i realtid. L\u{00E4}gre trafik, snabbare svar.\n\n**Gammaldags polling** — Varannan sekund. Mer f\u{00F6}rutsebart p\u{00E5} problemn\u{00E4}tverk.\n\n**Snabbstart** — Omedelbart UI fr\u{00E5}n cache, verifieras i bakgrunden.\n\n**Klassiskt** — V\u{00E4}ntar p\u{00E5} live-uppt\u{00E4}ckt. Alltid korrekt.",
-            "nb": "**Hendelsesstyrt** — Sanntid UPnP-abonnementer. Lavere trafikk, raskere respons.\n\n**Legacy-polling** — Hvert 2. sekund. Mer forutsigbart p\u{00E5} problemnettverk.\n\n**Hurtigstart** — Umiddelbart UI fra buffer, verifisert i bakgrunnen.\n\n**Klassisk** — Venter p\u{00E5} live-oppdagelse. Alltid n\u{00F8}yaktig.",
-            "da": "**H\u{00E6}ndelsesstyret** — Realtids UPnP-abonnementer. Lavere trafik, hurtigere respons.\n\n**Legacy-polling** — Hvert 2. sekund. Mere forudsigeligt p\u{00E5} problematiske netv\u{00E6}rk.\n\n**Hurtig start** — Omg\u{00E5}ende UI fra cache, verificeret i baggrunden.\n\n**Klassisk** — Venter p\u{00E5} live-opdagelse. Altid n\u{00F8}jagtigt.",
-            "ja": "**\u{30A4}\u{30D9}\u{30F3}\u{30C8}\u{99C6}\u{52D5}** — \u{30EA}\u{30A2}\u{30EB}\u{30BF}\u{30A4}\u{30E0} UPnP \u{30B5}\u{30D6}\u{30B9}\u{30AF}\u{30EA}\u{30D7}\u{30B7}\u{30E7}\u{30F3}\u{3002}\u{30C8}\u{30E9}\u{30D5}\u{30A3}\u{30C3}\u{30AF}\u{304C}\u{5C11}\u{306A}\u{304F}\u{3001}\u{5FDC}\u{7B54}\u{304C}\u{901F}\u{3044}\u{3067}\u{3059}\u{3002}\n\n**\u{30EC}\u{30AC}\u{30B7}\u{30FC}\u{30DD}\u{30FC}\u{30EA}\u{30F3}\u{30B0}** — 2 \u{79D2}\u{3054}\u{3068}\u{306B}\u{30AF}\u{30A8}\u{30EA}\u{3002}\u{554F}\u{984C}\u{306E}\u{3042}\u{308B}\u{30CD}\u{30C3}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{3067}\u{3088}\u{308A}\u{4E88}\u{6E2C}\u{53EF}\u{80FD}\u{3067}\u{3059}\u{3002}\n\n**\u{30AF}\u{30A4}\u{30C3}\u{30AF}\u{30B9}\u{30BF}\u{30FC}\u{30C8}** — \u{30AD}\u{30E3}\u{30C3}\u{30B7}\u{30E5}\u{304B}\u{3089}\u{5373}\u{5EA7}\u{306B} UI \u{3092}\u{8868}\u{793A}\u{3057}\u{3001}\u{30D0}\u{30C3}\u{30AF}\u{30B0}\u{30E9}\u{30A6}\u{30F3}\u{30C9}\u{3067}\u{78BA}\u{8A8D}\u{3057}\u{307E}\u{3059}\u{3002}\n\n**\u{30AF}\u{30E9}\u{30B7}\u{30C3}\u{30AF}** — \u{30E9}\u{30A4}\u{30D6}\u{691C}\u{51FA}\u{3092}\u{5F85}\u{3061}\u{307E}\u{3059}\u{3002}\u{5E38}\u{306B}\u{6B63}\u{78BA}\u{3067}\u{3059}\u{3002}",
-            "pt": "**Orientado a eventos** — Assinaturas UPnP em tempo real. Menos tr\u{00E1}fego, resposta mais r\u{00E1}pida.\n\n**Polling legado** — A cada 2 segundos. Mais previs\u{00ED}vel em redes problem\u{00E1}ticas.\n\n**In\u{00ED}cio r\u{00E1}pido** — UI instant\u{00E2}neo do cache, verificado em segundo plano.\n\n**Cl\u{00E1}ssico** — Aguarda a descoberta ao vivo. Sempre preciso.",
-            "pl": "**Zdarzeniowy** — Subskrypcje UPnP w czasie rzeczywistym. Mniejszy ruch, szybsza odpowied\u{017A}.\n\n**Legacy polling** — Co 2 sekundy. Bardziej przewidywalne w problematycznych sieciach.\n\n**Szybki start** — Natychmiastowy UI z cache, weryfikowany w tle.\n\n**Klasyczny** — Czeka na wykrycie na \u{017C}ywo. Zawsze dok\u{0142}adny.",
-            "zh-Hans": "**\u{4E8B}\u{4EF6}\u{9A71}\u{52A8}** — \u{5B9E}\u{65F6} UPnP \u{8BA2}\u{9605}\u{3002}\u{6D41}\u{91CF}\u{66F4}\u{4F4E}，\u{54CD}\u{5E94}\u{66F4}\u{5FEB}\u{3002}\n\n**\u{4F20}\u{7EDF}\u{8F6E}\u{8BE2}** — \u{6BCF} 2 \u{79D2}\u{67E5}\u{8BE2}\u{4E00}\u{6B21}\u{3002}\u{5728}\u{6709}\u{95EE}\u{9898}\u{7684}\u{7F51}\u{7EDC}\u{4E0A}\u{66F4}\u{53EF}\u{9884}\u{6D4B}\u{3002}\n\n**\u{5FEB}\u{901F}\u{542F}\u{52A8}** — \u{4ECE}\u{7F13}\u{5B58}\u{5373}\u{65F6}\u{663E}\u{793A}\u{754C}\u{9762}\u{FF0C}\u{540E}\u{53F0}\u{9A8C}\u{8BC1}\u{3002}\n\n**\u{7ECF}\u{5178}** — \u{7B49}\u{5F85}\u{5B9E}\u{65F6}\u{53D1}\u{73B0}\u{3002}\u{59CB}\u{7EC8}\u{51C6}\u{786E}\u{3002}",
+            "en": "**Event-Driven** — Real-time UPnP subscriptions. Lower traffic, faster response.\n\n**Legacy Polling** — Queries every 2 seconds. More predictable on problematic networks.\n\n**Quick Start** — Instant UI from cache, verified in background.\n\n**Classic** — Waits for live discovery. Always accurate.\n\n**Bonjour** — Uses Bonjour to discover Sonos devices.\n\n**Legacy Multicast** — Uses multicast to find devices. May not work with complex network setups.",
+            "de": "**Ereignisgesteuert** — Echtzeit-UPnP-Abonnements. Weniger Traffic, schnellere Reaktion.\n\n**Legacy-Abfrage** — Alle 2 Sekunden. Vorhersagbarer bei problematischen Netzwerken.\n\n**Schnellstart** — Sofortige UI aus dem Cache, im Hintergrund \u{00FC}berpr\u{00FC}ft.\n\n**Klassisch** — Wartet auf Live-Erkennung. Immer aktuell.\n\n**Bonjour** — Verwendet Bonjour zur Erkennung von Sonos-Ger\u{00E4}ten.\n\n**Veraltetes Multicast** — Verwendet Multicast zur Ger\u{00E4}tefindung. Funktioniert m\u{00F6}glicherweise nicht mit komplexen Netzwerkkonfigurationen.",
+            "fr": "**Ev\u{00E9}nementiel** — Abonnements UPnP en temps r\u{00E9}el. Moins de trafic, r\u{00E9}ponse plus rapide.\n\n**Sondage legacy** — Toutes les 2 secondes. Plus pr\u{00E9}visible sur r\u{00E9}seaux probl\u{00E9}matiques.\n\n**D\u{00E9}marrage rapide** — UI instantan\u{00E9}e depuis le cache, v\u{00E9}rifi\u{00E9}e en arri\u{00E8}re-plan.\n\n**Classique** — Attend la d\u{00E9}couverte en direct. Toujours pr\u{00E9}cis.\n\n**Bonjour** — Utilise Bonjour pour d\u{00E9}couvrir les appareils Sonos.\n\n**Multidiffusion h\u{00E9}rit\u{00E9}e** — Utilise le multidiffusion pour trouver les appareils. Peut ne pas fonctionner avec des configurations r\u{00E9}seau complexes.",
+            "nl": "**Event-gestuurd** — Realtime UPnP-abonnementen. Minder verkeer, snellere respons.\n\n**Legacy polling** — Elke 2 seconden. Voorspelbaarder op probleem-netwerken.\n\n**Snelle start** — Directe UI uit cache, op achtergrond geverifieerd.\n\n**Klassiek** — Wacht op live-detectie. Altijd accuraat.\n\n**Bonjour** — Gebruikt Bonjour om Sonos-apparaten te detecteren.\n\n**Verouderd multicast** — Gebruikt multicast om apparaten te vinden. Werkt mogelijk niet met complexe netwerkopstellingen.",
+            "es": "**Event-Driven** — Suscripciones UPnP en tiempo real. Menos tr\u{00E1}fico, respuesta m\u{00E1}s r\u{00E1}pida.\n\n**Sondeo legacy** — Cada 2 segundos. M\u{00E1}s predecible en redes problem\u{00E1}ticas.\n\n**Arranque r\u{00E1}pido** — UI instant\u{00E1}nea desde cach\u{00E9}, verificada en segundo plano.\n\n**Cl\u{00E1}sico** — Espera a descubrimiento en vivo. Siempre preciso.\n\n**Bonjour** — Utiliza Bonjour para descubrir dispositivos Sonos.\n\n**Multidifusi\u{00F3}n heredada** — Utiliza multidifusi\u{00F3}n para encontrar dispositivos. Puede que no funcione con configuraciones de red complejas.",
+            "it": "**Event-Driven** — Sottoscrizioni UPnP in tempo reale. Meno traffico, risposta pi\u{00F9} rapida.\n\n**Polling legacy** — Ogni 2 secondi. Pi\u{00F9} prevedibile su reti problematiche.\n\n**Avvio rapido** — UI istantanea da cache, verificata in background.\n\n**Classico** — Attende la scoperta in tempo reale. Sempre accurato.\n\n**Bonjour** — Utilizza Bonjour per scoprire i dispositivi Sonos.\n\n**Multicast legacy** — Utilizza il multicast per trovare i dispositivi. Potrebbe non funzionare con configurazioni di rete complesse.",
+            "sv": "**H\u{00E4}ndelsedriven** — UPnP-prenumerationer i realtid. L\u{00E4}gre trafik, snabbare svar.\n\n**Gammaldags polling** — Varannan sekund. Mer f\u{00F6}rutsebart p\u{00E5} problemn\u{00E4}tverk.\n\n**Snabbstart** — Omedelbart UI fr\u{00E5}n cache, verifieras i bakgrunden.\n\n**Klassiskt** — V\u{00E4}ntar p\u{00E5} live-uppt\u{00E4}ckt. Alltid korrekt.\n\n**Bonjour** — Anv\u{00E4}nder Bonjour f\u{00F6}r att uppt\u{00E4}cka Sonos-enheter.\n\n**\u{00C4}ldre multicast** — Anv\u{00E4}nder multicast f\u{00F6}r att hitta enheter. Kanske inte fungerar med komplexa n\u{00E4}tverkskonfigurationer.",
+            "nb": "**Hendelsesstyrt** — Sanntid UPnP-abonnementer. Lavere trafikk, raskere respons.\n\n**Legacy-polling** — Hvert 2. sekund. Mer forutsigbart p\u{00E5} problemnettverk.\n\n**Hurtigstart** — Umiddelbart UI fra buffer, verifisert i bakgrunnen.\n\n**Klassisk** — Venter p\u{00E5} live-oppdagelse. Alltid n\u{00F8}yaktig.\n\n**Bonjour** — Bruker Bonjour til \u{00E5} oppdage Sonos-enheter.\n\n**Eldre multicast** — Bruker multicast for \u{00E5} finne enheter. Fungerer kanskje ikke med komplekse nettverkskonfigurasjoner.",
+            "da": "**H\u{00E6}ndelsesstyret** — Realtids UPnP-abonnementer. Lavere trafik, hurtigere respons.\n\n**Legacy-polling** — Hvert 2. sekund. Mere forudsigeligt p\u{00E5} problematiske netv\u{00E6}rk.\n\n**Hurtig start** — Omg\u{00E5}ende UI fra cache, verificeret i baggrunden.\n\n**Klassisk** — Venter p\u{00E5} live-opdagelse. Altid n\u{00F8}jagtigt.\n\n**Bonjour** — Bruger Bonjour til at opdage Sonos-enheder.\n\n**\u{00C6}ldre multicast** — Bruger multicast til at finde enheder. Virker muligvis ikke med komplekse netv\u{00E6}rksops\u{00E6}tninger.",
+            "ja": "**\u{30A4}\u{30D9}\u{30F3}\u{30C8}\u{99C6}\u{52D5}** — \u{30EA}\u{30A2}\u{30EB}\u{30BF}\u{30A4}\u{30E0} UPnP \u{30B5}\u{30D6}\u{30B9}\u{30AF}\u{30EA}\u{30D7}\u{30B7}\u{30E7}\u{30F3}\u{3002}\u{30C8}\u{30E9}\u{30D5}\u{30A3}\u{30C3}\u{30AF}\u{304C}\u{5C11}\u{306A}\u{304F}\u{3001}\u{5FDC}\u{7B54}\u{304C}\u{901F}\u{3044}\u{3067}\u{3059}\u{3002}\n\n**\u{30EC}\u{30AC}\u{30B7}\u{30FC}\u{30DD}\u{30FC}\u{30EA}\u{30F3}\u{30B0}** — 2 \u{79D2}\u{3054}\u{3068}\u{306B}\u{30AF}\u{30A8}\u{30EA}\u{3002}\u{554F}\u{984C}\u{306E}\u{3042}\u{308B}\u{30CD}\u{30C3}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{3067}\u{3088}\u{308A}\u{4E88}\u{6E2C}\u{53EF}\u{80FD}\u{3067}\u{3059}\u{3002}\n\n**\u{30AF}\u{30A4}\u{30C3}\u{30AF}\u{30B9}\u{30BF}\u{30FC}\u{30C8}** — \u{30AD}\u{30E3}\u{30C3}\u{30B7}\u{30E5}\u{304B}\u{3089}\u{5373}\u{5EA7}\u{306B} UI \u{3092}\u{8868}\u{793A}\u{3057}\u{3001}\u{30D0}\u{30C3}\u{30AF}\u{30B0}\u{30E9}\u{30A6}\u{30F3}\u{30C9}\u{3067}\u{78BA}\u{8A8D}\u{3057}\u{307E}\u{3059}\u{3002}\n\n**\u{30AF}\u{30E9}\u{30B7}\u{30C3}\u{30AF}** — \u{30E9}\u{30A4}\u{30D6}\u{691C}\u{51FA}\u{3092}\u{5F85}\u{3061}\u{307E}\u{3059}\u{3002}\u{5E38}\u{306B}\u{6B63}\u{78BA}\u{3067}\u{3059}\u{3002}\n\n**Bonjour** — Bonjour\u{3092}\u{4F7F}\u{7528}\u{3057}\u{3066}Sonos\u{30C7}\u{30D0}\u{30A4}\u{30B9}\u{3092}\u{691C}\u{51FA}\u{3057}\u{307E}\u{3059}\u{3002}\n\n**\u{30EC}\u{30AC}\u{30B7}\u{30FC}\u{30DE}\u{30EB}\u{30C1}\u{30AD}\u{30E3}\u{30B9}\u{30C8}** — \u{30DE}\u{30EB}\u{30C1}\u{30AD}\u{30E3}\u{30B9}\u{30C8}\u{3092}\u{4F7F}\u{7528}\u{3057}\u{3066}\u{30C7}\u{30D0}\u{30A4}\u{30B9}\u{3092}\u{691C}\u{7D22}\u{3057}\u{307E}\u{3059}\u{3002}\u{8907}\u{96D1}\u{306A}\u{30CD}\u{30C3}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{8A2D}\u{5B9A}\u{3067}\u{306F}\u{6A5F}\u{80FD}\u{3057}\u{306A}\u{3044}\u{5834}\u{5408}\u{304C}\u{3042}\u{308A}\u{307E}\u{3059}\u{3002}",
+            "pt": "**Orientado a eventos** — Assinaturas UPnP em tempo real. Menos tr\u{00E1}fego, resposta mais r\u{00E1}pida.\n\n**Polling legado** — A cada 2 segundos. Mais previs\u{00ED}vel em redes problem\u{00E1}ticas.\n\n**In\u{00ED}cio r\u{00E1}pido** — UI instant\u{00E2}neo do cache, verificado em segundo plano.\n\n**Cl\u{00E1}ssico** — Aguarda a descoberta ao vivo. Sempre preciso.\n\n**Bonjour** — Usa Bonjour para descobrir dispositivos Sonos.\n\n**Multicast legado** — Usa multicast para encontrar dispositivos. Pode n\u{00E3}o funcionar com configura\u{00E7}\u{00F5}es de rede complexas.",
+            "pl": "**Zdarzeniowy** — Subskrypcje UPnP w czasie rzeczywistym. Mniejszy ruch, szybsza odpowied\u{017A}.\n\n**Legacy polling** — Co 2 sekundy. Bardziej przewidywalne w problematycznych sieciach.\n\n**Szybki start** — Natychmiastowy UI z cache, weryfikowany w tle.\n\n**Klasyczny** — Czeka na wykrycie na \u{017C}ywo. Zawsze dok\u{0142}adny.\n\n**Bonjour** — U\u{017C}ywa Bonjour do odkrywania urz\u{0105}dze\u{0144} Sonos.\n\n**Starsze multicast** — U\u{017C}ywa multicast do wyszukiwania urz\u{0105}dze\u{0144}. Mo\u{017C}e nie dzia\u{0142}a\u{0107} z kompleksowymi konfiguracjami sieci.",
+            "zh-Hans": "**\u{4E8B}\u{4EF6}\u{9A71}\u{52A8}** — \u{5B9E}\u{65F6} UPnP \u{8BA2}\u{9605}\u{3002}\u{6D41}\u{91CF}\u{66F4}\u{4F4E}，\u{54CD}\u{5E94}\u{66F4}\u{5FEB}\u{3002}\n\n**\u{4F20}\u{7EDF}\u{8F6E}\u{8BE2}** — \u{6BCF} 2 \u{79D2}\u{67E5}\u{8BE2}\u{4E00}\u{6B21}\u{3002}\u{5728}\u{6709}\u{95EE}\u{9898}\u{7684}\u{7F51}\u{7EDC}\u{4E0A}\u{66F4}\u{53EF}\u{9884}\u{6D4B}\u{3002}\n\n**\u{5FEB}\u{901F}\u{542F}\u{52A8}** — \u{4ECE}\u{7F13}\u{5B58}\u{5373}\u{65F6}\u{663E}\u{793A}\u{754C}\u{9762}\u{FF0C}\u{540E}\u{53F0}\u{9A8C}\u{8BC1}\u{3002}\n\n**\u{7ECF}\u{5178}** — \u{7B49}\u{5F85}\u{5B9E}\u{65F6}\u{53D1}\u{73B0}\u{3002}\u{59CB}\u{7EC8}\u{51C6}\u{786E}\u{3002}\n\n**Bonjour** — \u{4F7F}\u{7528}Bonjour\u{53D1}\u{73B0}Sonos\u{8BBE}\u{5907}\u{3002}\n\n**\u{4F20}\u{7EDF}\u{591A}\u{64AD}** — \u{4F7F}\u{7528}\u{591A}\u{64AD}\u{67E5}\u{627E}\u{8BBE}\u{5907}\u{3002}\u{53EF}\u{80FD}\u{4E0D}\u{9002}\u{7528}\u{4E8E}\u{590D}\u{6742}\u{7684}\u{7F51}\u{7EDC}\u{8BBE}\u{7F6E}\u{3002}",
         ],
         "aboutCacheBody": [
             "en": "Speaker cache stores your room layout for instant startup. Artwork cache stores album art for faster browsing. Both rebuild automatically when cleared.",
