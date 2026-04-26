@@ -241,6 +241,9 @@
 				Base,
 			);
 			mainGroup = E10000;
+			packageReferences = (
+				D10020 /* XCLocalSwiftPackageReference "Packages/SonosKit" */,
+			);
 			productRefGroup = E10099 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -442,9 +445,17 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		D10020 /* XCLocalSwiftPackageReference "Packages/SonosKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/SonosKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		D10010 /* SonosKit */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = D10020 /* XCLocalSwiftPackageReference "Packages/SonosKit" */;
 			productName = SonosKit;
 		};
 /* End XCSwiftPackageProductDependency section */
