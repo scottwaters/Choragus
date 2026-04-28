@@ -87,7 +87,11 @@ struct ChoragusApp: App {
                 .onChange(of: sonosManager.appearanceMode) {
                     WindowManager.shared.colorScheme = colorScheme
                 }
-                .frame(minWidth: 640, minHeight: 450)
+                // Per-panel minimum widths are enforced from inside
+                // ContentView (`.frame(minWidth: requiredMinWidth, …)`)
+                // so the window floor tracks browse / queue visibility.
+                // Setting a static minimum here would lock the floor at
+                // that value and override the dynamic one.
                 .navigationTitle("Choragus")
                 .preferredColorScheme(colorScheme)
         }

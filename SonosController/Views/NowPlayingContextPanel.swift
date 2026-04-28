@@ -212,14 +212,25 @@ struct NowPlayingContextPanel: View {
                 lyricsOffsetToolbar
             }
         } else if let plain = lyrics.plainText {
+            // Plain (un-synced) lyrics — centred, larger text, normal
+            // scroll bar. Line spacing matches the breathing room of
+            // `SlidingLyricsView`'s 34pt row height.
+            let plainLines = plain
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .map(String.init)
             ScrollView {
-                Text(plain)
-                    .font(.body)
-                    .lineSpacing(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding(.vertical, 8)
+                VStack(spacing: 14) {
+                    ForEach(Array(plainLines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.title3)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
+            .textSelection(.enabled)
         }
     }
 
@@ -1004,3 +1015,4 @@ private struct SlidingLyricsView: View {
         )
     }
 }
+

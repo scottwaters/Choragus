@@ -370,9 +370,7 @@ struct ContentView: View {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
                         showBrowse.toggle()
-                        if showBrowse {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
-                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
                     } label: {
                         Image(systemName: "square.grid.2x2")
                     }
@@ -381,9 +379,7 @@ struct ContentView: View {
 
                     Button {
                         showQueue.toggle()
-                        if showQueue {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
-                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
                     } label: {
                         Image(systemName: "list.bullet")
                     }
@@ -460,15 +456,11 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .menuToggleBrowse)) { _ in
                 showBrowse.toggle()
-                if showBrowse {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
-                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .menuToggleQueue)) { _ in
                 showQueue.toggle()
-                if showQueue {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
-                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { ensureWindowFits() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .menuShowStats)) { _ in
                 WindowManager.shared.togglePlayHistory()
@@ -497,6 +489,13 @@ struct ContentView: View {
                 }
             }
         }
+        // Drives `NSWindow.minSize` from the visible-panel set.
+        // SwiftUI propagates the intrinsic min content size of the
+        // root view into the WindowGroup's window-level min, so when
+        // `requiredMinWidth` changes (showBrowse / showQueue toggle),
+        // the OS-level drag-resize floor moves with it — including
+        // shrinking when panels are hidden.
+        .frame(minWidth: requiredMinWidth, minHeight: 450)
     }
 
     private func handlePlayPause() {
