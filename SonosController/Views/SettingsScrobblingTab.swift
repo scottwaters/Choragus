@@ -14,6 +14,7 @@ import SonosKit
 struct SettingsScrobblingTab: View {
     @EnvironmentObject var scrobbleManager: ScrobbleManager
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
+    @EnvironmentObject var sonosManager: SonosManager
     @ObservedObject var lastfm: LastFMScrobbler
 
     // Local state for credential entry / test / connect flow.
@@ -36,11 +37,24 @@ struct SettingsScrobblingTab: View {
     // collections of tracks that already come from one of these actual
     // sources. Including them here would just mis-label what the filter
     // is actually matching against.
-    private let knownMusicServices: [String] = [
-        "Local Library",
-        "TuneIn", "Sonos Radio", "Calm Radio",
-        "Apple Music", "Amazon Music", "Spotify", "SoundCloud", "YouTube Music"
-    ]
+    //
+    // The list is derived from `ServiceID.knownNames` so it stays in
+    // sync with the services the rest of the app supports. Plus
+    // "Local Library" which isn't a streaming service but is a
+    // legitimate source. TuneIn (254) and TuneIn (New) (333) collapse
+    // to a single "TuneIn" string in `knownNames`, so the dedupe is
+    // automatic.
+    private var knownMusicServices: [String] {
+        var seen: Set<String> = []
+        var out: [String] = ["Local Library"]
+        seen.insert("Local Library")
+        // Sort by name for predictable UI ordering.
+        let services = ServiceID.knownNames.values.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        for name in services where seen.insert(name).inserted {
+            out.append(name)
+        }
+        return out
+    }
 
     enum TestStatus: Equatable {
         case notRun
@@ -97,13 +111,13 @@ struct SettingsScrobblingTab: View {
                 if enabled {
                     VStack(alignment: .leading, spacing: 10) {
                     Text(L10n.lastFMCredentialsIntro)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Link(L10n.openLastFMRegistration,
                          destination: URL(string: "https://www.last.fm/api/account/create")!)
-                        .font(.caption)
+                        .font(.callout)
 
                     HStack {
                         Text(L10n.apiKey).frame(width: 110, alignment: .trailing)
@@ -151,7 +165,7 @@ struct SettingsScrobblingTab: View {
                             .disabled(testStatus != .passed || isConnecting)
                         }
                         if let err = connectError {
-                            Text(err).font(.caption).foregroundStyle(.red).lineLimit(2)
+                            Text(err).font(.callout).foregroundStyle(.red).lineLimit(2)
                         }
                     }
 
@@ -159,9 +173,9 @@ struct SettingsScrobblingTab: View {
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
-                            .font(.caption)
+                            .font(.callout)
                         Text(L10n.doubleScrobbleWarning)
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -177,7 +191,7 @@ struct SettingsScrobblingTab: View {
                 Text("Last.fm").fontWeight(.semibold)
                 if lastfm.isConnected, let name = lastfm.connectedUsername {
                     Text("· \(name)")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -191,12 +205,12 @@ struct SettingsScrobblingTab: View {
         case .passed:
             HStack(spacing: 4) {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                Text(L10n.credentialsValid).font(.caption).foregroundStyle(.secondary)
+                Text(L10n.credentialsValid).font(.callout).foregroundStyle(.secondary)
             }
         case .failed(let msg):
             HStack(spacing: 4) {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                Text(msg).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Text(msg).font(.callout).foregroundStyle(.secondary).lineLimit(2)
             }
         }
     }
@@ -236,13 +250,13 @@ struct SettingsScrobblingTab: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.sources).font(.headline)
             Text(L10n.sourcesDescription)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
 
             let rooms = distinctRooms()
             if rooms.isEmpty {
                 Text(L10n.noRoomsInHistory)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.tertiary)
             } else {
                 FlowingChecklist(items: rooms, selected: $selectedRooms) { updated in
@@ -253,13 +267,26 @@ struct SettingsScrobblingTab: View {
     }
 
     private func distinctRooms() -> [String] {
-        // Each room name may be a composite "A + B + C"; decompose and dedupe.
-        let raw = playHistoryManager.repo.distinctGroupNames()
+        // Union of historical group names (decomposed from "A + B + C"
+        // composites) and currently-discovered speakers. History alone
+        // hides newly-added rooms that haven't played anything yet;
+        // live-only would hide rooms that have played in the past but
+        // are offline right now. Showing both lets the user pre-select
+        // rooms they expect to scrobble even before any plays land.
+        let historyRaw = playHistoryManager.repo.distinctGroupNames()
         var seen: Set<String> = []
         var out: [String] = []
-        for name in raw {
+        for name in historyRaw {
             for part in name.components(separatedBy: " + ") {
                 let trimmed = part.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty && seen.insert(trimmed).inserted {
+                    out.append(trimmed)
+                }
+            }
+        }
+        for group in sonosManager.groups {
+            for member in group.members {
+                let trimmed = member.roomName.trimmingCharacters(in: .whitespaces)
                 if !trimmed.isEmpty && seen.insert(trimmed).inserted {
                     out.append(trimmed)
                 }
@@ -274,7 +301,7 @@ struct SettingsScrobblingTab: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.musicServicesToScrobble).font(.headline)
             Text(L10n.musicServicesDescription)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
 
             FlowingChecklist(items: knownMusicServices, selected: $selectedMusicServices) { updated in
@@ -293,7 +320,14 @@ struct SettingsScrobblingTab: View {
             ))
 
             let pending = scrobbleManager.pendingCount(for: lastfm)
+            let preview = scrobbleManager.previewPending(for: lastfm)
             let stats = scrobbleManager.stats(for: lastfm)
+            // The "pending" count from the repository is the raw row
+            // count — it includes rows that current filters will skip.
+            // Show eligible (will-actually-submit) primarily and the
+            // filtered-out delta in parens so the user understands why
+            // the number won't drop after a manual scrobble.
+            let filteredOut = preview.filteredByRoom + preview.filteredByMusicService
 
             HStack(spacing: 16) {
                 Button(action: { Task { await scrobbleManager.scrobblePending() } }) {
@@ -303,9 +337,17 @@ struct SettingsScrobblingTab: View {
                         Text(L10n.scrobblePendingNow)
                     }
                 }
-                .disabled(scrobbleManager.isScrobbling || pending == 0)
+                .disabled(scrobbleManager.isScrobbling || preview.eligible == 0)
 
-                Text("\(pending) \(L10n.pending)").font(.caption).foregroundStyle(.secondary)
+                // TODO: localize (English-only for now)
+                if filteredOut > 0 {
+                    Text("\(preview.eligible) pending (\(filteredOut) filtered)")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .help("\(pending) total pending rows. \(preview.eligible) match the current room/service filters and will submit; \(filteredOut) are excluded by your filter selections.")
+                } else {
+                    Text("\(pending) \(L10n.pending)").font(.callout).foregroundStyle(.secondary)
+                }
             }
 
             HStack(spacing: 18) {
@@ -325,11 +367,11 @@ struct SettingsScrobblingTab: View {
                     .help(L10n.resetIgnoredTooltip)
                 }
             }
-            .font(.caption)
+            .font(.callout)
 
             if let err = scrobbleManager.lastRunError {
                 Text("\(L10n.lastRunLabel) \(err)")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.red)
                     .lineLimit(2)
             }
@@ -363,7 +405,7 @@ struct SettingsScrobblingTab: View {
                               systemImage: "slash.circle")
                             .foregroundStyle(.secondary)
                     }
-                    .font(.caption)
+                    .font(.callout)
 
                     if !preview.sampleFilteredByRoom.isEmpty {
                         let rooms = scrobbleManager.enabledRooms.sorted().joined(separator: ", ")
@@ -383,7 +425,7 @@ struct SettingsScrobblingTab: View {
                 }
                 .padding(.top, 4)
             }
-            .font(.caption)
+            .font(.callout)
         }
     }
 
@@ -394,11 +436,11 @@ struct SettingsScrobblingTab: View {
         detail: @escaping (PlayHistoryEntry) -> String
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.caption2).foregroundStyle(.secondary).padding(.top, 4)
+            Text(title).font(.callout).foregroundStyle(.secondary).padding(.top, 4)
             ForEach(entries) { e in
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("\(e.artist) — \(e.title)").font(.caption2).lineLimit(1)
-                    Text(detail(e)).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                    Text("\(e.artist) — \(e.title)").font(.callout).lineLimit(1)
+                    Text(detail(e)).font(.callout).foregroundStyle(.tertiary).lineLimit(1)
                 }
             }
         }
@@ -425,27 +467,27 @@ struct SettingsScrobblingTab: View {
                                   ? "exclamationmark.triangle"
                                   : "slash.circle")
                                 .foregroundStyle(row.state == .failedRetryable ? .orange : .secondary)
-                                .font(.caption)
+                                .font(.callout)
                                 .frame(width: 14)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text("\(row.artist) — \(row.title)")
-                                    .font(.caption)
+                                    .font(.callout)
                                     .lineLimit(1)
                                 Text(row.reason ?? L10n.noReasonRecorded)
-                                    .font(.caption2)
+                                    .font(.callout)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
                             Spacer()
                             Text(row.timestamp, style: .date)
-                                .font(.caption2)
+                                .font(.callout)
                                 .foregroundStyle(.tertiary)
                         }
                     }
                 }
                 .padding(.top, 4)
             }
-            .font(.caption)
+            .font(.callout)
         }
     }
 }

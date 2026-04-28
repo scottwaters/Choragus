@@ -14,8 +14,25 @@ public protocol SOAPClientProtocol {
         path: String,
         service: String,
         action: String,
-        arguments: [(String, String)]
+        arguments: [(String, String)],
+        timeoutSeconds: TimeInterval?
     ) async throws -> [String: String]
+}
+
+public extension SOAPClientProtocol {
+    /// Back-compat shim — older call sites that don't supply
+    /// `timeoutSeconds` continue to use the session-level default.
+    func send(
+        to baseURL: URL,
+        path: String,
+        service: String,
+        action: String,
+        arguments: [(String, String)] = []
+    ) async throws -> [String: String] {
+        try await send(to: baseURL, path: path, service: service,
+                       action: action, arguments: arguments,
+                       timeoutSeconds: nil)
+    }
 }
 
 // MARK: - Image Cache
@@ -51,6 +68,21 @@ public protocol SonosCacheProtocol {
 public protocol AlbumArtSearchProtocol {
     func searchArtwork(artist: String, album: String) async -> String?
     func searchRadioTrackArt(artist: String, title: String) async -> String?
+
+    /// Patient variant — waits up to `maxWait` seconds when the iTunes rate
+    /// limiter's soft window would otherwise drop the call. Used for
+    /// background sweeps (history backfill) where every entry matters and
+    /// completing in 5–10 minutes beats dropping 80 % of them.
+    /// Hard `.cooldown` still fails fast.
+    func searchArtwork(artist: String, album: String, maxWait: TimeInterval) async -> String?
+}
+
+public extension AlbumArtSearchProtocol {
+    func searchArtwork(artist: String, album: String, maxWait: TimeInterval) async -> String? {
+        // Default falls through to fail-fast variant for any conformer that
+        // doesn't override — keeps the protocol non-breaking.
+        await searchArtwork(artist: artist, album: album)
+    }
 }
 
 // MARK: - Playback Service (SRP: transport control only)
@@ -197,6 +229,9 @@ public protocol TransportStateProviding {
     // MARK: Art cache
     func cacheArtURL(_ artURL: String, forURI uri: String, title: String, itemID: String)
     func lookupCachedArt(uri: String?, title: String) -> String?
+
+    // MARK: Album art search (injectable iTunes lookup; tests provide stub)
+    var albumArtSearch: AlbumArtSearchProtocol { get }
 
     // MARK: Metadata update (with merge logic)
     func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata)

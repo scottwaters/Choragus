@@ -184,6 +184,7 @@ public enum Timing {
 public enum UDKey {
     public static let startupMode = "startupMode"
     public static let communicationMode = "communicationMode"
+    public static let discoveryMode = "discoveryMode"
     public static let appearanceMode = "appearanceMode"
     public static let appLanguage = "appLanguage"
     public static let lastSelectedGroupID = "lastSelectedGroupID"
@@ -191,6 +192,14 @@ public enum UDKey {
     public static let playHistoryEnabled = "playHistoryEnabled"
     public static let playHistoryEnabledSet = "playHistoryEnabledSet"
     public static let smapiEnabled = "smapiEnabled"
+    /// When true (default) AND direct Plex is authenticated, the Plex
+    /// sidebar entry routes to PlexDirectBrowseView instead of the SMAPI
+    /// relay. Toggle exposed in MusicServicesView when both auths exist.
+    public static let plexPreferDirect = "plex.preferDirect"
+    /// Mouse-wheel volume control over the Now Playing area.
+    public static let scrollVolumeEnabled = "scrollVolumeEnabled"
+    /// Middle-click mute toggle over the Now Playing area.
+    public static let middleClickMuteEnabled = "middleClickMuteEnabled"
     public static let imageCacheMaxSizeMB = "imageCacheMaxSizeMB"
     public static let imageCacheMaxAgeDays = "imageCacheMaxAgeDays"
     public static let classicShuffleEnabled = "classicShuffleEnabled"
@@ -310,11 +319,15 @@ public enum QueueChangeKey {
 // MARK: - App Support Directory
 
 public enum AppPaths {
-    /// Returns the SonosController directory in Application Support, creating it if needed
+    /// Returns the Choragus directory in Application Support, creating it if needed.
+    /// (Pre-rename builds used a `SonosController` directory at the same parent.
+    /// In the sandboxed build the new bundle ID gets a fresh container, so cross-
+    /// directory access doesn't apply — the old directory is in the old bundle's
+    /// container and isn't visible to the renamed app.)
     public static var appSupportDirectory: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        let dir = appSupport.appendingPathComponent("SonosController", isDirectory: true)
+        let dir = appSupport.appendingPathComponent("Choragus", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

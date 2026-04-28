@@ -85,7 +85,10 @@ final class NowPlayingViewModel {
     init(sonosManager: any NowPlayingServices, group: SonosGroup, playHistoryManager: PlayHistoryManager? = nil) {
         self.sonosManager = sonosManager
         self.group = group
-        self.art = ArtResolver(playHistoryManager: playHistoryManager)
+        self.art = ArtResolver(
+            playHistoryManager: playHistoryManager,
+            albumArtSearch: sonosManager.albumArtSearch
+        )
     }
 
     // MARK: - Transport Actions
@@ -156,12 +159,17 @@ final class NowPlayingViewModel {
             speakerMutes[member.id] = newMuted
             sonosManager.updateDeviceMute(member.id, muted: newMuted)
         }
+        let members = group.members
         Task {
-            for member in group.members {
-                do {
-                    try await sonosManager.setMute(device: member, muted: newMuted)
-                } catch {
-                    sonosDebugLog("[NOW-PLAYING] setMute failed for \(member.roomName): \(error)")
+            await withTaskGroup(of: Void.self) { tg in
+                for member in members {
+                    tg.addTask {
+                        do {
+                            try await self.sonosManager.setMute(device: member, muted: newMuted)
+                        } catch {
+                            sonosDebugLog("[NOW-PLAYING] setMute failed for \(member.roomName): \(error)")
+                        }
+                    }
                 }
             }
         }
@@ -222,13 +230,24 @@ final class NowPlayingViewModel {
     }
 
     func commitVolume() {
+        // Per-device SOAPs in parallel — for a group of N speakers a
+        // serial loop took N × ~150 ms (the cumulative SOAP round-trip
+        // time), which read as sluggish on 3+ speaker groups. TaskGroup
+        // fires them concurrently so the whole commit completes in one
+        // round-trip instead of N.
+        let members = group.members
+        let snapshot = speakerVolumes
         Task {
-            for member in group.members {
-                let vol = Int(speakerVolumes[member.id] ?? 0)
-                do {
-                    try await sonosManager.setVolume(device: member, volume: vol)
-                } catch {
-                    sonosDebugLog("[NOW-PLAYING] commitVolume failed for \(member.roomName): \(error)")
+            await withTaskGroup(of: Void.self) { tg in
+                for member in members {
+                    let vol = Int(snapshot[member.id] ?? 0)
+                    tg.addTask {
+                        do {
+                            try await self.sonosManager.setVolume(device: member, volume: vol)
+                        } catch {
+                            sonosDebugLog("[NOW-PLAYING] commitVolume failed for \(member.roomName): \(error)")
+                        }
+                    }
                 }
             }
         }
@@ -494,9 +513,17 @@ final class NowPlayingViewModel {
         let hasLocalOnlyArt = hasArt && (metadata.albumArtURI?.contains("/getaa?") ?? false)
         // For service tracks with persistent art URLs, no search needed —
         // pin the metadata URL as the canonical answer for this track.
+        //
+        // EXCEPT on radio: `albumArtURI` for a radio stream is the
+        // station's logo URL, not track-specific art. Pinning it
+        // shadows the `radioTrackArtURL` that `searchRadioTrackArt`
+        // resolves async — the user sees the station logo even when
+        // we've successfully found cover art for the song.
+        let onRadio = !metadata.stationName.isEmpty || metadata.isRadioStream
         if hasArt && !hasLocalOnlyArt {
             art.clearWebArt()
-            if let artStr = metadata.albumArtURI, let url = URL(string: artStr) {
+            if !onRadio,
+               let artStr = metadata.albumArtURI, let url = URL(string: artStr) {
                 art.markArtResolved(for: metadata, url: url)
             }
             return
@@ -510,7 +537,8 @@ final class NowPlayingViewModel {
         // Toni Braxton album for a Joe track) from overriding correct art.
         if hasLocalOnlyArt {
             art.clearWebArt()
-            if let artStr = metadata.albumArtURI, let url = URL(string: artStr) {
+            if !onRadio,
+               let artStr = metadata.albumArtURI, let url = URL(string: artStr) {
                 art.markArtResolved(for: metadata, url: url)
             }
             return
@@ -544,13 +572,13 @@ final class NowPlayingViewModel {
         let effectiveSearch = cleanedSearchTerm.isEmpty ? searchTerm : cleanedSearchTerm
 
         Task {
-            var foundArt = await AlbumArtSearchService.shared.searchArtwork(
+            var foundArt = await sonosManager.albumArtSearch.searchArtwork(
                 artist: artist, album: effectiveSearch
             )
 
             // If no result, try artist only
             if foundArt == nil, !artist.isEmpty {
-                foundArt = await AlbumArtSearchService.shared.searchArtwork(
+                foundArt = await sonosManager.albumArtSearch.searchArtwork(
                     artist: artist, album: ""
                 )
             }
@@ -583,11 +611,20 @@ final class NowPlayingViewModel {
         // re-evaluate radio track art while paused; the existing art stays.
         guard transportState.isActive else { return }
 
-        guard !metadata.stationName.isEmpty,
-              !metadata.title.isEmpty,
-              metadata.title != metadata.stationName,
-              !metadata.isAdBreak else {
+        // Real "no current track" cases — clear and bail.
+        if metadata.stationName.isEmpty || metadata.isAdBreak {
             art.clearRadioTrackArt()
+            return
+        }
+        // Transient empty/echoed title while still on the same station —
+        // don't clear `radioTrackArtURL`, just don't re-search. Holds the
+        // last-good track art across the metadata blip instead of flicking
+        // back to the station logo. Without this, every poll where the
+        // title hasn't repopulated yet (or matches the station name as a
+        // placeholder) clears the art and the next iTunes search may not
+        // re-resolve it (e.g. tracks where the radio's "artist" tag is the
+        // composer/conductor, not the recording artist).
+        if metadata.title.isEmpty || metadata.title == metadata.stationName {
             return
         }
         let key = "\(metadata.title)|\(metadata.artist)"
@@ -601,9 +638,10 @@ final class NowPlayingViewModel {
         // since it often contains the movie/album name (e.g. "Tristania (Troia Troy)")
         let searchTitle = metadata.title
         Task {
-            if let artURL = await AlbumArtSearchService.shared.searchRadioTrackArt(
+            if let artURL = await sonosManager.albumArtSearch.searchRadioTrackArt(
                 artist: artist, title: searchTitle
             ) {
+                sonosDebugLog("[ART/RADIO] resolved \(searchTitle) – \(artist) → \(artURL.prefix(80))")
                 art.setRadioTrackArt(URL(string: artURL))
                 art.playHistoryManager?.updateArtwork(
                     forTitle: metadata.title, artist: metadata.artist, artURL: artURL
@@ -611,6 +649,7 @@ final class NowPlayingViewModel {
                 // Cache so menu bar and other views can find it
                 sonosManager.cacheArtURL(artURL, forURI: metadata.trackURI ?? "", title: metadata.title, itemID: "")
             } else {
+                sonosDebugLog("[ART/RADIO] no result for \(searchTitle) – \(artist)")
                 art.setRadioTrackArt(nil)
             }
         }

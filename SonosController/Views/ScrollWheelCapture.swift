@@ -23,38 +23,52 @@ import SonosKit
 /// overlay transparent to normal mouse interaction while still receiving
 /// scroll and middle-click.
 struct ScrollWheelCapture: NSViewRepresentable {
+    let captureScroll: Bool
+    let captureMiddleClick: Bool
     let onScroll: (CGFloat) -> Void
     let onMiddleClick: () -> Void
 
     func makeNSView(context: Context) -> NSView {
         let view = CaptureView()
-        view.configure(onScroll: onScroll, onMiddleClick: onMiddleClick)
+        view.configure(captureScroll: captureScroll,
+                       captureMiddleClick: captureMiddleClick,
+                       onScroll: onScroll, onMiddleClick: onMiddleClick)
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? CaptureView)?.configure(onScroll: onScroll, onMiddleClick: onMiddleClick)
+        (nsView as? CaptureView)?.configure(captureScroll: captureScroll,
+                                            captureMiddleClick: captureMiddleClick,
+                                            onScroll: onScroll, onMiddleClick: onMiddleClick)
     }
 
     private final class CaptureView: NSView {
+        private var captureScroll: Bool = false
+        private var captureMiddleClick: Bool = false
         private var onScroll: (CGFloat) -> Void = { _ in }
         private var onMiddleClick: () -> Void = { }
 
-        func configure(onScroll: @escaping (CGFloat) -> Void, onMiddleClick: @escaping () -> Void) {
+        func configure(captureScroll: Bool, captureMiddleClick: Bool,
+                       onScroll: @escaping (CGFloat) -> Void,
+                       onMiddleClick: @escaping () -> Void) {
+            self.captureScroll = captureScroll
+            self.captureMiddleClick = captureMiddleClick
             self.onScroll = onScroll
             self.onMiddleClick = onMiddleClick
         }
 
         override func hitTest(_ point: NSPoint) -> NSView? {
-            // Claim only the two event types we're here to handle. Everything
-            // else (clicks, right-clicks, drags, hovers) passes through to
-            // SwiftUI content underneath the overlay.
+            // Claim only the event types whose feature flag is currently
+            // enabled. With scroll disabled in Settings, scroll events
+            // must fall through to the underlying SwiftUI ScrollView —
+            // otherwise the overlay swallows the event for the (no-op)
+            // handler and the user can't scroll the page.
             guard let event = NSApp.currentEvent else { return nil }
             switch event.type {
             case .scrollWheel:
-                return self
+                return captureScroll ? self : nil
             case .otherMouseDown, .otherMouseUp where event.buttonNumber == 2:
-                return self
+                return captureMiddleClick ? self : nil
             default:
                 return nil
             }
@@ -81,6 +95,11 @@ extension View {
     /// toggles to `onToggleMute`. Foreground controls (buttons, sliders)
     /// continue to work normally because the capture is installed as a
     /// background layer.
+    ///
+    /// Each handler is gated by its own UserDefaults toggle
+    /// (`UDKey.scrollVolumeEnabled`, `UDKey.middleClickMuteEnabled`) so
+    /// a user who finds either gesture confusing can disable it from
+    /// Settings without losing the other.
     func volumeScrollControl(
         onVolumeStep: @escaping (Int) -> Void,
         onToggleMute: @escaping () -> Void
@@ -93,16 +112,24 @@ private struct VolumeScrollControlModifier: ViewModifier {
     let onVolumeStep: (Int) -> Void
     let onToggleMute: () -> Void
     @State private var accumulator = ScrollVolumeAccumulator()
+    @AppStorage(UDKey.scrollVolumeEnabled) private var scrollEnabled = false
+    @AppStorage(UDKey.middleClickMuteEnabled) private var middleClickEnabled = true
 
     func body(content: Content) -> some View {
-        content.overlay(
-            ScrollWheelCapture(
-                onScroll: { deltaY in
-                    let step = accumulator.consume(deltaY: deltaY)
-                    if step != 0 { onVolumeStep(step) }
-                },
-                onMiddleClick: { onToggleMute() }
+        if !scrollEnabled && !middleClickEnabled {
+            content
+        } else {
+            content.overlay(
+                ScrollWheelCapture(
+                    captureScroll: scrollEnabled,
+                    captureMiddleClick: middleClickEnabled,
+                    onScroll: { deltaY in
+                        let step = accumulator.consume(deltaY: deltaY)
+                        if step != 0 { onVolumeStep(step) }
+                    },
+                    onMiddleClick: { onToggleMute() }
+                )
             )
-        )
+        }
     }
 }

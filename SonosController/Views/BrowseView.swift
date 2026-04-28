@@ -120,6 +120,10 @@ struct BrowseView: View {
                     CalmRadioBrowseView(group: group)
                 } else if current.objectID == "SONOSRADIOPROMPT:" {
                     SonosRadioSearchView(group: group)
+                } else if current.objectID.hasPrefix("PLEXDIRECT:") {
+                    PlexDirectBrowseView(group: group)
+                } else if current.objectID == "LINEIN:" {
+                    LineInBrowseView(group: group)
                 } else if current.objectID.hasPrefix("SMAPISEARCHPROMPT:") {
                     let sidStr = current.objectID.replacingOccurrences(of: "SMAPISEARCHPROMPT:", with: "")
                     let sid = Int(sidStr) ?? 0
@@ -237,6 +241,7 @@ struct BrowseSectionsView: View {
     @EnvironmentObject var sonosManager: SonosManager
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
+    @EnvironmentObject var plexAuth: PlexAuthManager
     let group: SonosGroup?
     let onNavigate: (BrowseDestination) -> Void
 
@@ -280,12 +285,55 @@ struct BrowseSectionsView: View {
         if sonosRadioEnabled {
             entries.append(ServiceSearchEntry(key: "sonosradio", title: "Sonos Radio", objectID: "SONOSRADIOPROMPT:", icon: "antenna.radiowaves.left.and.right"))
         }
+        // Plex's two flavors are wholly independent — Local (direct PMS
+        // via PlexAuthManager PIN flow) and Cloud (SMAPI relay). Show
+        // each in the sidebar only when its own auth is in place.
+        // User can connect 0, 1, or 2 of them.
+        let hasDirectPlex = plexAuth.isAuthenticated
+        let hasSMAPIPlex = smapiSearchableServices.contains { $0.id == ServiceID.plex }
+
         for service in smapiSearchableServices {
+            // Plex SMAPI is added separately below as "Plex – Cloud" so
+            // we don't double-list it as plain "Plex" + a flavored one.
+            if service.id == ServiceID.plex { continue }
             entries.append(ServiceSearchEntry(
                 key: "smapi:\(service.id)",
                 title: service.name,
                 objectID: "SMAPISEARCHPROMPT:\(service.id)",
                 icon: "magnifyingglass"
+            ))
+        }
+        if hasDirectPlex {
+            entries.append(ServiceSearchEntry(
+                key: "plex.local",
+                title: "Plex – Local",
+                objectID: "PLEXDIRECT:",
+                icon: "magnifyingglass"
+            ))
+        }
+        if hasSMAPIPlex {
+            entries.append(ServiceSearchEntry(
+                key: "plex.cloud",
+                title: "Plex – Cloud",
+                objectID: "SMAPISEARCHPROMPT:\(ServiceID.plex)",
+                icon: "magnifyingglass"
+            ))
+        }
+        // Line-In: shown whenever the household has any speaker with
+        // analog or TV input capability. We iterate `devices` (all
+        // discovered SSDP devices) rather than `groups.members` —
+        // model names live on the `_MR` MediaRenderer entries which
+        // aren't represented in group membership, so a group-only
+        // scan misses them and the entry never appeared.
+        let anyInputCapable = sonosManager.devices.values.contains {
+            LineInBrowseView.isInputCapable(modelName: $0.modelName)
+        }
+        if anyInputCapable {
+            entries.append(ServiceSearchEntry(
+                key: "linein",
+                title: "Line-In",
+                objectID: "LINEIN:",
+                icon: "cable.connector.horizontal"
             ))
         }
         return ServiceSearchOrder.ordered(entries)
@@ -448,6 +496,83 @@ struct BrowseListView: View {
     private var filteredItems: [BrowseItem] { vm.filteredItems }
     private func serviceLabel(for item: BrowseItem) -> String? { vm.serviceLabel(for: item) }
 
+    /// True when the (filtered) result list contains anything that can
+    /// be played as-is — gates the bulk-action bar visibility. Albums
+    /// with a `cpcontainer:` URI count too, since the speaker can
+    /// expand them server-side.
+    private var hasPlayableTracks: Bool {
+        vm.filteredItems.contains { item in
+            (item.resourceURI != nil && !item.isContainer) ||
+            item.itemClass == .musicAlbum
+        }
+    }
+
+    /// Top-of-list bulk actions — Play All / Add All to Queue /
+    /// Play Next. Same shape and copy as the other browse views so
+    /// the behaviour is consistent across local library, favourites,
+    /// SMAPI service search, and Plex Direct.
+    private var bulkActionBar: some View {
+        HStack(spacing: 6) {
+            // TODO: localize (English-only for now)
+            Button { Task { await playAllNow() } } label: {
+                Label("Play All", systemImage: "play.fill")
+            }
+            .controlSize(.small)
+            Button { Task { await addAllToQueue(playNext: false) } } label: {
+                Label("Add All to Queue", systemImage: "text.append")
+            }
+            .controlSize(.small)
+            Button { Task { await addAllToQueue(playNext: true) } } label: {
+                Label("Play Next", systemImage: "text.insert")
+            }
+            .controlSize(.small)
+            Spacer()
+            Text("\(vm.filteredItems.count) item\(vm.filteredItems.count == 1 ? "" : "s")")
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    /// Collects a flat playable list from the current filtered items.
+    /// Containers with a `cpcontainer:` URI (Spotify/Apple Music
+    /// albums/playlists from SMAPI search results) pass straight
+    /// through — `addBrowseItemsToQueue` lets the speaker expand them
+    /// server-side. Bare containers (local library albums browsed via
+    /// UPnP) need a child fetch first; for now we send those as-is and
+    /// let `playBrowseItem`'s container path handle the queue switch.
+    private func collectPlayable() -> [BrowseItem] {
+        vm.filteredItems.filter { item in
+            (item.resourceURI != nil && !item.isContainer) ||
+            item.itemClass == .musicAlbum
+        }
+    }
+
+    private func playAllNow() async {
+        guard let group = vm.group else { return }
+        let items = collectPlayable()
+        guard !items.isEmpty else { return }
+        do {
+            try await sonosManager.playItemsReplacingQueue(items, in: group)
+        } catch {
+            sonosDebugLog("[BROWSE] playAllNow failed: \(error)")
+            vm.playbackError = "Couldn't play all: \(error.localizedDescription)"
+        }
+    }
+
+    private func addAllToQueue(playNext: Bool) async {
+        guard let group = vm.group else { return }
+        let items = collectPlayable()
+        guard !items.isEmpty else { return }
+        do {
+            _ = try await sonosManager.addBrowseItemsToQueue(items, in: group, playNext: playNext)
+        } catch {
+            sonosDebugLog("[BROWSE] addAllToQueue failed: \(error)")
+            vm.playbackError = "Couldn't add all: \(error.localizedDescription)"
+        }
+    }
+
     var body: some View {
         Group {
             if vm.isLoading && vm.items.isEmpty {
@@ -488,7 +613,7 @@ struct BrowseListView: View {
                                 vm.playbackError = nil
                             } label: {
                                 Image(systemName: "xmark")
-                                    .font(.caption2)
+                                    .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
@@ -516,6 +641,17 @@ struct BrowseListView: View {
                         Divider()
                     }
 
+                    // Bulk-action bar — Play All / Add All / Play Next.
+                    // Same shape and copy as PlexDirectBrowseView and
+                    // SMAPIServiceSearchView so behaviour reads the same
+                    // across every browse surface (local library, Sonos
+                    // Favorites, service results — wherever lots of
+                    // tracks land in one view).
+                    if hasPlayableTracks {
+                        bulkActionBar
+                        Divider()
+                    }
+
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(vm.filteredItems) { item in
@@ -539,7 +675,7 @@ struct BrowseListView: View {
                                 .overlay(alignment: .trailing) {
                                     if item.requiresService {
                                         Text(L10n.requiresSonosApp)
-                                            .font(.caption2)
+                                            .font(.footnote)
                                             .foregroundStyle(.orange)
                                             .padding(.trailing, 12)
                                     }
@@ -748,7 +884,7 @@ struct BrowseItemRow: View {
                         playlistServiceTags(services: services)
                     } else if let source = sourceLabel {
                         Text(source)
-                            .font(.caption2)
+                            .font(.footnote)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
@@ -778,7 +914,7 @@ struct BrowseItemRow: View {
                 Task { await loadMissingArt() }
             }
         }
-        .onReceive(sonosManager.$discoveredArtURLs) { _ in
+        .onReceive(sonosManager.artCache.$discoveredArtURLs) { _ in
             if resolvedArtURL == nil && item.albumArtURI == nil {
                 checkArtCache()
             }
@@ -804,7 +940,7 @@ struct BrowseItemRow: View {
 
         ForEach(visible, id: \.self) { service in
             Text(service)
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
@@ -813,7 +949,7 @@ struct BrowseItemRow: View {
 
         if overflow > 0 {
             Text("+\(overflow)")
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
@@ -837,7 +973,7 @@ private struct FilterChip: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.caption2)
+                .font(.footnote)
                 .fontWeight(isSelected ? .semibold : .regular)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -918,6 +1054,15 @@ struct AppleMusicSearchView: View {
     @State private var navStack: [AMLevel] = []
     @State private var itemsCache: [Int: [BrowseItem]] = [:]
     @State private var sortOrder: SearchSortOrder = .relevance
+    @State private var throttleSnapshot: ITunesRateLimiter.Snapshot?
+    @State private var bulkActionInFlight = false
+
+    private static let cooldownTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        return f
+    }()
 
     private var currentLevel: AMLevel { navStack.last ?? .search }
 
@@ -1025,7 +1170,19 @@ struct AppleMusicSearchView: View {
             }
 
             // Content
-            if isLoading {
+            if let snap = throttleSnapshot, !snap.isAvailable, let until = snap.cooldownUntil {
+                VStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.orange)
+                    Text(L10n.appleMusicSearchUnavailable)
+                        .font(.headline)
+                    Text(L10n.appleMusicResumesAt(Self.cooldownTimeFormatter.string(from: until)))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if isLoading {
                 ProgressView(navStack.isEmpty ? "Searching Apple Music..." : "Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if items.isEmpty && (hasSearched || !navStack.isEmpty) {
@@ -1048,6 +1205,10 @@ struct AppleMusicSearchView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                if hasPlayableContent {
+                    appleMusicBulkActionBar
+                    Divider()
+                }
                 List(sortedItems) { item in
                     BrowseItemRow(item: item)
                         .contentShape(Rectangle())
@@ -1065,6 +1226,14 @@ struct AppleMusicSearchView: View {
                 }
             } else {
                 sn = smapiManager.serialNumber(for: ServiceID.appleMusic)
+            }
+        }
+        .task {
+            // Refresh the rate-limiter snapshot every 5s while the panel
+            // is visible. .task auto-cancels on disappear.
+            while !Task.isCancelled {
+                throttleSnapshot = await ITunesRateLimiter.shared.snapshot()
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
             }
         }
         .onChange(of: navStack) {
@@ -1085,6 +1254,107 @@ struct AppleMusicSearchView: View {
         case .artistAlbums(_, let name): return name
         case .albumTracks(_, let title): return title
         }
+    }
+
+    /// Tracks that the bulk action bar can play directly. Tracks we keep
+    /// as-is. Albums get expanded to their tracks via iTunes /lookup
+    /// when the user actually presses Play All / Add All — we don't
+    /// pre-fetch on view appear because most users don't bulk-act and
+    /// each lookup costs a rate-limiter slot.
+    private var hasPlayableContent: Bool {
+        items.contains {
+            ($0.itemClass == .musicTrack || $0.itemClass == .musicAlbum)
+                && $0.resourceURI != nil
+        } || items.contains { $0.itemClass == .musicAlbum }
+    }
+
+    private var bulkContentLabel: String {
+        let trackCount = items.filter { $0.itemClass == .musicTrack }.count
+        let albumCount = items.filter { $0.itemClass == .musicAlbum }.count
+        if albumCount > 0 && trackCount == 0 {
+            return "\(albumCount) album\(albumCount == 1 ? "" : "s")"
+        }
+        return "\(trackCount) track\(trackCount == 1 ? "" : "s")"
+    }
+
+    /// Top-of-list bulk actions. Mirrors the SMAPI search bar — Play All
+    /// replaces the queue and starts playback; Add All / Play Next append
+    /// without disturbing playback.
+    /// Buttons are disabled while a bulk action is in flight to prevent
+    /// double-firing — large enqueues take a few seconds and rapid second
+    /// clicks would otherwise re-add every track.
+    private var appleMusicBulkActionBar: some View {
+        HStack(spacing: 6) {
+            Button { Task { await appleMusicPlayAllNow() } } label: {
+                Label(L10n.playAll, systemImage: "play.fill").font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(bulkActionInFlight)
+            Button { Task { await appleMusicAddAll(playNext: false) } } label: {
+                Label(L10n.addAllToQueue, systemImage: "text.append").font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(bulkActionInFlight)
+            Button { Task { await appleMusicAddAll(playNext: true) } } label: {
+                Label(L10n.playNext, systemImage: "text.insert").font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(bulkActionInFlight)
+            Spacer()
+            if bulkActionInFlight {
+                ProgressView().controlSize(.small)
+                    .padding(.trailing, 4)
+            }
+            Text(bulkContentLabel)
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    /// Expands the current `items` into a flat list of playable tracks.
+    /// Tracks pass through unchanged; albums are fanned out via
+    /// `lookupAlbumTracks` and concatenated in display order.
+    private func expandedPlayableTracks() async -> [BrowseItem] {
+        var out: [BrowseItem] = []
+        for item in items {
+            if item.itemClass == .musicTrack, item.resourceURI != nil {
+                out.append(item)
+            } else if item.itemClass == .musicAlbum {
+                if let collectionId = Int(item.objectID.replacingOccurrences(of: "apple:album:", with: "")) {
+                    let tracks = await ServiceSearchProvider.shared.lookupAlbumTracks(
+                        collectionId: collectionId, sn: sn
+                    )
+                    out.append(contentsOf: tracks.filter { $0.resourceURI != nil })
+                }
+            }
+        }
+        return out
+    }
+
+    private func appleMusicPlayAllNow() async {
+        guard !bulkActionInFlight, let group = group else { return }
+        bulkActionInFlight = true
+        defer { bulkActionInFlight = false }
+        let tracks = await expandedPlayableTracks()
+        guard !tracks.isEmpty else { return }
+        // Audio-first: clears + queues + plays the first track in one
+        // SOAP round-trip, the rest fills in the background. QueueView's
+        // `isAddingToQueue` spinner reflects the background work.
+        try? await sonosManager.playItemsReplacingQueue(tracks, in: group)
+    }
+
+    private func appleMusicAddAll(playNext: Bool) async {
+        guard !bulkActionInFlight, let group = group else { return }
+        bulkActionInFlight = true
+        defer { bulkActionInFlight = false }
+        let tracks = await expandedPlayableTracks()
+        guard !tracks.isEmpty else { return }
+        _ = try? await sonosManager.addBrowseItemsToQueue(tracks, in: group, playNext: playNext)
     }
 
     // MARK: - Tap handling
@@ -1174,10 +1444,11 @@ struct AppleMusicSearchView: View {
         let tracks = await ServiceSearchProvider.shared.lookupAlbumTracks(collectionId: collectionId, sn: sn)
         guard !tracks.isEmpty else { return }
         if replace {
-            try? await sonosManager.clearQueue(group: group)
+            try? await sonosManager.playItemsReplacingQueue(tracks, in: group)
+        } else {
+            _ = try? await sonosManager.addBrowseItemsToQueue(tracks, in: group, playNext: false)
+            try? await sonosManager.play(group: group)
         }
-        try? await sonosManager.addBrowseItemsToQueue(tracks, in: group, playNext: false)
-        try? await sonosManager.play(group: group)
     }
 
     // MARK: - Data loading
@@ -1192,6 +1463,9 @@ struct AppleMusicSearchView: View {
         Task {
             items = await ServiceSearchProvider.shared.searchAppleMusic(query: query, entity: entity, sn: sn)
             isLoading = false
+            // Refresh the rate-limiter snapshot so a 403 triggered by *this*
+            // search shows the cooldown banner immediately, not 5 s later.
+            throttleSnapshot = await ITunesRateLimiter.shared.snapshot()
             // Resolve missing artist artwork in background (iTunes API doesn't return art for artists)
             if items.contains(where: { $0.itemClass == .musicArtist && $0.albumArtURI == nil }) {
                 items = await ServiceSearchProvider.shared.resolveArtistArtwork(for: items)
@@ -1691,6 +1965,10 @@ struct SMAPIServiceSearchView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                if smapiHasPlayableTracks {
+                    smapiBulkActionBar
+                    Divider()
+                }
                 List(items) { item in
                     BrowseItemRow(item: item)
                         .contentShape(Rectangle())
@@ -1820,6 +2098,89 @@ struct SMAPIServiceSearchView: View {
 
     // MARK: - Context menus
 
+    /// True when at least one item in the current list is a directly
+    /// playable track. Albums whose URI is a `cpcontainer` count too —
+    /// they're effectively single-action playables.
+    private var smapiHasPlayableTracks: Bool {
+        items.contains { item in
+            (item.resourceURI != nil && !item.isContainer) ||
+            item.itemClass == .musicAlbum
+        }
+    }
+
+    /// Top-of-list bulk actions, mirroring PlexDirectBrowseView and
+    /// the rest of the app — same shape and copy so behavior reads
+    /// the same regardless of which service the user is in.
+    private var smapiBulkActionBar: some View {
+        HStack(spacing: 6) {
+            // TODO: localize (English-only for now)
+            Button { Task { await smapiPlayAllNow() } } label: {
+                Label("Play All", systemImage: "play.fill")
+            }
+            .controlSize(.small)
+            Button { Task { await smapiAddAllToQueue(playNext: false) } } label: {
+                Label("Add All to Queue", systemImage: "text.append")
+            }
+            .controlSize(.small)
+            Button { Task { await smapiAddAllToQueue(playNext: true) } } label: {
+                Label("Play Next", systemImage: "text.insert")
+            }
+            .controlSize(.small)
+            Spacer()
+            Text("\(items.count) item\(items.count == 1 ? "" : "s")")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    /// Bulk action helpers — operate on the entire current items list.
+    /// Containers expand to their child tracks before queueing.
+    private func smapiCollectTracks() async -> [BrowseItem] {
+        var out: [BrowseItem] = []
+        for item in items {
+            if item.isContainer {
+                if let uri = item.resourceURI, !uri.isEmpty {
+                    // Container has a `cpcontainer` URI — Sonos can
+                    // expand it server-side in a single SOAP call.
+                    out.append(item)
+                } else if let (token, uri, sn) = serviceCredentials() {
+                    let id = SMAPIPrefix.strip(item.objectID, serviceID: serviceID)
+                    let kids = await ServiceSearchProvider.shared.browseSMAPI(
+                        id: id, serviceID: serviceID,
+                        serviceURI: uri, token: token, sn: sn)
+                    out.append(contentsOf: kids.filter { $0.resourceURI != nil && !$0.isContainer })
+                }
+            } else if item.resourceURI != nil {
+                out.append(item)
+            }
+        }
+        return out
+    }
+
+    private func smapiPlayAllNow() async {
+        guard let group = group else { return }
+        let tracks = await smapiCollectTracks()
+        guard !tracks.isEmpty else { showPlayError("Nothing to play."); return }
+        do {
+            try await sonosManager.playItemsReplacingQueue(tracks, in: group)
+        } catch {
+            showPlayError("Couldn't play all: \(error.localizedDescription)")
+        }
+    }
+
+    private func smapiAddAllToQueue(playNext: Bool) async {
+        guard let group = group else { return }
+        let tracks = await smapiCollectTracks()
+        guard !tracks.isEmpty else { showPlayError("Nothing to add."); return }
+        do {
+            _ = try await sonosManager.addBrowseItemsToQueue(tracks, in: group, playNext: playNext)
+        } catch {
+            showPlayError("Couldn't add: \(error.localizedDescription)")
+        }
+    }
+
     @ViewBuilder
     private func contextMenuItems(for item: BrowseItem) -> some View {
         if let group = group {
@@ -1934,9 +2295,7 @@ struct SMAPIServiceSearchView: View {
             return
         }
         do {
-            try await sonosManager.clearQueue(group: group)
-            try await sonosManager.addBrowseItemsToQueue(playable, in: group, playNext: false)
-            try await sonosManager.play(group: group)
+            try await sonosManager.playItemsReplacingQueue(playable, in: group)
         } catch {
             sonosDebugLog("[SMAPI_SEARCH] playContainer (track-by-track) failed: \(error). first URI=\(playable.first?.resourceURI ?? "nil")")
             showPlayError("Couldn't play \(container.title): \(error.localizedDescription)")

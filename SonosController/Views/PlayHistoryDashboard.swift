@@ -212,7 +212,7 @@ struct PlayHistoryDashboard: View {
                             ProgressView()
                                 .controlSize(.mini)
                             Text(L10n.updatingEllipsis)
-                                .font(.system(size: 10))
+                                .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                     } else {
@@ -221,9 +221,9 @@ struct PlayHistoryDashboard: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 10))
+                                    .font(.footnote)
                                 Text(L10n.refreshStats)
-                                    .font(.system(size: 10))
+                                    .font(.footnote)
                             }
                             .foregroundStyle(.secondary)
                         }
@@ -233,7 +233,7 @@ struct PlayHistoryDashboard: View {
 
                     if let lastRollup = historyManager.lastRollupDate {
                         Text(lastRollup.formatted(date: .omitted, time: .shortened))
-                            .font(.system(size: 9))
+                            .font(.footnote)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -286,7 +286,7 @@ struct PlayHistoryDashboard: View {
                                 .stroke(isCustomTheme ? Color.primary : Color.clear, lineWidth: 2)
                         )
                         Image(systemName: "paintpalette")
-                            .font(.system(size: 10))
+                            .font(.footnote)
                             .foregroundStyle(isCustomTheme ? .primary : .secondary)
                     }
                 }
@@ -313,7 +313,7 @@ struct PlayHistoryDashboard: View {
     private func colorPickerItem(_ label: String, hex: Binding<String>) -> some View {
         HStack(spacing: 6) {
             Text(label)
-                .font(.system(size: 11))
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(width: 62, alignment: .leading)
             ColorPicker("", selection: Binding(
@@ -517,7 +517,7 @@ struct PlayHistoryDashboard: View {
                 .chartXAxis {
                     AxisMarks(values: .stride(by: 3)) { value in
                         if let hour = value.as(Int.self) {
-                            AxisValueLabel { Text(formatHour(hour)).font(.caption2) }
+                            AxisValueLabel { Text(formatHour(hour)).font(.footnote) }
                         }
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(.quaternary)
@@ -551,7 +551,7 @@ struct PlayHistoryDashboard: View {
                             .cornerRadius(4)
                             .annotation(position: .trailing, spacing: 4) {
                                 Text("\(item.1)")
-                                    .font(.caption2)
+                                    .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -601,7 +601,7 @@ struct PlayHistoryDashboard: View {
                                 .font(.title3)
                                 .fontWeight(.bold)
                             Text("tracks")
-                                .font(.caption2)
+                                .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -611,9 +611,9 @@ struct PlayHistoryDashboard: View {
                         ForEach(sources, id: \.0) { name, count in
                             HStack(spacing: 4) {
                                 Circle().fill(ServiceColor.color(for: name)).frame(width: 8, height: 8)
-                                Text(name).font(.caption2).lineLimit(1)
+                                Text(name).font(.footnote).lineLimit(1)
                                 Spacer()
-                                Text("\(count)").font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                                Text("\(count)").font(.footnote).foregroundStyle(.secondary).monospacedDigit()
                             }
                         }
                     }
@@ -635,7 +635,7 @@ struct PlayHistoryDashboard: View {
                 ForEach(Array(recent.enumerated()), id: \.element.id) { idx, entry in
                     HStack(spacing: 12) {
                         Text(entry.timestamp, format: .relative(presentation: .named))
-                            .font(.caption2)
+                            .font(.footnote)
                             .foregroundStyle(.tertiary)
                             .frame(width: 60, alignment: .trailing)
 
@@ -669,7 +669,7 @@ struct PlayHistoryDashboard: View {
 
                         let source = historyManager.sourceServiceName(for: entry)
                         Text(source)
-                            .font(.caption2)
+                            .font(.footnote)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
@@ -698,13 +698,13 @@ struct PlayHistoryDashboard: View {
     private func statPill(icon: String, label: String, value: String, color: Color) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon)
-                .font(.system(size: 9))
+                .font(.footnote)
                 .foregroundStyle(color)
             Text(value)
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .monospacedDigit()
             Text(label)
-                .font(.system(size: 10))
+                .font(.footnote)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)
@@ -778,7 +778,7 @@ struct PlayHistoryDashboard: View {
                                         .lineLimit(1)
                                     if !item.1.isEmpty {
                                         Text(item.1)
-                                            .font(.system(size: 10))
+                                            .font(.footnote)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                     }
@@ -820,7 +820,7 @@ struct PlayHistoryDashboard: View {
                                     .foregroundStyle(.tertiary)
                                     .frame(width: 16, alignment: .trailing)
                                 Image(systemName: "radio")
-                                    .font(.system(size: 10))
+                                    .font(.footnote)
                                     .foregroundStyle(.orange.opacity(0.8))
                                 Text(item.0)
                                     .font(.system(size: 12, weight: .medium))
@@ -864,7 +864,7 @@ struct PlayHistoryDashboard: View {
                             .cornerRadius(4)
                             .annotation(position: .trailing, spacing: 4) {
                                 Text("\(item.1)")
-                                    .font(.caption2)
+                                    .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -901,7 +901,7 @@ struct PlayHistoryDashboard: View {
                         .cornerRadius(4)
                         .annotation(position: .trailing, spacing: 4) {
                             Text("\(count)")
-                                .font(.caption2)
+                                .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                     }

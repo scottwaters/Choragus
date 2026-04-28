@@ -90,7 +90,18 @@ public struct TrackMetadata: Equatable {
         guard let parsed = XMLResponseParser.parseDIDLMetadata(didl) else { return }
 
         if title.isEmpty { title = parsed.title }
-        if artist.isEmpty { artist = parsed.creator }
+        if artist.isEmpty {
+            // Prefer `<upnp:artist>` over `<dc:creator>`. Some services
+            // (Apple Music tracks served from Sonos favorites is the
+            // worst offender) populate only `upnp:artist`, leaving
+            // `dc:creator` empty or set to the album. Fall back to
+            // creator only when the upnp field wasn't present.
+            if !parsed.artist.isEmpty {
+                artist = parsed.artist
+            } else {
+                artist = parsed.creator
+            }
+        }
         if album.isEmpty { album = parsed.album }
 
         let artURI = device.makeAbsoluteURL(parsed.albumArtURI)

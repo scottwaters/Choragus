@@ -186,7 +186,7 @@ struct AlarmRow: View {
                     }
                     Text("·").foregroundStyle(.tertiary)
                     Image(systemName: "speaker.wave.2")
-                        .font(.system(size: 9))
+                        .font(.footnote)
                         .foregroundStyle(.tertiary)
                     Text("\(alarm.volume)")
                         .font(.caption)

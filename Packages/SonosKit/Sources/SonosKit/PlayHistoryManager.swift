@@ -120,15 +120,20 @@ public final class PlayHistoryManager: ObservableObject {
 
         lastLoggedTrack[groupID] = dedupKey
 
-        // Only persist internet art URLs — speaker-local /getaa URLs are ephemeral
-        // and break after IP changes or restarts. updateArtwork() will backfill
-        // from iTunes search when it completes.
-        let artURI: String?
-        if let art = metadata.albumArtURI, !art.isEmpty, !art.contains("/getaa?") {
-            artURI = art
-        } else {
-            artURI = nil
-        }
+        // Persist whatever art URL we have — even speaker-local
+        // `/getaa?` proxies. Yes, those break after IP changes or
+        // restarts, but the previous nil-out-everything-getaa policy
+        // left history entries permanently artless for any service
+        // whose metadata stream is the speaker proxy (most of them
+        // post-firmware updates: Spotify, direct-Plex, etc.). The
+        // existing `updateArtwork(forTitle:artist:artURL:)` backfill
+        // — driven by `ArtResolver` from the Now Playing surface —
+        // replaces them with stable iTunes URLs over time, so the
+        // ephemerality is self-healing.
+        let artURI: String? = {
+            guard let art = metadata.albumArtURI, !art.isEmpty else { return nil }
+            return art
+        }()
 
         let entry = PlayHistoryEntry(
             title: TrackMetadata.filterDeviceID(metadata.title),
@@ -150,6 +155,69 @@ public final class PlayHistoryManager: ObservableObject {
         // from here produced a race against the NowPlaying-side search
         // and let iTunes's non-deterministic top hit win intermittently,
         // which flickered the UI.
+    }
+
+    /// Tracks which (title|artist) keys we've already searched in the
+    /// current process — prevents re-hitting iTunes on every history
+    /// view refresh for entries we already failed to find art for.
+    private var attemptedArtBackfillKeys: Set<String> = []
+
+    /// Walks history entries with empty/ephemeral art and runs an
+    /// iTunes Search lookup to backfill stable URLs. Called on app
+    /// launch (background) and when the history view appears.
+    /// Throttled with a short delay between calls so we don't hammer
+    /// the iTunes Search API. The first hit per (title, artist) gets
+    /// applied to every matching entry via `updateArtwork(...)`, so
+    /// playing a track once gives art to every prior play.
+    public func backfillMissingArtwork(using search: AlbumArtSearchProtocol = AlbumArtSearchService.shared,
+                                       maxEntries: Int = 100) async {
+        // Filter to entries with NO art OR a /getaa? URL (ephemeral
+        // speaker proxy that may have broken since logging). Group by
+        // (title, artist) so we only fire one search per unique track.
+        var seenKeys: Set<String> = []
+        var queue: [(title: String, artist: String, album: String)] = []
+        for entry in entries.reversed() {
+            let needsArt = (entry.albumArtURI ?? "").isEmpty
+                || entry.albumArtURI?.contains("/getaa?") == true
+            guard needsArt else { continue }
+            let key = "\(entry.title.lowercased())|\(entry.artist.lowercased())"
+            guard !seenKeys.contains(key), !attemptedArtBackfillKeys.contains(key) else { continue }
+            // Skip if title/artist are too thin to give iTunes a chance.
+            // Radio stations with no track info can't be searched.
+            let trimmedTitle = entry.title.trimmingCharacters(in: .whitespaces)
+            let trimmedArtist = entry.artist.trimmingCharacters(in: .whitespaces)
+            guard !trimmedTitle.isEmpty, !trimmedArtist.isEmpty else { continue }
+            seenKeys.insert(key)
+            queue.append((title: trimmedTitle, artist: trimmedArtist, album: entry.album))
+            if queue.count >= maxEntries { break }
+        }
+        guard !queue.isEmpty else { return }
+        sonosDebugLog("[HISTORY] Backfilling artwork for \(queue.count) unique tracks")
+        // Patient maxWait so the limiter paces this background loop into the
+        // soft window automatically. ~120s is generous for a backfill of up
+        // to `maxEntries` unique tracks; calls that would still be denied
+        // (15-min cooldown active) drop fast and we accept the loss for
+        // this pass — `attemptedArtBackfillKeys` prevents re-attempts in
+        // the same process, but the next launch tries again.
+        let backfillMaxWait: TimeInterval = 120
+        for entry in queue {
+            let key = "\(entry.title.lowercased())|\(entry.artist.lowercased())"
+            attemptedArtBackfillKeys.insert(key)
+            // Search by artist + album first; fall back to artist + title.
+            // iTunes album results are higher quality (uniform 600x600)
+            // than per-track results.
+            var artURL: String? = nil
+            if !entry.album.isEmpty {
+                artURL = await search.searchArtwork(artist: entry.artist, album: entry.album, maxWait: backfillMaxWait)
+            }
+            if artURL == nil {
+                artURL = await search.searchArtwork(artist: entry.artist, album: entry.title, maxWait: backfillMaxWait)
+            }
+            if let url = artURL, !url.isEmpty {
+                updateArtwork(forTitle: entry.title, artist: entry.artist, artURL: url)
+            }
+        }
+        sonosDebugLog("[HISTORY] Artwork backfill pass complete")
     }
 
     /// Updates the album art URI for entries matching title+artist.

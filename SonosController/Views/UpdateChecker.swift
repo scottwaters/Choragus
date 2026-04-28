@@ -10,9 +10,9 @@ import SonosKit
 /// App-level URLs used by the About panel, Help menu, and update checker.
 /// Single source of truth — avoids duplicating the repository path across files.
 enum AppLinks {
-    static let repositoryURLString = "https://github.com/scottwaters/SonosController"
-    static let issuesURLString = "https://github.com/scottwaters/SonosController/issues/new"
-    static let releasesAPIURLString = "https://api.github.com/repos/scottwaters/SonosController/releases/latest"
+    static let repositoryURLString = "https://github.com/scottwaters/Choragus"
+    static let issuesURLString = "https://github.com/scottwaters/Choragus/issues/new"
+    static let releasesAPIURLString = "https://api.github.com/repos/scottwaters/Choragus/releases/latest"
 
     static var repositoryURL: URL? { URL(string: repositoryURLString) }
     static var issuesURL: URL? { URL(string: issuesURLString) }

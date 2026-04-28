@@ -212,7 +212,14 @@ struct PlayHistoryView: View {
                 stationName: entry.stationName
             )
         }
-        .onAppear { refreshFilteredEntries() }
+        .onAppear {
+            refreshFilteredEntries()
+            // Kick off an iTunes backfill pass for entries with
+            // missing or ephemeral art. The task in PlayHistoryManager
+            // is throttled and remembers attempted keys, so opening
+            // the view repeatedly doesn't re-search the same tracks.
+            Task { await historyManager.backfillMissingArtwork() }
+        }
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
             // Periodic refresh to catch new entries from background logging
             let currentTotal = historyManager.totalEntries

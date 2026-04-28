@@ -113,7 +113,7 @@ struct PlayHistoryView2: View {
                     HStack(spacing: 4) {
                         if entry.starred {
                             Image(systemName: "star.fill")
-                                .font(.system(size: 9))
+                                .font(.footnote)
                                 .foregroundStyle(.yellow)
                         }
                         Text(entry.title)
@@ -136,7 +136,7 @@ struct PlayHistoryView2: View {
                         if !entry.album.isEmpty {
                             if !entry.artist.isEmpty {
                                 Text("  /  ")
-                                    .font(.system(size: 11))
+                                    .font(.subheadline)
                                     .foregroundStyle(.quaternary)
                             }
                             Text(entry.album)
@@ -163,7 +163,7 @@ struct PlayHistoryView2: View {
                                 Image(systemName: "antenna.radiowaves.left.and.right")
                                     .font(.system(size: 8))
                                 Text(entry.stationName)
-                                    .font(.system(size: 10))
+                                    .font(.footnote)
                                     .lineLimit(1)
                             }
                             .foregroundStyle(.orange.opacity(0.9))
@@ -177,7 +177,7 @@ struct PlayHistoryView2: View {
                                 Image(systemName: "hifispeaker")
                                     .font(.system(size: 8))
                                 Text(entry.groupName)
-                                    .font(.system(size: 10))
+                                    .font(.footnote)
                             }
                             .foregroundStyle(.tertiary)
                         }

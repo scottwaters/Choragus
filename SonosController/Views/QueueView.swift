@@ -80,27 +80,51 @@ struct QueueView: View {
     // MARK: - Subviews
 
     private var headerBar: some View {
-        HStack {
+        HStack(spacing: 6) {
+            // Title — lowest priority. Shrinks / truncates first
+            // when the panel is narrow.
             Text(L10n.queue)
                 .font(.headline)
-            // Small inline spinner during reloads or add-in-flight — shown
-            // when busy but items are already present (e.g., post-add
-            // reconcile or per-track batch mid-loop). The queue list stays
-            // visible; the spinner hints that something is happening
-            // without commandeering the whole panel.
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(0)
+                .fixedSize(horizontal: false, vertical: false)
             if (vm.isLoading || sonosManager.isAddingToQueue) && !vm.queueItems.isEmpty {
                 ProgressView().controlSize(.small)
             }
-            Spacer()
-            Text("\(vm.totalTracks) \(L10n.tracks)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            // Track count is informational — drops out before any
+            // button gets clipped.
+            ViewThatFits(in: .horizontal) {
+                Text("\(vm.totalTracks) \(L10n.tracks)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                EmptyView()
+            }
+            .layoutPriority(2)
+            // Buttons get the HIGHEST layout priority and each is
+            // .fixedSize so SwiftUI can't ever shrink them below
+            // their natural icon width. Putting them as direct
+            // children of the parent HStack (not nested in a Group)
+            // ensures the priority is applied per-view.
+            Button { Task { await vm.loadQueue() } } label: {
+                Image(systemName: "arrow.clockwise").font(.caption)
+            }
+            .buttonStyle(.plain)
+            .tooltip("Refresh queue")
+            .fixedSize()
+            .layoutPriority(3)
+
             Button { Task { await vm.shuffleQueue() } } label: {
                 Image(systemName: "shuffle").font(.caption)
             }
             .buttonStyle(.plain)
             .tooltip(L10n.shuffleQueueTooltip)
             .disabled(vm.queueItems.count < 2)
+            .fixedSize()
+            .layoutPriority(3)
 
             Button { showSavePlaylist = true } label: {
                 Image(systemName: "square.and.arrow.down").font(.caption)
@@ -108,6 +132,8 @@ struct QueueView: View {
             .buttonStyle(.plain)
             .tooltip(L10n.saveAsPlaylist)
             .disabled(vm.queueItems.isEmpty)
+            .fixedSize()
+            .layoutPriority(3)
 
             Button { Task { await vm.clearQueue() } } label: {
                 if vm.isClearing {
@@ -119,6 +145,8 @@ struct QueueView: View {
             .buttonStyle(.plain)
             .tooltip(L10n.clearQueue)
             .disabled(vm.queueItems.isEmpty || vm.isClearing)
+            .fixedSize()
+            .layoutPriority(3)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

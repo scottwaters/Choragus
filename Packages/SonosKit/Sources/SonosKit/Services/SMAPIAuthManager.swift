@@ -1,5 +1,6 @@
 /// SMAPIAuthManager.swift — Manages SMAPI authentication flow and service discovery.
 import Foundation
+import Combine
 
 @MainActor
 public final class SMAPIAuthManager: ObservableObject {
@@ -10,6 +11,14 @@ public final class SMAPIAuthManager: ObservableObject {
     @Published public var isAuthenticating = false
     @Published public var authServiceName = ""
     @Published public var authError: String?
+
+    /// Forward tokenStore changes so views observing this manager re-render
+    /// when authentication state changes. Without this, tokens save fine
+    /// but `MusicServicesView` / `BrowseView` (which both depend on the
+    /// computed `authenticatedServiceList`) don't refresh because tokenStore
+    /// is a separate ObservableObject whose objectWillChange doesn't
+    /// propagate up automatically.
+    private var tokenStoreSubscription: AnyCancellable?
 
     public var isEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: UDKey.smapiEnabled) }
@@ -23,6 +32,20 @@ public final class SMAPIAuthManager: ObservableObject {
     @Published public var serviceSerialNumbers: [Int: Int] = [:]
 
     public init() {
+        // SMAPI is always-on for this app — there's no user-facing toggle
+        // and every reader (BrowseView, MusicServicesView, app onAppear)
+        // gates work on `isEnabled`. Without a registered default the flag
+        // reads `false` on a fresh sandbox container (e.g. after the
+        // bundle-ID rename to com.choragus.app), which silently breaks
+        // service discovery and the Connect flow.
+        UserDefaults.standard.register(defaults: [UDKey.smapiEnabled: true])
+
+        // Forward nested ObservableObject changes — see comment on
+        // tokenStoreSubscription above.
+        tokenStoreSubscription = tokenStore.objectWillChange.sink { [weak self] in
+            self?.objectWillChange.send()
+        }
+
         // Listen for token refresh notifications
         NotificationCenter.default.addObserver(forName: .smapiTokenRefreshed, object: nil, queue: .main) { [weak self] notification in
             guard let info = notification.userInfo,
@@ -39,9 +62,11 @@ public final class SMAPIAuthManager: ObservableObject {
 
     /// Loads available services and device identity from a speaker
     public func loadServices(speakerIP: String, musicServicesList: [MusicService]) async {
+        sonosDebugLog("[SMAPI] loadServices start (speakerIP=\(speakerIP))")
         do {
             deviceID = try await client.getDeviceID(speakerIP: speakerIP)
             householdID = try await client.getHouseholdID(speakerIP: speakerIP)
+            sonosDebugLog("[SMAPI] device identity loaded: deviceID=\(deviceID ?? "<none>") householdID=\(householdID)")
         } catch {
             sonosDebugLog("[SMAPI] Failed to get device identity: \(error)")
         }
@@ -51,6 +76,7 @@ public final class SMAPIAuthManager: ObservableObject {
         do {
             let descriptorXML = try await fetchServiceDescriptors(speakerIP: speakerIP)
             availableServices = parseServiceDescriptors(descriptorXML)
+            sonosDebugLog("[SMAPI] descriptors loaded: \(availableServices.count) services — \(availableServices.map { "\($0.name)(\($0.id))" }.joined(separator: ", "))")
         } catch {
             sonosDebugLog("[SMAPI] Failed to load service descriptors: \(error)")
         }
@@ -151,7 +177,9 @@ public final class SMAPIAuthManager: ObservableObject {
     /// Starts the AppLink authentication flow for a service.
     /// Returns the URL the user needs to visit to authorize.
     public func startAuth(service: SMAPIServiceDescriptor) async -> String? {
+        sonosDebugLog("[SMAPI] startAuth tapped: \(service.name) (id=\(service.id), uri=\(service.secureUri))")
         guard let deviceID, !deviceID.isEmpty, !householdID.isEmpty else {
+            sonosDebugLog("[SMAPI] startAuth aborted — missing device identity (deviceID=\(deviceID ?? "<nil>") householdID=\(householdID))")
             authError = "Device identity not loaded. Try restarting the app."
             return nil
         }

@@ -9,6 +9,7 @@
 /// touches SOAP directly. Uses a "Quick Start" cache system to show speakers
 /// instantly on launch while live discovery runs in the background.
 import Foundation
+import Combine
 
 private let debugLogPath: String = {
     AppPaths.appSupportDirectory.appendingPathComponent("sonos_debug.log").path
@@ -36,6 +37,22 @@ public enum StartupMode: String, CaseIterable {
 public enum CommunicationMode: String, CaseIterable {
     case hybridEventFirst = "Event-Driven"
     case legacyPolling = "Legacy Polling"
+}
+
+/// How the app finds Sonos speakers on the network.
+///
+/// - `auto`: run Bonjour and SSDP in parallel and merge by RINCON UUID.
+///   Right answer for almost everyone — flat networks already discover via
+///   SSDP; VLAN-segmented networks (UniFi/OPNsense with mDNS reflectors but
+///   no SSDP reflector) light up via Bonjour without user config.
+/// - `bonjour`: mDNS only. Use when SSDP multicast traffic is being filtered
+///   and you want to suppress retransmits.
+/// - `ssdp`: SSDP only. Original behaviour — kept as an escape hatch in case
+///   `_sonos._tcp` browsing misbehaves on a particular network.
+public enum DiscoveryMode: String, CaseIterable {
+    case auto = "Auto"
+    case bonjour = "Bonjour"
+    case ssdp = "Legacy Multicast"
 }
 
 public enum AppearanceMode: String, CaseIterable {
@@ -100,9 +117,16 @@ public class SonosManager: ObservableObject {
     @Published public var deviceVolumes: [String: Int] = [:]
     @Published public var deviceMutes: [String: Bool] = [:]
 
-    /// Cached art URLs discovered during playback
-    /// Used by browse list to show art for items that lack it in their DIDL
-    @Published public var discoveredArtURLs: [String: String] = [:]
+    /// Persistent art-URL cache. State + lookup + persistence live in
+    /// `ArtCacheService`; SonosManager exposes the legacy `discoveredArtURLs`
+    /// / `cacheArtURL` / `lookupCachedArt` surface as forwarding shims so
+    /// existing call sites (and the `TransportStateProviding` protocol)
+    /// keep working unchanged. Observers wanting to react to cache changes
+    /// should subscribe to `artCache.$discoveredArtURLs` directly.
+    public let artCache: ArtCacheService
+
+    /// Forwarding accessor; canonical state lives in `artCache`.
+    public var discoveredArtURLs: [String: String] { artCache.discoveredArtURLs }
 
     /// The objectID of the last favorite that was played — used to map art back to the browse list
     public var lastPlayedFavoriteID: String?
@@ -123,54 +147,17 @@ public class SonosManager: ObservableObject {
     /// Drag state for cross-view drag-and-drop (browse → queue)
     public var draggedBrowseItem: BrowseItem?
 
-    /// Stores an art URL with multiple cache keys for flexible lookup
+    /// Stores an art URL with multiple cache keys for flexible lookup.
+    /// Forwards to `ArtCacheService`; preserved on SonosManager for
+    /// `TransportStateProviding` conformance and existing call sites.
     public func cacheArtURL(_ artURL: String, forURI uri: String, title: String = "", itemID: String = "") {
-        if !uri.isEmpty {
-            discoveredArtURLs[uri] = artURL
-        }
-        if !title.isEmpty {
-            discoveredArtURLs["title:\(title.lowercased())"] = artURL
-            let normalized = Self.normalizeForCache(title)
-            if !normalized.isEmpty {
-                discoveredArtURLs["norm:\(normalized)"] = artURL
-            }
-        }
-        if !itemID.isEmpty {
-            discoveredArtURLs[itemID] = artURL
-        }
-        persistArtCache()
+        artCache.cacheArtURL(artURL, forURI: uri, title: title, itemID: itemID)
     }
 
-    private var artCacheSaveTask: Task<Void, Never>?
-
-    /// Debounced persist of art URL cache to disk
-    private func persistArtCache() {
-        artCacheSaveTask?.cancel()
-        artCacheSaveTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: Timing.rescanDebounce)
-            guard !Task.isCancelled, let self else { return }
-            self.cache.saveArtURLs(self.discoveredArtURLs)
-        }
-    }
-
-    /// Looks up cached art by URI, exact title, or normalized title
+    /// Looks up cached art by URI, exact title, or normalized title.
+    /// Forwards to `ArtCacheService`.
     public func lookupCachedArt(uri: String?, title: String) -> String? {
-        if let uri = uri, let art = discoveredArtURLs[uri] { return art }
-        if let art = discoveredArtURLs["title:\(title.lowercased())"] { return art }
-        let normalized = Self.normalizeForCache(title)
-        if !normalized.isEmpty, let art = discoveredArtURLs["norm:\(normalized)"] { return art }
-        return nil
-    }
-
-    private static func normalizeForCache(_ title: String) -> String {
-        title.lowercased()
-            .replacingOccurrences(of: " - ", with: " ")
-            .replacingOccurrences(of: "radio", with: "")
-            .replacingOccurrences(of: "station", with: "")
-            .components(separatedBy: .alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespaces)
+        artCache.lookupCachedArt(uri: uri, title: title)
     }
 
     // MARK: - Grace Periods (centralized)
@@ -224,6 +211,13 @@ public class SonosManager: ObservableObject {
         }
     }
 
+    @Published public var discoveryMode: DiscoveryMode {
+        didSet {
+            UserDefaults.standard.set(discoveryMode.rawValue, forKey: UDKey.discoveryMode)
+            Task { @MainActor in await switchDiscoveryTransports() }
+        }
+    }
+
     @Published public var appearanceMode: AppearanceMode {
         didSet { UserDefaults.standard.set(appearanceMode.rawValue, forKey: UDKey.appearanceMode) }
     }
@@ -244,7 +238,15 @@ public class SonosManager: ObservableObject {
 
     // MARK: - Services (injectable for testability)
 
-    private let discovery = SSDPDiscovery()
+    /// Active discovery transports. Populated by `applyDiscoveryMode()` based
+    /// on `discoveryMode`. In `.auto` both SSDP and mDNS run concurrently;
+    /// `discoveredLocations` (URL-keyed) is the dedup point so duplicate
+    /// reports from the same speaker via two transports are harmless.
+    private var discoveryTransports: [any SpeakerDiscovery] = []
+    /// HouseholdID hints learned from mDNS TXT records, keyed by location URL.
+    /// Consulted in `handleDiscoveredDevice` so we can skip `GetHouseholdID`
+    /// when the network told us the answer for free.
+    private var householdHints: [String: String] = [:]
     private let soap: SOAPClient
     private let cache: SonosCache
     // Lazy so services share a single SOAPClient (and its URLSession)
@@ -256,6 +258,25 @@ public class SonosManager: ObservableObject {
     private lazy var musicServices = MusicServicesService(soap: soap)
 
     private var discoveredLocations: Set<String> = []  // de-dups SSDP responses
+
+    /// Tracks per-URI Apple-Music enrichment state so we don't fire
+    /// duplicate iTunes lookups on every transport update tick.
+    private var appleMusicEnrichmentInFlight: Set<String> = []
+
+    /// Metadata cache used to persist Apple-Music-by-track-ID results
+    /// across launches. Backed by the same SQLite file the lyrics /
+    /// artist / album caches use. Lazy so we don't open the DB on
+    /// SonosManager init for callers that never play Apple Music.
+    private lazy var metadataCacheForAppleMusic: MetadataCacheRepository? = {
+        let path = AppPaths.appSupportDirectory.appendingPathComponent("play_history.sqlite").path
+        return MetadataCacheRepository(dbPath: path)
+    }()
+
+    /// Codable payload for the Apple-Music-by-track-ID enrichment cache.
+    fileprivate struct AppleMusicTrackEnrichment: Codable, Sendable {
+        let artist: String
+        let album: String?
+    }
 
     /// Cached track info — populated when adding Service Search items to queue.
     /// Used to recover title/artist when the speaker returns empty TrackMetaData.
@@ -298,21 +319,35 @@ public class SonosManager: ObservableObject {
         (transportStrategy as? HybridEventFirstTransport)?.callbackURLString ?? "Not available"
     }
 
+    /// Album-art search service (iTunes lookup). Public + protocol-typed
+    /// so tests can inject a stub and call sites can use the same instance
+    /// instead of reaching for `AlbumArtSearchService.shared`.
+    public let albumArtSearch: AlbumArtSearchProtocol
+
     /// Default init with production services
     public convenience init() {
         self.init(soap: SOAPClient(), cache: SonosCache())
     }
 
     /// Injectable init for testing
-    public init(soap: SOAPClient, cache: SonosCache) {
+    private var artCacheSubscription: AnyCancellable?
+
+    public init(soap: SOAPClient,
+                cache: SonosCache,
+                albumArtSearch: AlbumArtSearchProtocol = AlbumArtSearchService.shared) {
         self.soap = soap
         self.cache = cache
+        self.artCache = ArtCacheService(cache: cache)
+        self.albumArtSearch = albumArtSearch
 
         let savedStartup = UserDefaults.standard.string(forKey: UDKey.startupMode) ?? StartupMode.quickStart.rawValue
         self.startupMode = StartupMode(rawValue: savedStartup) ?? .quickStart
 
         let savedComms = UserDefaults.standard.string(forKey: UDKey.communicationMode) ?? CommunicationMode.hybridEventFirst.rawValue
         self.communicationMode = CommunicationMode(rawValue: savedComms) ?? .hybridEventFirst
+
+        let savedDiscovery = UserDefaults.standard.string(forKey: UDKey.discoveryMode) ?? DiscoveryMode.auto.rawValue
+        self.discoveryMode = DiscoveryMode(rawValue: savedDiscovery) ?? .auto
 
         let savedAppearance = UserDefaults.standard.string(forKey: UDKey.appearanceMode) ?? AppearanceMode.system.rawValue
         self.appearanceMode = AppearanceMode(rawValue: savedAppearance) ?? .system
@@ -333,10 +368,13 @@ public class SonosManager: ObservableObject {
         self.playingZoneColor = StoredColor.load(from: "playingZoneColor", default: StoredColor(red: 0.2, green: 0.78, blue: 0.35))
         self.inactiveZoneColor = StoredColor.load(from: "inactiveZoneColor", default: StoredColor(red: 0.56, green: 0.56, blue: 0.58))
 
-        discovery.onDeviceFound = { [weak self] location, ip, port in
-            Task { @MainActor [weak self] in
-                await self?.handleDiscoveredDevice(location: location, ip: ip, port: port)
-            }
+        rebuildDiscoveryTransports()
+
+        // Forward art cache changes so views observing `sonosManager` re-render
+        // when the cache updates (preserves the prior `@Published` semantics
+        // that `discoveredArtURLs` had when it lived on this class).
+        artCacheSubscription = artCache.objectWillChange.sink { [weak self] in
+            self?.objectWillChange.send()
         }
     }
 
@@ -345,11 +383,8 @@ public class SonosManager: ObservableObject {
     public func startDiscovery() {
         guard !isDiscovering else { return }
 
-        // Restore persisted art URL mappings (independent of startup mode)
-        let savedArtURLs = cache.loadArtURLs()
-        if !savedArtURLs.isEmpty {
-            discoveredArtURLs = savedArtURLs
-        }
+        // Restore persisted art URL mappings (independent of startup mode).
+        artCache.loadFromDisk()
 
         // Quick Start: load cache first for instant UI
         if startupMode == .quickStart, let cached = cache.load() {
@@ -369,19 +404,20 @@ public class SonosManager: ObservableObject {
         // Start live discovery (runs in background regardless of cache)
         isDiscovering = true
         isRefreshing = true
-        discovery.startDiscovery()
+        for t in discoveryTransports { t.startDiscovery() }
 
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.discoveredLocations.removeAll()
-                self?.discovery.rescan()
+                guard let self else { return }
+                self.discoveredLocations.removeAll()
+                for t in self.discoveryTransports { t.rescan() }
             }
         }
     }
 
     public func stopDiscovery() {
         isDiscovering = false
-        discovery.stopDiscovery()
+        for t in discoveryTransports { t.stopDiscovery() }
         refreshTimer?.invalidate()
         refreshTimer = nil
 
@@ -395,7 +431,47 @@ public class SonosManager: ObservableObject {
     public func rescan() {
         discoveredLocations.removeAll()
         isRefreshing = true
-        discovery.rescan()
+        for t in discoveryTransports { t.rescan() }
+    }
+
+    /// Builds the active transport list from `discoveryMode` and wires the
+    /// shared `onDeviceFound` callback. Called once at init and again on
+    /// every mode change.
+    private func rebuildDiscoveryTransports() {
+        let modes: [any SpeakerDiscovery]
+        switch discoveryMode {
+        case .auto:    modes = [SSDPDiscovery(), MDNSDiscovery()]
+        case .bonjour: modes = [MDNSDiscovery()]
+        case .ssdp:    modes = [SSDPDiscovery()]
+        }
+        for t in modes {
+            t.onDeviceFound = { [weak self] location, ip, port, hh in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let hh, !hh.isEmpty {
+                        self.householdHints[location] = hh
+                    }
+                    await self.handleDiscoveredDevice(location: location, ip: ip, port: port)
+                }
+            }
+        }
+        discoveryTransports = modes
+    }
+
+    /// Tears down current transports, rebuilds for the new mode, and (if we
+    /// were already discovering) starts the new set + clears the dedup cache
+    /// so the next announce paints over with a current view.
+    @MainActor
+    private func switchDiscoveryTransports() async {
+        let wasRunning = isDiscovering
+        for t in discoveryTransports { t.stopDiscovery() }
+        rebuildDiscoveryTransports()
+        discoveredLocations.removeAll()
+        householdHints.removeAll()
+        if wasRunning {
+            isRefreshing = true
+            for t in discoveryTransports { t.startDiscovery() }
+        }
     }
 
     private func handleDiscoveredDevice(location: String, ip: String, port: Int) async {
@@ -420,8 +496,14 @@ public class SonosManager: ObservableObject {
             // and only updated by factory reset). Once resolved, never re-query —
             // this removes one SOAP round-trip per SSDP response per speaker, which
             // matters a lot for S1 hardware that's sensitive to request pressure.
+            //
+            // mDNS speakers advertise `hhid` in the TXT record, so when the discovery
+            // transport surfaced it we skip the SOAP call entirely (`householdHints`).
             let existing = devices[device.id]
             device.householdID = existing?.householdID
+            if device.householdID == nil, let hint = householdHints[location], !hint.isEmpty {
+                device.householdID = hint
+            }
             if device.householdID == nil {
                 if let resolved = try? await zoneTopology.getHouseholdID(device: device), !resolved.isEmpty {
                     device.householdID = resolved
@@ -985,9 +1067,156 @@ public class SonosManager: ObservableObject {
 
     public func clearQueue(group: SonosGroup) async throws {
         guard let coordinator = group.coordinator else { return }
+
+        // Detect whether the currently-playing source is the queue itself
+        // BEFORE we remove its rows. If it is, the speaker will keep
+        // showing the (now-orphaned) track in `Track 1` until it advances
+        // to a non-existent next position, which leaves the Now Playing
+        // header stale. Stop transport and clear local metadata too so
+        // the UI matches the new empty state immediately.
+        let wasPlayingFromQueue = groupTrackMetadata[group.coordinatorID]?.isQueueSource == true
+
         try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
         lastQueueItems[group.coordinatorID] = nil
         cachedTrackByPosition[group.coordinatorID] = nil
+
+        if wasPlayingFromQueue {
+            try? await avTransport.stop(device: coordinator)
+            groupTrackMetadata[coordinator.id] = TrackMetadata()
+            groupTransportStates[coordinator.id] = .stopped
+            groupPositions[coordinator.id] = 0
+            awaitingPlayback[coordinator.id] = false
+        }
+    }
+
+    /// "Play All" / "Replace Queue" semantics with audio-first sequencing.
+    /// Clears the queue, adds the first track, starts playback immediately,
+    /// then fills the rest of the queue in the background. The user gets
+    /// audio in ~1 SOAP round-trip instead of waiting for all N tracks to
+    /// enqueue first.
+    ///
+    /// Background fill toggles `isAddingToQueue` so the QueueView shows a
+    /// spinner inline; no `ErrorHandler.shared.info(...)` banner is posted
+    /// (this path is fast, the spinner already communicates "still
+    /// loading").
+    public func playItemsReplacingQueue(_ items: [BrowseItem], in group: SonosGroup) async throws {
+        guard let coordinator = group.coordinator, !items.isEmpty else { return }
+
+        let playable = items.filter { ($0.resourceURI ?? "").isEmpty == false }
+        guard let first = playable.first else { return }
+
+        try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
+        lastQueueItems[group.coordinatorID] = nil
+        cachedTrackByPosition[group.coordinatorID] = nil
+
+        // 1. First track + immediate playback.
+        if let uri = first.resourceURI, !uri.isEmpty {
+            // Preload cached track info so any speaker poll that arrives
+            // before our background fill writes art/title can recover it.
+            let cached = CachedTrack(title: first.title,
+                                     artist: first.artist ?? "",
+                                     album: first.album ?? "",
+                                     artURL: first.albumArtURI)
+            if !first.title.isEmpty {
+                cachedTrackInfo[uri] = cached
+                if let decoded = uri.removingPercentEncoding, decoded != uri {
+                    cachedTrackInfo[decoded] = cached
+                }
+            }
+
+            var meta = first.resourceMetadata ?? ""
+            if meta.contains("&lt;") { meta = XMLResponseParser.xmlUnescape(meta) }
+            _ = try await contentDirectory.addURIToQueue(
+                device: coordinator, uri: uri, metadata: meta,
+                desiredFirstTrackNumberEnqueued: 0, enqueueAsNext: false
+            )
+            try await avTransport.setAVTransportURI(
+                device: coordinator,
+                uri: "x-rincon-queue:\(coordinator.id)#0"
+            )
+            try await avTransport.play(device: coordinator)
+            // Show optimistic now-playing metadata immediately so the UI
+            // updates before the speaker's first transport tick.
+            var pendingMeta = TrackMetadata()
+            pendingMeta.title = first.title
+            pendingMeta.artist = first.artist ?? ""
+            pendingMeta.album = first.album ?? ""
+            pendingMeta.albumArtURI = first.albumArtURI
+            pendingMeta.trackURI = uri
+            groupTrackMetadata[coordinator.id] = pendingMeta
+            groupTransportStates[coordinator.id] = .transitioning
+            awaitingPlayback[coordinator.id] = true
+            setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
+        }
+
+        // First-track refresh: Browse(Q:0) right now so the queue panel
+        // shows the one row that's been enqueued + playing while the
+        // background fill is still running. Without this, the panel
+        // sits empty for the few seconds it takes the background fill
+        // to do its first chunk and then refresh.
+        postQueueChanged(optimisticItems: [])
+
+        // 2. Remaining tracks in background.
+        let rest = Array(playable.dropFirst())
+        if !rest.isEmpty {
+            Task { [weak self] in
+                await self?.fillQueueInBackground(rest, in: group)
+            }
+        }
+    }
+
+    /// Background batched enqueue used after `playItemsReplacingQueue`
+    /// has the first track playing. Sets `isAddingToQueue` so QueueView
+    /// shows its spinner; never posts the green status banner.
+    private func fillQueueInBackground(_ items: [BrowseItem], in group: SonosGroup) async {
+        guard let coordinator = group.coordinator, !items.isEmpty else { return }
+        isAddingToQueue = true
+        defer {
+            isAddingToQueue = false
+            postQueueChanged(optimisticItems: [])
+        }
+
+        var uris: [String] = []
+        var metas: [String] = []
+        for item in items {
+            guard let uri = item.resourceURI, !uri.isEmpty, !item.isContainer else { continue }
+            uris.append(uri)
+            var meta = item.resourceMetadata ?? ""
+            if meta.contains("&lt;") { meta = XMLResponseParser.xmlUnescape(meta) }
+            metas.append(meta)
+            if !item.title.isEmpty {
+                let cached = CachedTrack(title: item.title,
+                                         artist: item.artist ?? "",
+                                         album: item.album ?? "",
+                                         artURL: item.albumArtURI)
+                cachedTrackInfo[uri] = cached
+                if let decoded = uri.removingPercentEncoding, decoded != uri {
+                    cachedTrackInfo[decoded] = cached
+                }
+            }
+        }
+        guard !uris.isEmpty else { return }
+
+        let chunkSize = 16
+        for chunkStart in stride(from: 0, to: uris.count, by: chunkSize) {
+            let end = min(chunkStart + chunkSize, uris.count)
+            do {
+                _ = try await contentDirectory.addMultipleURIsToQueue(
+                    device: coordinator,
+                    uris: Array(uris[chunkStart..<end]),
+                    metadatas: Array(metas[chunkStart..<end]),
+                    desiredFirstTrackNumberEnqueued: 0,
+                    enqueueAsNext: false
+                )
+                sonosDebugLog("[QUEUE] Background fill chunk \(chunkStart)-\(end-1): \(end-chunkStart) tracks")
+                // Refresh the queue panel after each chunk so large
+                // playlists fill in visibly instead of jumping from
+                // 1 track → N tracks at the very end.
+                postQueueChanged(optimisticItems: [])
+            } catch {
+                sonosDebugLog("[QUEUE] Background fill chunk \(chunkStart)-\(end-1) failed: \(error). Continuing.")
+            }
+        }
     }
 
     public func playTrackFromQueue(group: SonosGroup, trackNumber: Int) async throws {
@@ -1287,11 +1516,13 @@ public class SonosManager: ObservableObject {
             if uri.hasPrefix(URIPrefix.rinconContainer) {
                 // Streaming service containers (albums/playlists) —
                 // try adding to queue first, fall back to direct transport URI
+                var queueWasModified = false
                 do {
                     try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
                     _ = try await contentDirectory.addURIToQueue(
                         device: coordinator, uri: uri, metadata: meta
                     )
+                    queueWasModified = true
                     try await avTransport.setAVTransportURI(
                         device: coordinator, uri: "x-rincon-queue:\(coordinator.id)#0"
                     )
@@ -1312,6 +1543,13 @@ public class SonosManager: ObservableObject {
                 groupTransportStates[coordinator.id] = .transitioning
                 setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
                 awaitingPlayback[coordinator.id] = true
+                // Notify QueueView to reload — it was previously
+                // missing this signal when the queue-based play path
+                // ran, leaving the panel stale until the user toggled
+                // it off and back on (issue #8).
+                if queueWasModified {
+                    postQueueChanged(optimisticItems: [])
+                }
             } else if uri.hasPrefix(URIPrefix.rinconPlaylist) || uri.hasPrefix("file:///jffs/") {
                 // Sonos playlists and library playlists — add to queue then play
                 try await withStaleHandling(for: group.name) {
@@ -1324,6 +1562,7 @@ public class SonosManager: ObservableObject {
                     )
                     try await avTransport.play(device: coordinator)
                 }
+                postQueueChanged(optimisticItems: [])
             } else {
                 // Direct playback — singles, radio streams, etc.
                 sonosDebugLog("[PLAYBACK] SetAVTransportURI: \(uri.prefix(80))")
@@ -1334,6 +1573,11 @@ public class SonosManager: ObservableObject {
                     )
                     try await avTransport.play(device: coordinator)
                 }
+                // Direct-URI playback bypasses the queue, but `Play
+                // Now` semantics imply replacing whatever was there;
+                // a notification triggers a Browse(Q:0) so the panel
+                // shows the newly-empty (or radio-streaming) state.
+                postQueueChanged(optimisticItems: [])
             }
         } else if item.isContainer {
             try await withStaleHandling(for: group.name) {
@@ -1343,6 +1587,7 @@ public class SonosManager: ObservableObject {
                 try await avTransport.setAVTransportURI(device: coordinator, uri: "x-rincon-queue:\(coordinator.id)#0")
                 try await avTransport.play(device: coordinator)
             }
+            postQueueChanged(optimisticItems: [])
         }
     }
 
@@ -1408,15 +1653,21 @@ public class SonosManager: ObservableObject {
 
         sonosDebugLog("[QUEUE] Batch add \(uris.count) URIs at pos \(insertAt) playNext=\(playNext)")
 
-        // Show an immediate "Adding..." banner so the user knows something's
-        // happening — batch adds on S1 hardware can take 20-40 s and the
-        // user-perceived silence is exactly the bug we're fixing.
-        ErrorHandler.shared.info("Adding \(uris.count) tracks…")
-
         // Try the single-SOAP batch action first. Sonos caps each call at
         // 16 items, so chunk the input and send multiple batches if needed.
         // If the speaker rejects the wire format (fault 402 "Invalid Args")
         // or doesn't support the action, fall back to sequential single adds.
+        //
+        // 16 is the firmware-imposed maximum for `AddMultipleURIsToQueue` —
+        // anything larger faults with 402. Smaller batches (5/10) are
+        // strictly worse: per-call SOAP overhead is fixed, so n×overhead
+        // grows with the number of round-trips. The "this takes forever"
+        // perception was a UI gap — a single static banner during the
+        // serial chunked send. Now we update the banner per chunk so
+        // the user sees progress instead of dead air.
+        let total = uris.count
+        ErrorHandler.shared.info("Adding 0 / \(total) tracks…")
+
         var firstTrack = 0
         var numAdded = 0
         var batchSucceeded = false
@@ -1439,6 +1690,10 @@ public class SonosManager: ObservableObject {
                 // Next chunk goes after the ones we just added (only relevant
                 // when playNext/insertAt > 0; append mode keeps nextInsertAt=0).
                 if nextInsertAt > 0 { nextInsertAt += result.numAdded }
+                // Update the banner so the user can see the queue is filling.
+                if numAdded < total {
+                    ErrorHandler.shared.info("Adding \(numAdded) / \(total) tracks…")
+                }
             }
             batchSucceeded = numAdded > 0
         } catch {
@@ -1461,9 +1716,12 @@ public class SonosManager: ObservableObject {
                         device: coordinator, uri: uri, metadata: meta,
                         desiredFirstTrackNumberEnqueued: target, enqueueAsNext: false
                     )
-                    sonosDebugLog("[QUEUE] Per-track fallback \(i+1)/\(uris.count) '\(item.title)' -> pos=\(pos)")
+                    sonosDebugLog("[QUEUE] Per-track fallback \(i+1)/\(uris.count) '\(item.title)' uri=\(uri.prefix(80)) -> pos=\(pos)")
                     if firstTrack == 0 && pos > 0 { firstTrack = pos }
                     if pos > 0 { numAdded += 1 }
+                    if numAdded < uris.count {
+                        ErrorHandler.shared.info("Adding \(numAdded) / \(uris.count) tracks…")
+                    }
                 } catch {
                     sonosDebugLog("[QUEUE] Per-track fallback add FAILED for '\(item.title)': \(error)")
                     ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
@@ -1846,6 +2104,26 @@ extension SonosManager: TransportStrategyDelegate {
             updated.stationName = existing.stationName
         }
 
+        // Preserve enriched artist/album across polls. Apple Music HLS-static
+        // favorites send sparse DIDL with an empty artist on every transport
+        // poll; we fill it in via a one-shot iTunes lookup, but the next
+        // poll would otherwise overwrite that with empty (or the original
+        // album-shaped junk) again. As long as we're still on the same
+        // track:
+        //   - An empty incoming field never wins over a non-empty existing.
+        //   - An album-shaped incoming "artist" never wins over a clean one
+        //     (defends against Sonos's `dc:creator = album` quirk).
+        if !trackChanged {
+            let incomingArtistIsSuspect = Self.isAlbumShapedArtist(updated.artist)
+            if (updated.artist.isEmpty || incomingArtistIsSuspect) && !existing.artist.isEmpty
+               && !Self.isAlbumShapedArtist(existing.artist) {
+                updated.artist = existing.artist
+            }
+            if updated.album.isEmpty && !existing.album.isEmpty {
+                updated.album = existing.album
+            }
+        }
+
         // Art stability: for same track, pin the first art we saw.
         //
         // Earlier logic only replaced the incoming art when it was nil or a
@@ -1877,6 +2155,132 @@ extension SonosManager: TransportStrategyDelegate {
                 transportState: groupTransportStates[groupID] ?? .stopped
             )
         }
+
+        // Apple Music favorites (saved as `x-sonosapi-hls-static:song:<id>` or
+        // `x-sonos-http:song:<id>.mp4`) often deliver a sparse DIDL with no
+        // artist field — Sonos's own app fills in the artist from a separate
+        // lookup. We mirror that with a one-shot iTunes lookup by track ID,
+        // rate-limited so it can't tip iTunes into 403.
+        enrichAppleMusicArtistIfNeeded(groupID: groupID, metadata: updated)
+    }
+
+    private func enrichAppleMusicArtistIfNeeded(groupID: String, metadata: TrackMetadata) {
+        // Enrich when the existing artist field is empty OR when it looks
+        // album-shaped (Sonos sometimes leaks the album name into
+        // `<dc:creator>` for HLS-static Apple Music favorites). We
+        // overwrite a suspect value because it's worse-than-nothing — it
+        // poisons every downstream lookup.
+        guard metadata.artist.isEmpty || Self.isAlbumShapedArtist(metadata.artist) else { return }
+        guard let uri = metadata.trackURI, !uri.isEmpty else { return }
+        guard let songID = Self.extractAppleMusicSongID(from: uri) else { return }
+
+        // Persistent cache: subsequent plays of the same favorite hit the
+        // local store and skip both the network call and the stale-trip
+        // around `appleMusicEnrichmentResolved` (which only lives for the
+        // process lifetime).
+        let cacheKey = MetadataCacheRepository.Kind.appleMusicTrack.key(songID)
+        if let cached = metadataCacheForAppleMusic?.get(cacheKey),
+           let data = cached.data(using: .utf8),
+           let payload = try? JSONDecoder().decode(AppleMusicTrackEnrichment.self, from: data) {
+            applyAppleMusicEnrichment(groupID: groupID, uri: uri, payload: payload, source: "cache")
+            return
+        }
+
+        if appleMusicEnrichmentInFlight.contains(songID) { return }
+        appleMusicEnrichmentInFlight.insert(songID)
+
+        Task { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    self?.appleMusicEnrichmentInFlight.remove(songID)
+                }
+            }
+            guard let url = URL(string: "https://itunes.apple.com/lookup?id=\(songID)") else { return }
+            // Goes through the shared rate limiter so the existing 403
+            // protection covers this lookup too.
+            guard let (data, _) = await ITunesRateLimiter.shared.perform(
+                url: url, session: URLSession.shared, maxWait: 5
+            ) else { return }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let results = json["results"] as? [[String: Any]],
+                  let first = results.first,
+                  let artistName = first["artistName"] as? String,
+                  !artistName.isEmpty else { return }
+            let albumName = first["collectionName"] as? String
+
+            let payload = AppleMusicTrackEnrichment(artist: artistName, album: albumName)
+
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                // Persist for next time — 90-day TTL is plenty since
+                // Apple Music track IDs are stable.
+                if let store = self.metadataCacheForAppleMusic,
+                   let encoded = try? JSONEncoder().encode(payload),
+                   let str = String(data: encoded, encoding: .utf8) {
+                    store.set(cacheKey, payload: str, ttlSeconds: 90 * 24 * 60 * 60)
+                }
+                self.applyAppleMusicEnrichment(groupID: groupID, uri: uri, payload: payload, source: "network")
+            }
+        }
+    }
+
+    /// Writes the enriched fields onto `groupTrackMetadata[groupID]` when
+    /// the track URI still matches and the existing artist is either empty
+    /// or album-shaped. If an album-shaped value is overwritten, we move
+    /// it into the `album` field when that field is empty — it really was
+    /// the album, just labelled wrong.
+    private func applyAppleMusicEnrichment(groupID: String, uri: String,
+                                           payload: AppleMusicTrackEnrichment, source: String) {
+        guard var meta = groupTrackMetadata[groupID] else { return }
+        guard meta.trackURI == uri else { return }
+        let existingArtistIsAlbum = Self.isAlbumShapedArtist(meta.artist)
+        guard meta.artist.isEmpty || existingArtistIsAlbum else { return }
+
+        // Reclaim a misplaced album label before overwriting the artist.
+        if existingArtistIsAlbum && meta.album.isEmpty {
+            meta.album = meta.artist
+        }
+        meta.artist = payload.artist
+        if meta.album.isEmpty, let albumName = payload.album, !albumName.isEmpty {
+            meta.album = albumName
+        }
+        groupTrackMetadata[groupID] = meta
+        sonosDebugLog("[ENRICH] Apple Music \(source) → \(payload.artist) — \(payload.album ?? "")")
+    }
+
+    /// Returns true when an "artist" string is actually an album label —
+    /// Sonos occasionally writes the album into `<dc:creator>` for HLS
+    /// favorites. We mirror the suffix list from `MusicMetadataService`
+    /// so the enrichment trigger and the About-tab guard agree on what
+    /// "looks album-shaped" means.
+    private static func isAlbumShapedArtist(_ s: String) -> Bool {
+        let lower = s.lowercased()
+        let albumSuffixes = [
+            "(deluxe)", "(deluxe edition)", "(remastered)", "(remaster)",
+            "(expanded)", "(soundtrack)", "(original soundtrack)", "(ost)",
+            "(special edition)", "(extended)", "(anniversary edition)",
+            "(bonus track version)"
+        ]
+        for suffix in albumSuffixes where lower.hasSuffix(suffix) { return true }
+        return false
+    }
+
+    /// Pulls the numeric song ID out of an Apple-Music-flavoured Sonos URI.
+    /// Matches both:
+    ///   `x-sonos-http:song%3a<ID>.mp4?…`
+    ///   `x-sonosapi-hls-static:song%3a<ID>?…`
+    /// Returns nil for any other URI shape.
+    private static func extractAppleMusicSongID(from uri: String) -> String? {
+        guard uri.contains("x-sonos-http:song") || uri.contains("x-sonosapi-hls-static:song") else {
+            return nil
+        }
+        // Decode percent-encoding so `song%3a123` → `song:123`.
+        let decoded = uri.removingPercentEncoding ?? uri
+        // Find "song:" then read consecutive digits.
+        guard let range = decoded.range(of: "song:") else { return nil }
+        let after = decoded[range.upperBound...]
+        let digits = after.prefix { $0.isNumber }
+        return digits.isEmpty ? nil : String(digits)
     }
 
     /// Detects technical stream names that should not replace friendly titles.
@@ -1897,7 +2301,76 @@ extension SonosManager: TransportStrategyDelegate {
     public func transportDidUpdateMute(_ deviceID: String, muted: Bool) {
         let now = Date()
         if let grace = muteGraceUntils[deviceID], now < grace { return }
-        if deviceMutes[deviceID] != muted { deviceMutes[deviceID] = muted }
+        let changed = deviceMutes[deviceID] != muted
+        if changed { deviceMutes[deviceID] = muted }
+        // Sonos's group-mute (from its own app, voice control, scenes)
+        // sends individual SetMute calls per member, but the per-member
+        // UPnP NOTIFY events arrive at very different latencies on
+        // different hardware — wired Connect/One: ~50 ms; portable
+        // Float/Roam: up to ~10 s on unmute. Waiting for each speaker's
+        // own event leaves the UI badly out of sync during that window.
+        //
+        // Optimistic group propagation: when one member's mute toggles,
+        // mirror to all other members in the same group on the
+        // assumption it was a group-level operation. The verifying
+        // GetMute fan-out below corrects within ~150 ms in the rare
+        // per-speaker-mute case where the assumption is wrong (brief
+        // visible flicker is acceptable; FP5's 10 s real lag is not).
+        if changed {
+            propagateMuteOptimistically(triggerDeviceID: deviceID, muted: muted)
+            scheduleGroupMuteResync(triggerDeviceID: deviceID)
+        }
+    }
+
+    /// Mirrors a mute change from one member to every other member of
+    /// its group, skipping members whose `muteGraceUntils` is currently
+    /// active (those are echoes of writes we just made). Doesn't touch
+    /// the trigger device itself — `transportDidUpdateMute` already did.
+    private func propagateMuteOptimistically(triggerDeviceID: String, muted: Bool) {
+        guard let group = groups.first(where: {
+            $0.members.contains { $0.id == triggerDeviceID }
+        }) else { return }
+        let now = Date()
+        for member in group.members where member.id != triggerDeviceID {
+            if let grace = muteGraceUntils[member.id], now < grace { continue }
+            if deviceMutes[member.id] != muted {
+                deviceMutes[member.id] = muted
+            }
+        }
+    }
+
+    /// Verifies the optimistic propagation by polling each non-trigger
+    /// member's actual mute state via SOAP. Corrects any speaker that
+    /// the optimistic update mirrored incorrectly (e.g. user only
+    /// muted one speaker via Sonos's app). Bypasses the
+    /// `muteGraceUntils` filter for the polled values because we're
+    /// reading authoritative speaker state, not echoing our own write.
+    private func scheduleGroupMuteResync(triggerDeviceID: String) {
+        guard let group = groups.first(where: {
+            $0.members.contains { $0.id == triggerDeviceID }
+        }) else { return }
+        let others = group.members.filter { $0.id != triggerDeviceID }
+        guard !others.isEmpty else { return }
+        Task { [weak self] in
+            await withTaskGroup(of: Void.self) { tg in
+                for member in others {
+                    tg.addTask { [weak self] in
+                        guard let self else { return }
+                        do {
+                            let val = try await self.renderingControl.getMute(device: member)
+                            await MainActor.run {
+                                if self.deviceMutes[member.id] != val {
+                                    self.deviceMutes[member.id] = val
+                                }
+                            }
+                        } catch {
+                            // Quiet failure — the periodic reconciliation
+                            // poll will catch any persistent mismatch.
+                        }
+                    }
+                }
+            }
+        }
     }
 
     public func transportDidUpdateTopology(_ groupData: [ZoneGroupData]) {
@@ -1950,6 +2423,19 @@ extension SonosManager: TransportStrategyDelegate {
 
     public func getZoneGroupTopologyService() -> ZoneGroupTopologyService {
         zoneTopology
+    }
+
+    /// Triggered by `ZoneGroupTopology` UPnP NOTIFY events. Doesn't try
+    /// to parse the event payload (its triple-encoded XML structure is
+    /// unreliable) — instead pulls authoritative `GetZoneGroupState`
+    /// from any known coordinator. Without this, group/ungroup actions
+    /// made from Sonos's app weren't reflected here until the next
+    /// 30-second SSDP rescan.
+    public func transportRequestsTopologyRefresh() {
+        guard let device = groups.first?.coordinator ?? devices.values.first else { return }
+        Task {
+            await refreshTopology(from: device, force: true)
+        }
     }
 }
 

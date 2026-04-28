@@ -2,12 +2,50 @@
 ///
 /// Checks the two-tier cache first, then fetches from the network on miss.
 /// Shows a music note placeholder while loading or on failure.
+///
+/// Image fetches use one of two URLSessions to avoid head-of-line
+/// blocking. The single shared session was a problem when, say, a
+/// Spotify queue of 50 tracks loaded all-at-once: art URLs all
+/// originate from `i.scdn.co`, the per-host connection cap (6)
+/// saturated, and the Now Playing art request had to wait its turn
+/// behind 50 queue thumbs. Each session has its own connection pool,
+/// so a queue render no longer starves Now Playing.
 import SwiftUI
 import SonosKit
+
+enum ImageFetchPriority {
+    /// Now Playing, menu bar, modal artwork — user is staring at this.
+    case interactive
+    /// Queue rows, browse lists — fine to wait if interactive is busy.
+    case background
+}
+
+private enum ImageFetchSession {
+    /// Dedicated to interactive surfaces. Small pool, but never blocks
+    /// behind background loads.
+    static let interactive: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.httpMaximumConnectionsPerHost = 6
+        config.timeoutIntervalForRequest = 15
+        return URLSession(configuration: config)
+    }()
+    /// Browse / queue art. Independent pool.
+    static let background: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.httpMaximumConnectionsPerHost = 6
+        config.timeoutIntervalForRequest = 30
+        return URLSession(configuration: config)
+    }()
+
+    static func session(for priority: ImageFetchPriority) -> URLSession {
+        priority == .interactive ? interactive : background
+    }
+}
 
 struct CachedAsyncImage: View {
     let url: URL?
     var cornerRadius: CGFloat = 4
+    var priority: ImageFetchPriority = .background
 
     @State private var image: NSImage?
     @State private var isLoading = false
@@ -75,7 +113,8 @@ struct CachedAsyncImage: View {
 
         Task {
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
+                let session = ImageFetchSession.session(for: priority)
+                let (data, _) = try await session.data(from: url)
                 if let nsImage = NSImage(data: data) {
                     let squared = Self.cropToSquare(nsImage)
                     ImageCache.shared.store(squared, for: url)

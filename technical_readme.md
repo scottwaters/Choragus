@@ -1,4 +1,4 @@
-# The SonosController — Technical README
+# The Choragus — Technical README
 
 Low-level reference for developers. For the end-user feature overview see [README.md](README.md).
 
@@ -6,7 +6,7 @@ Low-level reference for developers. For the end-user feature overview see [READM
 
 ## Project Shape
 
-- **SonosController** — SwiftUI app target (views, ViewModels, app-level singletons).
+- **Choragus** — SwiftUI app target (views, ViewModels, app-level singletons).
 - **SonosKit** — local Swift package (discovery, UPnP/SOAP services, models, caching, SMAPI, play history, transport strategies).
 - **~24,000 lines of Swift** across 80+ source files.
 - **292 unit tests** covering classifier logic, XML parsing, grace-period state machines, topology-merge invariants (value equality, stable member sort, household partitioning, grace window), protocol conformance, and model enrichment.
@@ -122,7 +122,7 @@ Format-string helpers use `String(format:)` with `%1$@` / `%2$@` positional plac
 
 ### Update Checker
 
-Queries `https://api.github.com/repos/scottwaters/SonosController/releases/latest`, compares `tag_name` (normalized — strips leading "v", extracts numeric run) against the running `CFBundleShortVersionString` using a pure numeric semver comparator.
+Queries `https://api.github.com/repos/scottwaters/Choragus/releases/latest`, compares `tag_name` (normalized — strips leading "v", extracts numeric run) against the running `CFBundleShortVersionString` using a pure numeric semver comparator.
 
 Silent background check at most once per 24 h at launch (`UserDefaults[updateChecker.lastCheck]`). Manual check from the app menu always reports a result. All outcomes (`available`, `current`, `error`) are logged via `sonosDebugLog`.
 
@@ -133,10 +133,10 @@ Silent background check at most once per 24 h at launch (`UserDefaults[updateChe
 **Prerequisites:** Xcode 15 or later. macOS 14+ SDK.
 
 ```bash
-git clone https://github.com/scottwaters/SonosController.git
-cd SonosController
+git clone https://github.com/scottwaters/Choragus.git
+cd Choragus
 
-xcodebuild -scheme SonosController \
+xcodebuild -scheme Choragus \
   -configuration Release \
   -destination 'platform=macOS' \
   CONFIGURATION_BUILD_DIR="$(pwd)/build" \
@@ -145,7 +145,7 @@ xcodebuild -scheme SonosController \
   build
 ```
 
-The resulting app is at `build/SonosController.app`. Use `-configuration Debug` for a debug build with symbols and `DEBUG` defined.
+The resulting app is at `build/Choragus.app`. Use `-configuration Debug` for a debug build with symbols and `DEBUG` defined.
 
 ### Running Tests
 
@@ -158,17 +158,17 @@ The Swift Package Manager target for `SonosKit` is self-contained and runs indep
 
 ### Project Conventions
 
-- **Build output** — always to `build/SonosController.app` at the project root. Avoid DerivedData for command-line builds.
+- **Build output** — always to `build/Choragus.app` at the project root. Avoid DerivedData for command-line builds.
 - **Universal binary** — CI should always pass `ONLY_ACTIVE_ARCH=NO ARCHS="arm64 x86_64"`.
-- **Kill before rebuild** — `pkill -x SonosController` (or `killall SonosController`) before a rebuild to avoid stale state.
+- **Kill before rebuild** — `pkill -x Choragus` (or `killall Choragus`) before a rebuild to avoid stale state.
 - **No force-unwraps** — use `guard let` with a safe fallback (see `SonosDevice.fallbackURL` pattern).
-- **Debug logging** — `sonosDebugLog(_:)` writes to `~/Library/Containers/com.sonoscontroller.app/Data/Library/Application Support/SonosController/sonos_debug.log` in DEBUG builds. Look for `[DISCOVERY]`, `[UPDATE]`, and similar prefixes.
+- **Debug logging** — `sonosDebugLog(_:)` writes to `~/Library/Containers/com.sonoscontroller.app/Data/Library/Application Support/Choragus/sonos_debug.log` in DEBUG builds. Look for `[DISCOVERY]`, `[UPDATE]`, and similar prefixes.
 
 ---
 
 ## File System Paths (Runtime)
 
-Under `~/Library/Containers/com.sonoscontroller.app/Data/Library/Application Support/SonosController/`:
+Under `~/Library/Containers/com.sonoscontroller.app/Data/Library/Application Support/Choragus/`:
 
 | File | Purpose |
 |------|---------|
@@ -184,7 +184,7 @@ Under `~/Library/Containers/com.sonoscontroller.app/Data/Library/Application Sup
 
 ## Issues
 
-Bug reports and feature requests welcome at [github.com/scottwaters/SonosController/issues](https://github.com/scottwaters/SonosController/issues). Pull requests are not accepted on this project — please open an issue and describe the change you'd like to see.
+Bug reports and feature requests welcome at [github.com/scottwaters/Choragus/issues](https://github.com/scottwaters/Choragus/issues). Pull requests are not accepted on this project — please open an issue and describe the change you'd like to see.
 
 ## License
 

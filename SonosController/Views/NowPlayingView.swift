@@ -56,9 +56,146 @@ struct NowPlayingView: View {
     private var currentServiceName: String? { vm.currentServiceName }
     private var displayArtist: String { vm.displayArtist }
 
+    /// Show the Lyrics/About/History panel whenever there's a real
+    /// track to look up. Hides for empty states, ad breaks, and the
+    /// "TV" / "Line-In" stream titles where there's nothing useful for
+    /// LRCLIB or the metadata service to find.
+    ///
+    /// Artist is *not* required: some Sonos favorites deliver a track
+    /// with an empty artist field (the album name lands in the artist
+    /// slot or the artist is dropped entirely). In those cases the
+    /// LyricsService falls back to a title-only search and the About
+    /// tab queries the album, so showing the panel still beats hiding
+    /// it — empty results render as "No lyrics found" / "No info found"
+    /// instead of an unexplained missing UI.
+    private var shouldShowContextPanel: Bool {
+        guard hasTrack else { return false }
+        if trackMetadata.isAdBreak { return false }
+        let title = trackMetadata.title
+        if title == "TV" || title == "Line-In" { return false }
+        return !trackMetadata.title.isEmpty
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
+                // Wraps the playback controls + speaker volumes — the
+                // section where mouse-wheel volume control makes sense.
+                // The context panel below sits OUTSIDE this group so
+                // scroll events over Lyrics/About/History scroll the
+                // panel content instead of changing volume.
+                playbackSection
+                    .volumeScrollControl(
+                        onVolumeStep: { vm.applyScrollVolumeStep($0) },
+                        onToggleMute: { vm.toggleMute() }
+                    )
+
+                // Lyrics / About / History — fills the otherwise-empty
+                // space below the speaker volumes when the user has a
+                // track playing. Hidden for radio/empty states.
+                if shouldShowContextPanel {
+                    Divider().padding(.top, 8)
+                    NowPlayingContextPanel(
+                        trackMetadata: trackMetadata,
+                        group: group,
+                        positionSeconds: vm.smoothPosition,
+                        isPlaying: transportState == .playing
+                    )
+                    // 260pt = tab picker (~36) + divider (1) +
+                    // padding (~16) + 5-row × 34pt lyrics (170) +
+                    // breathing room. Matches what
+                    // `SlidingLyricsView` actually wants so the
+                    // bottom of the gradient mask isn't clipped.
+                    .frame(maxWidth: .infinity, minHeight: 260)
+                    .padding(.top, 4)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .tint(sonosManager.resolvedAccentColor)
+        .onAppear {
+            startProgressTimer()
+            syncFromManager()
+            Task { await fetchCurrentState() }
+        }
+        .onDisappear { stopProgressTimer() }
+        .onChange(of: group.id) {
+            vm.group = group
+            vm.art.reset()
+            vm.resetForGroupChange()
+            startProgressTimer()
+            Task { await fetchCurrentState() }
+        }
+        .onReceive(sonosManager.$deviceVolumes) { _ in syncVolumeFromManager() }
+        .onReceive(sonosManager.$deviceMutes) { _ in syncMuteFromManager() }
+        .onChange(of: speakerMutes) { syncMasterMuteFromSpeakers() }
+        .onReceive(sonosManager.$groupPositions) { positions in
+            // Sync position from TransportStrategy updates for smooth interpolation
+            if let pos = positions[group.coordinatorID] {
+                vm.lastKnownPosition = pos
+                vm.lastPositionTimestamp = Date()
+                if !vm.isDraggingSeek {
+                    vm.smoothPosition = pos
+                }
+            }
+        }
+        .onReceive(sonosManager.$groupTrackMetadata) { _ in
+            // Force view to re-evaluate trackMetadata computed property
+        }
+        .sheet(isPresented: $showGroupEditor) {
+            GroupEditorView(initialGroup: group)
+                .environmentObject(sonosManager)
+        }
+        .sheet(isPresented: $showSleepTimer) {
+            SleepTimerView(group: group)
+                .environmentObject(sonosManager)
+        }
+        .sheet(isPresented: $showExpandedArt) {
+            ExpandedArtView(
+                artURL: vm.art.radioTrackArtURL ?? vm.art.displayedArtURL,
+                title: trackMetadata.title,
+                artist: trackMetadata.artist,
+                album: trackMetadata.album,
+                stationName: trackMetadata.stationName
+            )
+        }
+    }
+
+    /// The playback section — extracted so we can attach
+    /// `volumeScrollControl` to just this part. The context panel
+    /// below uses its own ScrollViews internally; we don't want our
+    /// scroll-wheel capture stealing events from there.
+    private var playbackSection: some View {
+        choragusWatermarkBackground {
+            playbackSectionContent
+        }
+    }
+
+    /// Wraps content with the Choragus logo as a top-right watermark
+    /// sized + positioned to mirror the album art on the left. Same
+    /// dimensions (`UILayout.nowPlayingArtSize`), same insets
+    /// (`UILayout.horizontalPadding` from the trailing edge, 12 pt from
+    /// the top to match the album-art HStack's `.padding(.top, 12)`).
+    /// Inert (no hit testing) and rendered as `.background` so it sits
+    /// behind content without disturbing layout.
+    @ViewBuilder
+    private func choragusWatermarkBackground<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .background(alignment: .topTrailing) {
+                Image("ChoragusLogo")
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: UILayout.nowPlayingArtSize,
+                           height: UILayout.nowPlayingArtSize)
+                    .opacity(0.18)
+                    .padding(.top, 12)
+                    .padding(.trailing, UILayout.horizontalPadding)
+                    .allowsHitTesting(false)
+            }
+    }
+
+    private var playbackSectionContent: some View {
+        VStack(spacing: 0) {
                 // Album art and track info
                 HStack(spacing: 24) {
                     if hasTrack {
@@ -350,12 +487,24 @@ struct NowPlayingView: View {
                     .buttonStyle(.plain)
 
                     SliderWithPopup(
-                        value: Binding(get: { vm.volume }, set: { vm.volume = $0 }),
+                        value: Binding(
+                            get: { vm.volume },
+                            set: { newValue in
+                                // Live-update per-speaker rows during drag.
+                                // setVolume() is local-only (no SOAP) — it
+                                // mutates `speakerVolumes` + the manager's
+                                // @Published `deviceVolumes` so individual
+                                // rows reflect the proportional / linear
+                                // change in real time. SOAP commit waits
+                                // for drag-end (`commitVolume()`).
+                                vm.volume = newValue
+                                vm.setVolume()
+                            }
+                        ),
                         range: 0...100
                     ) { editing in
                         vm.isDraggingVolume = editing
                         if !editing {
-                            vm.setVolume()
                             vm.commitVolume()
                         }
                     }
@@ -383,63 +532,7 @@ struct NowPlayingView: View {
                                       onToggleMute: { device, muted in await vm.setSpeakerMute(device: device, muted: muted) },
                                       onDragStateChanged: { dragging in vm.isDraggingVolume = dragging })
                 }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .tint(sonosManager.resolvedAccentColor)
-        // Scroll-wheel anywhere on the Now Playing panel adjusts the group
-        // coordinator's master volume; middle-click toggles mute. Applied at
-        // the outermost level so the whole panel is scroll-sensitive. The
-        // overlay uses selective hit-testing — only scroll and middle-click
-        // are captured; all other mouse events pass through to the SwiftUI
-        // content so buttons, sliders, drags, right-clicks keep working.
-        .volumeScrollControl(
-            onVolumeStep: { vm.applyScrollVolumeStep($0) },
-            onToggleMute: { vm.toggleMute() }
-        )
-        .onAppear {
-            startProgressTimer()
-            syncFromManager()
-            Task { await fetchCurrentState() }
-        }
-        .onDisappear { stopProgressTimer() }
-        .onChange(of: group.id) {
-            vm.group = group
-            vm.art.reset()
-            vm.resetForGroupChange()
-            startProgressTimer()
-            Task { await fetchCurrentState() }
-        }
-        .onReceive(sonosManager.$deviceVolumes) { _ in syncVolumeFromManager() }
-        .onReceive(sonosManager.$deviceMutes) { _ in syncMuteFromManager() }
-        .onChange(of: speakerMutes) { syncMasterMuteFromSpeakers() }
-        .onReceive(sonosManager.$groupPositions) { positions in
-            // Sync position from TransportStrategy updates for smooth interpolation
-            if let pos = positions[group.coordinatorID] {
-                vm.lastKnownPosition = pos
-                vm.lastPositionTimestamp = Date()
-                vm.smoothPosition = pos
-            }
-        }
-        .onReceive(sonosManager.$groupTrackMetadata) { _ in
-            // Force view to re-evaluate trackMetadata computed property
-        }
-        .sheet(isPresented: $showGroupEditor) {
-            GroupEditorView(initialGroup: group)
-                .environmentObject(sonosManager)
-        }
-        .sheet(isPresented: $showSleepTimer) {
-            SleepTimerView(group: group)
-                .environmentObject(sonosManager)
-        }
-        .sheet(isPresented: $showExpandedArt) {
-            ExpandedArtView(
-                artURL: vm.art.radioTrackArtURL ?? vm.art.displayedArtURL,
-                title: trackMetadata.title,
-                artist: trackMetadata.artist,
-                album: trackMetadata.album,
-                stationName: trackMetadata.stationName
-            )
+
         }
     }
 
@@ -475,7 +568,7 @@ struct NowPlayingView: View {
     private var albumArtView: some View {
         ZStack(alignment: .bottomTrailing) {
             if let url = vm.art.artURLForDisplay(trackMetadata: trackMetadata) {
-                CachedAsyncImage(url: url, cornerRadius: 8)
+                CachedAsyncImage(url: url, cornerRadius: 8, priority: .interactive)
             } else {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(
@@ -624,7 +717,7 @@ struct ExpandedArtView: View {
     var body: some View {
         VStack(spacing: 16) {
             if let url = artURL {
-                CachedAsyncImage(url: url, cornerRadius: 12)
+                CachedAsyncImage(url: url, cornerRadius: 12, priority: .interactive)
                     .frame(width: 400, height: 400)
                     .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
             } else {

@@ -13,6 +13,7 @@ final class WindowManager {
     private var playHistoryWindow: NSWindow?
     private var homeTheaterWindow: NSWindow?
     private var helpWindow: NSWindow?
+    private var forFunWindow: NSWindow?
 
     func openPlayHistory() {
         if let existing = playHistoryWindow, existing.isVisible {
@@ -46,8 +47,21 @@ final class WindowManager {
             return
         }
         let view = HelpView().preferredColorScheme(colorScheme)
-        let window = createWindow(title: "SonosController Help", content: view, width: 820, height: 560)
+        let window = createWindow(title: "Choragus Help", content: view, width: 820, height: 560)
         helpWindow = window
+    }
+
+    func openForFun() {
+        if let existing = forFunWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+        guard let manager = playHistoryManager else { return }
+        let view = ForFunView()
+            .environmentObject(manager)
+            .preferredColorScheme(colorScheme)
+        let window = createWindow(title: "Visualisations", content: view, width: 1100, height: 720)
+        forFunWindow = window
     }
 
     func openHomeTheaterEQ() {

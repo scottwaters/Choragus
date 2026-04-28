@@ -1,4 +1,4 @@
-/// HelpView.swift — In-app help for SonosController.
+/// HelpView.swift — In-app help for Choragus.
 ///
 /// Rendered in a dedicated auxiliary window (see WindowManager.openHelp).
 /// Uses a two-column layout: topic list on the left, content on the right.
@@ -163,18 +163,39 @@ struct HelpView: View {
     }
 
     private var about: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            heading(L10n.helpAboutSection)
-            paragraph(L10n.helpAboutBody1)
-            paragraph(L10n.helpAboutBody2)
-            heading(L10n.helpSourceCodeAndIssues)
+        // About reads more like a credits card than a help article —
+        // centering the text reflects that and matches the convention
+        // most macOS apps use for their About sheet.
+        VStack(alignment: .center, spacing: 12) {
+            centeredHeading(L10n.helpAboutSection)
+            centeredParagraph(L10n.helpAboutBody1)
+            centeredParagraph(L10n.helpAboutBody2)
+            centeredHeading(L10n.helpSourceCodeAndIssues)
             if let url = AppLinks.repositoryURL {
-                Link("github.com/scottwaters/SonosController", destination: url)
+                Link("github.com/scottwaters/Choragus", destination: url)
                     .font(.body)
             }
-            heading(L10n.helpLicense)
-            paragraph(L10n.helpLicenseBody)
+            centeredHeading(L10n.helpLicense)
+            centeredParagraph(L10n.helpLicenseBody)
         }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func centeredHeading(_ text: String) -> some View {
+        Text(text)
+            .font(.title3)
+            .fontWeight(.semibold)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 4)
+    }
+
+    private func centeredParagraph(_ text: String) -> some View {
+        Text(text)
+            .font(.body)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Helpers

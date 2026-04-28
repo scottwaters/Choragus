@@ -80,11 +80,11 @@ struct GroupEditorView: View {
 
                                 if isCoordinator {
                                     Text(L10n.coordinator)
-                                        .font(.caption2)
+                                        .font(.footnote)
                                         .foregroundStyle(.tertiary)
                                 } else if let otherName = otherGroupName, !isMember {
                                     Text("\(L10n.inGroup): \(otherName)")
-                                        .font(.caption2)
+                                        .font(.footnote)
                                         .foregroundStyle(.orange)
                                 }
                             }

@@ -31,7 +31,7 @@ struct FirstRunWelcomeView: View {
                 Image(systemName: "globe")
                     .foregroundStyle(.secondary)
                 Text(L10n.language)
-                    .font(.subheadline)
+                    .font(.body)
                 Picker("", selection: $sonosManager.appLanguage) {
                     ForEach(AppLanguage.allCases, id: \.self) { lang in
                         Text("\(lang.displayName) \u{2014} \(lang.englishName)").tag(lang)

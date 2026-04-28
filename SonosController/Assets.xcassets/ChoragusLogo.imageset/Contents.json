@@ -1,0 +1,22 @@
+{
+  "images" : [
+    {
+      "filename" : "choragus_light_v3_cropped.png",
+      "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "choragus_dark_v3_cropped.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

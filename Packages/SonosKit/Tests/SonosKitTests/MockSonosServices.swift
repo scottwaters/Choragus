@@ -86,6 +86,8 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
         return nil
     }
 
+    var albumArtSearch: AlbumArtSearchProtocol = AlbumArtSearchService.shared
+
     func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata) {
         groupTrackMetadata[groupID] = metadata
     }

@@ -222,7 +222,13 @@ public final class ContentDirectoryService {
                 ("ContainerMetaData", ""),
                 ("DesiredFirstTrackNumberEnqueued", "\(desiredFirstTrackNumberEnqueued)"),
                 ("EnqueueAsNext", enqueueAsNext ? "1" : "0")
-            ]
+            ],
+            // Bulk add scales linearly with the chunk size on the speaker.
+            // 14-16 tracks ≈ 15-25 s on real hardware. Default 10 s
+            // session timeout caused us to abort the batch even when
+            // Sonos was still happily processing it, leading to false
+            // "batch failed" → per-track fallback → DOUBLE-ADD.
+            timeoutSeconds: 30
         )
         let first = Int(result["FirstTrackNumberEnqueued"] ?? "0") ?? 0
         let added = Int(result["NumTracksAdded"] ?? "0") ?? 0

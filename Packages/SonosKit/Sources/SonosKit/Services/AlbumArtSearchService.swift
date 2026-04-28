@@ -24,6 +24,10 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
     /// 2. Album search with just title
     /// 3. Artist search (for artist-level containers)
     public func searchArtwork(artist: String, album: String) async -> String? {
+        await searchArtwork(artist: artist, album: album, maxWait: 0)
+    }
+
+    public func searchArtwork(artist: String, album: String, maxWait: TimeInterval) async -> String? {
         let cacheKey = "art:\(artist.lowercased())|\(album.lowercased())"
         cacheLock.lock()
         if let cached = cache[cacheKey] {
@@ -34,7 +38,7 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
 
         // Strategy 1: Combined artist + album search
         if !artist.isEmpty && !album.isEmpty {
-            if let url = await iTunesSearch(query: "\(artist) \(album)", entity: "album") {
+            if let url = await iTunesSearch(query: "\(artist) \(album)", entity: "album", maxWait: maxWait) {
                 cacheSet(cacheKey, url)
                 return url
             }
@@ -42,7 +46,7 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
 
         // Strategy 2: Album-only search
         if !album.isEmpty {
-            if let url = await iTunesSearch(query: album, entity: "album") {
+            if let url = await iTunesSearch(query: album, entity: "album", maxWait: maxWait) {
                 cacheSet(cacheKey, url)
                 return url
             }
@@ -51,7 +55,7 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
         // Strategy 3: Artist search (returns artist image)
         let artistQuery = !artist.isEmpty ? artist : album
         if !artistQuery.isEmpty {
-            if let url = await iTunesSearch(query: artistQuery, entity: "musicArtist") {
+            if let url = await iTunesSearch(query: artistQuery, entity: "musicArtist", maxWait: maxWait) {
                 cacheSet(cacheKey, url)
                 return url
             }
@@ -59,7 +63,7 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
 
         // Strategy 4: Broad song search (might find artwork from a popular track)
         if !album.isEmpty {
-            if let url = await iTunesSearch(query: album, entity: "song") {
+            if let url = await iTunesSearch(query: album, entity: "song", maxWait: maxWait) {
                 cacheSet(cacheKey, url)
                 return url
             }
@@ -79,6 +83,32 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
             return cached
         }
         cacheLock.unlock()
+
+        // Strategy 0a: Soundtrack-track shape via title ("X End Titles",
+        // "Theme From X", etc.) — see `extractMovieName`.
+        if Self.titleHasSoundtrackShape(title),
+           let movie = Self.extractMovieName(from: title), !movie.isEmpty {
+            if let url = await iTunesSearch(query: "\(movie) soundtrack", entity: "album") {
+                sonosDebugLog("[ART/RADIO] OST hit (title) movie=\(movie) artist=\(artist)")
+                cacheSet(cacheKey, url)
+                return url
+            }
+        }
+
+        // Strategy 0b: Soundtrack stations frequently put the *movie name*
+        // in the artist field instead of the actual composer/performer
+        // (e.g. 1.FM Movie Soundtracks Hits sends artist="Beauty and the
+        // Beast" for "Battle on the Tower"). When Strategy 0a missed,
+        // try treating the artist string as the movie name and search
+        // its OST. Constrained to non-trivial multi-character strings
+        // so we don't fire for empty / one-word artists.
+        if !artist.isEmpty, artist.count >= 3 {
+            if let url = await iTunesSearch(query: "\(artist) soundtrack", entity: "album") {
+                sonosDebugLog("[ART/RADIO] OST hit (artist-as-movie) movie=\(artist)")
+                cacheSet(cacheKey, url)
+                return url
+            }
+        }
 
         // Strategy 1: Verified song search with artist + title
         if !artist.isEmpty {
@@ -128,6 +158,88 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
 
     // MARK: - Shared Utilities
 
+    /// Soundtrack-track suffix keywords — appear at the END of titles like
+    /// "Willow End Titles" or "Star Wars Main Theme". Longest-first so
+    /// multi-word matches win over single-word ones during prefix checks.
+    private static let soundtrackTrackSuffixes: [String] = [
+        "main theme", "main title", "end titles", "end title",
+        "opening credits", "closing credits",
+        "overture", "prologue", "epilogue", "finale",
+        "credits", "theme", "suite", "score", "opening", "closing",
+        "intro", "outro"
+    ]
+
+    /// Soundtrack-track prefix patterns — appear at the START of titles
+    /// like "Theme From Jurassic Park" or "Music From Star Wars".
+    /// Each ends in a space so the match cleanly precedes the movie name.
+    private static let soundtrackTrackPrefixes: [String] = [
+        "theme from ", "music from ", "main theme from ",
+        "suite from ", "score from ", "song from ",
+        "selections from ", "highlights from ",
+        "end titles from ", "end title from "
+    ]
+
+    /// True when the title carries soundtrack-track shape — either a
+    /// recognised suffix (e.g. "X End Titles") or prefix (e.g. "Theme
+    /// From X"). Used to gate the OST-album search strategy because for
+    /// these tracks iTunes rarely has the recording itself but reliably
+    /// has the original soundtrack album under the bare movie name.
+    static func titleHasSoundtrackShape(_ title: String) -> Bool {
+        let stripped = title
+            .replacingOccurrences(of: "\\s*\\([^)]*\\)", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+            .lowercased()
+        for suffix in soundtrackTrackSuffixes {
+            if stripped.hasSuffix(" " + suffix) || stripped == suffix {
+                return true
+            }
+        }
+        for prefix in soundtrackTrackPrefixes where stripped.hasPrefix(prefix) {
+            return true
+        }
+        return false
+    }
+
+    /// Best-effort movie/film name extracted from a soundtrack-track
+    /// title. Strips parentheticals (which often hold localized titles)
+    /// and either a recognised soundtrack-track suffix ("Willow End
+    /// Titles" → "Willow") or prefix ("Theme From Jurassic Park" →
+    /// "Jurassic Park"). Returns nil if nothing meaningful is left.
+    static func extractMovieName(from title: String) -> String? {
+        var t = title
+            .replacingOccurrences(of: "\\s*\\([^)]*\\)", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        let tLower = t.lowercased()
+        // Try suffixes first — they're more common and leave a movie name
+        // followed by an optional punctuator we trim below.
+        for suffix in soundtrackTrackSuffixes {
+            if tLower.hasSuffix(" " + suffix) {
+                let cutoff = t.count - suffix.count - 1
+                t = String(t.prefix(cutoff)).trimmingCharacters(in: .whitespaces)
+                break
+            }
+            if tLower == suffix {
+                t = ""
+                break
+            }
+        }
+        // If suffix didn't match (or fully consumed the title), try prefixes.
+        if t == title || t.isEmpty {
+            for prefix in soundtrackTrackPrefixes where tLower.hasPrefix(prefix) {
+                t = String(title.dropFirst(prefix.count))
+                    .replacingOccurrences(of: "\\s*\\([^)]*\\)", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]", with: "", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespaces)
+                break
+            }
+        }
+        // Strip trailing punctuators (dash/colon/comma) left after the cut.
+        t = t.trimmingCharacters(in: CharacterSet(charactersIn: " -–—:,"))
+        return t.count >= 2 ? t : nil
+    }
+
     /// Constructs a /getaa URL to extract embedded art from a local file via the Sonos speaker
     public static func getaaURL(speakerIP: String, port: Int = SonosProtocol.defaultPort, trackURI: String) -> String {
         let encoded = trackURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trackURI
@@ -167,50 +279,43 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
     }
 
     /// Low-level iTunes Search API call
-    private func iTunesSearch(query: String, entity: String, limit: Int = 1) async -> String? {
-        let result = await iTunesSearchFull(query: query, entity: entity, limit: limit)
+    private func iTunesSearch(query: String, entity: String, limit: Int = 1, maxWait: TimeInterval = 0) async -> String? {
+        let result = await iTunesSearchFull(query: query, entity: entity, limit: limit, maxWait: maxWait)
         return result?.artURL
     }
 
     /// iTunes search that also returns metadata for verification
-    private func iTunesSearchFull(query: String, entity: String, limit: Int = 3) async -> (artURL: String, artistName: String, collectionName: String, trackName: String)? {
+    private func iTunesSearchFull(query: String, entity: String, limit: Int = 3, maxWait: TimeInterval = 0) async -> (artURL: String, artistName: String, collectionName: String, trackName: String)? {
         guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=\(limit)") else {
             return nil
         }
 
-        do {
-            let (data, response) = try await session.data(for: URLRequest(url: url))
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                return nil
-            }
-
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let results = json["results"] as? [[String: Any]],
-                  let first = results.first else {
-                return nil
-            }
-
-            let artURL = first["artworkUrl100"] as? String ??
-                         first["artworkUrl60"] as? String ??
-                         first["artworkUrl30"] as? String
-            guard let art = artURL else { return nil }
-
-            let upscaled = art.replacingOccurrences(of: "100x100", with: "600x600")
-                              .replacingOccurrences(of: "60x60", with: "600x600")
-                              .replacingOccurrences(of: "30x30", with: "600x600")
-
-            return (
-                artURL: upscaled,
-                artistName: first["artistName"] as? String ?? "",
-                collectionName: first["collectionName"] as? String ?? "",
-                trackName: first["trackName"] as? String ?? ""
-            )
-        } catch {
+        guard let (data, _) = await ITunesRateLimiter.shared.perform(url: url, session: session, maxWait: maxWait) else {
             return nil
         }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["results"] as? [[String: Any]],
+              let first = results.first else {
+            return nil
+        }
+
+        let artURL = first["artworkUrl100"] as? String ??
+                     first["artworkUrl60"] as? String ??
+                     first["artworkUrl30"] as? String
+        guard let art = artURL else { return nil }
+
+        let upscaled = art.replacingOccurrences(of: "100x100", with: "600x600")
+                          .replacingOccurrences(of: "60x60", with: "600x600")
+                          .replacingOccurrences(of: "30x30", with: "600x600")
+
+        return (
+            artURL: upscaled,
+            artistName: first["artistName"] as? String ?? "",
+            collectionName: first["collectionName"] as? String ?? "",
+            trackName: first["trackName"] as? String ?? ""
+        )
     }
 
     // MARK: - Text Cleaning for Search
@@ -302,21 +407,19 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
               let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=\(limit)") else {
             return nil
         }
-        do {
-            let (data, response) = try await session.data(for: URLRequest(url: url))
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode),
-                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let items = json["results"] as? [[String: Any]] else { return nil }
-            return items.compactMap { item in
-                guard let art = item["artworkUrl100"] as? String else { return nil }
-                let upscaled = art.replacingOccurrences(of: "100x100", with: "600x600")
-                                  .replacingOccurrences(of: "60x60", with: "600x600")
-                                  .replacingOccurrences(of: "30x30", with: "600x600")
-                return (artURL: upscaled,
-                        trackName: item["trackName"] as? String ?? "",
-                        collectionName: item["collectionName"] as? String ?? "")
-            }
-        } catch { return nil }
+        guard let (data, _) = await ITunesRateLimiter.shared.perform(url: url, session: session) else {
+            return nil
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = json["results"] as? [[String: Any]] else { return nil }
+        return items.compactMap { item in
+            guard let art = item["artworkUrl100"] as? String else { return nil }
+            let upscaled = art.replacingOccurrences(of: "100x100", with: "600x600")
+                              .replacingOccurrences(of: "60x60", with: "600x600")
+                              .replacingOccurrences(of: "30x30", with: "600x600")
+            return (artURL: upscaled,
+                    trackName: item["trackName"] as? String ?? "",
+                    collectionName: item["collectionName"] as? String ?? "")
+        }
     }
 }

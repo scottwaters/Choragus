@@ -32,7 +32,7 @@
 		</dict>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>SonosController needs local network access to discover and control Sonos speakers.</string>
+	<string>Choragus needs local network access to discover and control Sonos speakers.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_sonos._tcp</string>

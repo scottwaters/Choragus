@@ -66,6 +66,13 @@ private struct TabContentView: View {
     @Environment(\.dismiss) private var dismiss
     let tab: Int
 
+    /// Bound directly to UserDefaults so the Toggle UI updates
+    /// instantly when flipped — the previous indirection through
+    /// `MenuBarController.shared.isEnabled` wasn't observable, so
+    /// SwiftUI didn't know the value changed and the checkbox felt
+    /// stuck for half a second on each toggle.
+    @AppStorage(UDKey.menuBarEnabled) private var menuBarEnabled = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -108,7 +115,7 @@ private struct TabContentView: View {
                 }
 
                 Text(L10n.colors)
-                    .font(.subheadline)
+                    .font(.body)
                     .foregroundStyle(.secondary)
 
                 colorRow(label: L10n.accent, systemImage: "paintpalette.fill",
@@ -125,10 +132,47 @@ private struct TabContentView: View {
 
                 Divider()
 
-                Toggle(L10n.menuBarControls, isOn: Binding(
-                    get: { MenuBarController.shared.isEnabled },
-                    set: { MenuBarController.shared.isEnabled = $0 }
+                Toggle(L10n.menuBarControls, isOn: $menuBarEnabled)
+                    .onChange(of: menuBarEnabled) { _, on in
+                        // Status item lifecycle is the heavy work
+                        // here (NSStatusBar.statusItem creation /
+                        // tear-down). Doing it on the next runloop
+                        // tick keeps the SwiftUI checkbox animation
+                        // crisp; the bound value already updated
+                        // instantly via @AppStorage.
+                        DispatchQueue.main.async {
+                            if on {
+                                MenuBarController.shared.show()
+                            } else {
+                                MenuBarController.shared.hide()
+                            }
+                        }
+                    }
+
+                Divider()
+
+                // TODO: localize (English-only for now)
+                Text("Mouse Controls")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Toggle("Scroll wheel adjusts volume", isOn: Binding(
+                    get: { UserDefaults.standard.bool(forKey: UDKey.scrollVolumeEnabled) },
+                    set: { UserDefaults.standard.set($0, forKey: UDKey.scrollVolumeEnabled) }
                 ))
+                Text("Scroll the mouse wheel over Now Playing to change the group's volume.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle("Middle-click toggles mute", isOn: Binding(
+                    get: { UserDefaults.standard.bool(forKey: UDKey.middleClickMuteEnabled) },
+                    set: { UserDefaults.standard.set($0, forKey: UDKey.middleClickMuteEnabled) }
+                ))
+                Text("Click the scroll wheel over Now Playing to mute or unmute the group.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 infoToggle(isExpanded: $showAppearanceInfo, label: L10n.aboutAppearance,
                            text: L10n.appearanceInfo)
@@ -150,7 +194,7 @@ private struct TabContentView: View {
                     set: { UserDefaults.standard.set($0, forKey: UDKey.classicShuffleEnabled) }
                 ))
                 Text(L10n.classicShuffleHelp)
-                    .font(.caption2)
+                    .font(.callout)
                     .foregroundStyle(.tertiary)
 
                 Divider().padding(.vertical, 4)
@@ -160,7 +204,7 @@ private struct TabContentView: View {
                     set: { UserDefaults.standard.set($0, forKey: UDKey.proportionalGroupVolume) }
                 ))
                 Text(L10n.proportionalVolumeHelp)
-                    .font(.caption2)
+                    .font(.callout)
                     .foregroundStyle(.tertiary)
             }
 
@@ -175,7 +219,6 @@ private struct TabContentView: View {
                     get: { UserDefaults.standard.bool(forKey: UDKey.ignoreTV) },
                     set: { UserDefaults.standard.set($0, forKey: UDKey.ignoreTV) }
                 ))
-                .font(.system(size: 12))
 
                 Divider().padding(.vertical, 4)
 
@@ -193,14 +236,13 @@ private struct TabContentView: View {
                         }
                     }
                 ))
-                .font(.system(size: 12))
 
                 if UserDefaults.standard.bool(forKey: UDKey.realtimeStats) {
                     if isRebuildingSummaries {
                         HStack(spacing: 4) {
                             ProgressView().controlSize(.mini)
                             Text(L10n.buildingSummaries)
-                                .font(.caption2)
+                                .font(.callout)
                                 .foregroundStyle(.tertiary)
                         }
                     }
@@ -229,12 +271,12 @@ private struct TabContentView: View {
 
                     if let lastRollup = playHistoryManager.lastRollupDate {
                         Text(L10n.lastUpdatedFormat(lastRollup.formatted(date: .omitted, time: .shortened)))
-                            .font(.caption2)
+                            .font(.callout)
                             .foregroundStyle(.tertiary)
                     }
 
                     Text(L10n.dailySummariesHelp)
-                        .font(.caption2)
+                        .font(.callout)
                         .foregroundStyle(.tertiary)
                 }
 
@@ -242,7 +284,7 @@ private struct TabContentView: View {
 
                 if playHistoryManager.totalEntries > 0 {
                     Text("\(playHistoryManager.totalEntries) entries, \(String(format: "%.1f", playHistoryManager.totalListeningHours)) hours")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
 
@@ -307,7 +349,7 @@ private struct TabContentView: View {
                     HStack(spacing: 4) {
                         Circle().fill(.green).frame(width: 6, height: 6)
                         Text("\(sonosManager.activeSubscriptionCount) \(L10n.activeSubscriptions)")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -322,6 +364,28 @@ private struct TabContentView: View {
                     .frame(maxWidth: 240)
                 }
 
+                Divider()
+
+                settingsRow(L10n.discovery) {
+                    Picker("", selection: $sonosManager.discoveryMode) {
+                        ForEach(DiscoveryMode.allCases, id: \.self) { mode in
+                            Text(discoveryModeLabel(mode)).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 320)
+                }
+
+                if sonosManager.discoveryMode == .auto {
+                    Text(L10n.discoveryAutoHint)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                ITunesThrottleStatusRow()
+
                 infoToggle(isExpanded: $showNetworkInfo, label: L10n.aboutNetwork,
                            text: L10n.aboutNetworkBody)
             }
@@ -334,11 +398,11 @@ private struct TabContentView: View {
                             .fill(sonosManager.isUsingCachedData ? .orange : .green)
                             .frame(width: 6, height: 6)
                         Text(sonosManager.isUsingCachedData ? L10n.cachedData : L10n.liveData)
-                            .font(.caption)
+                            .font(.callout)
                     }
                     Spacer()
                     Text(L10n.artworkImagesSummary(ImageCache.shared.diskUsageString, ImageCache.shared.fileCount))
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
 
@@ -423,10 +487,10 @@ private struct TabContentView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.right")
-                        .font(.caption2)
+                        .font(.callout)
                         .rotationEffect(isExpanded.wrappedValue ? .degrees(90) : .zero)
                     Text(label)
-                        .font(.caption)
+                        .font(.body)
                 }
                 .foregroundStyle(.secondary)
                 .contentShape(Rectangle())
@@ -435,10 +499,11 @@ private struct TabContentView: View {
 
             if isExpanded.wrappedValue {
                 Text(text)
-                    .font(.caption)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .padding(.top, 2)
                     .padding(.leading, 16)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -449,7 +514,7 @@ private struct TabContentView: View {
                 .foregroundStyle(iconColor)
                 .frame(width: 14)
             Text(label)
-                .font(.caption)
+                .font(.callout)
                 .frame(width: 50, alignment: .leading)
             ColorSwatchGrid(
                 storedColor: storedColor,
@@ -461,9 +526,78 @@ private struct TabContentView: View {
     private func settingsRow<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
         HStack {
             Text(label)
-                .font(.subheadline)
+                .font(.body)
                 .frame(width: 70, alignment: .leading)
             content()
         }
+    }
+
+    private func discoveryModeLabel(_ mode: DiscoveryMode) -> String {
+        switch mode {
+        case .auto:    return L10n.autoDiscovery
+        case .bonjour: return L10n.bonjourDiscovery
+        case .ssdp:    return L10n.legacyMulticast
+        }
+    }
+}
+
+/// Status row showing iTunes Search API health: live / cooling-down, the
+/// sliding-window utilisation, and cumulative counters since launch.
+/// Polls the actor every 5s while visible.
+private struct ITunesThrottleStatusRow: View {
+    @State private var snap: ITunesRateLimiter.Snapshot?
+
+    private static let timeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        return f
+    }()
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 6, height: 6)
+                .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(L10n.appleMusicSearch)
+                        .font(.body)
+                    Text(statusLabel)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                if let s = snap {
+                    Text(L10n.iTunesQueriesInWindow(s.requestsInWindow, s.softLimit))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    if let until = s.cooldownUntil {
+                        Text(L10n.appleMusicResumesAt(Self.timeFmt.string(from: until)))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Spacer()
+        }
+        .task {
+            // Poll the actor every 5 s while the Settings tab is visible.
+            // .task auto-cancels when the row leaves the hierarchy.
+            while !Task.isCancelled {
+                snap = await ITunesRateLimiter.shared.snapshot()
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
+        }
+    }
+
+    private var statusColor: Color {
+        guard let s = snap else { return .secondary }
+        return s.isAvailable ? .green : .orange
+    }
+
+    private var statusLabel: String {
+        guard let s = snap else { return "—" }
+        return s.isAvailable ? L10n.appleMusicSearchReady : L10n.appleMusicSearchCoolingDown
     }
 }

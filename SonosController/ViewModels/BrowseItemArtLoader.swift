@@ -61,7 +61,7 @@ final class BrowseItemArtLoader {
         let isRadio = item.resourceURI.map { URIPrefix.isRadio($0) } ?? false
         if !isRadio {
             let artist = item.artist.isEmpty ? "" : item.artist
-            if let artURL = await AlbumArtSearchService.shared.searchArtwork(artist: artist, album: item.title) {
+            if let artURL = await sonosManager.albumArtSearch.searchArtwork(artist: artist, album: item.title) {
                 return URL(string: artURL)
             }
         }
@@ -158,7 +158,7 @@ final class BrowseItemArtLoader {
             artist = item.artist.isEmpty ? "" : item.artist; album = item.title
         }
 
-        if let artURL = await AlbumArtSearchService.shared.searchArtwork(artist: artist, album: album) {
+        if let artURL = await sonosManager.albumArtSearch.searchArtwork(artist: artist, album: album) {
             sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title, itemID: "")
             return URL(string: artURL)
         }
@@ -166,7 +166,7 @@ final class BrowseItemArtLoader {
         // For generic containers, try guessing artist/album from path
         if !isArtist && !isAlbum {
             if let (guessedArtist, guessedAlbum) = guessArtistAlbum(from: item.objectID, title: item.title) {
-                if let artURL = await AlbumArtSearchService.shared.searchArtwork(artist: guessedArtist, album: guessedAlbum) {
+                if let artURL = await sonosManager.albumArtSearch.searchArtwork(artist: guessedArtist, album: guessedAlbum) {
                     sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title, itemID: "")
                     return URL(string: artURL)
                 }

@@ -49,36 +49,32 @@ public final class ServiceSearchProvider {
 
     private func fetchiTunes(query: String, entity: ServiceSearchEntity, sn: Int, limit: Int) async -> [BrowseItem] {
         guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity.iTunesEntity)&limit=\(limit)") else {
+              let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity.iTunesEntity)&limit=\(limit)\(Self.countryQueryParam())") else {
             return []
         }
 
-        do {
-            let (data, response) = try await session.data(for: URLRequest(url: url))
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                return []
-            }
-
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let results = json["results"] as? [[String: Any]] else {
-                return []
-            }
-
-            let sid = ServiceID.appleMusic
-            let serviceType = (sid << 8) + 7  // 52231
-
-            switch entity {
-            case .song, .all:
-                return parseSongResults(results, sid: sid, serviceType: serviceType, sn: sn)
-            case .album:
-                return parseAlbumResults(results, sid: sid, serviceType: serviceType, sn: sn)
-            case .artist:
-                return parseArtistResults(results)
-            }
-        } catch {
-            sonosDebugLog("[SERVICE_SEARCH] Apple Music search failed: \(error)")
+        // User-facing search bypasses the self-throttle so background art
+        // lookups can't starve it. Apple-side 403/429 still short-circuits
+        // (and the UI can surface that via `ITunesRateLimiter.snapshot()`).
+        guard let (data, _) = await ITunesRateLimiter.shared.performUnthrottled(url: url, session: session) else {
             return []
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["results"] as? [[String: Any]] else {
+            return []
+        }
+
+        let sid = ServiceID.appleMusic
+        let serviceType = (sid << 8) + 7  // 52231
+
+        switch entity {
+        case .song, .all:
+            return parseSongResults(results, sid: sid, serviceType: serviceType, sn: sn)
+        case .album:
+            return parseAlbumResults(results, sid: sid, serviceType: serviceType, sn: sn)
+        case .artist:
+            return parseArtistResults(results)
         }
     }
 
@@ -107,6 +103,12 @@ public final class ServiceSearchProvider {
             let artURL = upscaleArt(result["artworkUrl100"] as? String)
             let relDate = Self.parseISODate(result["releaseDate"] as? String)
 
+            // Reverted to v3.7's working form: hardcoded `flags=8224`.
+            // The `serviceFlagsOverrides` table (which maps Apple Music
+            // → 8232) is for SMAPI-browse items routed through
+            // `buildPlayURI`; iTunes-search-derived items use the
+            // legacy `8224` flag and have done so reliably since the
+            // feature first shipped.
             let resourceURI = "x-sonos-http:song%3a\(trackId).mp4?sid=\(sid)&flags=8224&sn=\(sn)"
             let metadata = buildTrackDIDL(trackId: trackId, collectionId: collectionId, title: trackName, artist: artistName, album: albumName, serviceType: serviceType)
 
@@ -186,19 +188,17 @@ public final class ServiceSearchProvider {
                     continue
                 }
                 group.addTask {
-                    guard let url = URL(string: "https://itunes.apple.com/lookup?id=\(artistId)&entity=album&limit=1") else {
+                    guard let url = URL(string: "https://itunes.apple.com/lookup?id=\(artistId)&entity=album&limit=1\(Self.countryQueryParam())") else {
                         return (index, nil)
                     }
-                    do {
-                        let (data, _) = try await self.session.data(for: URLRequest(url: url))
-                        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                              let results = json["results"] as? [[String: Any]] else { return (index, nil) }
-                        let album = results.first { ($0["wrapperType"] as? String) == "collection" }
-                        let artURL = self.upscaleArt(album?["artworkUrl100"] as? String)
-                        return (index, artURL)
-                    } catch {
+                    guard let (data, _) = await ITunesRateLimiter.shared.perform(url: url, session: self.session) else {
                         return (index, nil)
                     }
+                    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let results = json["results"] as? [[String: Any]] else { return (index, nil) }
+                    let album = results.first { ($0["wrapperType"] as? String) == "collection" }
+                    let artURL = self.upscaleArt(album?["artworkUrl100"] as? String)
+                    return (index, artURL)
                 }
             }
             var updated = items
@@ -222,50 +222,57 @@ public final class ServiceSearchProvider {
 
     // MARK: - Drill-Down Lookups
 
+    /// Returns `&country=<region>` based on the user's current locale, or
+    /// empty string if the region can't be determined. Critical for
+    /// Apple-Music-derived track/album IDs to match the user's actual
+    /// storefront — without it, iTunes Search defaults to US, and the
+    /// US-specific track IDs don't exist in non-US Apple Music catalogues
+    /// (Sonos returns "item is no longer available" on play).
+    private static func countryQueryParam() -> String {
+        guard let region = Locale.current.region?.identifier, !region.isEmpty else {
+            return ""
+        }
+        return "&country=\(region.lowercased())"
+    }
+
     /// Fetch albums by a specific artist via iTunes lookup API.
     public func lookupArtistAlbums(artistId: Int, sn: Int, limit: Int = 25) async -> [BrowseItem] {
-        guard let url = URL(string: "https://itunes.apple.com/lookup?id=\(artistId)&entity=album&limit=\(limit)") else {
+        guard let url = URL(string: "https://itunes.apple.com/lookup?id=\(artistId)&entity=album&limit=\(limit)\(Self.countryQueryParam())") else {
             return []
         }
-        do {
-            let (data, response) = try await session.data(for: URLRequest(url: url))
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else { return [] }
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let results = json["results"] as? [[String: Any]] else { return [] }
+        // User-initiated drill-down — bypass the self-throttle (background
+        // art enrichment can starve it otherwise). Apple-side 403/429 still
+        // respected; the UI surfaces that via the cooldown banner.
+        guard let (data, _) = await ITunesRateLimiter.shared.performUnthrottled(url: url, session: session) else {
+            return []
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["results"] as? [[String: Any]] else { return [] }
 
-            let sid = ServiceID.appleMusic
-            let serviceType = (sid << 8) + 7
-            // First result is the artist itself — skip it
-            let albumResults = results.filter { ($0["wrapperType"] as? String) == "collection" }
-            return parseAlbumResults(albumResults, sid: sid, serviceType: serviceType, sn: sn)
-        } catch {
-            sonosDebugLog("[SERVICE_SEARCH] Artist album lookup failed: \(error)")
-            return []
-        }
+        let sid = ServiceID.appleMusic
+        let serviceType = (sid << 8) + 7
+        // First result is the artist itself — skip it
+        let albumResults = results.filter { ($0["wrapperType"] as? String) == "collection" }
+        return parseAlbumResults(albumResults, sid: sid, serviceType: serviceType, sn: sn)
     }
 
     /// Fetch tracks for a specific album via iTunes lookup API.
     public func lookupAlbumTracks(collectionId: Int, sn: Int) async -> [BrowseItem] {
-        guard let url = URL(string: "https://itunes.apple.com/lookup?id=\(collectionId)&entity=song&limit=50") else {
+        guard let url = URL(string: "https://itunes.apple.com/lookup?id=\(collectionId)&entity=song&limit=50\(Self.countryQueryParam())") else {
             return []
         }
-        do {
-            let (data, response) = try await session.data(for: URLRequest(url: url))
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else { return [] }
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let results = json["results"] as? [[String: Any]] else { return [] }
+        // User-initiated drill-down — same reasoning as lookupArtistAlbums.
+        guard let (data, _) = await ITunesRateLimiter.shared.performUnthrottled(url: url, session: session) else {
+            return []
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["results"] as? [[String: Any]] else { return [] }
 
-            let sid = ServiceID.appleMusic
-            let serviceType = (sid << 8) + 7
-            // First result is the album itself — skip it
-            let trackResults = results.filter { ($0["wrapperType"] as? String) == "track" }
-            return parseSongResults(trackResults, sid: sid, serviceType: serviceType, sn: sn)
-        } catch {
-            sonosDebugLog("[SERVICE_SEARCH] Album track lookup failed: \(error)")
-            return []
-        }
+        let sid = ServiceID.appleMusic
+        let serviceType = (sid << 8) + 7
+        // First result is the album itself — skip it
+        let trackResults = results.filter { ($0["wrapperType"] as? String) == "track" }
+        return parseSongResults(trackResults, sid: sid, serviceType: serviceType, sn: sn)
     }
 
     // MARK: - TuneIn Radio (RadioTime OPML API)
@@ -566,6 +573,14 @@ public final class ServiceSearchProvider {
 
     // MARK: - DIDL Builders
 
+    /// Track DIDL for iTunes-search-derived Apple Music tracks.
+    /// Matches v3.7's working form exactly — `00032020song:<id>` ID with
+    /// `0004206calbum:<collectionId>` parent, including `dc:creator` and
+    /// `upnp:album`. This is what Sonos accepted for both single-track
+    /// `AddURIToQueue` and bulk `AddMultipleURIsToQueue` in the released
+    /// build. Earlier "fixes" to mirror the SMAPI-favorite shape
+    /// (`10032020song:` + empty parentID, drop creator/album) caused
+    /// "item no longer available" rejections during queue-advance.
     private func buildTrackDIDL(trackId: Int, collectionId: Int, title: String, artist: String, album: String, serviceType: Int) -> String {
         """
         <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="00032020song%3a\(trackId)" parentID="0004206calbum%3a\(collectionId)" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:album>\(xmlEscape(album))</upnp:album><upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON\(serviceType)_X_#Svc\(serviceType)-0-Token</desc></item></DIDL-Lite>
@@ -720,21 +735,19 @@ public final class ServiceSearchProvider {
                 group.addTask {
                     let query = [artist, album].filter { !$0.isEmpty }.joined(separator: " ")
                     guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                          let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=album&limit=1") else {
+                          let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=album&limit=1\(Self.countryQueryParam())") else {
                         return (key, nil)
                     }
-                    do {
-                        let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
-                        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                              let results = json["results"] as? [[String: Any]],
-                              let first = results.first,
-                              let dateStr = first["releaseDate"] as? String else {
-                            return (key, nil)
-                        }
-                        return (key, Self.parseISODate(dateStr))
-                    } catch {
+                    guard let (data, _) = await ITunesRateLimiter.shared.perform(url: url, session: self.session) else {
                         return (key, nil)
                     }
+                    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let results = json["results"] as? [[String: Any]],
+                          let first = results.first,
+                          let dateStr = first["releaseDate"] as? String else {
+                        return (key, nil)
+                    }
+                    return (key, Self.parseISODate(dateStr))
                 }
             }
             for await (key, date) in group {

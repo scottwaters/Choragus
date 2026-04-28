@@ -153,7 +153,15 @@ public final class SecretsStore {
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess else { return nil }
+        guard status == errSecSuccess else {
+            // -25300 = errSecItemNotFound (normal first-run / no items yet)
+            // -25308 = errSecInteractionNotAllowed (keychain locked / user dismissed prompt)
+            // -34018 = errSecMissingEntitlement (sandbox / signing mismatch)
+            if status != errSecItemNotFound {
+                sonosDebugLog("[SECRETS] Keychain read failed: service=\(service) account=\(account) OSStatus=\(status)")
+            }
+            return nil
+        }
         return result as? Data
     }
 

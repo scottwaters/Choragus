@@ -45,29 +45,48 @@ final class QueueViewModel: ObservableObject {
 
         guard playing else { return }
 
-        // Always try title+artist match first — works for both shuffle and sequential
+        // Authoritative source: Sonos's `Track` field from GetPositionInfo
+        // is the 1-based queue position currently playing. Title matching
+        // can't disambiguate when the queue has multiple tracks with the
+        // same title (e.g. several recordings of "Theme From X" on a
+        // movie-soundtracks playlist) — title match always returns the
+        // FIRST occurrence. Use trackNumber whenever the speaker reports
+        // a sane value, fall back to title only when it doesn't.
+        if let trackNum = meta?.trackNumber, trackNum > 0,
+           queueItems.contains(where: { $0.id == trackNum }) {
+            if trackNum != currentTrack {
+                sonosDebugLog("[QUEUE] TrackNumber match: \(trackNum)")
+                currentTrack = trackNum
+            }
+            return
+        }
+
+        // Fallback: title+artist match (used when trackNumber isn't
+        // populated yet — early after a track change, or for service
+        // tracks where Sonos sometimes lags on position reporting).
         if let title = meta?.title, !title.isEmpty, !queueItems.isEmpty {
             let artist = meta?.artist ?? ""
             if let match = queueItems.first(where: { $0.title == title && $0.artist == artist }) {
                 if match.id != currentTrack {
-                    sonosDebugLog("[QUEUE] Title+artist match: '\(title)' -> queue pos \(match.id)")
+                    sonosDebugLog("[QUEUE] Title+artist fallback: '\(title)' -> queue pos \(match.id)")
                     currentTrack = match.id
                 }
                 return
             }
             if let match = queueItems.first(where: { $0.title == title }) {
                 if match.id != currentTrack {
-                    sonosDebugLog("[QUEUE] Title-only match: '\(title)' -> queue pos \(match.id)")
+                    sonosDebugLog("[QUEUE] Title-only fallback: '\(title)' -> queue pos \(match.id)")
                     currentTrack = match.id
                 }
                 return
             }
         }
 
-        // Fallback: use track number (1-based queue position from GetPositionInfo)
+        // Final fallback (kept for absolute safety — should rarely fire
+        // because the trackNumber check above already handles this).
         if let trackNum = meta?.trackNumber, trackNum > 0 {
             if trackNum != currentTrack {
-                sonosDebugLog("[QUEUE] TrackNumber fallback: \(trackNum)")
+                sonosDebugLog("[QUEUE] TrackNumber final fallback: \(trackNum)")
                 currentTrack = trackNum
             }
         }

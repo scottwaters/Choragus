@@ -124,6 +124,12 @@ public struct ZoneMemberData {
 public struct DIDLItem {
     public var title: String = ""
     public var creator: String = ""
+    /// `<upnp:artist>` — the canonical UPnP artist field. Some Sonos
+    /// services (notably Apple Music via favorites) populate this but
+    /// not `<dc:creator>`, leaving the legacy `creator`-only path with
+    /// an empty artist. Holds the "Performer" role when multiple
+    /// `<upnp:artist>` elements differ by role.
+    public var artist: String = ""
     public var album: String = ""
     public var albumArtURI: String = ""
     public var streamContent: String = ""  // r:streamContent — current track info for streams
@@ -264,6 +270,16 @@ private class DIDLParser: NSObject, XMLParserDelegate {
     private var item = DIDLItem()
     private var currentElement = ""
     private var currentValue = ""
+    /// Role attribute for the in-flight `<upnp:artist>` element. UPnP
+    /// allows the same `artist` element to repeat with different roles
+    /// (`Performer`, `AlbumArtist`, `Composer`); we prefer the Performer
+    /// for display.
+    private var currentArtistRole: String = ""
+    /// Tracks whether we've already accepted a Performer-role artist.
+    /// AlbumArtist / Composer roles only fill in when no Performer
+    /// has been seen yet — gives us a sensible fallback without
+    /// overwriting better data.
+    private var haveAcceptedPerformer = false
 
     func parse(_ xml: String) -> DIDLItem? {
         guard let data = xml.data(using: .utf8) else { return nil }
@@ -279,6 +295,9 @@ private class DIDLParser: NSObject, XMLParserDelegate {
         let name = elementName.components(separatedBy: ":").last ?? elementName
         currentElement = name
         currentValue = ""
+        if name == "artist" {
+            currentArtistRole = attributes["role"] ?? ""
+        }
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
@@ -293,6 +312,20 @@ private class DIDLParser: NSObject, XMLParserDelegate {
         switch name {
         case "title": item.title = trimmed
         case "creator": item.creator = trimmed
+        case "artist":
+            // Prefer Performer; fall back to other roles only if we
+            // haven't seen a Performer yet. Empty `role` attribute is
+            // treated as Performer (the common case for services that
+            // emit a single bare `<upnp:artist>`).
+            let role = currentArtistRole.lowercased()
+            let isPerformer = role.isEmpty || role == "performer"
+            if isPerformer {
+                item.artist = trimmed
+                haveAcceptedPerformer = true
+            } else if !haveAcceptedPerformer && item.artist.isEmpty {
+                item.artist = trimmed
+            }
+            currentArtistRole = ""
         case "album": item.album = trimmed
         case "albumArtURI": item.albumArtURI = trimmed
         case "streamContent": item.streamContent = trimmed

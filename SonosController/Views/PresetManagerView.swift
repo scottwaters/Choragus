@@ -196,7 +196,7 @@ struct PresetManagerView: View {
                 // EQ summary
                 if preset.includesEQ, let eqSummary = eqSummaryText(preset) {
                     Text(eqSummary)
-                        .font(.caption2)
+                        .font(.footnote)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }

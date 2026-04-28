@@ -28,11 +28,60 @@ final class MenuBarController {
         guard statusItem == nil else { return }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "hifispeaker.fill", accessibilityDescription: "SonosController")
-            button.image?.size = NSSize(width: 16, height: 16)
+            // Code-drawn template glyph following Apple's HIG for menu
+            // bar extras: monochrome silhouette, isTemplate = true so
+            // macOS auto-tints for light / dark / tinted-wallpaper
+            // modes (matching system items like Wi-Fi, Volume, Battery).
+            // Echoes the Choragus icon's "central node with satellites"
+            // motif at a size that's legible at 18pt.
+            button.image = MenuBarController.makeTemplateIcon()
             button.action = #selector(togglePopover)
             button.target = self
         }
+    }
+
+    /// "C with centred dot" — a stroked open arc forming a stylised
+    /// C (Choragus brand initial) with a small filled dot at its
+    /// centre representing the conductor / chorus leader. Drawn pure
+    /// black on transparent + isTemplate=true so AppKit handles all
+    /// the tinting (light, dark, tinted-wallpaper).
+    private static func makeTemplateIcon() -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSColor.black.setStroke()
+            NSColor.black.setFill()
+            let cx = rect.midX
+            let cy = rect.midY
+
+            // Open C: 270° arc with the gap on the right. Rendered
+            // by stroking a circle along that arc range. Plain
+            // NSBezierPath uses degrees and counter-clockwise by
+            // default — we sweep from 45° → 315° going CCW for a
+            // clean right-side opening.
+            let radius: CGFloat = 6.5
+            let lineWidth: CGFloat = 2.0
+            let arc = NSBezierPath()
+            arc.lineWidth = lineWidth
+            arc.lineCapStyle = .round
+            arc.appendArc(
+                withCenter: NSPoint(x: cx, y: cy),
+                radius: radius,
+                startAngle: 45,
+                endAngle: 315,
+                clockwise: false
+            )
+            arc.stroke()
+
+            // Centre dot — small filled circle, the "conductor".
+            let dotR: CGFloat = 1.6
+            NSBezierPath(ovalIn: NSRect(
+                x: cx - dotR, y: cy - dotR, width: dotR * 2, height: dotR * 2
+            )).fill()
+
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     func hide() {
@@ -103,19 +152,41 @@ struct MenuBarPlayerView: View {
         return group.members.contains { sonosManager.deviceMutes[$0.id] == true }
     }
 
-    /// Resolved art URL — speaker's albumArtURI is authoritative. The
-    /// discoveredArtURLs cache is keyed by lowercase title and would
-    /// conflate different versions of the same-titled track (e.g. every
-    /// "This Christmas" gets the first one ever cached), so it's only
-    /// consulted when the speaker has no art.
+    /// Resolved art URL — checks in priority order:
+    ///   1. User's persisted art override (manual `Search Artwork` choice)
+    ///   2. Title-keyed cached art (radio-track auto-resolves write here
+    ///      via `sonosManager.cacheArtURL`, so this is the track-specific
+    ///      art for radio when iTunes resolved it)
+    ///   3. Speaker's `albumArtURI` (canonical for non-radio; the station
+    ///      logo for radio)
+    /// On radio the cache wins over `albumArtURI` because `albumArtURI`
+    /// is the station logo, not the song. For non-radio tracks the
+    /// cache miss falls through to `albumArtURI` which is canonical.
+    /// Mirrors the priority `ArtResolver.artURLForDisplay` uses for the
+    /// inline view.
     private var resolvedArtURL: URL? {
         let meta = trackMetadata
-        if let art = meta.albumArtURI, !art.isEmpty,
-           let url = URL(string: art) {
+        // Step 1: persisted override.
+        let overrideKey = (!meta.title.isEmpty ? meta.title : meta.stationName)
+            .lowercased()
+        if !overrideKey.isEmpty {
+            let udKey = "\(UDKey.artOverridePrefix)\(overrideKey)"
+            if let saved = UserDefaults.standard.string(forKey: udKey) {
+                if saved == "IGNORE" { return nil }
+                if let url = URL(string: saved) { return url }
+            }
+        }
+        // Step 2: cached track art. `searchRadioTrackArt` writes to
+        // `sonosManager.cacheArtURL` whenever it resolves a real
+        // track-specific URL via iTunes — this is exactly the lookup
+        // that surfaces it for the menubar.
+        if let cached = sonosManager.lookupCachedArt(uri: meta.trackURI, title: meta.title),
+           !cached.isEmpty, let url = URL(string: cached) {
             return url
         }
-        if let cached = sonosManager.lookupCachedArt(uri: meta.trackURI, title: meta.title),
-           let url = URL(string: cached) {
+        // Step 3: speaker's reported art.
+        if let art = meta.albumArtURI, !art.isEmpty,
+           let url = URL(string: art) {
             return url
         }
         return nil
@@ -127,7 +198,7 @@ struct MenuBarPlayerView: View {
             ZStack(alignment: .bottomLeading) {
                 // Art background (blurred)
                 if let url = resolvedArtURL {
-                    CachedAsyncImage(url: url, cornerRadius: 0)
+                    CachedAsyncImage(url: url, cornerRadius: 0, priority: .interactive)
                         .frame(height: 140)
                         .clipped()
                         .blur(radius: 20)
@@ -142,7 +213,7 @@ struct MenuBarPlayerView: View {
                     // Album art
                     Group {
                         if let url = resolvedArtURL {
-                            CachedAsyncImage(url: url, cornerRadius: 6)
+                            CachedAsyncImage(url: url, cornerRadius: 6, priority: .interactive)
                         } else {
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(.ultraThinMaterial)
@@ -176,7 +247,7 @@ struct MenuBarPlayerView: View {
 
                         if !trackMetadata.artist.isEmpty && !TrackMetadata.isDeviceID(trackMetadata.artist) {
                             Text(trackMetadata.artist)
-                                .font(.system(size: 11))
+                                .font(.subheadline)
                                 .foregroundStyle(.white.opacity(0.8))
                                 .lineLimit(1)
                         }
@@ -194,7 +265,7 @@ struct MenuBarPlayerView: View {
                 if sonosManager.groups.count > 1 {
                     HStack(spacing: 6) {
                         Image(systemName: "hifispeaker")
-                            .font(.system(size: 10))
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                         Picker("", selection: $selectedGroupID) {
                             ForEach(sonosManager.groups.sorted { $0.name < $1.name }) { group in
@@ -275,7 +346,7 @@ struct MenuBarPlayerView: View {
                         }
                     } label: {
                         Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.fill")
-                            .font(.system(size: 11))
+                            .font(.subheadline)
                             .foregroundStyle(isMuted ? .red.opacity(0.8) : .secondary)
                             .frame(width: 16)
                     }
@@ -313,7 +384,11 @@ struct MenuBarPlayerView: View {
                     NSApp.activate(ignoringOtherApps: true)
                     // Find existing main window or create new one
                     if let window = NSApp.windows.first(where: {
-                        $0.title.contains("SonosController") && $0.contentView != nil
+                        // Title is "Choragus" (post-rename) — also accept the old
+                        // "SonosController" title for users running mid-upgrade
+                        // builds with cached window state.
+                        ($0.title.contains("Choragus") || $0.title.contains("SonosController"))
+                            && $0.contentView != nil
                     }) {
                         window.makeKeyAndOrderFront(nil)
                     } else {
@@ -323,9 +398,9 @@ struct MenuBarPlayerView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "macwindow")
-                            .font(.system(size: 10))
-                        Text(L10n.openSonosController)
-                            .font(.system(size: 11))
+                            .font(.footnote)
+                        Text(L10n.openChoragus)
+                            .font(.subheadline)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)

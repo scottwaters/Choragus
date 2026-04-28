@@ -30,5 +30,5 @@ topology_cache.json
 # Local-only TODO (cross-release notes, not for GitHub)
 docs/TODO.md
 
-# Local-only experimental view (not part of shipped v3.7)
-SonosController/Views/ForFunView.swift
+# (ForFunView.swift was previously local-only; it is now part of the
+# shipped project and committed normally.)

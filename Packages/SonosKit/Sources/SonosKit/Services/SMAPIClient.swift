@@ -34,9 +34,27 @@ public final class SMAPIClient {
 
     public init() {
         let config = URLSessionConfiguration.default
+        // Conservative session-wide defaults — most SMAPI services
+        // respond in <1s. Per-request overrides handle slow services
+        // (notably Plex's plex.tv relay, which can hang 15–30s while
+        // it wakes the user's PMS). See `timeout(forURL:)`.
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 20
         self.session = URLSession(configuration: config)
+    }
+
+    /// Per-host request timeout. Plex's SMAPI relay routes through
+    /// plex.tv → user's PMS, with cold-start latencies in the tens of
+    /// seconds while the server wakes up. The previous 15s ceiling
+    /// produced "Plex returned nothing" errors that were really just
+    /// timeouts. Other services keep the tighter default — long
+    /// timeouts hide real failures.
+    private static func timeout(forURL url: URL) -> TimeInterval {
+        let host = url.host ?? ""
+        if host.hasSuffix(".plex.tv") || host == "plex.tv" {
+            return 45
+        }
+        return 15
     }
 
     // MARK: - Device Identity
@@ -323,18 +341,25 @@ public final class SMAPIClient {
         return result
     }
 
-    private static let sonosUserAgent = "Linux UPnP/1.0 Sonos/79.1-53202 (ACR_SonosController)"
+    private static let sonosUserAgent = "Linux UPnP/1.0 Sonos/79.1-53202 (ACR_Choragus)"
 
     private func soapCall(url urlStr: String, action: String, body: String) async throws -> String {
         guard let url = URL(string: urlStr) else { throw SMAPIError.invalidURL }
         var request = URLRequest(url: url)
+        request.timeoutInterval = Self.timeout(forURL: url)
         request.httpMethod = "POST"
         request.setValue("text/xml; charset=\"utf-8\"", forHTTPHeaderField: "Content-Type")
         request.setValue(action, forHTTPHeaderField: "SOAPAction")
         request.setValue(Self.sonosUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("gzip, deflate", forHTTPHeaderField: "Accept-Encoding")
         request.httpBody = body.data(using: .utf8)
-        let (data, response) = try await session.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            LocalNetworkPermissionMonitor.shared.record(error)
+            throw error
+        }
         let httpResponse = response as? HTTPURLResponse
         let responseStr = String(data: data, encoding: .utf8) ?? ""
         if httpResponse?.statusCode == 500 && !responseStr.contains("TokenRefreshRequired") && !responseStr.contains("NOT_LINKED_RETRY") {

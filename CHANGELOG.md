@@ -1,6 +1,28 @@
 
 # Changelog
 
+## v4.0 — 2026-04-27 — Choragus
+
+The project has been renamed from **SonosController** to **Choragus** to put trademark distance between the app and Sonos, Inc. The name comes from ancient Greek *choragos* — the leader who organised and directed a chorus to perform as one. The metaphor matches what the app actually does: it doesn't generate sound, it coordinates a group of speakers to play together.
+
+The bundle identifier remains `com.sonoscontroller.app` so existing installations upgrade in place — Keychain tokens, preferences, play history, and art cache all carry over without re-authentication. Older entries in this changelog reference "SonosController" by name; that history is preserved as-is.
+
+### Discovery — Bonjour added alongside SSDP
+
+Discovery used to rely solely on SSDP M-SEARCH multicast to `239.255.255.250:1900`. On networks where Sonos speakers live in a separate VLAN — common with IoT segmentation on UniFi, OPNsense, and similar — SSDP multicast typically does not cross the VLAN boundary, so the controller could not see the speakers even though plain unicast to port 1400 worked.
+
+Choragus now ships an `NWBrowser`-backed mDNS discovery transport (`_sonos._tcp`) that runs alongside SSDP. The Bonjour TXT record carries the same `location` URL that SSDP would surface in its M-SEARCH response, so the entire post-discovery pipeline (device-description → topology → browse) is unchanged.
+
+- **Auto** (new default) runs SSDP and Bonjour in parallel and dedupes by location URL. Flat networks see no behavioural change; segmented networks where mDNS is reflected light up without configuration.
+- **Bonjour** restricts discovery to mDNS only.
+- **Legacy Multicast** restricts discovery to SSDP only — the original behaviour, kept as an escape hatch.
+
+Speakers discovered via Bonjour also surface their household ID in the TXT record, which lets the app skip one `GetHouseholdID` SOAP round-trip per speaker. This is a measurable win on S1 hardware, which is sensitive to request pressure during topology discovery.
+
+Setting lives in **Settings → System → Network → Discovery**. `NSBonjourServices` was already declared in `Info.plist` from prior work, and the existing `NSLocalNetworkUsageDescription` covers the Local Network permission for both transports.
+
+Issue and approach reported by [@mbieh](https://github.com/mbieh) ([#11](https://github.com/scottwaters/SonosController/issues/11)) including the verification dump and the parallel-merge design recommendation. Initial implementation contributed by [@steventamm](https://github.com/steventamm) in [#12](https://github.com/scottwaters/SonosController/pull/12) — the `NWBrowser` transport, the `SpeakerDiscovery` protocol abstraction, and the 13-locale translation work all started from that PR.
+
 ## v3.71 — 2026-04-25
 
 - **SoundCloud moved to blocked list.** `getAppLink` returns

@@ -29,7 +29,12 @@ public final class SOAPClient: SOAPClientProtocol {
     public init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 10
-        config.timeoutIntervalForResource = 15
+        // Resource timeout is the absolute ceiling — even per-call
+        // overrides via `URLRequest.timeoutInterval` cannot exceed it.
+        // Bumped to 60 s so bulk actions (`AddMultipleURIsToQueue` for
+        // 14-16 tracks routinely takes 15-25 s on real Sonos hardware)
+        // can complete without aborting mid-flight.
+        config.timeoutIntervalForResource = 60
         self.session = URLSession(configuration: config)
     }
 
@@ -38,7 +43,8 @@ public final class SOAPClient: SOAPClientProtocol {
         path: String,
         service: String,
         action: String,
-        arguments: [(String, String)] = []
+        arguments: [(String, String)] = [],
+        timeoutSeconds: TimeInterval? = nil
     ) async throws -> [String: String] {
         guard let url = URL(string: path, relativeTo: baseURL) else {
             throw SOAPError.invalidURL
@@ -49,6 +55,15 @@ public final class SOAPClient: SOAPClientProtocol {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        // Per-call timeout override. The session-level 10 s default is
+        // right for fast actions (Play/Pause/SetVolume), but bulk
+        // operations like `AddMultipleURIsToQueue` regularly take 15-25 s
+        // on the speaker and would otherwise time out before Sonos
+        // returned a response — leaving the caller unable to tell whether
+        // the action actually applied.
+        if let timeoutSeconds {
+            request.timeoutInterval = timeoutSeconds
+        }
         request.setValue("text/xml; charset=\"utf-8\"", forHTTPHeaderField: "Content-Type")
         request.setValue(soapAction, forHTTPHeaderField: "SOAPAction")
         request.httpBody = body.data(using: .utf8)
@@ -57,6 +72,11 @@ public final class SOAPClient: SOAPClientProtocol {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            // Surface macOS Local Network privacy denials. Every SOAP
+            // call goes through here, so this is the single cheapest
+            // place to detect "user has Choragus turned off in
+            // Privacy → Local Network".
+            LocalNetworkPermissionMonitor.shared.record(error)
             throw SOAPError.networkError(error)
         }
 

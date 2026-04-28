@@ -5,12 +5,15 @@
 /// cache banners that appear when Quick Start mode is active.
 import SwiftUI
 import SonosKit
+import AppKit
 
 struct ContentView: View {
     @EnvironmentObject var sonosManager: SonosManager
     @EnvironmentObject var presetManager: PresetManager
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
+    @EnvironmentObject var plexAuth: PlexAuthManager
+    @ObservedObject private var localNetworkMonitor = LocalNetworkPermissionMonitor.shared
     @State private var selectedGroupID: String?
     @State private var showQueue = false
     @State private var showBrowse = false
@@ -30,36 +33,93 @@ struct ContentView: View {
     private let browseMinWidth: CGFloat = 260
     private let browseMaxWidth: CGFloat = 600
     private let queueMinWidth: CGFloat = 280
+    private let queueMaxWidth: CGFloat = 400
     private let sidebarWidth: CGFloat = 200
+    /// Pixels eaten by the visible separators between panels. Browse panel
+    /// is followed by a 6 pt drag handle (with a Divider overlay); queue
+    /// panel is preceded by a 1 pt Divider. Both are rendered alongside
+    /// the panels themselves in the HStack, so the panel widths must
+    /// reserve room for them or the right edge clips (visible as the
+    /// queue's vertical scrollbar getting truncated).
+    private let browseDividerWidth: CGFloat = 6
+    private let queueDividerWidth: CGFloat = 1
     @State private var userBrowseWidth: CGFloat?
 
-    /// Calculates panel widths ensuring now playing always gets at least its minimum.
-    /// Browse width is user-adjustable via drag handle.
+    /// Allocates panel widths so they always sum exactly to
+    /// `totalWidth`, every visible panel meets its minimum, and
+    /// browse honors the user-set width when room allows. The OS
+    /// pins `window.minSize` to `requiredMinWidth` so this never
+    /// receives a totalWidth smaller than the sum of minimums.
+    ///
+    /// Algorithm: start each visible panel at its minimum, then
+    /// distribute the slack (totalWidth − sum-of-minimums) in
+    /// priority order:
+    ///   1. Queue grows toward `queueMaxWidth`.
+    ///   2. Browse grows toward `userBrowseWidth` (clamped to its
+    ///      own min/max range).
+    ///   3. Now Playing absorbs whatever remains.
     private func panelWidths(totalWidth: CGFloat) -> (browse: CGFloat, nowPlaying: CGFloat, queue: CGFloat) {
-        let qw: CGFloat = showQueue ? max(queueMinWidth, min(totalWidth * 0.3, 400)) : 0
-        let bw: CGFloat
-        if showBrowse {
-            let userWidth = userBrowseWidth ?? min(totalWidth * 0.35, 400)
-            bw = max(browseMinWidth, min(userWidth, browseMaxWidth))
-        } else {
-            bw = 0
+        let bMin = showBrowse ? browseMinWidth : 0
+        let qMin = showQueue ? queueMinWidth : 0
+        let nMin = nowPlayingMinWidth
+        let dividers = (showBrowse ? browseDividerWidth : 0) + (showQueue ? queueDividerWidth : 0)
+        // Subtract divider pixels so the panels + dividers together always
+        // fit in totalWidth — otherwise the rightmost panel overflows and
+        // its scrollbar gets clipped.
+        let usable = max(0, totalWidth - dividers)
+        let totalMin = bMin + qMin + nMin
+        var slack = max(0, usable - totalMin)
+
+        // Queue: grows up to its max via slack proportional split,
+        // capped at queueMaxWidth - queueMinWidth.
+        var qw = qMin
+        if showQueue {
+            let queueGrowCap = queueMaxWidth - queueMinWidth
+            let queueGrowth = min(queueGrowCap, slack * 0.3)
+            qw += queueGrowth
+            slack -= queueGrowth
         }
-        let nw = max(nowPlayingMinWidth, totalWidth - bw - qw)
+
+        // Browse: honors user preference (from drag handle), else
+        // takes a chunk of the remaining slack. Always clamped to
+        // [browseMinWidth, browseMaxWidth].
+        var bw = bMin
+        if showBrowse {
+            let preferred = userBrowseWidth ?? (browseMinWidth + slack * 0.4)
+            let target = max(browseMinWidth, min(preferred, browseMaxWidth))
+            let browseGrowth = min(max(0, target - browseMinWidth), slack)
+            bw += browseGrowth
+            slack -= browseGrowth
+        }
+
+        // Now Playing absorbs whatever's left — always >= its min.
+        let nw = nMin + slack
         return (bw, nw, qw)
     }
 
-    /// Minimum window width needed for current panel configuration
+    /// Minimum window width needed for current panel configuration.
+    /// Includes the divider pixels rendered alongside each panel so the
+    /// OS-level resize floor exactly matches what `panelWidths` allocates.
     private var requiredMinWidth: CGFloat {
         var width = sidebarWidth + nowPlayingMinWidth
-        if showBrowse { width += browseMinWidth }
-        if showQueue { width += queueMinWidth }
+        if showBrowse { width += browseMinWidth + browseDividerWidth }
+        if showQueue { width += queueMinWidth + queueDividerWidth }
         return width
     }
 
-    /// Ensures the window is wide enough for the current panels
+    /// Ensures the window is wide enough for the current panels AND
+    /// enforces that minimum at the NSWindow level so the user cannot
+    /// drag the resize handle down to a width that would clip toolbars
+    /// (queue header, browse search bar) off the right edge.
     private func ensureWindowFits() {
         guard let window = NSApp.mainWindow else { return }
         let needed = requiredMinWidth
+        // Pin the OS-level resize floor so the user cannot shrink past
+        // the visible-toolbar threshold.
+        let currentMin = window.minSize
+        if currentMin.width != needed || currentMin.height < 450 {
+            window.minSize = NSSize(width: needed, height: max(currentMin.height, 450))
+        }
         if window.frame.width < needed {
             var frame = window.frame
             let growth = needed - frame.width
@@ -198,7 +258,7 @@ struct ContentView: View {
                                             .onChanged { value in
                                                 let newWidth = (userBrowseWidth ?? sizes.browse) + value.translation.width
                                                 let clamped = max(browseMinWidth, min(newWidth, browseMaxWidth))
-                                                let neededWindow = sidebarWidth + clamped + (showQueue ? queueMinWidth : 0) + nowPlayingMinWidth
+                                                let neededWindow = sidebarWidth + clamped + browseDividerWidth + nowPlayingMinWidth + (showQueue ? queueMinWidth + queueDividerWidth : 0)
                                                 // Grow window if player would be squeezed
                                                 if let window = NSApp.mainWindow, neededWindow > window.frame.width {
                                                     var frame = window.frame
@@ -256,6 +316,12 @@ struct ContentView: View {
                 if selectedGroupID == nil {
                     sidebarVisibility = .all
                 }
+                // Set the window's drag-resize floor to the current panel
+                // configuration so toolbars can't be clipped off-screen.
+                // Toggle handlers re-call ensureWindowFits() whenever showBrowse
+                // or showQueue change (existing call sites at the toolbar
+                // buttons + menu observers), so onAppear is enough for startup.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { ensureWindowFits() }
                 // Show the welcome popup once, on the very first launch.
                 if !FirstRunWelcome.hasBeenShown {
                     // Small delay so the main window finishes appearing first.
@@ -279,6 +345,7 @@ struct ContentView: View {
                     }
                 )
             }
+            .modifier(LocalNetworkPermissionAlert(monitor: localNetworkMonitor))
             .onChange(of: selectedGroupID) {
                 UserDefaults.standard.set(selectedGroupID, forKey: UDKey.lastSelectedGroupID)
             }
@@ -286,6 +353,17 @@ struct ContentView: View {
                 // When groups load/change, try to restore selection if nothing selected
                 if selectedGroupID == nil || selectedGroup == nil {
                     restoreLastSelectedGroup()
+                }
+                // Quick-Start cache restores groups + selection from disk
+                // before live discovery completes. The first scan runs
+                // against possibly-stale coordinator data and quietly
+                // fails / returns empty metadata — Now Playing then sits
+                // blank until the user switches speakers (which retriggers
+                // `NowPlayingView.onChange(of: group.id)`). Re-scan the
+                // currently-selected group whenever topology updates so
+                // live data lands without that extra click.
+                if let group = selectedGroup {
+                    Task { await sonosManager.scanGroup(group) }
                 }
             }
             .toolbar {
@@ -373,6 +451,7 @@ struct ContentView: View {
                             .environmentObject(sonosManager)
                             .environmentObject(playHistoryManager)
                             .environmentObject(smapiManager)
+                            .environmentObject(plexAuth)
                     }
                 }
             }
@@ -393,6 +472,9 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .menuShowStats)) { _ in
                 WindowManager.shared.togglePlayHistory()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuShowForFun)) { _ in
+                WindowManager.shared.openForFun()
             }
             .onReceive(NotificationCenter.default.publisher(for: .menuPlayPause)) { _ in
                 handlePlayPause()
@@ -471,3 +553,33 @@ struct ContentView: View {
         }
     }
 }
+
+/// Extracted to a ViewModifier so ContentView's already-massive `body`
+/// stays under Swift's type-check budget — inlining the alert pushed
+/// the compiler past its timeout. Fires when `LocalNetworkPermissionMonitor`
+/// detects macOS has denied the app Local Network access.
+private struct LocalNetworkPermissionAlert: ViewModifier {
+    @ObservedObject var monitor: LocalNetworkPermissionMonitor
+
+    func body(content: Content) -> some View {
+        // TODO: localize (English-only for now)
+        content.alert(
+            "Local Network access required",
+            isPresented: Binding(
+                get: { monitor.shouldShowAlert },
+                set: { if !$0 { monitor.acknowledge() } }
+            )
+        ) {
+            Button("Open System Settings") {
+                NSWorkspace.shared.open(LocalNetworkPermissionMonitor.systemSettingsURL)
+                monitor.acknowledge()
+            }
+            Button("Later", role: .cancel) {
+                monitor.acknowledge()
+            }
+        } message: {
+            Text("macOS is blocking Choragus from reaching your Sonos speakers.\n\nTurn Choragus ON under System Settings → Privacy & Security → Local Network, then quit and relaunch the app.")
+        }
+    }
+}
+

@@ -1,10 +1,12 @@
-# The SonosController
+# Choragus
 
-A native macOS controller for Sonos speakers. Built entirely in Swift and SwiftUI. Ships as a universal binary with native support for both Apple Silicon and Intel Macs.
+**Native macOS controller for Sonos speakers.** Built entirely in Swift and SwiftUI. Ships as a universal binary with native support for both Apple Silicon and Intel Macs.
+
+> Choragus was previously named *SonosController*. Same project, same code; renamed to put trademark distance between the app and Sonos, Inc. The name comes from the ancient Greek *choragos* — the leader who organised and directed a chorus to perform as one. The metaphor matches what the app does: it doesn't make sound, it coordinates a group of speakers to play together.
 
 > **Looking for internals?** See [technical_readme.md](technical_readme.md) for architecture, protocols, and build instructions.
 
-![SonosController — Now Playing with Browse and Queue](screenshots/v3/mainview_browse_search_queue.png)
+![Choragus — Now Playing with Browse and Queue](screenshots/v3/mainview_browse_search_queue.png)
 
 ---
 
@@ -20,22 +22,33 @@ Tested against a live Sonos system with 16 speakers across 10 zones, a large loc
 
 ## Installing on macOS
 
-1. From the [latest release](https://github.com/scottwaters/SonosController/releases/latest), download `SonosController.zip` and double-click to unzip.
-2. Drag `SonosController.app` into `/Applications`.
+1. From the [latest release](https://github.com/scottwaters/Choragus/releases/latest), download `Choragus.zip` and double-click to unzip.
+2. Drag `Choragus.app` into `/Applications`.
 3. Double-click to launch.
 
 The build is signed with a Developer ID and notarized by Apple, so it launches cleanly with no Gatekeeper warning. On first launch macOS will ask for permission to access devices on your local network — grant it, or speaker discovery will not work.
 
+## Setting Up Music Services
+
+Once the app is installed, getting your streaming services (Spotify, Plex, TuneIn, Apple Music, etc.) to show up takes either one click or three steps depending on the service. For step-by-step instructions written for non-technical users, see **[Setupguide.md](Setupguide.md)**.
+
+Short version:
+
+- **TuneIn / Calm Radio / Sonos Radio / Apple Music search** — these services need to exist in your Sonos household first (radio services are usually pre-installed; Apple Music has to be added in the Sonos app). Then in Choragus press `⌘,`, scroll to **Music**, tick the checkbox. If a service isn't set up in Sonos, the toggle is disabled with an inline hint.
+- **Spotify / Plex / Apple Music playback** — first add the service in the official Sonos app, then *(Spotify and Apple Music only)* play one song from it and save it as a Sonos Favorite, then come back to Choragus, press `⌘,`, **Music → Connected Services → Connect**, and sign in via the browser.
+
+Why the favourited-song step? Sonos generates an internal account identifier the first time you save content from a service. Without it, no third-party app can authenticate playback through that service. It is a Sonos design constraint, not a Choragus limitation. The full explanation is in [Setupguide.md](Setupguide.md).
+
 ---
 
-## What's New in v3.7
+## What's New in v4.0
 
-- **Opens on first double-click** — signed and notarized by Apple. No Gatekeeper warnings, no right-click workaround.
-- **Plex works** — sign in once, your library shows up alongside the other services. Music streams straight from your own Plex server.
-- **Spotify fixed** — if v3.6 lost your Spotify connection, v3.7 detects it and prompts you to reconnect once. Keychain prompts per new build are way down.
-- **No more album-art flicker** — covers no longer flash between variants when tracks or stations change.
-- **Pick your language on first launch** — the welcome dialog has a language picker, pre-selected to match your Mac. Full app, Help, and stats dashboard now translate into all 13 supported languages.
-- **Stability** — fixed a startup crash that could hit users running in non-English locales.
+- **Renamed to Choragus** — the app you knew as SonosController. Existing installs upgrade in place; tokens, history, and preferences all carry over.
+- **Works on segmented networks** — speakers in a separate VLAN (UniFi, OPNsense, etc.) now appear automatically. Bonjour discovery runs alongside SSDP and meets at whichever one your network forwards.
+- **Lyrics that move with the song** — synced lyrics from LRCLIB, smooth-scrolling with a centre-focused gradient and a font that grows toward the active line.
+- **Richer Now Playing** — artist bios, tags, and album tracklists pulled from Wikipedia, MusicBrainz, and Last.fm with permanent local caching, so subsequent plays are instant and offline-friendly.
+- **About-box etymology** — a small nod to where the name comes from.
+- **Lots of UX polish** — settings text bumped for readability, queue panel layout fixed when all panels are open, menu-bar icon redesigned to a template glyph that follows macOS HIG, and play-history from your old SonosController install migrates over on first launch.
 
 For the full change list see [CHANGELOG.md](CHANGELOG.md).
 
@@ -57,8 +70,8 @@ For the full change list see [CHANGELOG.md](CHANGELOG.md).
 
 - **Stable multi-household rescans** — speakers no longer flicker in and out of the sidebar during periodic rescans, even when different speakers in the same household briefly return slightly different topology views. Room sections stay put.
 - **Stable radio artwork** — album art on radio streams no longer flashes back to the station logo between tracks or while paused.
-- **In-app Help** — `Help → SonosController Help` (⌘?) opens a built-in help window with eight topics, including a searchable keyboard-shortcuts reference.
-- **Check for Updates** — `SonosController → Check for Updates…` queries the project's GitHub releases and tells you when a new version is available. A quiet background check runs at most once a day at launch.
+- **In-app Help** — `Help → Choragus Help` (⌘?) opens a built-in help window with eight topics, including a searchable keyboard-shortcuts reference.
+- **Check for Updates** — `Choragus → Check for Updates…` queries the project's GitHub releases and tells you when a new version is available. A quiet background check runs at most once a day at launch.
 - **Better macOS menus** — new Controls menu (⌘P play/pause, ⌘→ next, ⌘← previous, ⌥⌘↓ mute), new View menu items (⌘B browse, ⌥⌘U queue, ⇧⌘S stats), and a proper About panel with version info and a link to the project repo.
 - **Main volume slider respects your accent colour** — the master volume slider now reliably reflects the custom accent colour you set in Settings, matching the per-speaker sliders.
 - **First-run welcome** — a one-time popup on first launch points you to the official Sonos app for speaker and service setup, then to Settings → Music for enabling services in this app.
@@ -116,7 +129,7 @@ The Queue panel shows the current play queue with album art, track info, and dur
 
 ### Music Services
 
-Services are managed in **Settings → Music**. Each can be individually enabled.
+Services are managed in **Settings → Music**. Each can be individually enabled. **First-time setup is described in plain language in [Setupguide.md](Setupguide.md)** — start there if you're not sure how to get a service showing up.
 
 #### Available — No Connection Required
 
@@ -180,7 +193,7 @@ The **History** timeline groups tracks by day with album art, artist, album, ser
 
 ![Menu Bar Mini Player](screenshots/v3/menubar.png)
 
-Control playback without switching apps. The menu-bar mini player shows album art with a blurred background, track title, artist, and room. Transport controls (skip, play/pause, skip), volume slider with mute toggle, and a star button for the currently playing track. The room picker shows green/grey dots for playing status across zones. Click *Open SonosController* to bring up the main window.
+Control playback without switching apps. The menu-bar mini player shows album art with a blurred background, track title, artist, and room. Transport controls (skip, play/pause, skip), volume slider with mute toggle, and a star button for the currently playing track. The room picker shows green/grey dots for playing status across zones. Click *Open Choragus* to bring up the main window.
 
 ### Speaker Presets
 

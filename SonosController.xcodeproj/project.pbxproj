@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10001 /* SonosControllerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001; };
+		A10001 /* ChoragusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001; };
 		A10002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002; };
 		A10003 /* RoomListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003; };
 		A10004 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10004; };
@@ -33,6 +33,10 @@
 		A10029 /* RecentlyPlayedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10029; };
 		A10030 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10030; };
 		A10031 /* MusicServicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10031; };
+		A10050 /* ForFunView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10050; };
+		A10060 /* PlexDirectBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10060; };
+		A10061 /* LineInBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10061; };
+		A10062 /* NowPlayingContextPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10062; };
 		A10032 /* NowPlayingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10032; };
 		A10033 /* QueueViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10033; };
 		A10034 /* SliderPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10034; };
@@ -52,7 +56,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		B10001 /* SonosControllerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosControllerApp.swift; sourceTree = "<group>"; };
+		B10001 /* ChoragusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoragusApp.swift; sourceTree = "<group>"; };
 		B10002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B10003 /* RoomListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomListView.swift; sourceTree = "<group>"; };
 		B10004 /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
@@ -80,6 +84,10 @@
 		B10029 /* RecentlyPlayedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentlyPlayedView.swift; sourceTree = "<group>"; };
 		B10030 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
 		B10031 /* MusicServicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicServicesView.swift; sourceTree = "<group>"; };
+		B10050 /* ForFunView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForFunView.swift; sourceTree = "<group>"; };
+		B10060 /* PlexDirectBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexDirectBrowseView.swift; sourceTree = "<group>"; };
+		B10061 /* LineInBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineInBrowseView.swift; sourceTree = "<group>"; };
+		B10062 /* NowPlayingContextPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingContextPanel.swift; sourceTree = "<group>"; };
 		B10034 /* SliderPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SliderPopup.swift; sourceTree = "<group>"; };
 		B10035 /* BrowseViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseViewModel.swift; sourceTree = "<group>"; };
 		B10032 /* NowPlayingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingViewModel.swift; sourceTree = "<group>"; };
@@ -123,7 +131,7 @@
 		E10001 /* SonosController */ = {
 			isa = PBXGroup;
 			children = (
-				B10001 /* SonosControllerApp.swift */,
+				B10001 /* ChoragusApp.swift */,
 				E10002 /* Views */,
 				E10003 /* ViewModels */,
 				B10005 /* Assets.xcassets */,
@@ -173,6 +181,10 @@
 				B10029 /* RecentlyPlayedView.swift */,
 				B10030 /* MenuBarController.swift */,
 				B10031 /* MusicServicesView.swift */,
+				B10050 /* ForFunView.swift */,
+				B10060 /* PlexDirectBrowseView.swift */,
+				B10061 /* LineInBrowseView.swift */,
+				B10062 /* NowPlayingContextPanel.swift */,
 				B10041 /* ArtworkSearchView.swift */,
 				B10042 /* SonosRadioSearchView.swift */,
 				B10034 /* SliderPopup.swift */,
@@ -269,7 +281,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10001 /* SonosControllerApp.swift in Sources */,
+				A10001 /* ChoragusApp.swift in Sources */,
 				A10002 /* ContentView.swift in Sources */,
 				A10003 /* RoomListView.swift in Sources */,
 				A10004 /* NowPlayingView.swift in Sources */,
@@ -294,6 +306,10 @@
 				A10029 /* RecentlyPlayedView.swift in Sources */,
 				A10030 /* MenuBarController.swift in Sources */,
 				A10031 /* MusicServicesView.swift in Sources */,
+				A10050 /* ForFunView.swift in Sources */,
+				A10060 /* PlexDirectBrowseView.swift in Sources */,
+				A10061 /* LineInBrowseView.swift in Sources */,
+				A10062 /* NowPlayingContextPanel.swift in Sources */,
 				A10041 /* ArtworkSearchView.swift in Sources */,
 				A10042 /* SonosRadioSearchView.swift in Sources */,
 				A10032 /* NowPlayingViewModel.swift in Sources */,
@@ -374,21 +390,21 @@
 				CODE_SIGN_ENTITLEMENTS = SonosController/SonosController.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SonosController/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
-				INFOPLIST_KEY_CFBundleDisplayName = SonosController;
+				INFOPLIST_KEY_CFBundleDisplayName = Choragus;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 3.71;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sonoscontroller.app;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				MARKETING_VERSION = 4.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
+				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -402,21 +418,21 @@
 				CODE_SIGN_ENTITLEMENTS = SonosController/SonosController.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SonosController/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
-				INFOPLIST_KEY_CFBundleDisplayName = SonosController;
+				INFOPLIST_KEY_CFBundleDisplayName = Choragus;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 3.71;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sonoscontroller.app;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				MARKETING_VERSION = 4.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
+				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};

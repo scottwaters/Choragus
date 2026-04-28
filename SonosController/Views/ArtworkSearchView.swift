@@ -15,7 +15,15 @@ struct ArtworkSearchView: View {
     @State private var isSearching = false
     @State private var hasSearched = false
     @State private var selectedResult: ArtResult?
+    @State private var throttleSnapshot: ITunesRateLimiter.Snapshot?
     @Environment(\.dismiss) private var dismiss
+
+    private static let cooldownTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        return f
+    }()
 
     /// Strips parenthetical/bracket content for cleaner searches
     private static func cleanForSearch(_ text: String) -> String {
@@ -58,6 +66,21 @@ struct ArtworkSearchView: View {
                 Spacer()
                 Button(L10n.cancel) { dismiss() }
                     .controlSize(.small)
+            }
+
+            if let snap = throttleSnapshot, !snap.isAvailable, let until = snap.cooldownUntil {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L10n.appleMusicSearchUnavailable)
+                            .font(.caption)
+                        Text(L10n.appleMusicResumesAt(Self.cooldownTimeFormatter.string(from: until)))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
             }
 
             if hasSearched && results.isEmpty && !isSearching {
@@ -113,6 +136,7 @@ struct ArtworkSearchView: View {
         .padding(16)
         .frame(width: 400)
         .onAppear {
+            Task { throttleSnapshot = await ITunesRateLimiter.shared.snapshot() }
             if !artist.isEmpty || !title.isEmpty || !album.isEmpty {
                 performSearch()
             }
@@ -205,6 +229,7 @@ struct ArtworkSearchView: View {
             var seen = Set<String>()
             results = found.filter { seen.insert($0.artURL).inserted }
             isSearching = false
+            throttleSnapshot = await ITunesRateLimiter.shared.snapshot()
         }
     }
 
@@ -214,29 +239,27 @@ struct ArtworkSearchView: View {
             return []
         }
 
-        do {
-            let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url))
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode),
-                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let items = json["results"] as? [[String: Any]] else {
-                return []
-            }
-
-            return items.compactMap { item in
-                guard let artSmall = item["artworkUrl100"] as? String else { return nil }
-                let artLarge = artSmall
-                    .replacingOccurrences(of: "100x100", with: "600x600")
-                    .replacingOccurrences(of: "60x60", with: "600x600")
-                    .replacingOccurrences(of: "30x30", with: "600x600")
-                let name = item["collectionName"] as? String
-                    ?? item["trackName"] as? String
-                    ?? item["artistName"] as? String
-                    ?? ""
-                return ArtResult(artURL: artLarge, label: name)
-            }
-        } catch {
+        // User-initiated search — bypass the self-throttle so background art
+        // enrichment can't starve it. Apple-side 403/429 still respected.
+        guard let (data, _) = await ITunesRateLimiter.shared.performUnthrottled(url: url, session: URLSession.shared) else {
             return []
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = json["results"] as? [[String: Any]] else {
+            return []
+        }
+
+        return items.compactMap { item in
+            guard let artSmall = item["artworkUrl100"] as? String else { return nil }
+            let artLarge = artSmall
+                .replacingOccurrences(of: "100x100", with: "600x600")
+                .replacingOccurrences(of: "60x60", with: "600x600")
+                .replacingOccurrences(of: "30x30", with: "600x600")
+            let name = item["collectionName"] as? String
+                ?? item["trackName"] as? String
+                ?? item["artistName"] as? String
+                ?? ""
+            return ArtResult(artURL: artLarge, label: name)
         }
     }
 }

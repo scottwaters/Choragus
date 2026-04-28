@@ -26,6 +26,13 @@ public protocol TransportStrategyDelegate: AnyObject {
     func transportDidUpdateMute(_ deviceID: String, muted: Bool)
     func transportDidUpdateTopology(_ groups: [ZoneGroupData])
     func transportDidUpdatePosition(_ groupID: String, position: TimeInterval, duration: TimeInterval)
+    /// Fired when a `ZoneGroupTopology` UPnP NOTIFY arrives. The
+    /// delegate should re-fetch authoritative topology via
+    /// `GetZoneGroupState`. We don't try to parse the event payload —
+    /// its triple-encoded XML structure historically produced incorrect
+    /// group data. The notification is just a "something changed,
+    /// pull the truth" signal.
+    func transportRequestsTopologyRefresh()
     // Services for direct queries
     func getAVTransportService() -> AVTransportService
     func getRenderingControlService() -> RenderingControlService
@@ -342,10 +349,13 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
     @MainActor
     private func handleTopologyEvent(body: String) {
-        // Topology events have complex triple-encoded XML that can produce
-        // incorrect group data. Rely on SSDP-based topology refresh (30s)
-        // which is proven reliable. Topology changes are rare.
-        // Topology events handled by SSDP refresh
+        // Don't try to parse the event payload — its triple-encoded XML
+        // structure historically produced incorrect group data. Treat
+        // the event as a trigger only and have the delegate pull the
+        // authoritative ZoneGroupState via SOAP. Without this signal,
+        // grouping/ungrouping changes made from Sonos's app weren't
+        // reflected here until the 30-second SSDP rescan caught them.
+        delegate?.transportRequestsTopologyRefresh()
     }
 
     // MARK: - Reconciliation Polling

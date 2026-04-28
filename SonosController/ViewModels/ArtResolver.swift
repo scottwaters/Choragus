@@ -55,9 +55,12 @@ final class ArtResolver {
     // MARK: - Dependencies
 
     private(set) weak var playHistoryManager: PlayHistoryManager?
+    private let albumArtSearch: AlbumArtSearchProtocol
 
-    init(playHistoryManager: PlayHistoryManager? = nil) {
+    init(playHistoryManager: PlayHistoryManager? = nil,
+         albumArtSearch: AlbumArtSearchProtocol = AlbumArtSearchService.shared) {
         self.playHistoryManager = playHistoryManager
+        self.albumArtSearch = albumArtSearch
     }
 
     // MARK: - Display Resolution
@@ -81,8 +84,23 @@ final class ArtResolver {
         let currentStation = trackMetadata.stationName
         let onRadio = !currentStation.isEmpty || trackMetadata.isRadioStream
 
-        // Station changed — clear stale radio art
-        if currentStation != lastStationName {
+        // Station changed — clear stale radio art. Two cases trigger a
+        // genuine change:
+        //   1. Incoming `currentStation` is non-empty AND differs from
+        //      `lastStationName` (real switch to a different station).
+        //   2. We've truly LEFT radio (lastStationName non-empty, current
+        //      empty, AND `onRadio` is false — no longer a radio stream).
+        // Transient empty `stationName` while still on the same station
+        // (Sonos's metadata polls occasionally drop the field for a frame)
+        // must NOT clear `radioTrackArtURL`, or the auto-resolved track
+        // art flicks back to the station logo for the next render.
+        let realStationChange: Bool
+        if !currentStation.isEmpty {
+            realStationChange = currentStation != lastStationName
+        } else {
+            realStationChange = !lastStationName.isEmpty && !onRadio
+        }
+        if realStationChange {
             let wasRadio = !lastStationName.isEmpty
             lastStationName = currentStation
             radioStationArtURL = nil
@@ -119,6 +137,19 @@ final class ArtResolver {
             }
             displayedArtURL = resolved
         }
+        // Auto-pin the first non-`/getaa?` art we see for this track.
+        // For direct-stream playback (Plex direct, custom HTTP) the
+        // first frame carries the real upstream URL we provided in DIDL,
+        // and subsequent speaker polls rewrite it to a `/getaa?` proxy
+        // that returns generic placeholder art when the upstream isn't
+        // fetchable speaker-side. Pinning the original means
+        // `artURLForDisplay` can prefer it over the broken proxy.
+        if !isArtResolved(for: trackMetadata),
+           !onRadio,
+           let url = resolved,
+           !url.absoluteString.contains("/getaa?") {
+            markArtResolved(for: trackMetadata, url: url)
+        }
     }
 
     /// The art URL the view should show — accounts for ad breaks and ignore state.
@@ -133,13 +164,37 @@ final class ArtResolver {
             return radioStationArtURL
         }
         if isArtResolved(for: trackMetadata) {
+            // User's manual override wins over radio auto-search. A pin
+            // exists here only because `setManualArtwork` (or another
+            // explicit user action) called `markArtResolved` — radio
+            // auto-search results never pin. So if a pin is present
+            // while on radio, it's an explicit user choice and must
+            // beat `radioTrackArtURL`, which gets re-populated on
+            // subsequent polls and would otherwise reclobber the choice.
+            if !trackMetadata.stationName.isEmpty,
+               let pin = pinnedURL(for: trackMetadata) {
+                return pin
+            }
             if let trackArt = radioTrackArtURL, !trackMetadata.stationName.isEmpty {
                 return trackArt
             }
+            let metaArtString = trackMetadata.albumArtURI ?? ""
+            let metaIsGetaa = metaArtString.contains("/getaa?")
+            // Direct-stream playback (Plex direct, custom HTTP) goes
+            // through Sonos's `/getaa?` art proxy when echoed back from
+            // the speaker. The proxy returns a generic placeholder
+            // when it can't fetch the upstream URL (HTTPS .plex.direct
+            // + token, auth-required URLs). If we have a real pinned
+            // URL, prefer it over the proxy regardless of whether the
+            // proxy URL is "non-empty".
+            if metaIsGetaa,
+               let pin = pinnedURL(for: trackMetadata),
+               !pin.absoluteString.contains("/getaa?") {
+                return pin
+            }
             // Speaker's current albumArtURI is the source of truth — read it
             // directly so the inline view stays in sync with menubar/popup.
-            if let metaArt = trackMetadata.albumArtURI, !metaArt.isEmpty,
-               let url = URL(string: metaArt) {
+            if !metaArtString.isEmpty, let url = URL(string: metaArtString) {
                 return url
             }
             // Speaker reports no art for this track. A pinned /getaa? URL
@@ -247,12 +302,17 @@ final class ArtResolver {
         let key = "\(UDKey.artOverridePrefix)\(searchTerm.lowercased())"
         UserDefaults.standard.set(artURL, forKey: key)
         isArtIgnored = false
-        webArtURL = URL(string: artURL)
+        let chosenURL = URL(string: artURL)
+        webArtURL = chosenURL
         forceWebArt = true
-        markArtResolved(for: trackMetadata)
-        // Clear radio track art so it doesn't override the manual choice
+        // Clear stale state BEFORE pinning so `markArtResolved`'s fallback
+        // (`displayedArtURL ?? webArtURL`) doesn't capture the previous
+        // station-logo URL still sitting in displayedArtURL. Better still,
+        // pass the chosen URL explicitly — guarantees the pin matches the
+        // user's choice regardless of any transient state.
         radioTrackArtURL = nil
-        displayedArtURL = webArtURL
+        displayedArtURL = chosenURL
+        markArtResolved(for: trackMetadata, url: chosenURL)
         updateDisplayedArt(trackMetadata: trackMetadata, group: group)
 
         // Pre-cache the image so it's available immediately on future plays
@@ -298,6 +358,7 @@ final class ArtResolver {
     func markArtResolved(for trackMetadata: TrackMetadata, url: URL? = nil) {
         let key = artResolutionKey(trackMetadata: trackMetadata)
         guard !key.isEmpty else { return }
+        sonosDebugLog("[ART/PIN] mark key=\(key.prefix(60)) url=\(url?.absoluteString.prefix(80) ?? "<derive>")")
         // Use the explicitly-passed URL if provided, else whatever the
         // current resolver state yields. Storing the URL (not just the
         // fact of resolution) makes `artURLForDisplay` return a stable
@@ -311,6 +372,7 @@ final class ArtResolver {
     /// user actions (Search Artwork, Refresh, Ignore, Clear).
     func invalidateArtResolution(for trackMetadata: TrackMetadata) {
         let key = artResolutionKey(trackMetadata: trackMetadata)
+        sonosDebugLog("[ART/PIN] invalidate key=\(key.prefix(60))")
         pinnedArtByTrackURI.removeValue(forKey: key)
     }
 
@@ -331,7 +393,7 @@ final class ArtResolver {
         forceWebArt = false
         isArtIgnored = false
         Task {
-            if let artURL = await AlbumArtSearchService.shared.searchArtwork(
+            if let artURL = await albumArtSearch.searchArtwork(
                 artist: artist, album: searchTerm
             ) {
                 setManualArtwork(artURL, trackMetadata: trackMetadata, group: group)
