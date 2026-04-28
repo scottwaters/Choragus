@@ -26,9 +26,11 @@ SOAPAction: "urn:schemas-upnp-org:service:AVTransport:1#Play"
 </s:Envelope>
 ```
 
-## Discovery (SSDP)
+## Discovery (SSDP + Bonjour)
 
-Speakers are found via SSDP multicast:
+Speakers are found by two parallel transports that feed the same post-discovery pipeline. See [DISCOVERY.md](DISCOVERY.md) for the full design.
+
+### SSDP multicast
 
 ```
 M-SEARCH * HTTP/1.1
@@ -39,6 +41,18 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
 ```
 
 Each speaker responds with a `LOCATION` header pointing to its device description XML (e.g., `http://192.168.1.x:1400/xml/device_description.xml`).
+
+### Bonjour / mDNS
+
+Speakers also advertise the `_sonos._tcp` Bonjour service. `NWBrowser` enumerates them and resolves the TXT record, which carries the same `location` URL plus the household ID:
+
+```
+PTR _sonos._tcp.local
+TXT location=http://192.168.1.x:1400/xml/device_description.xml
+TXT householdid=Sonos_xxxxxxxxxxxx
+```
+
+Both transports merge by location URL, so seeing a speaker on both is harmless. Bonjour-supplied speakers skip the `GetHouseholdID` SOAP round-trip during topology discovery.
 
 ## Service Endpoints
 

@@ -7,83 +7,118 @@ Full source documentation for Choragus.
 ```
 Choragus/
 ├── Choragus.xcodeproj               # Xcode project file
-├── README.md                        # Project overview
+├── README.md                        # End-user overview
+├── technical_readme.md              # Developer overview (entry point to docs/)
+├── Setupguide.md                    # Plain-language onboarding for non-technical users
+├── CHANGELOG.md                     # Per-release history
 ├── LICENSE                          # MIT License
 ├── .gitignore
 ├── docs/
-│   ├── ARCHITECTURE.md              # This file
-│   ├── PROTOCOLS.md                 # UPnP/SOAP protocol reference
-│   └── CACHING.md                   # Caching system documentation
+│   ├── ARCHITECTURE.md              # This file — module-by-module breakdown
+│   ├── PROTOCOLS.md                 # UPnP/SOAP/SMAPI protocol reference
+│   ├── CACHING.md                   # Caching system documentation
+│   ├── DISCOVERY.md                 # Discovery modes (Auto / Bonjour / Legacy Multicast)
+│   ├── LOCALIZATION.md              # 13-locale architecture and conventions
+│   └── SERVICES.md                  # Music-service status matrix
 │
 ├── Choragus/                        # SwiftUI App Target
 │   ├── ChoragusApp.swift
 │   ├── Info.plist
 │   ├── Choragus.entitlements
 │   ├── Assets.xcassets/
-│   ├── MenuBarController.swift      # Menu bar icon and dropdown controls (with star button)
-│   ├── WindowManager.swift          # AppKit-based window management
+│   ├── MenuBarController.swift      # Menu bar icon, mini-player, room picker
+│   ├── WindowManager.swift          # AppKit window lifecycle for help/about/stats/HT EQ
 │   └── Views/
-│       ├── ContentView.swift
-│       ├── RoomListView.swift
-│       ├── NowPlayingView.swift     # Now Playing with star button
-│       ├── QueueView.swift
-│       ├── BrowseView.swift
-│       ├── GroupEditorView.swift
-│       ├── VolumeControlView.swift
-│       ├── EQView.swift
-│       ├── HomeTheaterEQView.swift  # Home theater EQ/Sub/Surrounds window
+│       ├── AccentColorHelper.swift          # Resolves user accent colour with system fallback
 │       ├── AlarmsView.swift
+│       ├── ArtworkSearchView.swift          # Manual artwork search dialog (iTunes Search)
+│       ├── BrowseView.swift                 # Hierarchical content browser
+│       ├── CachedAsyncImage.swift           # Drop-in AsyncImage backed by ImageCache
+│       ├── ColorSwatchGrid.swift            # Grid picker for accent / zone colours
+│       ├── ContentView.swift                # Main split layout
+│       ├── EQView.swift                     # Bass / treble / loudness popover
+│       ├── FirstRunWelcomeView.swift        # First-launch language + Sonos-app hint
+│       ├── ForFunView.swift                 # Visualisation experiments — paused in v4.0
+│       ├── GroupEditorView.swift            # Add/remove speakers from a group
+│       ├── HelpView.swift                   # In-app Help (10 topics, full body localised)
+│       ├── HomeTheaterEQView.swift          # Soundbar + Sub + Surrounds EQ window
+│       ├── HoverTooltip.swift               # Reliable replacement for SwiftUI .help()
+│       ├── LineInBrowseView.swift           # Browse Line-In sources across speakers
+│       ├── MarqueeText.swift                # Auto-scrolling marquee for long names
+│       ├── MenuBarController.swift          # Menu-bar mini player
+│       ├── MusicServicesView.swift          # SMAPI setup, Connect / Disconnect, status dots
+│       ├── NowPlayingContextPanel.swift     # Bottom tabbed panel — Lyrics / About / History
+│       ├── NowPlayingView.swift             # Album art, transport, volume, star, action buttons
+│       ├── PlayHistoryDashboard.swift       # Stats hero cards, charts, quick pills
+│       ├── PlayHistoryView.swift            # Listening Stats container (Dashboard + Timeline)
+│       ├── PlayHistoryView2.swift           # Card-based timeline grouped by day
+│       ├── PlexDirectBrowseView.swift       # Plex AppLink browse drill-down
+│       ├── PresetManagerView.swift          # Group preset CRUD + EQ editor
+│       ├── QueueView.swift
+│       ├── RecentlyPlayedView.swift
+│       ├── RoomListView.swift               # Sidebar with household sections
+│       ├── ScrollWheelCapture.swift         # NSEvent monitor for scroll-wheel volume
+│       ├── SettingsScrobblingTab.swift      # Last.fm scrobbling tab content
+│       ├── SettingsView.swift               # Settings sheet — 12 sections (see below)
 │       ├── SleepTimerView.swift
-│       ├── SettingsView.swift
-│       ├── RecentlyPlayedView.swift # Recently played stations/tracks
-│       ├── PlayHistoryView.swift    # Play history filters and tab container
-│       ├── PlayHistoryView2.swift   # Card-based timeline grouped by day
-│       ├── PlayHistoryDashboard.swift # Dashboard stats, charts, quick pills
-│       ├── MusicServicesView.swift  # SMAPI setup guide and service management
-│       ├── CachedAsyncImage.swift
-│       ├── MarqueeText.swift        # Auto-scrolling text for long names
-│       └── HoverTooltip.swift       # Custom tooltip replacing .help()
+│       ├── SliderPopup.swift                # Reusable slider popover
+│       ├── SonosRadioSearchView.swift       # Anonymous Sonos Radio search drill-down
+│       ├── UpdateChecker.swift              # GitHub /releases/latest poller
+│       ├── VolumeControlView.swift          # Per-speaker volume sliders
+│       └── WindowManager.swift              # Auxiliary-window factory
 │
 └── Packages/SonosKit/               # Local Swift Package
     ├── Package.swift
     ├── Sources/SonosKit/
-    │   ├── SonosManager.swift
-    │   ├── SonosConstants.swift     # URI prefixes, service IDs, colors, timing, paths
+    │   ├── SonosManager.swift            # Top-level @MainActor coordinator
+    │   ├── SonosConstants.swift          # URIPrefix, ServiceID (incl. pandora=3), colours, timing, paths
+    │   ├── AppError.swift / ErrorHandler.swift
+    │   ├── Protocols.swift               # ISP service protocols (Playback, Volume, EQ, ...)
+    │   ├── PresetManager.swift / PlayHistoryManager.swift / PlayHistoryRepository.swift
     │   ├── Discovery/
-    │   │   └── SSDPDiscovery.swift
-    │   ├── Models/
-    │   │   ├── SonosDevice.swift
-    │   │   ├── SonosGroup.swift
-    │   │   ├── HomeTheaterZone.swift # Home theater topology (soundbar/sub/surrounds)
-    │   │   ├── GroupPreset.swift     # Saved group preset with per-speaker volumes
-    │   │   ├── PlayHistoryEntry.swift # Play history entry with metadata
-    │   │   ├── TransportState.swift
-    │   │   ├── TrackMetadata.swift
-    │   │   ├── PlayMode.swift
-    │   │   └── BrowseItem.swift
+    │   │   ├── SpeakerDiscovery.swift    # Protocol abstraction over discovery transports
+    │   │   ├── SSDPDiscovery.swift       # UDP multicast (239.255.255.250:1900)
+    │   │   └── MDNSDiscovery.swift       # NWBrowser-backed _sonos._tcp Bonjour transport
+    │   ├── Events/                       # GENA subscription + transport state events
+    │   ├── Localization/
+    │   │   └── L10n.swift                # 13-locale dictionary, ~1000+ keys, dup-key gate
     │   ├── Managers/
-    │   │   ├── PresetManager.swift          # Save/load/apply group presets
-    │   │   ├── PlayHistoryManager.swift     # Track play history, stats, CSV export
-    │   │   └── PlaylistServiceScanner.swift # Background playlist service badge scanning
+    │   │   └── PlaylistServiceScanner.swift
+    │   ├── Models/
+    │   │   ├── SonosDevice.swift / SonosGroup.swift
+    │   │   ├── SonosSystemVersion.swift  # S1 vs S2 classifier
+    │   │   ├── HomeTheaterZone.swift
+    │   │   ├── GroupPreset.swift
+    │   │   ├── PlayHistoryEntry.swift
+    │   │   ├── TransportState.swift / TrackMetadata.swift / PlayMode.swift
+    │   │   └── BrowseItem.swift
     │   ├── UPnP/
-    │   │   ├── SOAPClient.swift
-    │   │   ├── XMLResponseParser.swift
-    │   │   ├── BrowseXMLParser.swift
-    │   │   └── DeviceDescriptionParser.swift
+    │   │   ├── SOAPClient.swift / XMLResponseParser.swift
+    │   │   ├── BrowseXMLParser.swift / DeviceDescriptionParser.swift
     │   ├── Services/
-    │   │   ├── AVTransportService.swift
-    │   │   ├── RenderingControlService.swift
-    │   │   ├── ZoneGroupTopologyService.swift
-    │   │   ├── ContentDirectoryService.swift
-    │   │   ├── AlarmClockService.swift
-    │   │   └── MusicServicesService.swift
+    │   │   ├── AVTransportService.swift / RenderingControlService.swift
+    │   │   ├── ZoneGroupTopologyService.swift / ContentDirectoryService.swift
+    │   │   ├── AlarmClockService.swift / MusicServicesService.swift
+    │   │   ├── SMAPIClient.swift / SMAPIAuthManager.swift / SMAPITokenStore.swift
+    │   │   ├── PlexDirectClient.swift
+    │   │   ├── LyricsService.swift                 # LRCLIB synced + plain lyrics
+    │   │   ├── MusicMetadataService.swift          # Wikipedia + MusicBrainz + Last.fm bios
+    │   │   ├── MetadataCacheRepository.swift       # SQLite cache w/ language-prefixed keys
+    │   │   ├── LastFMClient.swift / LastFMTokenStore.swift
+    │   │   ├── AlbumArtSearchService.swift         # iTunes Search fallback
+    │   │   ├── ArtCacheService.swift               # Persistent art-URL cache
+    │   │   ├── ITunesRateLimiter.swift
+    │   │   ├── ServiceSearchProvider.swift         # Apple Music / Sonos Radio / Calm Radio
+    │   │   ├── LocalNetworkPermissionMonitor.swift # Local Network entitlement watch
+    │   │   └── SecretsStore.swift                  # Unified Keychain item, Choragus service
     │   └── Cache/
-    │       ├── SonosCache.swift
-    │       ├── ImageCache.swift
+    │       ├── SonosCache.swift                    # Topology + browse-section JSON
+    │       ├── ImageCache.swift                    # Two-tier NSCache + JPEG disk
     │       └── StaleDataError.swift
-    └── Tests/SonosKitTests/
-        └── SonosKitTests.swift
+    └── Tests/SonosKitTests/                        # Classifier, XML, equality, locale tests
 ```
+
+The Views layer is intentionally flat (no per-feature subfolders) because most views are top-level scenes; deeper folders haven't paid off yet.
 
 ## App Target: Choragus
 
@@ -128,12 +163,24 @@ The main playback control view. Contains:
 - **Per-speaker volume** — shown when the group has multiple visible members
 - **Star button** — star/unstar the currently playing track (persisted in play history)
 - **Action buttons** — Group, Sleep, EQ
+- **Bottom context panel** — `NowPlayingContextPanel` is hosted at the bottom of the view as a collapsible section. The collapse state persists in `UserDefaults[nowPlayingDetails.collapsed]`.
 
 **Optimistic UI system:**
 - Play/pause, shuffle, repeat, crossfade, mute all flip their state immediately on tap
 - A grace period (`transportGraceUntil`, `volumeGraceUntil`, etc.) prevents the 2-second polling cycle from overwriting the optimistic state with stale data from the speaker
 - Grace lasts 5 seconds or until the speaker confirms the new state, whichever comes first
 - Polling is skipped entirely while an action is in flight
+
+#### NowPlayingContextPanel.swift
+Tabbed details panel (`TabView` with segmented `Picker` style) shown below the transport controls when the panel isn't collapsed. Three tabs:
+
+- **Lyrics** — driven by `LyricsService`. Synced word-by-word lyrics from LRCLIB when available with auto-scroll, centre-focused gradient, and a font-weight ramp toward the active line. Plain (unsynced) lyrics fall back to centre-justified text in a normal scroll view with the same line spacing as the synced layout. A manual offset slider compensates for stream/lyric clock drift in 250 ms steps.
+- **About** — driven by `MusicMetadataService`. Artist bio, photo, tags, related artists, album release date, and tracklist. Sources: Wikipedia (per-language subdomain), MusicBrainz (release metadata), Last.fm (tags + similar). Right-click → Refresh metadata; click the photo to enlarge; click the Wikipedia link to open the article. Cached locally via `MetadataCacheRepository` keyed by `<lang>|artist:<name>` etc.
+- **History** — recent plays of the current track for the active room, drawn from `play_history.sqlite`.
+
+The tab `Picker` is decorated with `.languageReactive()` (which applies `.id(appLanguage)`) so segmented label rendering rebuilds on language flip — without it the cached labels stay in their pre-flip language.
+
+The `ctxVM` is initialised eagerly in `init` (not via `.task`, which runs after the first body call) so the first render has services available.
 
 #### QueueView.swift
 Displays the play queue fetched via `ContentDirectoryService.browseQueue()`. Shows track title, artist, duration, and cached album art. Current track is highlighted. Supports:
@@ -181,13 +228,20 @@ Sheet with preset duration buttons (15m–2h). Shows remaining time when active.
 Quick-access list of recently played stations and tracks, displayed in the browse panel. Shows album art, track name, artist, and how long ago it was played. Tapping an entry starts playback of that item.
 
 #### SettingsView.swift
-Sheet with sections for:
-- **Startup Mode** — segmented picker for Quick Start (cached) vs. Classic (live discovery)
-- **Communications Mode** — Event-Driven vs. Legacy Polling
-- **Appearance** — theme, accent color, zone icon colors
-- **Play History** — enable/disable tracking, clear history with confirmation dialog
-- **Menu Bar** — enable/disable menu bar mode
-- **Cache Status** — shows live/cached indicator, cache age, and buttons to clear speaker cache and artwork cache separately. Artwork cache shows current disk usage.
+Sheet organised into 12 focused sections (was four broad tabs prior to v4.0):
+
+- **Appearance** — theme picker (System / Light / Dark) using `AppearanceMode.displayName`.
+- **Colours** — accent dot, playing-zone indicator, inactive-zone indicator. `ColorSwatchGrid` for picking from a curated palette plus an "Other…" `ColorPicker`.
+- **Language** — `AppLanguage` picker bound to `@AppStorage(UDKey.appLanguage)`. 13 supported locales. Changing this re-renders all observed views via `.languageReactive()` modifiers and `LanguageReactiveContainer` for AppKit-hosted windows.
+- **Menu Bar** — toggle the menu-bar mini-player.
+- **Mouse Controls** — scroll-wheel volume + middle-click mute (handled by `ScrollWheelCapture` over `NowPlayingView`).
+- **Communication** — segmented picker for `CommunicationMode` (Event-Driven / Legacy Polling). Picker labels use `displayName` so they localise.
+- **Discovery** — segmented picker for the discovery transport: Auto (SSDP + Bonjour, default), Bonjour (mDNS only), Legacy Multicast (SSDP only). See `docs/DISCOVERY.md`.
+- **Quick Start** — segmented picker for `StartupMode` (Quick Start / Classic).
+- **Music Services** — `MusicServicesView` showing tested-blue, untested, and blocked-red services with status dots; Connect / Disconnect drives the SMAPI AppLink flow.
+- **Scrobbling** — `SettingsScrobblingTab`. BYO Last.fm API key, browser OAuth via `auth.getSession`, room + service filters, Filter Preview.
+- **Image Cache** — size limit (MB), age limit (days), Clear button with current disk usage in its label.
+- **Listening Stats** — opens `PlayHistoryView` (Dashboard + Timeline) in an auxiliary window.
 
 Consistent padding and layout with confirmation dialogs for destructive actions.
 
@@ -243,13 +297,24 @@ The top-level coordinator. `@MainActor`, `ObservableObject`. Owns all services, 
 - `loadBrowseSections()` — probes the system for available content categories
 - `getAlarms/updateAlarm/deleteAlarm`
 
-### Discovery/SSDPDiscovery.swift
+### Discovery/
 
-UDP multicast speaker discovery using BSD sockets (Darwin). Sends M-SEARCH to `239.255.255.250:1900` for `urn:schemas-upnp-org:device:ZonePlayer:1`. Parses HTTP-like responses to extract `LOCATION` header (device description URL).
+The discovery layer is a protocol-abstraction (`SpeakerDiscovery`) over two transport implementations. Both feed the same `handleDiscoveredDevice(location:)` pipeline in `SonosManager`, deduped by location URL. See `docs/DISCOVERY.md` for end-to-end design notes and the discovery-mode setting.
 
-Runs a receive loop on a background `DispatchQueue`. Filters responses for "ZonePlayer" or "Sonos" to ignore non-Sonos UPnP devices.
+#### SpeakerDiscovery.swift
+Protocol the rest of the app talks to. Hides the choice of SSDP vs Bonjour vs both behind a single interface. Backed by either a single transport (Bonjour-only, Legacy-Multicast/SSDP-only) or a parallel-merge wrapper (Auto = SSDP + Bonjour with location-URL dedup).
 
-`rescan()` re-sends the M-SEARCH without recreating the socket. Called every 30 seconds by a timer in SonosManager.
+#### SSDPDiscovery.swift
+UDP multicast speaker discovery using BSD sockets (Darwin). Sends M-SEARCH to `239.255.255.250:1900` for `urn:schemas-upnp-org:device:ZonePlayer:1`. Parses HTTP-like responses to extract `LOCATION` header (device description URL). Runs a receive loop on a background `DispatchQueue`. Filters responses for "ZonePlayer" or "Sonos" to ignore non-Sonos UPnP devices. `rescan()` re-sends the M-SEARCH without recreating the socket. Called every 30 seconds by a timer in SonosManager.
+
+Use case: works on flat networks where all devices are in one broadcast domain. Often blocked by VLAN segmentation common with UniFi, OPNsense, and similar router setups.
+
+#### MDNSDiscovery.swift
+`NWBrowser`-backed mDNS discovery for `_sonos._tcp`. The Bonjour TXT record carries the same `location` URL that SSDP would surface in its M-SEARCH response, so the entire post-discovery pipeline is unchanged. The TXT record also surfaces the household ID, which lets the app skip one `GetHouseholdID` SOAP round-trip per speaker — measurable on S1 hardware.
+
+Use case: works on segmented networks where mDNS is reflected (most modern routers, including UniFi with mDNS reflector enabled).
+
+Both transports fan out to `handleDiscoveredDevice(location:)`, which dedupes by location URL so seeing the same speaker on both transports is harmless. `Info.plist` declares `NSBonjourServices` for `_sonos._tcp`; `NSLocalNetworkUsageDescription` covers the Local Network permission for both transports.
 
 ### SonosConstants.swift
 

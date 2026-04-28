@@ -3,7 +3,7 @@
 
 ## v4.0 — 2026-04-27 — Choragus
 
-The project has been renamed from **SonosController** to **Choragus** to put trademark distance between the app and Sonos, Inc. The name comes from ancient Greek *choragos* — the leader who organised and directed a chorus to perform as one. The metaphor matches what the app actually does: it doesn't generate sound, it coordinates a group of speakers to play together.
+The project has been renamed from **SonosController** to **Choragus** in respect of the Sonos trademark.
 
 The bundle identifier moves to `com.choragus.app` to match the rename, and the Keychain service name now follows suit. Sandbox container, Keychain service, and the signed Developer ID identity all line up with the new bundle. **One-time cost**: Last.fm and SMAPI services need to be re-authenticated on first launch — those credentials lived in Keychain entries scoped to the old service name and aren't migrated forward. Reading them with the new signed binary would have prompted the user to "allow access to keychain item created by SonosController.app" on every launch until they clicked through; cleaner to wipe the bridge entirely and ask for one re-auth pass. Play history, art cache, and the SQLite metadata store live in the sandbox container, which already moved to `com.choragus.app` when the bundle ID flipped in the v4.0 work — they aren't touched by this change. Older entries in this changelog reference "SonosController" by name; that history is preserved as-is.
 
@@ -22,6 +22,72 @@ Speakers discovered via Bonjour also surface their household ID in the TXT recor
 Setting lives in **Settings → System → Network → Discovery**. `NSBonjourServices` was already declared in `Info.plist` from prior work, and the existing `NSLocalNetworkUsageDescription` covers the Local Network permission for both transports.
 
 Issue and approach reported by [@mbieh](https://github.com/mbieh) ([#11](https://github.com/scottwaters/SonosController/issues/11)) including the verification dump and the parallel-merge design recommendation. Initial implementation contributed by [@steventamm](https://github.com/steventamm) in [#12](https://github.com/scottwaters/SonosController/pull/12) — the `NWBrowser` transport, the `SpeakerDiscovery` protocol abstraction, and the 13-locale translation work all started from that PR.
+
+### Now Playing — tabbed details panel
+
+The Now Playing screen's bottom area is now a three-tab `TabView` instead of a single scrolling block:
+
+- **Lyrics** — synced word-by-word lyrics from LRCLIB when available (auto-scroll, centre-focused gradient, font-weight ramp toward the active line). Plain lyrics fall back to centre-justified text in a normal scroll view with increased line spacing matched to the synced layout. Manual offset slider compensates for stream/lyric clock drift in 250 ms steps.
+- **About** — artist bio, photo, tags, and related artists pulled from Wikipedia and Last.fm; album release date and tracklist from MusicBrainz when available. Right-click → Refresh metadata; click the photo to open a larger view; click the Wikipedia link to open the article.
+- **History** — recent plays of the current track, scoped to whichever room is active.
+
+The whole panel is collapsible via a chevron in the section header. Collapse state persists across launches in `UserDefaults[nowPlayingDetails.collapsed]` so it's out of the way for users who don't want it.
+
+Tab labels honour the app language — the SwiftUI segmented `Picker` caches its rendered labels, so a `.languageReactive()` modifier (`.id(appLanguage)`) is applied to force a rebuild when the language flips.
+
+### Localised metadata sources
+
+Wikipedia, MusicBrainz, and Last.fm queries now follow the user's app language rather than the system locale.
+
+- **Wikipedia** — `MusicMetadataService.fetchLocalisedWikipediaSummary` queries the per-language subdomain (e.g. `de.wikipedia.org`, `ja.wikipedia.org`) with `Accept-Language` set; falls back to `en.wikipedia.org` if the article isn't available in the user's language.
+- **Last.fm** — `artist.getInfo` and `album.getInfo` carry a `lang=` parameter mapped from the app-language code.
+- **Cache keys** — language code is now part of the SQLite cache key prefix, so e.g. an English bio and a German bio for the same artist coexist instead of overwriting each other. A one-shot UserDefault flag (`metadataCache.langPrefixMigrated.v1`) drives a SQLite UPDATE on first launch under v4.0 that renames any unprefixed legacy `artist:<x>` row to `artist:en|<x>`.
+- **Reduced load on third-party APIs** — bios, tags, release dates, and similar-artist lookups are cached permanently in the SQLite metadata store. Wikipedia, MusicBrainz, and Last.fm are operated by small teams or community projects that explicitly ask third-party clients to cache aggressively; v4.0 honours that. A track skip never re-fetches data we already have, and a language flip only re-fetches the rows we don't have in the new language. Manual refresh (right-click → Refresh metadata) and the **Settings → Image Cache → Clear** action remain available for users who want to force a re-pull.
+
+Helpers: `MusicMetadataService.wikipediaLanguageCode()` for Wikipedia subdomain selection (with `zh-Hans → zh.wikipedia.org` plus an `Accept-Language: zh-Hans` header), and `MusicMetadataService.lastFMLanguageCode()` for the Last.fm `lang=` value.
+
+### Apple Music drill-down sort controls
+
+`AppleMusicArtistView` and `AppleMusicAlbumView` now expose a sort menu with **Relevance**, **Newest**, **Oldest**, **Title**, and **Artist**. Sorting is purely client-side over the iTunes Search response — no extra request — so flipping between sort options is instant. Sort selection persists per drill-down level.
+
+### Pandora identification
+
+Pandora was missing from the Music Services list because the app's RINCON-based service ID lookup didn't recognise its SMAPI sid. Pandora uses **SMAPI sid 3** (the public sid documented in SoCo and other open-source Sonos libraries) which is distinct from its RINCON service descriptor (519). `SonosConstants.ServiceID.pandora = 3` is now defined, the service surfaces in `Settings → Music` with the standard service-row UI, and is shown as **untested** with a note that Pandora is US-only as of 2026. Connecting it goes through the standard SMAPI AppLink flow; please open an issue with the result if you try it.
+
+### Audible promoted to working
+
+Audible is now in the tested-blue services list. AppLink auth completes cleanly and audiobook playback works through the standard SMAPI URI patterns; chapter navigation surfaces as a Sonos queue.
+
+### Home Theater EQ — full controls always visible
+
+When editing a preset for a Home Theater zone, the Sub level/polarity, Surround level/balance, Night Mode, and Dialog Enhancement controls now show as soon as the EQ tab is selected. Previously the section guard was tied to whether the topology had finished classifying the zone as HT (`isHTZone`), so cold-launch races would render only Night Mode + Dialog Enhancement until the user toggled the include-EQ switch off and back on. The outer guard now keys off whether `preset.homeTheaterEQ` has been hydrated rather than the live topology state, and `ensureHomeTheaterEQInitialised()` is called on `.onAppear`, on `.onChange(of: preset.coordinatorDeviceID)`, and on `.onChange(of: isHTZone)` so any path into the editor — first open, coordinator change, late topology classification — populates the EQ struct and reveals the full controls.
+
+### Settings — sectional reorganisation
+
+Settings is now organised into focused sections rather than four broad tabs: Appearance, Colours, Language, Menu Bar, Mouse Controls, Communication, Discovery Mode, Quick Start, Music Services, Scrobbling, Image Cache, Listening Stats. Communication-mode and Discovery-mode picker labels are localised; language flips re-render via `.languageReactive()` and the new `displayName` computed property on `CommunicationMode` / `StartupMode` / `AppearanceMode`.
+
+### Signed Debug builds
+
+`dev-build.sh` (lives in the parent `SonosApp/scripts/` directory, deliberately outside the repo so signing details never touch GitHub) now signs Debug builds with the same Developer ID Application identity that `release.sh` uses for distribution. Stable code signature across rebuilds means macOS Keychain ACL prompts (Last.fm, SMAPI tokens) appear once on first install instead of on every rebuild. Bare `xcodebuild` invocations still work for syntax-only checks but produce ad-hoc signatures that re-prompt the keychain.
+
+### Project rename — file system
+
+- Bundle identifier: `com.sonoscontroller.app` → `com.choragus.app`. Sandbox container moves accordingly.
+- Executable: `SonosController` → `Choragus`. Output path: `Choragus/build/Choragus.app`.
+- Keychain service: renamed in line with the bundle. One-time re-authentication of Last.fm and SMAPI services on first launch under v4.0 (the cleanest way to avoid per-launch "allow keychain item created by SonosController.app" prompts).
+- App Support directory: `~/Library/Containers/com.choragus.app/Data/Library/Application Support/Choragus/`. Play history, art cache, art URL cache, presets, and metadata cache all moved with the container — no migration step needed.
+- Xcode project, scheme, package, and target names all updated; signing config in `project.pbxproj` is signing-neutral so forks build cleanly with their own Developer ID identity.
+
+### Localisation
+
+- v4.0 adds ~120 new L10n keys across the Help rewrite, Now Playing tab labels, sectional Settings labels, and the Pandora/Audible service rows. All 13 locales (en, de, fr, nl, es, it, sv, nb, da, ja, pt, pl, zh-Hans) ship complete translations.
+- `AppLanguage` flips re-render the AppKit-hosted About box and Help windows via a `LanguageReactiveContainer` wrapper that observes `@AppStorage(UDKey.appLanguage)`. Without it, SwiftUI views inside `NSHostingController` ignore the change.
+- Segmented `Picker` controls (Communication mode, Startup mode, Discovery mode, Now Playing tabs) get `.languageReactive()` applied so their cached label rendering is invalidated on language flip.
+
+### Notes / housekeeping
+
+- "For Fun" visualisations are paused in v4.0. The view file remains in the tree but `WindowManager.openForFun()` is a no-op stub, and the Window-menu entry is hidden. Will return when the visualisation work has a clearer data-meaning story.
+- Older entries in this changelog reference "SonosController" by name; that history is preserved as-is.
 
 ## v3.71 — 2026-04-25
 

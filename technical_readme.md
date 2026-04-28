@@ -17,7 +17,10 @@ For deeper detail, see the documents under `docs/`:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — module-by-module breakdown.
 - [docs/PROTOCOLS.md](docs/PROTOCOLS.md) — UPnP/SOAP reference for every service action used.
-- [docs/CACHING.md](docs/CACHING.md) — topology cache, image cache, art URL cache.
+- [docs/CACHING.md](docs/CACHING.md) — topology cache, image cache, art URL cache, metadata cache.
+- [docs/DISCOVERY.md](docs/DISCOVERY.md) — Auto / Bonjour / Legacy Multicast discovery modes.
+- [docs/LOCALIZATION.md](docs/LOCALIZATION.md) — 13-locale architecture, conventions, gotchas.
+- [docs/SERVICES.md](docs/SERVICES.md) — music-service status matrix (working / untested / blocked).
 
 ---
 
@@ -26,11 +29,16 @@ For deeper detail, see the documents under `docs/`:
 | Protocol | Purpose |
 |----------|---------|
 | SSDP | UDP multicast discovery of speakers on 239.255.255.250:1900 |
+| Bonjour (mDNS) | `_sonos._tcp` service browsing via `NWBrowser` — runs alongside SSDP |
 | UPnP/SOAP | HTTP POST + XML commands to speakers on port 1400 |
 | GENA | Real-time push notifications via HTTP SUBSCRIBE/NOTIFY |
 | SMAPI | Music service browsing and authentication (AppLink / DeviceLink) |
 | DIDL-Lite | XML metadata format for tracks, albums, playlists |
-| iTunes Search API | Album art fallback for local library content |
+| iTunes Search API | Album art fallback + Apple Music search drill-down |
+| LRCLIB | Synced + plain lyrics |
+| Wikipedia REST | Per-language artist/album summaries (`{lang}.wikipedia.org`) |
+| MusicBrainz | Album release dates and tracklists |
+| Last.fm | Bios (with `lang=`), tags, similar artists, scrobbling |
 
 All speaker communication is local — no cloud service is required beyond optional SMAPI authentication flows with individual music services.
 
@@ -102,6 +110,19 @@ All cache files are created with `0o600` permissions.
 - **Error sanitization** — SOAP faults/HTTP errors surface user-friendly messages; raw details never exposed.
 - **No telemetry** — no analytics, no crash reporting, no network calls outside Sonos LAN and explicitly-invoked music services / iTunes Search / GitHub releases (update check only).
 
+### Discovery
+
+Two parallel discovery transports behind `SpeakerDiscovery`:
+
+- **`SSDPDiscovery`** — UDP multicast M-SEARCH to `239.255.255.250:1900`. Works on flat networks; commonly blocked across VLANs.
+- **`MDNSDiscovery`** — `NWBrowser` over `_sonos._tcp`. Works wherever mDNS is reflected (most modern routers). The TXT record carries the same `location` URL plus the household ID, so post-discovery is unchanged and `GetHouseholdID` is skipped — measurable on S1.
+
+`DiscoveryMode` enum (Auto / Bonjour / Legacy Multicast) is bound to `Settings → Discovery`. Auto wraps both transports in a parallel-merge that dedupes by location URL. The other two run a single transport so users on hostile networks can isolate which one is working.
+
+`Info.plist` declares `NSBonjourServices` for `_sonos._tcp`; `NSLocalNetworkUsageDescription` covers the Local Network permission for both transports.
+
+See [docs/DISCOVERY.md](docs/DISCOVERY.md) for the full design.
+
 ### Localization (L10n)
 
 Dictionary-based localization in `Packages/SonosKit/Sources/SonosKit/Localization/L10n.swift`. Keys are looked up against `UserDefaults[UDKey.appLanguage]` with English as the fallback. Supported languages: English, German, French, Dutch, Spanish, Italian, Swedish, Norwegian (nb), Danish, Japanese, Portuguese, Polish, Chinese Simplified.
@@ -114,7 +135,21 @@ Dictionary-based localization in `Packages/SonosKit/Sources/SonosKit/Localizatio
 
 Format-string helpers use `String(format:)` with `%1$@` / `%2$@` positional placeholders so translations can reorder arguments — see `L10n.updateAvailableBody(current:latest:)` for the canonical example.
 
-**Scope note for v3.5:** the `HelpView` body prose is intentionally English-only. Topic titles (`L10n.helpGettingStarted`, etc.) and the navigation chrome are localized. Translating the detailed help paragraphs would triple the L10n dictionary size and is deferred to a future release.
+**Pre-commit gate:** Swift 6 asserts on duplicate dict-literal keys at first access (EXC_BREAKPOINT before the app draws a window). The recommended check is:
+
+```bash
+grep -nE '^[[:space:]]+"[a-zA-Z][a-zA-Z0-9_]*":[[:space:]]*\[' \
+  Packages/SonosKit/Sources/SonosKit/Localization/L10n.swift \
+  | awk -F'"' '{print $2}' | sort | uniq -c | awk '$1 > 1 {print}'
+```
+
+**Help body:** as of v3.7 the entire `HelpView` body prose (every heading, paragraph, and bullet across 10 topics) is fully localised across all 13 languages. v4.0 added two new topics (Now Playing details, Music Services) and expanded Preferences from 5 to 11 bullets — all entries ship complete translations.
+
+**Language-aware metadata:** Wikipedia, MusicBrainz, and Last.fm queries follow the user's app language. `MusicMetadataService.wikipediaLanguageCode()` resolves the per-language Wikipedia subdomain; `lastFMLanguageCode()` produces the Last.fm `lang=` parameter. Cache keys in `MetadataCacheRepository` carry a `<lang>|` prefix so an English bio and a German bio coexist instead of overwriting. A one-shot `metadataCache.langPrefixMigrated.v1` UserDefault flag drives the SQLite UPDATE that renames legacy unprefixed rows on first launch under v4.0.
+
+**AppKit-hosted windows:** SwiftUI views inside `NSHostingController` (About box, Help window, Listening Stats) don't observe `UserDefaults[UDKey.appLanguage]` automatically. `LanguageReactiveContainer` wraps them with `@AppStorage(UDKey.appLanguage)` + `.id(appLanguage)` so a language flip rebuilds the view tree. Segmented `Picker` controls also cache their rendered labels — they get `.languageReactive()` applied to invalidate the cache on flip.
+
+See [docs/LOCALIZATION.md](docs/LOCALIZATION.md) for the full design.
 
 ### First-Run Welcome
 
@@ -146,6 +181,18 @@ xcodebuild -scheme Choragus \
 ```
 
 The resulting app is at `build/Choragus.app`. Use `-configuration Debug` for a debug build with symbols and `DEBUG` defined.
+
+### Development build (signed, recommended)
+
+Bare `xcodebuild` produces an ad-hoc signature, which means macOS regenerates the Keychain ACL on every rebuild — Last.fm and SMAPI services prompt for "allow access to Keychain item" each time. For day-to-day development, use the helper script:
+
+```bash
+../scripts/dev-build.sh
+```
+
+This produces a Debug build signed with a Developer ID Application identity, so the code signature is stable across rebuilds and Keychain prompts only appear once on first install. The script lives in the parent `SonosApp/scripts/` directory (deliberately outside the repo so signing details never touch GitHub) and reads its identity from a sibling `.release.env` file. Forks can drop in their own Developer ID identity by creating their own `dev-build.sh`; the project file is signing-neutral. Bare `xcodebuild` invocations remain a fine option for quick syntax-only checks.
+
+For distribution-grade builds (signed, notarised, stapled) use `../scripts/release.sh`, which produces `Choragus/build/Choragus.zip` after a ~3–5 minute Apple notary round-trip.
 
 ### Running Tests
 

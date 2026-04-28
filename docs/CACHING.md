@@ -1,6 +1,6 @@
 # Caching System
 
-Choragus uses five caching layers to minimise latency and provide instant startup.
+Choragus uses six caching layers to minimise latency and provide instant startup.
 
 ## 1. Topology Cache (Speaker Layout)
 
@@ -50,9 +50,11 @@ The user sees a brief "not responding, refreshing..." message and the speaker li
 ### Disk tier
 
 - JPEG files stored in the ImageCache directory
-- 500 MB default maximum (configurable) — LRU eviction removes oldest-accessed files when exceeded
+- Configurable size limit: 100 MB minimum, 5 GB maximum, default 500 MB. LRU eviction removes oldest-accessed files when the cap is exceeded.
+- Configurable age limit: 7 days to ∞ — entries past the age limit are evicted on the next sweep regardless of size
 - File modification date is updated on each read (touch) to track access recency
 - Survives app restarts
+- Limits live in **Settings → Image Cache**
 
 ### Flow
 
@@ -188,3 +190,49 @@ This means:
 - Most Sonos commands are acknowledged within 1-2 seconds
 - Buffering for streaming content can take up to 3-4 seconds
 - 5 seconds provides margin without being noticeably stale
+
+## 6. Metadata Cache (Wikipedia / MusicBrainz / Last.fm)
+
+**Location:** `~/Library/Application Support/Choragus/metadata_cache.sqlite`
+**Format:** SQLite database
+**Owner:** `MetadataCacheRepository`
+**Consumer:** `MusicMetadataService` (drives the About tab in Now Playing)
+
+### Problem
+
+The About tab in Now Playing shows artist bios, photos, tags, related artists, album release dates, and tracklists. Each of those is one or more network round-trip to Wikipedia, MusicBrainz, or Last.fm. Without caching, every track change re-fetches data that almost never changes (an artist's bio doesn't update each time you skip a track), which is wasteful for the user and — more importantly — needlessly noisy on the public APIs we depend on. Wikipedia, MusicBrainz, and Last.fm are operated by small teams or community projects and explicitly ask third-party clients to cache aggressively rather than re-querying for unchanged data. Caching is also language-aware: switching the app to French should serve the cached French bio, not re-fetch it.
+
+### Solution
+
+A SQLite cache keyed by language and entity:
+
+```
+artist_bios   — key: "<lang>|artist:<normalized-name>"
+album_info    — key: "<lang>|album:<normalized-artist>:<normalized-album>"
+artist_tags   — key: "<lang>|tags:<normalized-name>"
+similar       — key: "<lang>|similar:<normalized-name>"
+```
+
+`<lang>` follows the user's app-language preference, not the system locale. So an English bio (`en|artist:radiohead`) and a German bio (`de|artist:radiohead`) coexist; switching the app to German loads the cached German row if present, otherwise fetches from `de.wikipedia.org` / Last.fm with `lang=de`.
+
+### Wikipedia subdomain selection
+
+`MusicMetadataService.wikipediaLanguageCode()` maps `appLanguage` to the per-language Wikipedia subdomain (e.g. `de.wikipedia.org`). For Simplified Chinese the subdomain is `zh.wikipedia.org` and an `Accept-Language: zh-Hans` header is added so Wikipedia returns the Simplified script rather than Traditional. If the article isn't available in the target language, the service falls back to `en.wikipedia.org` and caches the English row under the foreign-language key — so the user gets *something* useful and the cache stops re-fetching every time.
+
+### Last.fm `lang=` parameter
+
+`artist.getInfo` and `album.getInfo` carry a `lang=` parameter mapped from `appLanguage` via `lastFMLanguageCode()`. Last.fm falls back internally if the language isn't supported.
+
+### Migration on first launch under v4.0
+
+A one-shot UserDefault flag (`metadataCache.langPrefixMigrated.v1`) drives a SQLite UPDATE that renames any unprefixed legacy `artist:<x>` / `album:<...>` rows to `en|artist:<x>` / `en|album:<...>`. After the migration runs the flag is set so the UPDATE never repeats. New installs skip the migration entirely.
+
+### Persistence
+
+- Permanent — there's no TTL. Bios change rarely; the cost of an occasional stale tag is much lower than re-fetching every play.
+- Manual clear is exposed in **Settings → Image Cache** (alongside artwork) for users who want to force a refresh after, say, an artist's tags get badly mis-categorised.
+
+### Where it's used
+
+- **Now Playing → About tab** — every field is hydrated from the cache first; misses fan out to the network and write back on success.
+- The same cache feeds inline metadata elsewhere (artist tooltips, album views in Apple Music drill-down) so we don't pay multiple round-trips per session per artist.

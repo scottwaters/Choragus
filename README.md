@@ -2,7 +2,7 @@
 
 **Native macOS controller for Sonos speakers.** Built entirely in Swift and SwiftUI. Ships as a universal binary with native support for both Apple Silicon and Intel Macs.
 
-> Choragus was previously named *SonosController*. Same project, same code; renamed to put trademark distance between the app and Sonos, Inc. The name comes from the ancient Greek *choragos* — the leader who organised and directed a chorus to perform as one. The metaphor matches what the app does: it doesn't make sound, it coordinates a group of speakers to play together.
+> Choragus was previously named *SonosController*. Same project, same code; renamed in respect of the Sonos trademark.
 
 > **Looking for internals?** See [technical_readme.md](technical_readme.md) for architecture, protocols, and build instructions.
 
@@ -43,14 +43,16 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 
 ## What's New in v4.0
 
-- **Renamed to Choragus** — the app you knew as SonosController. Existing installs upgrade in place; tokens, history, and preferences all carry over.
-- **Works on segmented networks** — speakers in a separate VLAN (UniFi, OPNsense, etc.) now appear automatically. Bonjour discovery runs alongside SSDP and meets at whichever one your network forwards.
-- **Lyrics that move with the song** — synced lyrics from LRCLIB, smooth-scrolling with a centre-focused gradient and a font that grows toward the active line.
-- **Richer Now Playing** — artist bios, tags, and album tracklists pulled from Wikipedia, MusicBrainz, and Last.fm with permanent local caching, so subsequent plays are instant and offline-friendly.
-- **About-box etymology** — a small nod to where the name comes from.
-- **Lots of UX polish** — settings text bumped for readability, queue panel layout fixed when all panels are open, menu-bar icon redesigned to a template glyph that follows macOS HIG, and play-history from your old SonosController install migrates over on first launch.
+- **Renamed to Choragus** — same app, new name (in respect of the Sonos trademark). Your speakers, presets, history, and settings all come across automatically. The first time you launch, you'll be asked to sign back into Spotify (and any other connected services) one time — that's expected.
+- **Works on tricky home networks** — if your speakers are on a guest network or smart-home VLAN, they now show up automatically. No router tweaks required.
+- **Now Playing has tabs** — the bottom of the Now Playing screen is now organised into three tabs: **Lyrics** (synced word-by-word when available, plain otherwise), **About** (artist bios, photos, related artists, album tracklists), and **History** (recent plays of this track). Don't want it visible? Click the chevron to collapse the whole panel.
+- **Bios in your language** — artist info is now pulled from Wikipedia and Last.fm in your chosen language. Switch the app to French or Japanese and the bios switch with you. Everything you've already looked at stays cached on your Mac, so we're not re-hammering those free public services every time you skip a track.
+- **Apple Music sorting** — when you tap an artist in Apple Music search, you can now sort their albums by Newest, Oldest, Title, Artist, or Relevance. Same for tracks inside an album.
+- **More services on the list** — Audible is confirmed working (alongside Spotify and Plex). Pandora is now visible in Settings → Music as untested — connect at your own risk and let us know if it works.
+- **Home Theater EQ shows up reliably** — editing a soundbar/sub/surrounds preset now shows all the EQ controls (Night Mode, Dialog Enhancement, Sub level, Surround level, etc.) without having to toggle anything to make them appear.
+- **Settings reorganised** — the Settings window now has clearly labelled sections: Appearance, Colours, Language, Menu Bar, Mouse Controls, Communication, Discovery, Quick Start, Music Services, Scrobbling, and Image Cache. Easier to find what you need.
 
-For the full change list see [CHANGELOG.md](CHANGELOG.md).
+For the full per-feature change list with technical details, see [CHANGELOG.md](CHANGELOG.md).
 
 ## What's New in v3.6
 
@@ -149,10 +151,15 @@ Services are managed in **Settings → Music**. Each can be individually enabled
 |---------|:------:|:------:|:--------:|-------|
 | **Spotify** | ✓ | ✓ | ✓ | AppLink authentication. Connect in Settings, then add one favorited song via the Sonos app |
 | **Plex** *(v3.7)* | ✓ | ✓ | ✓ | AppLink authentication via [app.plex.tv/auth](https://app.plex.tv/auth). Streams from your own Plex Media Server — no third-party CDN, no short-lived signatures |
+| **Audible** *(v4.0)* | ✓ | ✓ | ✓ | AppLink authentication. Confirmed working for audiobook playback; chapter navigation behaves like a queue |
 
 #### Available — Connection Required (Untested)
 
 40+ additional services are available via SMAPI AppLink/DeviceLink and may work — connect via **Settings → Music → Other Services**. Results are not guaranteed.
+
+| Service | SID | Notes |
+|---------|:---:|-------|
+| **Pandora** *(v4.0)* | 3 | US-only as of 2026; visible in Settings → Music as untested. Uses the public SMAPI sid 3 (distinct from RINCON 519). Connect at your own risk and please [open an issue](https://github.com/scottwaters/Choragus/issues) with the result |
 
 #### Not Available
 
@@ -209,12 +216,20 @@ The preset editor shows all EQ controls including Home Theater settings: Night M
 
 ![Settings — Display tab](screenshots/v3/settings_themes.png)
 
-Settings are organised into four tabs:
+Settings is organised into focused sections so you can jump straight to whatever you want to change:
 
-- **Display** — Language (13 languages), theme (System / Light / Dark), custom colours for accent / playing zone / inactive zone icons, menu-bar controls toggle
-- **Music** — Playback options (Classic Shuffle, Proportional Group Volume), Play History toggle with stats, Music Services management (enable search services, connect Spotify, service status)
-- **Scrobbling** *(new in v3.6)* — Connect Last.fm (BYO API app — register at [last.fm/api/account/create](https://www.last.fm/api/account/create), paste your key + shared secret, approve via browser). Filter which rooms and music services to scrobble, run on demand or auto-scrobble every 5 minutes. Includes a Filter Preview diagnostic showing why specific pending tracks aren't going through, and a Recent Non-Scrobbled list surfacing Last.fm's per-track rejections.
-- **System** — Communication mode (Event-Driven / Legacy Polling), Startup mode (Quick Start / Classic), image-cache controls (size limit, age limit, clear)
+- **Appearance** — Theme (System / Light / Dark) and overall look.
+- **Colours** — Customise the accent dot, the colour for rooms that are playing, and the colour for rooms that are idle.
+- **Language** — Pick from 13 supported languages. The interface, artist bios, and Wikipedia summaries all switch to match.
+- **Menu Bar** — Show or hide the menu-bar mini-player.
+- **Mouse Controls** — Scroll wheel to change volume, middle-click to mute.
+- **Communication** — Event-Driven (default; uses real-time push from your speakers) vs Legacy Polling (fallback for fussy networks).
+- **Discovery** — How the app finds your speakers. **Auto** is the default and works for almost everyone; pick **Bonjour** or **Legacy Multicast** only if you've been told to.
+- **Quick Start** — Whether to show your speakers from the cached layout immediately on launch (default) or wait for live discovery.
+- **Music Services** — Turn services on or off, connect a service like Spotify or Plex, and see which services are confirmed working / blocked / untested.
+- **Scrobbling** *(v3.6)* — Send your listens to Last.fm using your own API key (register at [last.fm/api/account/create](https://www.last.fm/api/account/create)). Filter by room and by service, and run automatically every 5 minutes or on demand. A Filter Preview shows you exactly why a track did or didn't scrobble.
+- **Image Cache** — Cap how much disk space artwork can use (in MB) and for how long (in days).
+- **Listening Stats** — Open the Listening Stats dashboard from here.
 
 ### Privacy & Local-Only Operation
 
