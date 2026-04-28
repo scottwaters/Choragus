@@ -30,35 +30,32 @@ struct NowPlayingContextPanel: View {
     @EnvironmentObject var metadataService: MusicMetadataServiceHolder
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
 
-    @State private var tab: ContextTab = .about
-    @State private var lyrics: Lyrics?
-    @State private var lyricsState: LoadState = .idle
-    @State private var artistInfo: ArtistInfo?
-    @State private var albumInfo: AlbumInfo?
-    @State private var aboutState: LoadState = .idle
-    /// Per-track lyrics timing offset in seconds. Restored from cache on
-    /// every track change (defaults to 0 if no entry); persisted via the
-    /// LyricsService whenever the user nudges. Positive nudges the
-    /// lyrics earlier, negative later.
-    @State private var lyricsOffset: Double = 0
-    /// Holds the in-flight debounced save so a flurry of taps coalesces
-    /// into a single write.
-    @State private var offsetSaveTask: Task<Void, Never>?
+    /// All metadata-fetch state + orchestration lives in the VM
+    /// (lyrics + offsets, artist + album info, lazy-load gating,
+    /// background pre-warm, refresh, debounced offset persistence).
+    /// The View just renders state and dispatches events.
+    @State private var vm: NowPlayingContextPanelViewModel?
+
+    @State private var tab: NowPlayingContextPanelTab = .about
     /// Drives the click-to-expand sheet for the artist photo in the
     /// About card (mirrors the album-art expand behaviour in
     /// `NowPlayingView`). Carries the URL so the same `ExpandedArtView`
     /// can render it.
     @State private var expandedArtistPhotoURL: URL?
 
-    enum ContextTab: String, CaseIterable, Identifiable {
-        case lyrics = "Lyrics"
-        case about = "About"
-        case history = "History"
-        var id: String { rawValue }
-    }
-
-    enum LoadState {
-        case idle, loading, loaded, missing, error(String)
+    /// Live binding to a non-nil VM. Initialised on first appear from
+    /// the environment-injected services. Force-unwrapping is safe at
+    /// every body call since `.task(id:)` initialises the VM before
+    /// any state read happens.
+    private var ctxVM: NowPlayingContextPanelViewModel {
+        guard let vm else {
+            assertionFailure("NowPlayingContextPanel ViewModel accessed before initialisation")
+            return NowPlayingContextPanelViewModel(
+                lyricsService: lyricsService.service,
+                metadataService: metadataService.service
+            )
+        }
+        return vm
     }
 
     /// Stable per-track identifier. `trackURI` is the canonical
@@ -108,34 +105,27 @@ struct NowPlayingContextPanel: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task(id: trackKey) {
-            // New track — reset and refetch.
-            lyrics = nil
-            lyricsState = .idle
-            artistInfo = nil
-            albumInfo = nil
-            aboutState = .idle
-            // Reset offset to 0 first; restore the persisted value (if any)
-            // immediately afterwards. Setting to 0 before the load avoids a
-            // brief flash of the previous track's offset on rapid skips.
-            lyricsOffset = 0
-            if let saved = lyricsService.service.loadOffset(
-                artist: trackMetadata.artist,
-                title: trackMetadata.title,
-                album: trackMetadata.album.isEmpty ? nil : trackMetadata.album
-            ) {
-                lyricsOffset = saved
+            // Lazily build the VM on first appear so the view doesn't
+            // require services at construction time (keeps the view's
+            // initialiser cheap for parents that build it speculatively).
+            if vm == nil {
+                vm = NowPlayingContextPanelViewModel(
+                    lyricsService: lyricsService.service,
+                    metadataService: metadataService.service
+                )
             }
-            await loadActiveTab()
+            ctxVM.resetForNewTrack(trackMetadata)
+            await ctxVM.loadActiveTab(tab, metadata: trackMetadata)
         }
-        .onChange(of: lyricsOffset) { _, newValue in
+        .onChange(of: ctxVM.lyricsOffset) { _, newValue in
             // Debounced save so a tap-tap-tap of `+1 +1 +1` writes once
             // at the final +3 instead of three times. 500 ms is short
             // enough to feel persistent ("I tapped, it stuck") but long
             // enough to coalesce a flurry of taps.
-            scheduleOffsetSave(newValue)
+            ctxVM.scheduleOffsetSave(newValue, metadata: trackMetadata)
         }
         .onChange(of: tab) { _, _ in
-            Task { await loadActiveTab() }
+            Task { await ctxVM.loadActiveTab(tab, metadata: trackMetadata) }
         }
     }
 
@@ -143,7 +133,7 @@ struct NowPlayingContextPanel: View {
 
     private var tabPicker: some View {
         Picker("", selection: $tab) {
-            ForEach(ContextTab.allCases) { Text($0.rawValue).tag($0) }
+            ForEach(NowPlayingContextPanelTab.allCases) { Text($0.rawValue).tag($0) }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
@@ -169,11 +159,11 @@ struct NowPlayingContextPanel: View {
         // path doesn't get wrapped in a ScrollView (which would let
         // its fixed window get clipped or grow unpredictably).
         Group {
-            switch lyricsState {
+            switch ctxVM.lyricsState {
             case .idle, .loading:
                 loadingPlaceholder(text: "Looking up lyrics…")
             case .loaded:
-                if let lyrics {
+                if let lyrics = ctxVM.lyrics {
                     renderedLyrics(lyrics)
                 } else {
                     emptyPlaceholder(icon: "text.alignleft",
@@ -205,7 +195,7 @@ struct NowPlayingContextPanel: View {
             VStack(spacing: 6) {
                 SlidingLyricsView(
                     lines: Lyrics.parseSynced(synced),
-                    position: positionSeconds + lyricsOffset,
+                    position: positionSeconds + ctxVM.lyricsOffset,
                     isPlaying: isPlaying
                 )
                 .frame(maxWidth: .infinity)
@@ -247,7 +237,7 @@ struct NowPlayingContextPanel: View {
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 56)
                 .contentShape(Rectangle())
-                .onTapGesture { lyricsOffset = 0 }
+                .onTapGesture { ctxVM.lyricsOffset = 0 }
                 .help("Tap to reset offset")
             offsetButton(label: "+1", delta: 1)
             offsetButton(label: "+5", delta: 5)
@@ -257,55 +247,39 @@ struct NowPlayingContextPanel: View {
     }
 
     private func offsetButton(label: String, delta: Double) -> some View {
-        Button(label) { lyricsOffset += delta }
+        Button(label) { ctxVM.lyricsOffset += delta }
             .buttonStyle(.bordered)
             .controlSize(.mini)
             .font(.caption.monospacedDigit())
     }
 
     private var offsetDisplayString: String {
-        if lyricsOffset == 0 { return "0.0s" }
-        let sign = lyricsOffset > 0 ? "+" : ""
-        return String(format: "%@%.1fs", sign, lyricsOffset)
+        let value = ctxVM.lyricsOffset
+        if value == 0 { return "0.0s" }
+        let sign = value > 0 ? "+" : ""
+        return String(format: "%@%.1fs", sign, value)
     }
 
-    /// Debounced offset persistence. Cancels any in-flight save and
-    /// schedules a new one for 500 ms in the future, so a tap-tap-tap of
-    /// the +/- buttons coalesces into a single write at the final value.
-    /// Captures the trackMetadata at schedule time so a track change
-    /// during the debounce window doesn't cross-contaminate the cache.
-    private func scheduleOffsetSave(_ value: Double) {
-        offsetSaveTask?.cancel()
-        let artist = trackMetadata.artist
-        let title = trackMetadata.title
-        let album = trackMetadata.album.isEmpty ? nil : trackMetadata.album
-        // Don't save against a missing identifier — would write under an
-        // empty key and cross-collide across whatever-track-is-playing.
-        guard !title.isEmpty else { return }
-        let service = lyricsService.service
-        offsetSaveTask = Task {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            if Task.isCancelled { return }
-            service.saveOffset(artist: artist, title: title, album: album, seconds: value)
-        }
-    }
+    // Offset persistence + tab orchestration live on
+    // `NowPlayingContextPanelViewModel` now — see `scheduleOffsetSave`,
+    // `loadActiveTab`, `refreshAbout` in that file.
 
     // MARK: - About
 
     private var aboutTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                switch aboutState {
+                switch ctxVM.aboutState {
                 case .idle, .loading:
                     loadingPlaceholder(text: "Loading info…")
                 case .loaded, .missing, .error:
-                    if let artistInfo {
-                        artistSection(artistInfo)
+                    if let info = ctxVM.artistInfo {
+                        artistSection(info)
                     }
-                    if let albumInfo {
-                        albumSection(albumInfo)
+                    if let album = ctxVM.albumInfo {
+                        albumSection(album)
                     }
-                    if artistInfo == nil && albumInfo == nil {
+                    if ctxVM.artistInfo == nil && ctxVM.albumInfo == nil {
                         emptyPlaceholder(
                             icon: "info.circle",
                             text: "No info found."
@@ -318,7 +292,7 @@ struct NowPlayingContextPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contextMenu {
                 Button {
-                    Task { await refreshAbout() }
+                    Task { await ctxVM.refreshAbout(trackMetadata) }
                 } label: {
                     Label("Refresh metadata", systemImage: "arrow.clockwise")
                 }
@@ -337,8 +311,8 @@ struct NowPlayingContextPanel: View {
         )) { wrapper in
             ExpandedArtView(
                 artURL: wrapper.url,
-                title: artistInfo?.name ?? trackMetadata.artist,
-                artist: artistInfo?.name ?? trackMetadata.artist,
+                title: ctxVM.artistInfo?.name ?? trackMetadata.artist,
+                artist: ctxVM.artistInfo?.name ?? trackMetadata.artist,
                 album: "",
                 stationName: ""
             )
@@ -652,109 +626,6 @@ struct NowPlayingContextPanel: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-
-    // MARK: - Loading
-
-    private func loadActiveTab() async {
-        // Only title is strictly required. Artist may be empty for some
-        // Sonos favorites where the metadata is incomplete; the underlying
-        // services fall back to title-only / album-only lookups in that
-        // case and surface "No lyrics found" / "No info found" if the
-        // resolution truly fails.
-        guard !trackMetadata.title.isEmpty else { return }
-        switch tab {
-        case .lyrics: await loadLyrics()
-        case .about:  await loadAbout()
-        case .history: break
-        }
-        // Pre-warm the OTHER tab's cache in the background so switching
-        // tabs is instant. The service-level fetches cache results to the
-        // SQLite metadata store; warming on first track change means the
-        // user never waits for a network round-trip when toggling tabs.
-        // Tasks here are fire-and-forget — we don't wait or update state
-        // on the active path.
-        warmInactiveTabCaches()
-    }
-
-    /// Kicks off background fetches for the tabs we're NOT currently
-    /// showing so the cache is hot when the user switches. Service
-    /// methods write to the persistent metadata cache, so subsequent
-    /// `loadLyrics` / `loadAbout` calls return immediately on hit.
-    private func warmInactiveTabCaches() {
-        guard !trackMetadata.title.isEmpty else { return }
-        let title = trackMetadata.title
-        let artist = trackMetadata.artist
-        let album = trackMetadata.album
-        let duration = trackMetadata.duration > 0 ? Int(trackMetadata.duration) : nil
-        let lyricsServiceRef = lyricsService.service
-        let metadataServiceRef = metadataService.service
-
-        if tab != .lyrics {
-            Task {
-                _ = await lyricsServiceRef.fetch(
-                    artist: artist, title: title,
-                    album: album.isEmpty ? nil : album,
-                    durationSeconds: duration
-                )
-            }
-        }
-        if tab != .about {
-            Task {
-                _ = await metadataServiceRef.artistInfo(name: artist)
-                if !album.isEmpty {
-                    _ = await metadataServiceRef.albumInfo(artist: artist, album: album)
-                }
-            }
-        }
-    }
-
-    private func loadLyrics() async {
-        if case .loaded = lyricsState { return }
-        if case .loading = lyricsState { return }
-        lyricsState = .loading
-        let duration = trackMetadata.duration > 0 ? Int(trackMetadata.duration) : nil
-        let result = await lyricsService.service.fetch(
-            artist: trackMetadata.artist,
-            title: trackMetadata.title,
-            album: trackMetadata.album.isEmpty ? nil : trackMetadata.album,
-            durationSeconds: duration
-        )
-        lyrics = result
-        lyricsState = result == nil ? .missing : .loaded
-    }
-
-    /// Drops the artist + album metadata cache entries for the current
-    /// track, then re-runs the About-tab fetch. Wired to the right-click
-    /// menu on the About tab so users can pull updated content without
-    /// waiting for the 30-day cache TTL.
-    private func refreshAbout() async {
-        guard !trackMetadata.title.isEmpty else { return }
-        let svc = metadataService.service
-        if !trackMetadata.artist.isEmpty {
-            svc.invalidateArtist(name: trackMetadata.artist)
-        }
-        if !trackMetadata.album.isEmpty {
-            svc.invalidateAlbum(artist: trackMetadata.artist, album: trackMetadata.album)
-        }
-        artistInfo = nil
-        albumInfo = nil
-        aboutState = .idle
-        await loadAbout()
-    }
-
-    private func loadAbout() async {
-        if case .loaded = aboutState { return }
-        if case .loading = aboutState { return }
-        aboutState = .loading
-        async let artistTask = metadataService.service.artistInfo(name: trackMetadata.artist)
-        async let albumTask: AlbumInfo? = trackMetadata.album.isEmpty
-            ? nil
-            : metadataService.service.albumInfo(artist: trackMetadata.artist,
-                                                album: trackMetadata.album)
-        artistInfo = await artistTask
-        albumInfo = await albumTask
-        aboutState = .loaded
     }
 
     // MARK: - Helpers

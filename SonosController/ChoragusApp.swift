@@ -2,8 +2,8 @@
 ///
 /// Creates the SonosManager singleton and injects it into the SwiftUI environment.
 /// Discovery begins immediately on appear so speakers populate while the window loads.
-/// Applies the user's appearance preference. Accent color is applied per-view,
-/// not on the whole window, to avoid tinting toolbar icons.
+/// Applies the user's appearance preference. The accent colour is propagated from
+/// `ContentView` via `.tint(...)` so every descendant picks it up.
 import SwiftUI
 import SonosKit
 

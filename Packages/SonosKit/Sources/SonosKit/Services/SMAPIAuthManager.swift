@@ -127,7 +127,10 @@ public final class SMAPIAuthManager: ObservableObject {
 
         if !snMap.isEmpty {
             serviceSerialNumbers = snMap
-            sonosDebugLog("[SMAPI] Discovered \(snMap.count) service serial numbers: \(snMap)")
+            // Log only the count + service IDs, never the serials themselves —
+            // those are account-linked identifiers and don't belong in a
+            // long-lived debug log.
+            sonosDebugLog("[SMAPI] Discovered \(snMap.count) service serial numbers (services=\(snMap.keys.sorted()))")
         } else {
             sonosDebugLog("[SMAPI] No serial numbers found")
         }

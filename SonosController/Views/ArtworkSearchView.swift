@@ -101,23 +101,13 @@ struct ArtworkSearchView: View {
                 LazyVGrid(columns: columns, spacing: 8) {
                     ForEach(results) { result in
                         VStack(spacing: 4) {
-                            AsyncImage(url: URL(string: result.artURL)) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                                default:
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(.quaternary)
-                                        .overlay {
-                                            Image(systemName: "music.note")
-                                                .font(.caption)
-                                                .foregroundStyle(.tertiary)
-                                        }
-                                }
-                            }
+                            // Use the shared image cache so re-renders /
+                            // scroll recycling don't re-fetch from iTunes.
+                            CachedAsyncImage(
+                                url: URL(string: result.artURL),
+                                cornerRadius: 6,
+                                priority: .interactive
+                            )
                             .frame(width: 80, height: 80)
                             .onTapGesture {
                                 selectedResult = result
@@ -143,19 +133,12 @@ struct ArtworkSearchView: View {
         }
         .sheet(item: $selectedResult) { result in
             VStack(spacing: 16) {
-                AsyncImage(url: URL(string: result.artURL)) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    default:
-                        ProgressView()
-                            .frame(width: 300, height: 300)
-                    }
-                }
-                .frame(maxWidth: 300, maxHeight: 300)
+                CachedAsyncImage(
+                    url: URL(string: result.artURL),
+                    cornerRadius: 8,
+                    priority: .interactive
+                )
+                .frame(width: 300, height: 300)
 
                 Text(result.label)
                     .font(.system(size: 12))

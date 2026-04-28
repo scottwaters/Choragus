@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<!--
+  HTTP exceptions for tunein.com / 1.fm / radiotime.com:
+  these are radio metadata directories that genuinely don't speak HTTPS
+  (verified: TLS handshake fails on all three). The exceptions are
+  scoped per-domain and never widened to global insecure loads. Only
+  read-only metadata flows over them — no credentials, no PII.
+  Local-network UPnP traffic to Sonos speakers is also HTTP and is
+  covered by NSAllowsLocalNetworking below.
+-->
 <dict>
 	<key>NSAppTransportSecurity</key>
 	<dict>

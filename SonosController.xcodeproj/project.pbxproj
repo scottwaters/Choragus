@@ -39,6 +39,7 @@
 		A10062 /* NowPlayingContextPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10062; };
 		A10032 /* NowPlayingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10032; };
 		A10033 /* QueueViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10033; };
+		A10800 /* NowPlayingContextPanelViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10800; };
 		A10034 /* SliderPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10034; };
 		A10035 /* BrowseViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10035; };
 		A10036 /* PlayHistoryDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10036; };
@@ -92,6 +93,7 @@
 		B10035 /* BrowseViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseViewModel.swift; sourceTree = "<group>"; };
 		B10032 /* NowPlayingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingViewModel.swift; sourceTree = "<group>"; };
 		B10033 /* QueueViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueViewModel.swift; sourceTree = "<group>"; };
+		B10800 /* NowPlayingContextPanelViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingContextPanelViewModel.swift; sourceTree = "<group>"; };
 		B10036 /* PlayHistoryDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayHistoryDashboard.swift; sourceTree = "<group>"; };
 		B10037 /* AlarmsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmsViewModel.swift; sourceTree = "<group>"; };
 		B10038 /* ArtResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtResolver.swift; sourceTree = "<group>"; };
@@ -146,6 +148,7 @@
 			children = (
 				B10032 /* NowPlayingViewModel.swift */,
 				B10033 /* QueueViewModel.swift */,
+				B10800 /* NowPlayingContextPanelViewModel.swift */,
 				B10035 /* BrowseViewModel.swift */,
 				B10037 /* AlarmsViewModel.swift */,
 				B10038 /* ArtResolver.swift */,
@@ -314,6 +317,7 @@
 				A10042 /* SonosRadioSearchView.swift in Sources */,
 				A10032 /* NowPlayingViewModel.swift in Sources */,
 				A10033 /* QueueViewModel.swift in Sources */,
+				A10800 /* NowPlayingContextPanelViewModel.swift in Sources */,
 				A10034 /* SliderPopup.swift in Sources */,
 				A10035 /* BrowseViewModel.swift in Sources */,
 				A10036 /* PlayHistoryDashboard.swift in Sources */,

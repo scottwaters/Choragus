@@ -44,6 +44,11 @@ struct NowPlayingView: View {
     @State private var showCopied = false
     @State private var showExpandedArt = false
     @State private var showArtSearch = false
+    /// Persisted collapse state for the Lyrics / About / History panel.
+    /// `false` (default) keeps the panel visible; `true` hides it for
+    /// users who prefer the cleaner now-playing-only layout. The
+    /// chevron handle on the divider toggles this.
+    @AppStorage(UDKey.contextPanelCollapsed) private var contextPanelCollapsed: Bool = false
 
     // MARK: - Derived State (from ViewModel)
 
@@ -76,6 +81,34 @@ struct NowPlayingView: View {
         return !trackMetadata.title.isEmpty
     }
 
+    /// Divider with a centred chevron that toggles `contextPanelCollapsed`.
+    /// Replaces the plain `Divider()` so users can hide the lower panel.
+    private var contextPanelDivider: some View {
+        HStack(spacing: 6) {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.25))
+                .frame(height: 1)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    contextPanelCollapsed.toggle()
+                }
+            } label: {
+                Image(systemName: contextPanelCollapsed ? "chevron.down" : "chevron.up")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(contextPanelCollapsed ? "Show lyrics, about & history" : "Hide lyrics, about & history")
+            Rectangle()
+                .fill(Color.secondary.opacity(0.25))
+                .frame(height: 1)
+        }
+        .padding(.top, 8)
+        .padding(.horizontal, 8)
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -92,22 +125,27 @@ struct NowPlayingView: View {
 
                 // Lyrics / About / History — fills the otherwise-empty
                 // space below the speaker volumes when the user has a
-                // track playing. Hidden for radio/empty states.
+                // track playing. Hidden for radio/empty states. The
+                // chevron on the divider toggles between expanded and
+                // collapsed; the collapsed state is persisted.
                 if shouldShowContextPanel {
-                    Divider().padding(.top, 8)
-                    NowPlayingContextPanel(
-                        trackMetadata: trackMetadata,
-                        group: group,
-                        positionSeconds: vm.smoothPosition,
-                        isPlaying: transportState == .playing
-                    )
-                    // 260pt = tab picker (~36) + divider (1) +
-                    // padding (~16) + 5-row × 34pt lyrics (170) +
-                    // breathing room. Matches what
-                    // `SlidingLyricsView` actually wants so the
-                    // bottom of the gradient mask isn't clipped.
-                    .frame(maxWidth: .infinity, minHeight: 260)
-                    .padding(.top, 4)
+                    contextPanelDivider
+                    if !contextPanelCollapsed {
+                        NowPlayingContextPanel(
+                            trackMetadata: trackMetadata,
+                            group: group,
+                            positionSeconds: vm.smoothPosition,
+                            isPlaying: transportState == .playing
+                        )
+                        // 260pt = tab picker (~36) + divider (1) +
+                        // padding (~16) + 5-row × 34pt lyrics (170) +
+                        // breathing room. Matches what
+                        // `SlidingLyricsView` actually wants so the
+                        // bottom of the gradient mask isn't clipped.
+                        .frame(maxWidth: .infinity, minHeight: 260)
+                        .padding(.top, 4)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                 }
             }
         }
@@ -116,7 +154,13 @@ struct NowPlayingView: View {
         .onAppear {
             startProgressTimer()
             syncFromManager()
-            Task { await fetchCurrentState() }
+        }
+        // `.task(id:)` replaces the previous `Task { await fetchCurrentState() }`
+        // dance: it fires on appear AND whenever the group changes, and
+        // auto-cancels when the view goes away — so navigating during a
+        // slow fetch no longer leaks the in-flight work.
+        .task(id: group.id) {
+            await fetchCurrentState()
         }
         .onDisappear { stopProgressTimer() }
         .onChange(of: group.id) {
@@ -124,7 +168,6 @@ struct NowPlayingView: View {
             vm.art.reset()
             vm.resetForGroupChange()
             startProgressTimer()
-            Task { await fetchCurrentState() }
         }
         .onReceive(sonosManager.$deviceVolumes) { _ in syncVolumeFromManager() }
         .onReceive(sonosManager.$deviceMutes) { _ in syncMuteFromManager() }

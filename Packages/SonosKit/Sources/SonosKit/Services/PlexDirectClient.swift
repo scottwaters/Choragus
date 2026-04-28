@@ -173,10 +173,16 @@ public final class PlexDirectClient: Sendable {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let id = json["id"] as? Int,
               let code = json["code"] as? String else {
-            sonosDebugLog("[PLEX] createPin parse fail: \(String(data: data, encoding: .utf8) ?? "<nil>")")
+            // Don't dump the raw response body — Plex's error JSON can
+            // include account email and other PII that has no business
+            // sitting in a long-lived debug log.
+            sonosDebugLog("[PLEX] createPin parse fail: missing id/code (status=\((response as? HTTPURLResponse)?.statusCode ?? -1))")
             throw PlexError.parseError("missing id/code in pin response")
         }
-        sonosDebugLog("[PLEX] PIN created: id=\(id) code=\(code) status=\((response as? HTTPURLResponse)?.statusCode ?? -1)")
+        // Don't log `code` — it's the short-lived claim secret a third
+        // party pastes into plex.tv/link to authorise this app. Even
+        // 15 minutes is too long to leave it sitting in Console.app.
+        sonosDebugLog("[PLEX] PIN created: id=\(id) status=\((response as? HTTPURLResponse)?.statusCode ?? -1)")
         return PlexPin(id: id, code: code, createdAt: Date())
     }
 

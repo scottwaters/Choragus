@@ -214,6 +214,9 @@ public enum UDKey {
     public static let appleMusicSearchEnabled = "appleMusicSearchEnabled"
     public static let sonosRadioEnabled = "sonosRadioEnabled"
     public static let ignoreTV = "ignoreTV"
+    /// Collapses the Lyrics / About / History panel under Now Playing
+    /// for users who prefer the cleaner now-playing-only layout.
+    public static let contextPanelCollapsed = "contextPanelCollapsed"
 
     // MARK: - Scrobbling (added v3.6)
     /// Per-service enable toggle. Pattern: `scrobbling.<serviceID>.enabled`.

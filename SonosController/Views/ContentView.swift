@@ -146,48 +146,22 @@ struct ContentView: View {
         VStack(spacing: 0) {
             // Error banner
             if errorHandler.showError, let errorMsg = errorHandler.currentError {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.red)
-                    Text(errorMsg)
-                        .font(.caption)
-                        .lineLimit(2)
-                    Spacer()
-                    Button {
-                        errorHandler.dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.red.opacity(0.1))
+                DismissibleBanner(
+                    icon: "exclamationmark.circle.fill",
+                    tint: .red,
+                    message: errorMsg,
+                    onDismiss: errorHandler.dismiss
+                )
             }
 
             // Info / success banner (e.g. "Added to queue: <track>")
             if errorHandler.showInfo, let infoMsg = errorHandler.currentInfo {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                    Text(infoMsg)
-                        .font(.caption)
-                        .lineLimit(2)
-                    Spacer()
-                    Button {
-                        errorHandler.dismissInfo()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.green.opacity(0.1))
+                DismissibleBanner(
+                    icon: "checkmark.circle.fill",
+                    tint: .green,
+                    message: infoMsg,
+                    onDismiss: errorHandler.dismissInfo
+                )
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 
@@ -496,6 +470,12 @@ struct ContentView: View {
         // the OS-level drag-resize floor moves with it — including
         // shrinking when panels are hidden.
         .frame(minWidth: requiredMinWidth, minHeight: 450)
+        // Propagate the user's chosen accent through the whole tree
+        // so every `Color.accentColor` / `.tint` reference picks it
+        // up. Without this, only the views that explicitly read
+        // `sonosManager.resolvedAccentColor` change colour when the
+        // setting is updated, and the picker appears to "do nothing".
+        .tint(sonosManager.resolvedAccentColor)
     }
 
     private func handlePlayPause() {
@@ -579,6 +559,38 @@ private struct LocalNetworkPermissionAlert: ViewModifier {
         } message: {
             Text("macOS is blocking Choragus from reaching your Sonos speakers.\n\nTurn Choragus ON under System Settings → Privacy & Security → Local Network, then quit and relaunch the app.")
         }
+    }
+}
+
+/// Top-of-window pill for transient state — error / success / info.
+/// `tint` drives both the icon colour and the (10 %) background tint
+/// so future banners only have to pick a system colour. Stale-data and
+/// cached-data banners stay distinct because they have unique chrome
+/// (text-style "Dismiss" button, embedded ProgressView).
+private struct DismissibleBanner: View {
+    let icon: String
+    let tint: Color
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundStyle(tint)
+            Text(message)
+                .font(.caption)
+                .lineLimit(2)
+            Spacer()
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(tint.opacity(0.1))
     }
 }
 
