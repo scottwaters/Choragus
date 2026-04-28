@@ -513,9 +513,8 @@ struct BrowseListView: View {
     /// SMAPI service search, and Plex Direct.
     private var bulkActionBar: some View {
         HStack(spacing: 6) {
-            // TODO: localize (English-only for now)
             Button { Task { await playAllNow() } } label: {
-                Label("Play All", systemImage: "play.fill")
+                Label(L10n.playAll, systemImage: "play.fill")
             }
             .controlSize(.small)
             Button { Task { await addAllToQueue(playNext: false) } } label: {
@@ -2113,9 +2112,8 @@ struct SMAPIServiceSearchView: View {
     /// the same regardless of which service the user is in.
     private var smapiBulkActionBar: some View {
         HStack(spacing: 6) {
-            // TODO: localize (English-only for now)
             Button { Task { await smapiPlayAllNow() } } label: {
-                Label("Play All", systemImage: "play.fill")
+                Label(L10n.playAll, systemImage: "play.fill")
             }
             .controlSize(.small)
             Button { Task { await smapiAddAllToQueue(playNext: false) } } label: {

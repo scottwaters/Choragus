@@ -271,8 +271,7 @@ struct MusicServicesSettingsSection: View {
                     Text(L10n.musicServicesSetupGuide)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.primary)
-                    // TODO: localize (English-only for now)
-                    Text("First time here? 4 steps to get your services working.")
+                    Text(L10n.firstTimeHereSetupSteps)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -305,8 +304,7 @@ struct MusicServicesSettingsSection: View {
                     .foregroundStyle(.secondary)
                 if isLoadingDescriptors {
                     ProgressView().controlSize(.mini)
-                    // TODO: localize (English-only for now)
-                    Text("Checking your Sonos household…")
+                    Text(L10n.checkingSonosHousehold)
                         .font(.callout)
                         .foregroundStyle(.tertiary)
                 }
@@ -315,8 +313,7 @@ struct MusicServicesSettingsSection: View {
             let linked = rows.filter { isLinkedRow($0.state) }
             let unlinked = rows.filter { !isLinkedRow($0.state) }
             if linked.isEmpty {
-                // TODO: localize (English-only for now)
-                Text("No services connected yet — expand below to set one up.")
+                Text(L10n.noServicesConnectedYet)
                     .font(.callout)
                     .foregroundStyle(.tertiary)
             } else {
@@ -359,8 +356,7 @@ struct MusicServicesSettingsSection: View {
                         Image(systemName: "chevron.right")
                             .font(.callout)
                             .rotationEffect(unlinkedExpanded ? .degrees(90) : .zero)
-                        // TODO: localize (English-only for now)
-                        Text("Other services (\(unlinked.count))")
+                        Text(L10n.otherServicesAvailable(unlinked.count))
                             .font(.body.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -387,18 +383,14 @@ struct MusicServicesSettingsSection: View {
     /// below match. Per-row hints stay off so the rows themselves
     /// aren't noisy; the legend explains the meaning once.
     private var legendStrip: some View {
-        // TODO: localize (English-only for now)
         VStack(alignment: .leading, spacing: 6) {
-            legendLine(color: .blue,
-                       text: "Available — tap Connect to authenticate, or toggle on for search-only services (Apple Music search, TuneIn, Calm Radio, Sonos Radio).")
-            legendLine(color: .yellow,
-                       text: "Untested — we don't know if this service works through Choragus yet. Tap Connect to try; please report success or failure on GitHub so we can mark it as confirmed working.")
-            legendLine(color: .red,
-                       text: "Unavailable — the service provider doesn't allow third-party apps like Choragus to authenticate. Use the official Sonos app for these.")
+            legendLine(color: .blue, text: L10n.legendAvailable)
+            legendLine(color: .yellow, text: L10n.legendUntested)
+            legendLine(color: .red, text: L10n.legendUnavailable)
             HStack(spacing: 6) {
                 Image(systemName: "arrow.up.right.square")
                     .font(.callout)
-                Button("Open GitHub Issues") {
+                Button(L10n.openGitHubIssues) {
                     if let url = URL(string: "https://github.com/scottwaters/Choragus/issues") {
                         NSWorkspace.shared.open(url)
                     }
@@ -548,8 +540,7 @@ struct MusicServicesSettingsSection: View {
         // dot green; the legend can't carry that per-service step.
         switch state {
         case .authenticated(let needsFavorite) where needsFavorite:
-            // TODO: localize (English-only for now)
-            return "Open the official Sonos app, play any \(service.name) song, and tap the heart to save it as a Favorite. The dot turns green within a minute."
+            return L10n.playAnySongAndFavoriteFormat(service.name)
         default:
             return nil
         }
@@ -791,8 +782,7 @@ struct PlexPinAuthSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                // TODO: localize (English-only for now)
-                Text("Connect to Plex")
+                Text(L10n.connectToPlex)
                     .font(.title3.weight(.semibold))
                 Spacer()
                 Button {

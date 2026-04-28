@@ -251,8 +251,7 @@ struct PlexDirectBrowseView: View {
     @ViewBuilder
     private func contextMenu(for item: PlexMediaItem) -> some View {
         if item.isContainer {
-            // TODO: localize (English-only for now)
-            Button("Play All Now") {
+            Button(L10n.playAllNow) {
                 Task { await playAllChildren(of: item) }
             }
             Button("Add All to Queue") {
@@ -317,8 +316,7 @@ struct PlexDirectBrowseView: View {
             Image(systemName: "tray").font(.title2).foregroundStyle(.tertiary)
             Text("Nothing here.").font(.subheadline).foregroundStyle(.secondary)
             if fellBackToSMAPI {
-                // TODO: localize
-                Text("Plex's relay returned no items either — your Plex server may be sleeping.")
+                Text(L10n.plexRelayReturnedNoItems)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)

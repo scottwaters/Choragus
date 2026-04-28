@@ -339,12 +339,10 @@ struct SettingsScrobblingTab: View {
                 }
                 .disabled(scrobbleManager.isScrobbling || preview.eligible == 0)
 
-                // TODO: localize (English-only for now)
                 if filteredOut > 0 {
-                    Text("\(preview.eligible) pending (\(filteredOut) filtered)")
+                    Text(L10n.pendingWithFilteredFormat(pending: preview.eligible, filtered: filteredOut))
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                        .help("\(pending) total pending rows. \(preview.eligible) match the current room/service filters and will submit; \(filteredOut) are excluded by your filter selections.")
                 } else {
                     Text("\(pending) \(L10n.pending)").font(.callout).foregroundStyle(.secondary)
                 }

@@ -151,25 +151,24 @@ private struct TabContentView: View {
 
                 Divider()
 
-                // TODO: localize (English-only for now)
-                Text("Mouse Controls")
+                Text(L10n.mouseControls)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                Toggle("Scroll wheel adjusts volume", isOn: Binding(
+                Toggle(L10n.scrollWheelAdjustsVolume, isOn: Binding(
                     get: { UserDefaults.standard.bool(forKey: UDKey.scrollVolumeEnabled) },
                     set: { UserDefaults.standard.set($0, forKey: UDKey.scrollVolumeEnabled) }
                 ))
-                Text("Scroll the mouse wheel over Now Playing to change the group's volume.")
+                Text(L10n.scrollWheelAdjustsVolumeHint)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Toggle("Middle-click toggles mute", isOn: Binding(
+                Toggle(L10n.middleClickTogglesMute, isOn: Binding(
                     get: { UserDefaults.standard.bool(forKey: UDKey.middleClickMuteEnabled) },
                     set: { UserDefaults.standard.set($0, forKey: UDKey.middleClickMuteEnabled) }
                 ))
-                Text("Click the scroll wheel over Now Playing to mute or unmute the group.")
+                Text(L10n.middleClickTogglesMuteHint)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

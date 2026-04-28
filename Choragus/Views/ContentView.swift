@@ -548,23 +548,22 @@ private struct LocalNetworkPermissionAlert: ViewModifier {
     @ObservedObject var monitor: LocalNetworkPermissionMonitor
 
     func body(content: Content) -> some View {
-        // TODO: localize (English-only for now)
         content.alert(
-            "Local Network access required",
+            L10n.localNetworkAccessRequired,
             isPresented: Binding(
                 get: { monitor.shouldShowAlert },
                 set: { if !$0 { monitor.acknowledge() } }
             )
         ) {
-            Button("Open System Settings") {
+            Button(L10n.openSystemSettings) {
                 NSWorkspace.shared.open(LocalNetworkPermissionMonitor.systemSettingsURL)
                 monitor.acknowledge()
             }
-            Button("Later", role: .cancel) {
+            Button(L10n.later, role: .cancel) {
                 monitor.acknowledge()
             }
         } message: {
-            Text("macOS is blocking Choragus from reaching your Sonos speakers.\n\nTurn Choragus ON under System Settings → Privacy & Security → Local Network, then quit and relaunch the app.")
+            Text(L10n.localNetworkAccessMessage)
         }
     }
 }
