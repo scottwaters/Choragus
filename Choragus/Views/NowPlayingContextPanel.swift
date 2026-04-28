@@ -137,6 +137,7 @@ struct NowPlayingContextPanel: View {
         .controlSize(.small)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+        .languageReactive()
     }
 
     @ViewBuilder

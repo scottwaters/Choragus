@@ -103,3 +103,23 @@ private struct LanguageReactiveContainer<Content: View>: View {
     @ViewBuilder let content: () -> Content
     var body: some View { content() }
 }
+
+/// Forces SwiftUI to discard any cached subview state when the user
+/// flips `UDKey.appLanguage`. Most views just re-render and pick up
+/// fresh `L10n.*` reads, but a few SwiftUI controls — especially
+/// segmented `Picker`s — cache their label text from the first
+/// render and ignore subsequent text changes. Applying
+/// `.languageReactive()` ties the view's identity to the language
+/// code, so changing language triggers a full rebuild.
+extension View {
+    func languageReactive() -> some View {
+        modifier(LanguageReactiveModifier())
+    }
+}
+
+private struct LanguageReactiveModifier: ViewModifier {
+    @AppStorage(UDKey.appLanguage) private var appLanguage: String = "en"
+    func body(content: Content) -> some View {
+        content.id(appLanguage)
+    }
+}

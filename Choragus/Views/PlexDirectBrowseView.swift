@@ -82,6 +82,7 @@ struct PlexDirectBrowseView: View {
         .controlSize(.small)
         .padding(.horizontal, 10)
         .padding(.bottom, 6)
+        .languageReactive()
         .onChange(of: tab) { _, new in
             if new == .browse {
                 searchText = ""

@@ -1185,6 +1185,7 @@ struct AppleMusicSearchView: View {
                     .labelsHidden()
                     .controlSize(.small)
                     .frame(maxWidth: 140)
+                    .languageReactive()
                     Spacer()
                 }
                 .padding(.horizontal, 10)

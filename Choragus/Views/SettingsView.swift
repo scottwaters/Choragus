@@ -112,6 +112,7 @@ private struct TabContentView: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 240)
+                    .languageReactive()
                 }
 
                 Text(L10n.colors)
