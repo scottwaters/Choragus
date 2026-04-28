@@ -835,6 +835,13 @@ public enum L10n {
     public static var dateRangeTo: String { tr("dateRangeTo") }
     public static var signInWithPlex: String { tr("signInWithPlex") }
 
+    // Apple Music sort picker
+    public static var sortRelevance: String { tr("sortRelevance") }
+    public static var sortNewest: String { tr("sortNewest") }
+    public static var sortOldest: String { tr("sortOldest") }
+    public static var sortTitle: String { tr("sortTitle") }
+    public static var sortArtist: String { tr("sortArtist") }
+
     // MARK: - Translation Lookup
 
     private static func tr(_ key: String) -> String {
@@ -9475,6 +9482,51 @@ public enum L10n {
             "pt": "Iniciar sess\u{00E3}o com Plex",
             "pl": "Zaloguj si\u{0119} przez Plex",
             "zh-Hans": "\u{4F7F}\u{7528} Plex \u{767B}\u{5F55}",
+        ],
+        "sortRelevance": [
+            "en": "Relevance", "de": "Relevanz",
+            "fr": "Pertinence", "nl": "Relevantie",
+            "es": "Relevancia", "it": "Pertinenza",
+            "sv": "Relevans", "nb": "Relevans", "da": "Relevans",
+            "ja": "\u{95A2}\u{9023}\u{6027}",
+            "pt": "Relev\u{00E2}ncia", "pl": "Trafno\u{015B}\u{0107}",
+            "zh-Hans": "\u{76F8}\u{5173}\u{6027}",
+        ],
+        "sortNewest": [
+            "en": "Newest", "de": "Neueste",
+            "fr": "Plus r\u{00E9}cent", "nl": "Nieuwste",
+            "es": "M\u{00E1}s reciente", "it": "Pi\u{00F9} recente",
+            "sv": "Nyaste", "nb": "Nyeste", "da": "Nyeste",
+            "ja": "\u{65B0}\u{3057}\u{3044}\u{9806}",
+            "pt": "Mais recente", "pl": "Najnowsze",
+            "zh-Hans": "\u{6700}\u{65B0}",
+        ],
+        "sortOldest": [
+            "en": "Oldest", "de": "\u{00C4}lteste",
+            "fr": "Plus ancien", "nl": "Oudste",
+            "es": "M\u{00E1}s antiguo", "it": "Pi\u{00F9} vecchio",
+            "sv": "\u{00C4}ldsta", "nb": "Eldste", "da": "\u{00C6}ldste",
+            "ja": "\u{53E4}\u{3044}\u{9806}",
+            "pt": "Mais antigo", "pl": "Najstarsze",
+            "zh-Hans": "\u{6700}\u{65E9}",
+        ],
+        "sortTitle": [
+            "en": "Title", "de": "Titel",
+            "fr": "Titre", "nl": "Titel",
+            "es": "T\u{00ED}tulo", "it": "Titolo",
+            "sv": "Titel", "nb": "Tittel", "da": "Titel",
+            "ja": "\u{30BF}\u{30A4}\u{30C8}\u{30EB}",
+            "pt": "T\u{00ED}tulo", "pl": "Tytu\u{0142}",
+            "zh-Hans": "\u{6807}\u{9898}",
+        ],
+        "sortArtist": [
+            "en": "Artist", "de": "K\u{00FC}nstler",
+            "fr": "Artiste", "nl": "Artiest",
+            "es": "Artista", "it": "Artista",
+            "sv": "Artist", "nb": "Artist", "da": "Kunstner",
+            "ja": "\u{30A2}\u{30FC}\u{30C6}\u{30A3}\u{30B9}\u{30C8}",
+            "pt": "Artista", "pl": "Artysta",
+            "zh-Hans": "\u{827A}\u{672F}\u{5BB6}",
         ],
 
         "forceDirectedDescription": [

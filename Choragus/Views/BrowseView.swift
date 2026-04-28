@@ -165,6 +165,20 @@ enum SearchSortOrder: String, CaseIterable {
     case oldest = "Oldest"
     case title = "Title"
     case artist = "Artist"
+
+    /// Localised label for the segmented picker. RawValue stays stable
+    /// as the persistence key (the View wraps this in `@State`, not
+    /// `@AppStorage`, so persistence isn't currently used — but the
+    /// stable rawValue is the right shape for when it is).
+    var displayName: String {
+        switch self {
+        case .relevance: return L10n.sortRelevance
+        case .newest:    return L10n.sortNewest
+        case .oldest:    return L10n.sortOldest
+        case .title:     return L10n.sortTitle
+        case .artist:    return L10n.sortArtist
+        }
+    }
 }
 
 struct BrowseDestination: Hashable {
@@ -1146,25 +1160,35 @@ struct AppleMusicSearchView: View {
                         .disabled(searchText.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
 
-                    if hasSearched && !items.isEmpty {
-                        HStack(spacing: 4) {
-                            Text(L10n.sortLabel)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Picker("", selection: $sortOrder) {
-                                ForEach(SearchSortOrder.allCases, id: \.self) { order in
-                                    Text(order.rawValue).tag(order)
-                                }
-                            }
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .frame(maxWidth: 120)
-                        }
-                    }
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
 
+                Divider()
+            }
+
+            // Sort picker — shown at the search level once results
+            // exist AND on every drill-down level (artist's albums,
+            // album's tracks). Mirrors the user's request to sort
+            // an artist's albums by release date or alphabetically
+            // without losing the picker on drill-down.
+            if !items.isEmpty {
+                HStack(spacing: 4) {
+                    Text(L10n.sortLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: $sortOrder) {
+                        ForEach(SearchSortOrder.allCases, id: \.self) { order in
+                            Text(order.displayName).tag(order)
+                        }
+                    }
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .frame(maxWidth: 140)
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
                 Divider()
             }
 
@@ -1364,11 +1388,20 @@ struct AppleMusicSearchView: View {
             if let artistId = Int(item.objectID.replacingOccurrences(of: "apple:artist:", with: "")) {
                 itemsCache[navStack.count] = items
                 navStack.append(.artistAlbums(artistId: artistId, artistName: item.title))
+                // Sensible default for an artist's discography: newest
+                // first. "Relevance" has no meaning for albums under
+                // a single artist; users typically want the most
+                // recent release at the top.
+                sortOrder = .newest
             }
         case .musicAlbum:
             if let collectionId = Int(item.objectID.replacingOccurrences(of: "apple:album:", with: "")) {
                 itemsCache[navStack.count] = items
                 navStack.append(.albumTracks(collectionId: collectionId, albumTitle: item.title))
+                // Tracks within an album: leave at relevance — the
+                // iTunes API returns them in track-number order
+                // already, which is what the user expects.
+                sortOrder = .relevance
             }
         default:
             if let group = group {
