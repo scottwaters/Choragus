@@ -23,7 +23,7 @@ Speakers discovered via Bonjour also surface their household ID in the TXT recor
 
 Setting lives in **Settings → System → Network → Discovery**. `NSBonjourServices` was already declared in `Info.plist` from prior work, and the existing `NSLocalNetworkUsageDescription` covers the Local Network permission for both transports.
 
-Issue and approach reported by [@mbieh](https://github.com/mbieh) ([#11](https://github.com/scottwaters/SonosController/issues/11)) including the verification dump and the parallel-merge design recommendation. Initial implementation contributed by [@steventamm](https://github.com/steventamm) in [#12](https://github.com/scottwaters/SonosController/pull/12) — the `NWBrowser` transport, the `SpeakerDiscovery` protocol abstraction, and the 13-locale translation work all started from that PR.
+Issue and approach reported by [@mbieh](https://github.com/mbieh) ([#11](https://github.com/scottwaters/SonosController/issues/11)) including the verification dump and the parallel-merge design recommendation. Initial implementation contributed by [@steventamm](https://github.com/steventamm) in [#12](https://github.com/scottwaters/SonosController/issues/12) — the `NWBrowser` transport, the `SpeakerDiscovery` protocol abstraction, and the 13-locale translation work all started from that contribution.
 
 ### Now Playing — tabbed details panel
 

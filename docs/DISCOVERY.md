@@ -116,4 +116,4 @@ The location URL is the canonical identity of a speaker as far as Choragus is co
 
 ## Credits
 
-The VLAN issue was reported by [@mbieh](https://github.com/mbieh) ([SonosController#11](https://github.com/scottwaters/SonosController/issues/11)) with a verification dump and a parallel-merge design recommendation. The initial `MDNSDiscovery` + `SpeakerDiscovery` protocol abstraction was contributed by [@steventamm](https://github.com/steventamm) in [SonosController#12](https://github.com/scottwaters/SonosController/pull/12), which also kicked off the 13-locale translation work for the Discovery picker.
+The VLAN issue was reported by [@mbieh](https://github.com/mbieh) ([SonosController#11](https://github.com/scottwaters/SonosController/issues/11)) with a verification dump and a parallel-merge design recommendation. The initial `MDNSDiscovery` + `SpeakerDiscovery` protocol abstraction was contributed by [@steventamm](https://github.com/steventamm) in [SonosController#12](https://github.com/scottwaters/SonosController/issues/12), which also kicked off the 13-locale translation work for the Discovery picker.
