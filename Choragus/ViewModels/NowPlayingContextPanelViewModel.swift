@@ -208,4 +208,15 @@ enum NowPlayingContextPanelTab: String, CaseIterable, Identifiable {
     case about = "About"
     case history = "History"
     var id: String { rawValue }
+
+    /// Localised label rendered in the segmented picker. The raw value
+    /// is kept stable as a stringly-typed identifier so it can be
+    /// persisted / logged without going through the L10n layer.
+    var displayName: String {
+        switch self {
+        case .lyrics:  return L10n.tabLyrics
+        case .about:   return L10n.tabAbout
+        case .history: return L10n.tabHistory
+        }
+    }
 }

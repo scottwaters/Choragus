@@ -169,7 +169,7 @@ struct ChoragusApp: App {
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
 
-                Button("Visualisations\u{2026}") {
+                Button(L10n.visualisations) {
                     NotificationCenter.default.post(name: .menuShowForFun, object: nil)
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
@@ -282,7 +282,7 @@ private enum ChoragusAboutWindow {
         }
         let host = NSHostingController(rootView: ChoragusAboutView())
         let window = NSWindow(contentViewController: host)
-        window.title = "About Choragus"
+        window.title = L10n.aboutWindowTitle
         window.styleMask = [.titled, .closable]
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
@@ -336,17 +336,17 @@ private struct ChoragusAboutView: View {
                 VStack(spacing: 6) {
                     Text("χορηγός")
                         .font(.system(size: 30, weight: .semibold))
-                    Text("choragus · n. (Ancient Greek)")
+                    Text(L10n.etymologyType)
                         .font(.callout)
                         .italic()
                         .foregroundStyle(.secondary)
-                    Text("The leader of the chorus — the citizen who funded and conducted the dramatic chorus in classical Athens.")
+                    Text(L10n.etymologyDefinition)
                         .font(.body)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 6)
                         .padding(.horizontal, 24)
-                    Text("One conductor. Many voices. One chorus.")
+                    Text(L10n.choragusMotto)
                         .font(.callout)
                         .italic()
                         .foregroundStyle(.secondary)
@@ -357,11 +357,11 @@ private struct ChoragusAboutView: View {
 
                 // Credits
                 VStack(spacing: 16) {
-                    Text("Credits").font(.headline)
+                    Text(L10n.credits).font(.headline)
 
                     creditsBlock(
-                        title: "Data sources",
-                        caption: "Synced lyrics, artist & album metadata, and album art.",
+                        title: L10n.dataSources,
+                        caption: L10n.dataSourcesCaption,
                         links: [
                             ("LRCLIB", "https://lrclib.net"),
                             ("Wikipedia", "https://www.wikipedia.org"),
@@ -372,8 +372,8 @@ private struct ChoragusAboutView: View {
                     )
 
                     creditsBlock(
-                        title: "Contributors",
-                        caption: "VLAN / Bonjour discovery design and initial implementation (v4.0).",
+                        title: L10n.contributors,
+                        caption: L10n.contributorsCaption,
                         links: [
                             ("@mbieh", "https://github.com/mbieh"),
                             ("@steventamm", "https://github.com/steventamm")
@@ -390,7 +390,7 @@ private struct ChoragusAboutView: View {
                         Link("github.com/scottwaters/Choragus", destination: repo)
                             .font(.callout)
                     }
-                    Text("Not affiliated with Sonos, Inc.")
+                    Text(L10n.notAffiliatedWithSonos)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }

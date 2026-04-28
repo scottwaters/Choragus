@@ -105,7 +105,7 @@ struct NowPlayingView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(contextPanelCollapsed ? "Show lyrics, about & history" : "Hide lyrics, about & history")
+            .help(contextPanelCollapsed ? L10n.showLyricsAboutHistory : L10n.hideLyricsAboutHistory)
             Rectangle()
                 .fill(Color.secondary.opacity(0.25))
                 .frame(height: 1)

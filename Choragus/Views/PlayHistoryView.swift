@@ -184,7 +184,7 @@ struct PlayHistoryView: View {
         }
         .alert("Delete \(cachedFilteredEntries.count) Filtered Entries?", isPresented: $showDeleteFilteredConfirm) {
             Button(L10n.cancel, role: .cancel) {}
-            Button("Delete", role: .destructive) {
+            Button(L10n.delete, role: .destructive) {
                 let ids = Set(cachedFilteredEntries.map(\.id))
                 historyManager.deleteEntries(ids)
                 refreshFilteredEntries()
@@ -373,7 +373,7 @@ struct PlayHistoryView: View {
 
                 Spacer()
 
-                Button("Clear All") {
+                Button(L10n.clearAll) {
                     withAnimation {
                         filterDateRange = .all
                         filterRoom = nil
@@ -419,7 +419,7 @@ struct PlayHistoryView: View {
 
     @ViewBuilder
     private func copyEntryMenu(_ entry: PlayHistoryEntry) -> some View {
-        Button("Copy Track Details") {
+        Button(L10n.copyTrackDetails) {
             var lines: [String] = []
             if !entry.stationName.isEmpty { lines.append("\(L10n.sourceLabel): \(entry.stationName)") }
             if !entry.artist.isEmpty { lines.append("\(L10n.artistLabel): \(entry.artist)") }
@@ -428,10 +428,10 @@ struct PlayHistoryView: View {
             copyToClipboard(lines.joined(separator: "\n"))
         }
         if !entry.title.isEmpty {
-            Button("Copy Title") { copyToClipboard(entry.title) }
+            Button(L10n.copyTitle) { copyToClipboard(entry.title) }
         }
         if !entry.artist.isEmpty {
-            Button("Copy Artist") { copyToClipboard(entry.artist) }
+            Button(L10n.copyArtist) { copyToClipboard(entry.artist) }
         }
     }
 

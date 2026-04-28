@@ -108,7 +108,7 @@ private struct TabContentView: View {
             settingsSection(L10n.appearance) {
                 settingsRow(L10n.theme) {
                     Picker("", selection: $sonosManager.appearanceMode) {
-                        ForEach(AppearanceMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        ForEach(AppearanceMode.allCases, id: \.self) { Text($0.displayName).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 240)

@@ -119,7 +119,7 @@ struct ForFunView: View {
             }
 
             HStack(spacing: 8) {
-                Text("Speed")
+                Text(L10n.speed)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Slider(
@@ -257,7 +257,7 @@ private struct ListeningRidgesVisualization: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Listening Ridges").font(.headline)
+                Text(L10n.listeningRidges).font(.headline)
                 Spacer()
                 Text("Each ridge = one top track. Height = plays per day. Newest finds at top, peaks bloom on binge days.")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -749,7 +749,7 @@ private struct AlbumConstellationsVisualization: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Album Constellations").font(.headline)
+                Text(L10n.albumConstellations).font(.headline)
                 Spacer()
                 Text("Each ring = one album. Stars = its tracks. Brightness = plays. Stars light up in the order you first played them.")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -769,7 +769,7 @@ private struct AlbumConstellationsVisualization: View {
         }
         let albums = aggregate()
         guard !albums.isEmpty else {
-            ctx.draw(Text("No albums yet").font(.title3).foregroundStyle(.secondary),
+            ctx.draw(Text(L10n.noAlbumsYet).font(.title3).foregroundStyle(.secondary),
                      at: CGPoint(x: size.width / 2, y: size.height / 2))
             return
         }
@@ -949,7 +949,7 @@ private struct FingerprintVisualization: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Listening Fingerprint").font(.headline)
+                Text(L10n.listeningFingerprint).font(.headline)
                 Spacer()
                 Text("Your signature: peak hour (hand), services (inner ring), top artists (outer wedges), weekend balance (background), starred days (rim glints).")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -1218,7 +1218,7 @@ private struct GourceVisualization: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Days Constellation").font(.headline)
+                Text(L10n.daysConstellation).font(.headline)
                 Spacer()
                 Text("Each cell = 1 day. Dots = plays, colour = service. Scrubber walks through history.")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -1230,7 +1230,7 @@ private struct GourceVisualization: View {
 
     private func draw(ctx: GraphicsContext, size: CGSize) {
         guard !entries.isEmpty, let range = timelineRange(for: entries) else {
-            ctx.draw(Text("No history yet").font(.title3).foregroundStyle(.secondary),
+            ctx.draw(Text(L10n.noHistoryYet).font(.title3).foregroundStyle(.secondary),
                      at: CGPoint(x: size.width / 2, y: size.height / 2))
             return
         }
@@ -1534,7 +1534,7 @@ private struct HeatmapVisualization: View {
             ctx.draw(Text("\(h)").font(.caption2).foregroundStyle(.secondary),
                      at: CGPoint(x: leftPad + (CGFloat(h) + 0.5) * cellW, y: topPad - 10))
         }
-        ctx.draw(Text("Hour").font(.caption2).foregroundStyle(.tertiary),
+        ctx.draw(Text(L10n.hour).font(.caption2).foregroundStyle(.tertiary),
                  at: CGPoint(x: leftPad + plotW / 2, y: topPad + plotH + 20))
 
         drawTimelineLabel(ctx: ctx, size: size, date: cutoff)
@@ -1636,9 +1636,9 @@ private struct ChordVisualization: View {
             ctx.draw(Text(r).font(.caption2).foregroundStyle(.primary),
                      at: CGPoint(x: pt.x + 10, y: pt.y), anchor: .leading)
         }
-        ctx.draw(Text("Artists").font(.caption).foregroundStyle(.tertiary),
+        ctx.draw(Text(L10n.artists).font(.caption).foregroundStyle(.tertiary),
                  at: CGPoint(x: center.x - radius - 60, y: 20))
-        ctx.draw(Text("Rooms").font(.caption).foregroundStyle(.tertiary),
+        ctx.draw(Text(L10n.rooms).font(.caption).foregroundStyle(.tertiary),
                  at: CGPoint(x: center.x + radius + 60, y: 20))
 
         drawTimelineLabel(ctx: ctx, size: size, date: cutoff)
@@ -1900,7 +1900,7 @@ private struct OrbitalVisualization: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Listening Clock").font(.headline)
+                Text(L10n.listeningClock).font(.headline)
                 Spacer()
                 Text("Angle = hour of day (0 at top). Radius = how recent (centre = latest). Colour = service.")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -1912,7 +1912,7 @@ private struct OrbitalVisualization: View {
 
     private func draw(ctx: GraphicsContext, size: CGSize) {
         guard !entries.isEmpty, let range = timelineRange(for: entries) else {
-            ctx.draw(Text("No history yet").font(.title3).foregroundStyle(.secondary),
+            ctx.draw(Text(L10n.noHistoryYet).font(.title3).foregroundStyle(.secondary),
                      at: CGPoint(x: size.width / 2, y: size.height / 2))
             return
         }
@@ -2111,7 +2111,7 @@ private struct PhysarumVisualization: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Listening Trail").font(.headline)
+                Text(L10n.listeningTrail).font(.headline)
                 Spacer()
                 Text("Slimes replay your actual listening order through top artists. Colour = service. Dense edges = artist pairs you chain.")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -2127,7 +2127,7 @@ private struct PhysarumVisualization: View {
 
     private func draw(ctx: GraphicsContext, size: CGSize) {
         if sim.nodes.isEmpty {
-            ctx.draw(Text("No history yet").font(.title3).foregroundStyle(.secondary),
+            ctx.draw(Text(L10n.noHistoryYet).font(.title3).foregroundStyle(.secondary),
                      at: CGPoint(x: size.width / 2, y: size.height / 2))
             return
         }

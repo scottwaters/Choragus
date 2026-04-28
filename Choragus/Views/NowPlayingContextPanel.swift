@@ -130,7 +130,7 @@ struct NowPlayingContextPanel: View {
 
     private var tabPicker: some View {
         Picker("", selection: $tab) {
-            ForEach(NowPlayingContextPanelTab.allCases) { Text($0.rawValue).tag($0) }
+            ForEach(NowPlayingContextPanelTab.allCases) { Text($0.displayName).tag($0) }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
@@ -158,20 +158,20 @@ struct NowPlayingContextPanel: View {
         Group {
             switch ctxVM.lyricsState {
             case .idle, .loading:
-                loadingPlaceholder(text: "Looking up lyrics…")
+                loadingPlaceholder(text: L10n.lookingUpLyrics)
             case .loaded:
                 if let lyrics = ctxVM.lyrics {
                     renderedLyrics(lyrics)
                 } else {
                     emptyPlaceholder(icon: "text.alignleft",
-                                     text: "No lyrics found.")
+                                     text: L10n.noLyricsFound)
                 }
             case .missing:
                 emptyPlaceholder(icon: "text.alignleft",
-                                 text: "No lyrics found.")
+                                 text: L10n.noLyricsFound)
             case .error(let msg):
                 emptyPlaceholder(icon: "exclamationmark.triangle",
-                                 text: "Couldn't load lyrics: \(msg)")
+                                 text: L10n.couldNotLoadLyricsFormat(msg))
             }
         }
         .padding(.horizontal, 16)
@@ -185,7 +185,7 @@ struct NowPlayingContextPanel: View {
             VStack(alignment: .center, spacing: 8) {
                 Image(systemName: "music.note").font(.title)
                     .foregroundStyle(.secondary)
-                Text("Instrumental").font(.body).foregroundStyle(.secondary)
+                Text(L10n.instrumental).font(.body).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let synced = lyrics.synced {
@@ -235,7 +235,7 @@ struct NowPlayingContextPanel: View {
                 .frame(minWidth: 56)
                 .contentShape(Rectangle())
                 .onTapGesture { ctxVM.lyricsOffset = 0 }
-                .help("Tap to reset offset")
+                .help(L10n.tapToResetOffset)
             offsetButton(label: "+1", delta: 1)
             offsetButton(label: "+5", delta: 5)
             offsetButton(label: "+10", delta: 10)
@@ -268,7 +268,7 @@ struct NowPlayingContextPanel: View {
             VStack(alignment: .leading, spacing: 14) {
                 switch ctxVM.aboutState {
                 case .idle, .loading:
-                    loadingPlaceholder(text: "Loading info…")
+                    loadingPlaceholder(text: L10n.loadingInfo)
                 case .loaded, .missing, .error:
                     if let info = ctxVM.artistInfo {
                         artistSection(info)
@@ -279,7 +279,7 @@ struct NowPlayingContextPanel: View {
                     if ctxVM.artistInfo == nil && ctxVM.albumInfo == nil {
                         emptyPlaceholder(
                             icon: "info.circle",
-                            text: "No info found."
+                            text: L10n.noInfoFound
                         )
                     }
                 }
@@ -291,7 +291,7 @@ struct NowPlayingContextPanel: View {
                 Button {
                     Task { await ctxVM.refreshAbout(trackMetadata) }
                 } label: {
-                    Label("Refresh metadata", systemImage: "arrow.clockwise")
+                    Label(L10n.refreshMetadata, systemImage: "arrow.clockwise")
                 }
                 .disabled(trackMetadata.title.isEmpty)
             }
@@ -351,7 +351,7 @@ struct NowPlayingContextPanel: View {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.up.right.square")
                             .imageScale(.small)
-                        Link("Read on Wikipedia", destination: url)
+                        Link(L10n.readOnWikipedia, destination: url)
                             .font(.callout)
                     }
                     .foregroundStyle(.tint)
@@ -359,7 +359,7 @@ struct NowPlayingContextPanel: View {
                 }
                 if !info.similarArtists.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        labelHeader("Similar artists")
+                        labelHeader(L10n.similarArtists)
                         similarArtistsRow(info.similarArtists)
                     }
                     .padding(.top, 2)
@@ -414,7 +414,7 @@ struct NowPlayingContextPanel: View {
                 }
                 if !info.tracks.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        labelHeader("Tracks")
+                        labelHeader(L10n.tracks)
                         VStack(spacing: 0) {
                             ForEach(Array(info.tracks.enumerated()), id: \.offset) { index, track in
                                 trackRow(track: track, index: index)
@@ -483,7 +483,7 @@ struct NowPlayingContextPanel: View {
                     )
                     .contentShape(Rectangle())
                     .onTapGesture { onImageTap?() }
-                    .help("Click to enlarge")
+                    .help(L10n.clickToEnlarge)
                     .accessibilityLabel("\(title) photo")
             }
         }
@@ -565,11 +565,11 @@ struct NowPlayingContextPanel: View {
                 let entries = matchingHistory()
                 if entries.isEmpty {
                     emptyPlaceholder(icon: "clock",
-                                     text: "No previous plays of this track in your Choragus history.")
+                                     text: L10n.noPreviousPlaysInHistory)
                 } else {
                     historySummary(entries)
                     Divider().padding(.vertical, 4)
-                    Text("Recent plays").font(.body.weight(.semibold))
+                    Text(L10n.recentPlays).font(.body.weight(.semibold))
                     ForEach(Array(entries.prefix(20))) { entry in
                         HStack(alignment: .top, spacing: 8) {
                             Text(formatRelativeDate(entry.timestamp))
@@ -609,16 +609,17 @@ struct NowPlayingContextPanel: View {
     private func historySummary(_ entries: [PlayHistoryEntry]) -> some View {
         let rooms = Set(entries.map(\.groupName).filter { !$0.isEmpty })
         return VStack(alignment: .leading, spacing: 4) {
-            Text("\(entries.count) play\(entries.count == 1 ? "" : "s")")
+            Text(L10n.playsCountFormat(entries.count))
                 .font(.title3.weight(.semibold))
             if !rooms.isEmpty {
-                Text("Across \(rooms.count) room\(rooms.count == 1 ? "" : "s"): \(rooms.sorted().joined(separator: ", "))")
+                Text(L10n.acrossRoomsFormat(count: rooms.count,
+                                             list: rooms.sorted().joined(separator: ", ")))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let last = entries.first {
-                Text("Last played \(formatRelativeDate(last.timestamp))")
+                Text(L10n.lastPlayedFormat(formatRelativeDate(last.timestamp)))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

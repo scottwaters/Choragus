@@ -59,6 +59,16 @@ public enum AppearanceMode: String, CaseIterable {
     case system = "System"
     case light = "Light"
     case dark = "Dark"
+
+    /// Localised label for the segmented picker. The raw value stays
+    /// the stable persistence key so existing UserDefaults survive.
+    public var displayName: String {
+        switch self {
+        case .system: return L10n.system
+        case .light:  return L10n.appearanceLight
+        case .dark:   return L10n.appearanceDark
+        }
+    }
 }
 
 /// Stored as RGB array [r, g, b] in UserDefaults. [-1,-1,-1] means "use system default".

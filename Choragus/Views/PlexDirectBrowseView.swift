@@ -73,7 +73,9 @@ struct PlexDirectBrowseView: View {
 
     private var tabPicker: some View {
         Picker("", selection: $tab) {
-            ForEach(ServiceTab.allCases) { Text($0.rawValue).tag($0) }
+            ForEach(ServiceTab.allCases) {
+                Text($0 == .browse ? L10n.browse : L10n.search).tag($0)
+            }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
@@ -100,23 +102,26 @@ struct PlexDirectBrowseView: View {
             Button {
                 Task { await playAllNow() }
             } label: {
-                Label("Play All", systemImage: "play.fill")
+                Label(L10n.playAll, systemImage: "play.fill")
             }
             .controlSize(.small)
             Button {
                 Task { await addAllToQueue(playNext: false) }
             } label: {
-                Label("Add All to Queue", systemImage: "text.append")
+                Label(L10n.addAllToQueue, systemImage: "text.append")
             }
             .controlSize(.small)
             Button {
                 Task { await addAllToQueue(playNext: true) }
             } label: {
-                Label("Play Next", systemImage: "text.insert")
+                Label(L10n.playNext, systemImage: "text.insert")
             }
             .controlSize(.small)
             Spacer()
-            Text("\(items.count) item\(items.count == 1 ? "" : "s")")
+            // Item count — left as a numeric-only label to avoid the
+            // pluralisation gymnastics the existing L10n flat-dictionary
+            // doesn't support cleanly. The number itself is universal.
+            Text("\(items.count)")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
         }
@@ -254,24 +259,24 @@ struct PlexDirectBrowseView: View {
             Button(L10n.playAllNow) {
                 Task { await playAllChildren(of: item) }
             }
-            Button("Add All to Queue") {
+            Button(L10n.addAllToQueue) {
                 Task { await addToQueue(item, playNext: false) }
             }
-            Button("Play All Next") {
+            Button(L10n.playAllNext) {
                 Task { await addToQueue(item, playNext: true) }
             }
             Divider()
-            Button("Open") {
+            Button(L10n.open) {
                 handleTap(item)
             }
         } else {
-            Button("Play Now") {
+            Button(L10n.playNow) {
                 Task { await play(track: item) }
             }
-            Button("Play Next") {
+            Button(L10n.playNext) {
                 Task { await addToQueue(item, playNext: true) }
             }
-            Button("Add to Queue") {
+            Button(L10n.addToQueue) {
                 Task { await addToQueue(item, playNext: false) }
             }
         }
@@ -337,10 +342,10 @@ struct PlexDirectBrowseView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
-                Button("Retry") { Task { await loadCurrent() } }
+                Button(L10n.retry) { Task { await loadCurrent() } }
                     .controlSize(.small)
                 if smapiManager.tokenStore.authenticatedServices[ServiceID.plex] != nil {
-                    Button("Use Plex via Sonos relay") { Task { await fallbackToSMAPI() } }
+                    Button(L10n.usePlexViaSonosRelay) { Task { await fallbackToSMAPI() } }
                         .controlSize(.small)
                 }
             }
