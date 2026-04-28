@@ -16,7 +16,7 @@ final class LastFMSigningTests: XCTestCase {
     @MainActor
     private func makeClient() -> LastFMClient {
         let secrets = SecretsStore(
-            service: "com.sonoscontroller.app.tests.\(UUID().uuidString)",
+            service: "com.choragus.app.tests.\(UUID().uuidString)",
             account: "secrets.test"
         )
         let store = LastFMTokenStore(secrets: secrets)

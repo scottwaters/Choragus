@@ -162,13 +162,13 @@ The Swift Package Manager target for `SonosKit` is self-contained and runs indep
 - **Universal binary** — CI should always pass `ONLY_ACTIVE_ARCH=NO ARCHS="arm64 x86_64"`.
 - **Kill before rebuild** — `pkill -x Choragus` (or `killall Choragus`) before a rebuild to avoid stale state.
 - **No force-unwraps** — use `guard let` with a safe fallback (see `SonosDevice.fallbackURL` pattern).
-- **Debug logging** — `sonosDebugLog(_:)` writes to `~/Library/Containers/com.sonoscontroller.app/Data/Library/Application Support/Choragus/sonos_debug.log` in DEBUG builds. Look for `[DISCOVERY]`, `[UPDATE]`, and similar prefixes.
+- **Debug logging** — `sonosDebugLog(_:)` writes to `~/Library/Containers/com.choragus.app/Data/Library/Application Support/Choragus/sonos_debug.log` in DEBUG builds. Look for `[DISCOVERY]`, `[UPDATE]`, and similar prefixes.
 
 ---
 
 ## File System Paths (Runtime)
 
-Under `~/Library/Containers/com.sonoscontroller.app/Data/Library/Application Support/Choragus/`:
+Under `~/Library/Containers/com.choragus.app/Data/Library/Application Support/Choragus/`:
 
 | File | Purpose |
 |------|---------|

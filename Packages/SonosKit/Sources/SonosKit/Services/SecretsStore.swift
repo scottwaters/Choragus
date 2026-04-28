@@ -10,11 +10,14 @@
 /// (service, account) pair. Result: one allow prompt per rebuild, one
 /// Keychain item to manage.
 ///
-/// Migration: on first access, if the unified item isn't present, the
-/// store pulls values from the legacy LastFM / SMAPI keychain services,
-/// writes them to the unified item, and deletes the legacy items. The
-/// user sees their old prompts once more (to read the legacy items during
-/// migration), then never again.
+/// Service name aligns with the bundle ID (`com.choragus.app`). The
+/// previous build used `com.sonoscontroller.app` — those legacy items are
+/// orphaned by design after the v4.0 rename: trying to migrate would
+/// trigger a fresh round of "Choragus wants to access keychain item
+/// created by SonosController" prompts every launch until the user
+/// clicked through them. Cleaner to ask users for a one-time re-auth
+/// of Last.fm / SMAPI services and let everything line up with the
+/// signed bundle identity from then on.
 ///
 /// Thread safety: access is gated on the main actor — token stores that
 /// own credentials are already `@MainActor` in this codebase.
@@ -32,12 +35,7 @@ public final class SecretsStore {
     private var cache: [String: String] = [:]
     private var loaded = false
 
-    /// Legacy service names we migrate from on first access. The (service,
-    /// account-prefix) pairs define the items to harvest.
-    private let legacyLastFMService = "com.sonoscontroller.app.lastfm"
-    private let legacySMAPIService = "com.sonoscontroller.smapi"
-
-    public init(service: String = "com.sonoscontroller.app",
+    public init(service: String = "com.choragus.app",
                 account: String = "secrets.v1") {
         self.service = service
         self.account = account
@@ -47,8 +45,7 @@ public final class SecretsStore {
 
     public func get(_ key: String) -> String? {
         ensureLoaded()
-        if let value = cache[key] { return value }
-        return legacyFallbackValue(for: key)
+        return cache[key]
     }
 
     public func set(_ key: String, _ value: String?) {
@@ -88,49 +85,6 @@ public final class SecretsStore {
            let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
             cache = decoded
         }
-        // No up-front legacy harvest. Running `SecItemCopyMatching` with
-        // `kSecReturnData` against the legacy service triggered a Keychain
-        // prompt for *every* item on every launch — user was being asked
-        // to approve 5+ times. Instead, `get(_:)` falls back to the
-        // legacy locations when a key isn't in the unified cache, and
-        // promotes the value on first successful read. That way:
-        //   - Unified store is still authoritative.
-        //   - Items we never read never get harvested, so no prompts.
-        //   - Items we do read migrate lazily with a single prompt each.
-    }
-
-    private static let legacyFallbackMap: [String: (service: String, account: String)] = [
-        "lastfm.apiKey":        ("com.sonoscontroller.app.lastfm", "lastfm.apiKey"),
-        "lastfm.sharedSecret":  ("com.sonoscontroller.app.lastfm", "lastfm.sharedSecret"),
-        "lastfm.sessionKey":    ("com.sonoscontroller.app.lastfm", "lastfm.sessionKey"),
-        "lastfm.username":      ("com.sonoscontroller.app.lastfm", "lastfm.username"),
-    ]
-
-    /// Lazy legacy fallback for keys not yet in the unified cache. Tries
-    /// the fixed legacy LastFM accounts first, then the pattern-based
-    /// SMAPI accounts (`smapi.token.<id>` → `smapi_token_<id>`). Returns
-    /// the legacy value if found and promotes it into the unified store
-    /// so future reads skip the legacy lookup.
-    private func legacyFallbackValue(for key: String) -> String? {
-        let fallback: (service: String, account: String)?
-        if let mapped = Self.legacyFallbackMap[key] {
-            fallback = mapped
-        } else if key.hasPrefix("smapi.") {
-            // "smapi.token.12" → account "smapi_token_12"
-            let underscored = key.replacingOccurrences(of: ".", with: "_")
-            fallback = (legacySMAPIService, underscored)
-        } else {
-            fallback = nil
-        }
-        guard let fallback,
-              let data = readKeychain(service: fallback.service, account: fallback.account),
-              let value = String(data: data, encoding: .utf8), !value.isEmpty else {
-            return nil
-        }
-        // Promote to unified store so next read is free.
-        cache[key] = value
-        persist()
-        return value
     }
 
     private func persist() {

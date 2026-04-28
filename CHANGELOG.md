@@ -5,7 +5,7 @@
 
 The project has been renamed from **SonosController** to **Choragus** to put trademark distance between the app and Sonos, Inc. The name comes from ancient Greek *choragos* — the leader who organised and directed a chorus to perform as one. The metaphor matches what the app actually does: it doesn't generate sound, it coordinates a group of speakers to play together.
 
-The bundle identifier remains `com.sonoscontroller.app` so existing installations upgrade in place — Keychain tokens, preferences, play history, and art cache all carry over without re-authentication. Older entries in this changelog reference "SonosController" by name; that history is preserved as-is.
+The bundle identifier moves to `com.choragus.app` to match the rename, and the Keychain service name now follows suit. Sandbox container, Keychain service, and the signed Developer ID identity all line up with the new bundle. **One-time cost**: Last.fm and SMAPI services need to be re-authenticated on first launch — those credentials lived in Keychain entries scoped to the old service name and aren't migrated forward. Reading them with the new signed binary would have prompted the user to "allow access to keychain item created by SonosController.app" on every launch until they clicked through; cleaner to wipe the bridge entirely and ask for one re-auth pass. Play history, art cache, and the SQLite metadata store live in the sandbox container, which already moved to `com.choragus.app` when the bundle ID flipped in the v4.0 work — they aren't touched by this change. Older entries in this changelog reference "SonosController" by name; that history is preserved as-is.
 
 ### Discovery — Bonjour added alongside SSDP
 
