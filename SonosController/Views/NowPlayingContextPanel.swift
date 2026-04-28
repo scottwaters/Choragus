@@ -26,15 +26,13 @@ struct NowPlayingContextPanel: View {
     /// (paused).
     let isPlaying: Bool
 
-    @EnvironmentObject var lyricsService: LyricsServiceHolder
-    @EnvironmentObject var metadataService: MusicMetadataServiceHolder
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
 
     /// All metadata-fetch state + orchestration lives in the VM
     /// (lyrics + offsets, artist + album info, lazy-load gating,
     /// background pre-warm, refresh, debounced offset persistence).
     /// The View just renders state and dispatches events.
-    @State private var vm: NowPlayingContextPanelViewModel?
+    @State private var ctxVM: NowPlayingContextPanelViewModel
 
     @State private var tab: NowPlayingContextPanelTab = .about
     /// Drives the click-to-expand sheet for the artist photo in the
@@ -43,19 +41,27 @@ struct NowPlayingContextPanel: View {
     /// can render it.
     @State private var expandedArtistPhotoURL: URL?
 
-    /// Live binding to a non-nil VM. Initialised on first appear from
-    /// the environment-injected services. Force-unwrapping is safe at
-    /// every body call since `.task(id:)` initialises the VM before
-    /// any state read happens.
-    private var ctxVM: NowPlayingContextPanelViewModel {
-        guard let vm else {
-            assertionFailure("NowPlayingContextPanel ViewModel accessed before initialisation")
-            return NowPlayingContextPanelViewModel(
-                lyricsService: lyricsService.service,
-                metadataService: metadataService.service
-            )
-        }
-        return vm
+    /// Initialises the VM eagerly so body's first render — which fires
+    /// before any `.task` modifier — already has the real instance. The
+    /// previous `@State var vm: VM?` + `assertionFailure`-guarded getter
+    /// crashed because SwiftUI evaluated body before the lazy `.task`
+    /// could populate it.
+    init(
+        trackMetadata: TrackMetadata,
+        group: SonosGroup,
+        positionSeconds: Double,
+        isPlaying: Bool,
+        lyricsService: LyricsService,
+        metadataService: MusicMetadataService
+    ) {
+        self.trackMetadata = trackMetadata
+        self.group = group
+        self.positionSeconds = positionSeconds
+        self.isPlaying = isPlaying
+        _ctxVM = State(wrappedValue: NowPlayingContextPanelViewModel(
+            lyricsService: lyricsService,
+            metadataService: metadataService
+        ))
     }
 
     /// Stable per-track identifier. `trackURI` is the canonical
@@ -105,15 +111,6 @@ struct NowPlayingContextPanel: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task(id: trackKey) {
-            // Lazily build the VM on first appear so the view doesn't
-            // require services at construction time (keeps the view's
-            // initialiser cheap for parents that build it speculatively).
-            if vm == nil {
-                vm = NowPlayingContextPanelViewModel(
-                    lyricsService: lyricsService.service,
-                    metadataService: metadataService.service
-                )
-            }
             ctxVM.resetForNewTrack(trackMetadata)
             await ctxVM.loadActiveTab(tab, metadata: trackMetadata)
         }

@@ -20,6 +20,11 @@ import SonosKit
 
 struct NowPlayingView: View {
     @EnvironmentObject var sonosManager: SonosManager
+    /// Forwarded into `NowPlayingContextPanel` so its VM can be
+    /// initialised eagerly (services come from the SwiftUI environment
+    /// at the App level — `ChoragusApp.swift`).
+    @EnvironmentObject var lyricsService: LyricsServiceHolder
+    @EnvironmentObject var metadataService: MusicMetadataServiceHolder
     @State private var vm: NowPlayingViewModel
     @State private var showShuffleHint = false
     let group: SonosGroup
@@ -135,7 +140,9 @@ struct NowPlayingView: View {
                             trackMetadata: trackMetadata,
                             group: group,
                             positionSeconds: vm.smoothPosition,
-                            isPlaying: transportState == .playing
+                            isPlaying: transportState == .playing,
+                            lyricsService: lyricsService.service,
+                            metadataService: metadataService.service
                         )
                         // 260pt = tab picker (~36) + divider (1) +
                         // padding (~16) + 5-row × 34pt lyrics (170) +
