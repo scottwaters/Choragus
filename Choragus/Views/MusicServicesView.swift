@@ -82,6 +82,15 @@ struct MusicServicesSettingsSection: View {
         .init(key: "254",       serviceID: ServiceID.tuneIn,     name: "TuneIn",       alternativeIDs: [ServiceID.tuneInNew], plexFlavor: .none),
         .init(key: "144",       serviceID: ServiceID.calmRadio,  name: "Calm Radio",   alternativeIDs: [], plexFlavor: .none),
         .init(key: "303",       serviceID: ServiceID.sonosRadio, name: "Sonos Radio",  alternativeIDs: [], plexFlavor: .none),
+        // Pandora is pinned so it surfaces as `connectableUntested`
+        // (yellow) for everyone, regardless of household state. Without
+        // this, Pandora only appeared if Sonos's catalogue explicitly
+        // listed it for that household — and US users who'd never
+        // favourited a Pandora track had no entry point at all. Pinning
+        // gives Connect-button visibility so users can try the AppLink
+        // flow and report results back via the upcoming "Report unknown
+        // services" button (task #97).
+        .init(key: "519",       serviceID: ServiceID.pandora,    name: "Pandora",      alternativeIDs: [], plexFlavor: .none),
     ]
 
     /// Builds the actual list of rows to display.

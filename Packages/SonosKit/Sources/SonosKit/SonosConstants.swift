@@ -39,6 +39,11 @@ public enum URIPrefix {
 
 public enum ServiceID {
     public static let deezer = 2
+    /// Pandora SMAPI sid per SoCo's public Music Service IDs wiki. Distinct
+    /// from the RINCON service-type number `519` used for URI parsing in
+    /// `RINCONService.knownNames` below — Sonos uses different IDs at the
+    /// SMAPI catalog layer vs the URI layer for the same service.
+    public static let pandora = 3
     public static let iHeartRadio = 6
     public static let spotify = 12
     public static let qobuz = 31
@@ -57,6 +62,7 @@ public enum ServiceID {
     /// Fallback map for when the speaker's service list hasn't loaded
     public static let knownNames: [Int: String] = [
         deezer: "Deezer",
+        pandora: "Pandora",
         iHeartRadio: "iHeartRadio",
         spotify: "Spotify",
         qobuz: "Qobuz",
