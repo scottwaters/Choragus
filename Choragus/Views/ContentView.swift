@@ -389,6 +389,13 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "speaker.wave.3")
                     }
+                    // SwiftUI's `Menu` label inherits the ambient
+                    // `.tint` from the root `ContentView`, but the
+                    // surrounding toolbar `Button`s render in
+                    // template/primary. Override the tint just for
+                    // this Menu so all six toolbar icons read as one
+                    // set instead of one accent dot in the middle.
+                    .tint(.primary)
                     .help(L10n.muteOrUnmuteAll)
                     .sheet(isPresented: $showPresetManager) {
                         PresetManagerView()

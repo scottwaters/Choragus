@@ -30,5 +30,18 @@ topology_cache.json
 # Local-only TODO (cross-release notes, not for GitHub)
 docs/TODO.md
 
+# Defense-in-depth — secret/key patterns that should never be committed.
+# Nothing matching currently exists in the tree; these prevent accidental
+# adds if a developer ever drops a cert or env file into the repo.
+.env
+.env.local
+.env.*.local
+*.p12
+*.pem
+*.cer
+*.key
+*.keystore
+.release.env
+
 # (ForFunView.swift was previously local-only; it is now part of the
 # shipped project and committed normally.)
