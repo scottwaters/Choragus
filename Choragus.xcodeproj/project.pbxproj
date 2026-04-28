@@ -63,7 +63,7 @@
 		B10004 /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
 		B10005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		B10007 /* SonosController.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SonosController.entitlements; sourceTree = "<group>"; };
+		B10007 /* Choragus.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Choragus.entitlements; sourceTree = "<group>"; };
 		B10008 /* SonosKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = SonosKit; path = Packages/SonosKit; sourceTree = "<group>"; };
 		B10011 /* QueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueView.swift; sourceTree = "<group>"; };
 		B10012 /* GroupEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEditorView.swift; sourceTree = "<group>"; };
@@ -106,7 +106,7 @@
 		B10045 /* FirstRunWelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunWelcomeView.swift; sourceTree = "<group>"; };
 		B10046 /* ScrollWheelCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollWheelCapture.swift; sourceTree = "<group>"; };
 		B10047 /* SettingsScrobblingTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScrobblingTab.swift; sourceTree = "<group>"; };
-		B10020 /* SonosController.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonosController.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10020 /* Choragus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Choragus.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -124,13 +124,13 @@
 		E10000 = {
 			isa = PBXGroup;
 			children = (
-				E10001 /* SonosController */,
+				E10001 /* Choragus */,
 				B10008 /* SonosKit */,
 				E10099 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		E10001 /* SonosController */ = {
+		E10001 /* Choragus */ = {
 			isa = PBXGroup;
 			children = (
 				B10001 /* ChoragusApp.swift */,
@@ -138,9 +138,9 @@
 				E10003 /* ViewModels */,
 				B10005 /* Assets.xcassets */,
 				B10006 /* Info.plist */,
-				B10007 /* SonosController.entitlements */,
+				B10007 /* Choragus.entitlements */,
 			);
-			path = SonosController;
+			path = Choragus;
 			sourceTree = "<group>";
 		};
 		E10003 /* ViewModels */ = {
@@ -204,7 +204,7 @@
 		E10099 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				B10020 /* SonosController.app */,
+				B10020 /* Choragus.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -212,7 +212,7 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		F10001 /* SonosController */ = {
+		F10001 /* Choragus */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = G10003;
 			buildPhases = (
@@ -224,12 +224,12 @@
 			);
 			dependencies = (
 			);
-			name = SonosController;
+			name = Choragus;
 			packageProductDependencies = (
 				D10010 /* SonosKit */,
 			);
-			productName = SonosController;
-			productReference = B10020 /* SonosController.app */;
+			productName = Choragus;
+			productReference = B10020 /* Choragus.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -263,7 +263,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				F10001 /* SonosController */,
+				F10001 /* Choragus */,
 			);
 		};
 /* End PBXProject section */
@@ -391,14 +391,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = SonosController/SonosController.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = SonosController/Info.plist;
+				INFOPLIST_FILE = Choragus/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_CFBundleDisplayName = Choragus;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026. All rights reserved.";
@@ -419,14 +419,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = SonosController/SonosController.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = SonosController/Info.plist;
+				INFOPLIST_FILE = Choragus/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_CFBundleDisplayName = Choragus;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026. All rights reserved.";
@@ -445,7 +445,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		G10001 /* Build configuration list for PBXProject "SonosController" */ = {
+		G10001 /* Build configuration list for PBXProject "Choragus" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				G10010 /* Debug */,
@@ -454,7 +454,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		G10003 /* Build configuration list for PBXNativeTarget "SonosController" */ = {
+		G10003 /* Build configuration list for PBXNativeTarget "Choragus" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				G10020 /* Debug */,

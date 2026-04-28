@@ -1,12 +1,12 @@
 # Architecture
 
-Full source documentation for The SonosController.
+Full source documentation for Choragus.
 
 ## Project Structure
 
 ```
-SonosController/
-├── SonosController.xcodeproj        # Xcode project file
+Choragus/
+├── Choragus.xcodeproj               # Xcode project file
 ├── README.md                        # Project overview
 ├── LICENSE                          # MIT License
 ├── .gitignore
@@ -15,10 +15,10 @@ SonosController/
 │   ├── PROTOCOLS.md                 # UPnP/SOAP protocol reference
 │   └── CACHING.md                   # Caching system documentation
 │
-├── SonosController/                 # SwiftUI App Target
-│   ├── SonosControllerApp.swift
+├── Choragus/                        # SwiftUI App Target
+│   ├── ChoragusApp.swift
 │   ├── Info.plist
-│   ├── SonosController.entitlements
+│   ├── Choragus.entitlements
 │   ├── Assets.xcassets/
 │   ├── MenuBarController.swift      # Menu bar icon and dropdown controls (with star button)
 │   ├── WindowManager.swift          # AppKit-based window management
@@ -85,13 +85,13 @@ SonosController/
         └── SonosKitTests.swift
 ```
 
-## App Target: SonosController
+## App Target: Choragus
 
 The SwiftUI app layer. Contains views and the app entry point. All business logic lives in SonosKit.
 
-### SonosControllerApp.swift
+### ChoragusApp.swift
 
-Entry point. Creates the `SonosManager` as a `@StateObject` and injects it into the view hierarchy via `@EnvironmentObject`. Starts speaker discovery on appear. Initializes `MenuBarController` and `WindowManager` for menu bar mode and AppKit-based window management. Window title is "The SonosController".
+Entry point. Creates the `SonosManager` as a `@StateObject` and injects it into the view hierarchy via `@EnvironmentObject`. Starts speaker discovery on appear. Initializes `MenuBarController` and `WindowManager` for menu bar mode and AppKit-based window management. Window title is "Choragus".
 
 ### MenuBarController.swift
 
@@ -297,13 +297,13 @@ Represents a browsable content item. Fields: `id` (objectID), `title`, `artist`,
 ### Managers
 
 #### PresetManager.swift
-Manages saved group presets. Persists presets to `~/Library/Application Support/SonosController/group_presets.json`. Methods: `save(preset:)`, `load()`, `delete(id:)`, `apply(preset:manager:)`. Applying a preset ungroups all speakers, forms the saved group, and sets per-speaker volumes.
+Manages saved group presets. Persists presets to `~/Library/Application Support/Choragus/group_presets.json`. Methods: `save(preset:)`, `load()`, `delete(id:)`, `apply(preset:manager:)`. Applying a preset ungroups all speakers, forms the saved group, and sets per-speaker volumes.
 
 #### PlayHistoryManager.swift
 Tracks play history with automatic deduplication (same track within a duration-based time window is not re-recorded). Persists to SQLite database. Provides stats (top artists, top tracks, top sources, total play count), star/favorite tracks (toggleStar, starCurrentTrack, starredEntries), and CSV export. SQL-based filtering by date range, room, source, and search text handles 50,000+ entries. Filterable by room, service, and starred status. Toggle on/off via Settings. Supports right-click copy of track details.
 
 #### PlaylistServiceScanner.swift
-Background scanner that determines which streaming service each track in a Sonos playlist belongs to. Browses playlist tracks via ContentDirectory, extracts service from URI pattern and SID metadata. Results cached to `~/Library/Application Support/SonosController/playlist_services_cache.json`. Scans one playlist at a time to limit network load. Results populate service badges in the browse list.
+Background scanner that determines which streaming service each track in a Sonos playlist belongs to. Browses playlist tracks via ContentDirectory, extracts service from URI pattern and SID metadata. Results cached to `~/Library/Application Support/Choragus/playlist_services_cache.json`. Scans one playlist at a time to limit network load. Results populate service badges in the browse list.
 
 ### UPnP
 
@@ -391,7 +391,7 @@ Keychain-based storage for SMAPI OAuth tokens. Stores access tokens keyed by ser
 ### Cache
 
 #### SonosCache.swift
-JSON-based disk cache for speaker topology and browse sections. Stores in `~/Library/Application Support/SonosController/topology_cache.json`.
+JSON-based disk cache for speaker topology and browse sections. Stores in `~/Library/Application Support/Choragus/topology_cache.json`.
 
 `CachedTopology` is `Codable` and contains: `groups`, `devices`, `browseSections`, `timestamp`. Provides `age` and `ageDescription` computed properties.
 
@@ -402,7 +402,7 @@ Two-tier album artwork cache. Singleton via `ImageCache.shared`.
 
 **Memory tier:** `NSCache` with 200 item limit and 50 MB cost limit. Instant access for recently viewed art.
 
-**Disk tier:** JPEG files (80% compression) in `~/Library/Application Support/SonosController/ImageCache/`. 200 MB limit with LRU eviction — oldest-accessed files are removed first when the limit is exceeded. File modification date is updated on each read to track access recency.
+**Disk tier:** JPEG files (80% compression) in `~/Library/Application Support/Choragus/ImageCache/`. 200 MB limit with LRU eviction — oldest-accessed files are removed first when the limit is exceeded. File modification date is updated on each read to track access recency.
 
 Cache key: deterministic hash of the URL string.
 

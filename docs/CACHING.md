@@ -1,10 +1,10 @@
 # Caching System
 
-SonosController uses five caching layers to minimise latency and provide instant startup.
+Choragus uses five caching layers to minimise latency and provide instant startup.
 
 ## 1. Topology Cache (Speaker Layout)
 
-**Location:** `~/Library/Application Support/SonosController/topology_cache.json`
+**Location:** `~/Library/Application Support/Choragus/topology_cache.json`
 **Format:** JSON
 **Contents:** Zone groups, devices (IP, UUID, room name, model), browse sections
 
@@ -36,7 +36,7 @@ The user sees a brief "not responding, refreshing..." message and the speaker li
 
 ## 2. Album Art Cache (Images)
 
-**Location:** `~/Library/Application Support/SonosController/ImageCache/`
+**Location:** `~/Library/Application Support/Choragus/ImageCache/`
 **Format:** JPEG files (80% quality compression)
 **Key:** Deterministic hash of the image URL
 
@@ -80,7 +80,7 @@ All three views use `CachedAsyncImage`, a drop-in replacement for SwiftUI's `Asy
 
 ## 3. Art URL Cache (Persistent)
 
-**Location:** `~/Library/Application Support/SonosController/art_url_cache.json`
+**Location:** `~/Library/Application Support/Choragus/art_url_cache.json`
 **Format:** JSON dictionary mapping keys to art URLs
 
 ### Problem
@@ -117,7 +117,7 @@ Favorite displayed in browse list
 
 ## 4. Playlist Services Cache
 
-**Location:** `~/Library/Application Support/SonosController/playlist_services_cache.json`
+**Location:** `~/Library/Application Support/Choragus/playlist_services_cache.json`
 **Format:** JSON dictionary mapping playlist IDs to per-track service identifiers
 
 ### Problem

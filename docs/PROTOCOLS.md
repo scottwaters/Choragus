@@ -1,6 +1,6 @@
 # Sonos UPnP Protocol Reference
 
-This document describes the UPnP/SOAP protocols used by SonosController to communicate with Sonos speakers. All communication is local network HTTP — no internet access required.
+This document describes the UPnP/SOAP protocols used by Choragus to communicate with Sonos speakers. All communication is local network HTTP — no internet access required.
 
 ## Overview
 

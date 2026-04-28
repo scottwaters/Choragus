@@ -1,4 +1,4 @@
-/// AppError.swift — Typed error enum for SonosController.
+/// AppError.swift — Typed error enum for Choragus.
 ///
 /// Provides structured, user-facing error descriptions for all common failure
 /// modes. Bridges from SOAPError and SMAPIError for unified error handling.
