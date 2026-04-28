@@ -6,7 +6,7 @@
 
 > **Looking for internals?** See [technical_readme.md](technical_readme.md) for architecture, protocols, and build instructions.
 
-![Choragus — Now Playing with Browse and Queue](screenshots/v3/mainview_browse_search_queue.png)
+![Choragus — Browse, Now Playing with the new About tab, and Queue](screenshots/v4/mainview.png)
 
 ---
 
@@ -46,11 +46,19 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 - **Renamed to Choragus** — same app, new name (in respect of the Sonos trademark). Your speakers, presets, history, and settings all come across automatically. The first time you launch, you'll be asked to sign back into Spotify (and any other connected services) one time — that's expected.
 - **Works on tricky home networks** — if your speakers are on a guest network or smart-home VLAN, they now show up automatically. No router tweaks required.
 - **Now Playing has tabs** — the bottom of the Now Playing screen is now organised into three tabs: **Lyrics** (synced word-by-word when available, plain otherwise), **About** (artist bios, photos, related artists, album tracklists), and **History** (recent plays of this track). Don't want it visible? Click the chevron to collapse the whole panel.
+
+  ![Synced lyrics with active-line emphasis and offset chips](screenshots/v4/nowplaying_lyrics_synced.png)
+
 - **Bios in your language** — artist info is now pulled from Wikipedia and Last.fm in your chosen language. Switch the app to French or Japanese and the bios switch with you. Everything you've already looked at stays cached on your Mac, so we're not re-hammering those free public services every time you skip a track.
+
+  ![About tab — Wikipedia bio, tags, similar artists, album tracklist](screenshots/v4/nowplaying_about.png)
+
 - **Apple Music sorting** — when you tap an artist in Apple Music search, you can now sort their albums by Newest, Oldest, Title, Artist, or Relevance. Same for tracks inside an album.
+
+  ![Apple Music drill-down sorted by oldest first](screenshots/v4/applemusic_sort.png)
 - **More services on the list** — Audible is confirmed working (alongside Spotify and Plex). Pandora is now visible in Settings → Music as untested — connect at your own risk and let us know if it works.
 - **Home Theater EQ shows up reliably** — editing a soundbar/sub/surrounds preset now shows all the EQ controls (Night Mode, Dialog Enhancement, Sub level, Surround level, etc.) without having to toggle anything to make them appear.
-- **Settings reorganised** — the Settings window now has clearly labelled sections: Appearance, Colours, Language, Menu Bar, Mouse Controls, Communication, Discovery, Quick Start, Music Services, Scrobbling, and Image Cache. Easier to find what you need.
+- **Settings tidied up** — Settings keeps its four tabs (Display, Music, Scrobbling, System) but each tab is now broken into clearly labelled sections — Discovery, Cache controls, Mouse Controls, Colours, Language, etc. — so it's easier to find what you want without scanning a wall of toggles.
 
 For the full per-feature change list with technical details, see [CHANGELOG.md](CHANGELOG.md).
 
@@ -88,8 +96,6 @@ For the full per-release history, see [CHANGELOG.md](CHANGELOG.md).
 ## Features
 
 ### Now Playing, Browse, and Queue
-
-![Now Playing with Browse panel and Queue](screenshots/v3/mainview_browse_search_queue.png)
 
 The main view shows three panels: **Browse** (left), **Now Playing** (centre), and **Queue** (right). All three are togglable from the toolbar. The Now Playing panel is guaranteed a minimum width of 640 px — the side panels shrink proportionally when the window is resized.
 
@@ -130,6 +136,8 @@ The Browse panel provides access to your entire music library and connected serv
 The Queue panel shows the current play queue with album art, track info, and duration. Tap to jump to a track, drag to reorder, right-click to remove. Queue shuffle physically reorders the tracks. Save the current queue as a Sonos playlist.
 
 ### Music Services
+
+![Settings → Music — services with status dots, toggles, and the Other Services list](screenshots/v4/settings_music.png)
 
 Services are managed in **Settings → Music**. Each can be individually enabled. **First-time setup is described in plain language in [Setupguide.md](Setupguide.md)** — start there if you're not sure how to get a service showing up.
 
@@ -177,7 +185,7 @@ Confirmed by live probe against the Sonos `ListAvailableServices` + `getAppLink`
 
 ### Listening History
 
-![Listening Stats — Dashboard](screenshots/v3/history_stats.png)
+![Listening Stats — Dashboard](screenshots/v4/listening_stats.png)
 
 The **Dashboard** shows your listening patterns at a glance: total plays, hours listened, unique artists and rooms. Quick stat pills show your current streak, best streak, average plays per day, unique albums, stations, and starred-track count. Charts show listening activity over time, peak hours, and day-of-week distribution.
 
@@ -204,32 +212,27 @@ Control playback without switching apps. The menu-bar mini player shows album ar
 
 ### Speaker Presets
 
-![Group Presets](screenshots/v3/presets.png)
+![Group Presets](screenshots/v4/presets.png)
 
-Save and recall speaker-group configurations with per-speaker volumes. Optionally include EQ settings (bass, treble, loudness, home-theatre sub/surround levels). One-click Apply to instantly reconfigure your speakers.
+Save and recall speaker-group configurations with per-speaker volumes. Optionally include EQ settings (bass, treble, loudness, home-theatre sub/surround levels). One-click Apply to instantly reconfigure your speakers. Presets show an `EQ` badge when EQ is bundled and a `5.1` badge when the saved zone is a Home Theater bundle.
 
-![Preset EQ Editor](screenshots/v3/presets_setup.png)
+![Preset EQ Editor — full Home Theater controls](screenshots/v4/presets_edit_ht.png)
 
 The preset editor shows all EQ controls including Home Theater settings: Night Mode, Dialog Enhancement, Sub level, Surround level, TV/Music balance, and Full/Ambient playback mode.
 
 ### Settings
 
-![Settings — Display tab](screenshots/v3/settings_themes.png)
+Settings has four tabs: **Display**, **Music**, **Scrobbling**, and **System**. Each tab is broken into clearly labelled sections.
 
-Settings is organised into focused sections so you can jump straight to whatever you want to change:
+![Settings — Display tab](screenshots/v4/settings_display.png)
 
-- **Appearance** — Theme (System / Light / Dark) and overall look.
-- **Colours** — Customise the accent dot, the colour for rooms that are playing, and the colour for rooms that are idle.
-- **Language** — Pick from 13 supported languages. The interface, artist bios, and Wikipedia summaries all switch to match.
-- **Menu Bar** — Show or hide the menu-bar mini-player.
-- **Mouse Controls** — Scroll wheel to change volume, middle-click to mute.
-- **Communication** — Event-Driven (default; uses real-time push from your speakers) vs Legacy Polling (fallback for fussy networks).
-- **Discovery** — How the app finds your speakers. **Auto** is the default and works for almost everyone; pick **Bonjour** or **Legacy Multicast** only if you've been told to.
-- **Quick Start** — Whether to show your speakers from the cached layout immediately on launch (default) or wait for live discovery.
-- **Music Services** — Turn services on or off, connect a service like Spotify or Plex, and see which services are confirmed working / blocked / untested.
-- **Scrobbling** *(v3.6)* — Send your listens to Last.fm using your own API key (register at [last.fm/api/account/create](https://www.last.fm/api/account/create)). Filter by room and by service, and run automatically every 5 minutes or on demand. A Filter Preview shows you exactly why a track did or didn't scrobble.
-- **Image Cache** — Cap how much disk space artwork can use (in MB) and for how long (in days).
-- **Listening Stats** — Open the Listening Stats dashboard from here.
+- **Display** — Language (13 supported), Theme (System / Light / Dark), Colours (separate pickers for accent dot, playing-zone indicator, and inactive-zone indicator), Menu Bar Controls toggle, Mouse Controls (scroll-wheel volume, middle-click mute).
+- **Music** — Connected services with status dots, search-only services as toggles, and the *Other Services (83 available)* section for everything else. *(See screenshot under [Music Services](#music-services).)*
+- **Scrobbling** *(v3.6)* — Send your listens to Last.fm using your own API key (register at [last.fm/api/account/create](https://www.last.fm/api/account/create)). Filter by room and by service, run automatically every 5 minutes or on demand. A Filter Preview shows exactly why a track did or didn't scrobble.
+
+![Settings — System tab with Discovery and Cache controls](screenshots/v4/settings_system.png)
+
+- **System** — Updates (Event-Driven push or Legacy Polling), Startup mode (Quick Start cached / Classic), **Discovery** (Auto / Bonjour / Legacy Multicast — Auto is the default and works for almost everyone), and the artwork Cache controls (max size, max age, clear).
 
 ### Privacy & Local-Only Operation
 

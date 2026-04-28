@@ -62,9 +62,9 @@ Audible is now in the tested-blue services list. AppLink auth completes cleanly 
 
 When editing a preset for a Home Theater zone, the Sub level/polarity, Surround level/balance, Night Mode, and Dialog Enhancement controls now show as soon as the EQ tab is selected. Previously the section guard was tied to whether the topology had finished classifying the zone as HT (`isHTZone`), so cold-launch races would render only Night Mode + Dialog Enhancement until the user toggled the include-EQ switch off and back on. The outer guard now keys off whether `preset.homeTheaterEQ` has been hydrated rather than the live topology state, and `ensureHomeTheaterEQInitialised()` is called on `.onAppear`, on `.onChange(of: preset.coordinatorDeviceID)`, and on `.onChange(of: isHTZone)` so any path into the editor — first open, coordinator change, late topology classification — populates the EQ struct and reveals the full controls.
 
-### Settings — sectional reorganisation
+### Settings — section labels within each tab
 
-Settings is now organised into focused sections rather than four broad tabs: Appearance, Colours, Language, Menu Bar, Mouse Controls, Communication, Discovery Mode, Quick Start, Music Services, Scrobbling, Image Cache, Listening Stats. Communication-mode and Discovery-mode picker labels are localised; language flips re-render via `.languageReactive()` and the new `displayName` computed property on `CommunicationMode` / `StartupMode` / `AppearanceMode`.
+Settings keeps its four tabs (Display, Music, Scrobbling, System) but each tab now has explicit labelled sub-sections rather than a flat list of toggles. Display gets `Language`, `Appearance`, `Mouse Controls`. System gets `Network` (with its own Updates / Startup / Discovery rows) and `Cache`. Communication-mode, Startup-mode, and Discovery-mode picker labels are localised via new `displayName` computed properties on `CommunicationMode` / `StartupMode` / `AppearanceMode` / `DiscoveryMode`, and the segmented pickers are decorated with `.languageReactive()` so SwiftUI's cached label rendering rebuilds on language flip.
 
 ### Signed Debug builds
 

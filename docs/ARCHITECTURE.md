@@ -228,20 +228,14 @@ Sheet with preset duration buttons (15m–2h). Shows remaining time when active.
 Quick-access list of recently played stations and tracks, displayed in the browse panel. Shows album art, track name, artist, and how long ago it was played. Tapping an entry starts playback of that item.
 
 #### SettingsView.swift
-Sheet organised into 12 focused sections (was four broad tabs prior to v4.0):
+Sheet with four tabs — Display, Music, Scrobbling, System — each broken into explicit labelled sub-sections (v4.0 promoted these from inline toggles to grouped sections so they're easier to scan):
 
-- **Appearance** — theme picker (System / Light / Dark) using `AppearanceMode.displayName`.
-- **Colours** — accent dot, playing-zone indicator, inactive-zone indicator. `ColorSwatchGrid` for picking from a curated palette plus an "Other…" `ColorPicker`.
-- **Language** — `AppLanguage` picker bound to `@AppStorage(UDKey.appLanguage)`. 13 supported locales. Changing this re-renders all observed views via `.languageReactive()` modifiers and `LanguageReactiveContainer` for AppKit-hosted windows.
-- **Menu Bar** — toggle the menu-bar mini-player.
-- **Mouse Controls** — scroll-wheel volume + middle-click mute (handled by `ScrollWheelCapture` over `NowPlayingView`).
-- **Communication** — segmented picker for `CommunicationMode` (Event-Driven / Legacy Polling). Picker labels use `displayName` so they localise.
-- **Discovery** — segmented picker for the discovery transport: Auto (SSDP + Bonjour, default), Bonjour (mDNS only), Legacy Multicast (SSDP only). See `docs/DISCOVERY.md`.
-- **Quick Start** — segmented picker for `StartupMode` (Quick Start / Classic).
-- **Music Services** — `MusicServicesView` showing tested-blue, untested, and blocked-red services with status dots; Connect / Disconnect drives the SMAPI AppLink flow.
-- **Scrobbling** — `SettingsScrobblingTab`. BYO Last.fm API key, browser OAuth via `auth.getSession`, room + service filters, Filter Preview.
-- **Image Cache** — size limit (MB), age limit (days), Clear button with current disk usage in its label.
-- **Listening Stats** — opens `PlayHistoryView` (Dashboard + Timeline) in an auxiliary window.
+- **Display tab** — `Language` (AppLanguage picker bound to `@AppStorage(UDKey.appLanguage)`, 13 locales); `Appearance` (Theme picker via `AppearanceMode.displayName`, Colors via `ColorSwatchGrid` for accent / playing-zone / inactive-zone with an "Other…" `ColorPicker` fallback, Menu Bar Controls toggle); `Mouse Controls` (scroll-wheel volume + middle-click mute, handled by `ScrollWheelCapture` over `NowPlayingView`).
+- **Music tab** — `MusicServicesView` rendered inline. Tested-blue, untested-yellow, and blocked-red services with status dots, search-only services as toggles, plus the *Other Services (N available)* expandable section. Connect / Disconnect drives the SMAPI AppLink flow.
+- **Scrobbling tab** — `SettingsScrobblingTab`. BYO Last.fm API key, browser OAuth via `auth.getSession`, room + service filters, Filter Preview.
+- **System tab** — `Network` section (Updates: `CommunicationMode` segmented picker; Startup: `StartupMode` segmented picker; **Discovery: Auto / Bonjour / Legacy Multicast** segmented picker; live event-subscription count + Apple Music search rate-limiter status); `Cache` section (artwork max size dropdown, max age, Clear Speaker Cache, Clear Artwork Cache, current disk usage / image count).
+
+All segmented pickers use `displayName` computed properties on their respective enums and are decorated with `.languageReactive()` so SwiftUI's cached label rendering rebuilds when the user flips the app language. Language flips re-render hosted SwiftUI windows (About box, Help, Listening Stats) via `LanguageReactiveContainer` in `WindowManager`.
 
 Consistent padding and layout with confirmation dialogs for destructive actions.
 
