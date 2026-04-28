@@ -19,10 +19,13 @@ struct MusicServicesSettingsSection: View {
     @AppStorage("musicServices.unlinkedExpanded") private var unlinkedExpanded = false
 
     // Services confirmed working with AppLink auth. Plex (sid=212) was
-    // verified by live `getAppLink` probe (2026-04-24).
+    // verified by live `getAppLink` probe (2026-04-24); Audible
+    // (sid=239) confirmed end-to-end on the realigned Choragus
+    // keychain (2026-04-28).
     private static let testedAppLinkServices: Set<Int> = [
         ServiceID.spotify,
         ServiceID.plex,
+        ServiceID.audible,
     ]
 
     /// Services where the connected status doesn't depend on the `sn=`
@@ -98,7 +101,14 @@ struct MusicServicesSettingsSection: View {
         var out = Self.pinnedServices
         let hasSMAPIPlexToken = smapiManager.tokenStore.authenticatedServices[ServiceID.plex] != nil
         let hasPlexSerial = smapiManager.serviceSerialNumbers[ServiceID.plex] != nil
-        if hasSMAPIPlexToken || hasPlexSerial {
+        // Also surface the row when the Sonos household lists Plex as
+        // available — without this, a user who's linked Plex in the
+        // Sonos app but never authed it through Choragus (or who lost
+        // the token to a keychain reset) has no entry point to start
+        // the cloud-auth flow. The row falls through to `.notInHousehold`
+        // gray naturally if Plex isn't in the catalogue.
+        let plexInHousehold = smapiManager.availableServices.contains { $0.id == ServiceID.plex }
+        if hasSMAPIPlexToken || hasPlexSerial || plexInHousehold {
             out.append(.init(key: "212.cloud", serviceID: ServiceID.plex,
                              name: "Plex – Cloud", alternativeIDs: [], plexFlavor: .cloud))
         }
