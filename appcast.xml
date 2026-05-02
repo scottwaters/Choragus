@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Choragus</title>
+    <link>https://scottwaters.github.io/Choragus/appcast.xml</link>
+    <description>Auto-update feed for Choragus, the Sonos controller for macOS.</description>
+    <language>en</language>
+<item>
+      <title>Version 4.0</title>
+      <pubDate>Sat, 02 May 2026 11:46:16 +1000</pubDate>
+      <sparkle:channel>beta</sparkle:channel>
+      <sparkle:version>10</sparkle:version>
+      <sparkle:shortVersionString>4.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/scottwaters/Choragus/releases/tag/v4.0</sparkle:releaseNotesLink>
+      <enclosure
+        url="https://github.com/scottwaters/Choragus/releases/download/v4.0/Choragus.zip"
+        length="26001673"
+        type="application/octet-stream"
+        sparkle:edSignature="V8qFnBdncWMydgCtI6W0Mx+7SAChxh8zqvls+Psd9qrPvI0k6UU6jTr10Ce/fTjLnmfl7CZQxuprukIw7CNRAw=="/>
+    </item>
+  </channel>
+</rss>
