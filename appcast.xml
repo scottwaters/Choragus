@@ -17,7 +17,7 @@
       <enclosure
         url="https://github.com/scottwaters/Choragus/releases/download/v4.6/Choragus.zip"
         length="19095215"
-        type="application/x-apple-diskimage"
+        type="application/octet-stream"
         sparkle:edSignature="Fb+4OFAfvf2yKPkdd+hy2MW8xUd65ihoLvr+6rkdVmAZsR/CgUuQAhjfRzhyVZcUfEjd08fBb3FEKc01Y6v2Ag=="/>
     </item>
 <item>
