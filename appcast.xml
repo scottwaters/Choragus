@@ -21,19 +21,6 @@
         sparkle:edSignature="1iT34OzAeNq5QkKGmUHLibnXYMjYnHN1mdU/5oCCgDaU4n8lAWvqQMYMBuH1kg7TP2x8GrX/MjZ9kUCDVWd6Bg=="/>
     </item>
 <item>
-      <title>Version 4.6</title>
-      <pubDate>Sun, 03 May 2026 15:34:37 +1000</pubDate>
-      <sparkle:version>17</sparkle:version>
-      <sparkle:shortVersionString>4.6</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://github.com/scottwaters/Choragus/releases/tag/v4.6</sparkle:releaseNotesLink>
-      <enclosure
-        url="https://github.com/scottwaters/Choragus/releases/download/v4.6/Choragus.dmg"
-        length="19128451"
-        type="application/x-apple-diskimage"
-        sparkle:edSignature="YoCpNQ1rr2m89EbzMQ9Z0CtOkIqdeMW+4vdwDKt+0uAXga6dmeGTx3VRLPMi6nYDPfNuzijA9yUb+Q2QixVdDQ=="/>
-    </item>
-<item>
       <title>Version 4.5.1 (beta 16)</title>
       <pubDate>Sun, 03 May 2026 15:02:51 +1000</pubDate>
       <sparkle:channel>beta</sparkle:channel>
