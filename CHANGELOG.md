@@ -1,6 +1,82 @@
 
 # Changelog
 
+## v4.7 — 2026-05-05 — TuneIn topic playback, bonded-set volume reconciliation, media keys, queue/UX robustness
+
+A combined release covering the v4.7-wip work (media keys, diagnostics overhaul, Radio Paradise + SiriusXM service classification, queue-add fixes, hybrid volume throttle) and a focused round of speaker-state correctness work prompted by issues #28 and #34. The headline is two architectural shifts: per-item playback strategies in `BrowseItem` so service-specific quirks live in one place each, and per-device `GetMute`/`GetVolume` verifiers triggered by every outbound write so the speaker is the source of truth instead of optimistic dictionary writes.
+
+### Per-item playback strategy — service isolation in playBrowseItem
+
+- New `BrowsePlaybackStrategy` enum on `BrowseItem` declared at construction time by the originating service path. Three closed cases: `.directURIWithDIDL` (default — TuneIn music stations, Sonos favorites, raw streams, line-in); `.smapiResolveThenEmpty` (SMAPI search items resolved via `getMediaURI`); `.tuneInResolveViaRadioTime` (TuneIn topics / programs / podcast episodes resolved via RadioTime's Tune.ashx).
+- `SonosManager.playBrowseItem`'s direct-play branch is now a `switch` on `item.playbackStrategy`. Each case handles its own URI shape and metadata policy in a single place — adding or modifying one strategy can no longer regress another. Resolves a class of bugs where a SMAPI optimisation silently dropped TuneIn DIDL.
+
+### TuneIn topic playback — Tune.ashx + queue-based
+
+- Topics, programs, and podcast episodes (t/p/g-prefix guide IDs) returned UPnP fault 800 from `SetAVTransportURI` because the legacy `x-sonosapi-stream:` scheme rejects on-demand content. RadioTime's public `https://opml.radiotime.com/Tune.ashx?id=<guideId>&render=json&formats=mp3,aac,ogg,hls` is now consulted at play time; the resolved direct URL plays via the queue (`AddURIToQueue` with a track-class DIDL declaring `protocolInfo` `http-get:*:audio/mpeg:*` etc., then `SetAVTransportURI` to the queue, then play). The `x-rincon-mp3radio://` scheme was attempted first but rejected on HSTS-protected CDNs and on `:https://` form (UPnP 714 Illegal MIME). Queue-based play with a typed track DIDL is the only form Sonos accepts for HTTPS one-shot files.
+- New `ServiceSearchProvider.resolveTuneIn(guideId:)` and `buildResolvedTuneInTrackDIDL(...)` helpers. `parseTuneInItem` and `searchTuneIn` tag t/p/g-prefix items with `.tuneInResolveViaRadioTime` at construction.
+- TuneIn ad-pre-roll loop detection: `transportDidUpdateTrackMetadata` now logs a `[TUNEIN-AD]` warning on entry into Sonos's ad station (`tunein%3a31971` / `tunein-ondemand.cdnstream1.com`) and `INFO` on exit. The ad loop itself is a Sonos-side issue; the diagnostic surfaces it explicitly so users (and bug reports) don't mistake it for a Choragus bug.
+
+### Pandora reclassified — blocked, favorites-only
+
+- Pandora moved to `MusicServicesView.blockedServices` alongside Amazon Music, YouTube Music, SoundCloud, and SiriusXM. Renders red Unavailable, no Connect button. Rationale: post-SiriusXM acquisition, Pandora's Sonos integration moved behind the same identity gate as the rest — the legacy `-0-Token` placeholder Choragus was using stopped working around mid-2018, and modern Sonos auth requires per-household credentials only the official Sonos app can provision.
+- Setup-guide copy in the help sheet (`L10n.blockedServicesBody`) updated to enumerate Amazon / YouTube Music / SoundCloud / SiriusXM / Pandora, note Pandora's SiriusXM ownership, and call out S1 unavailability. Per-row `.blocked` hint added (`L10n.blockedFavoritesPlayableHint`) so the row tells the user existing favorites still play through the Favorites view. Closes [#34](https://github.com/scottwaters/Choragus/issues/34).
+
+### Bonded-set mute / volume reconciliation — issue #28
+
+- Stereo pairs, surround sets, and sub-paired zones don't follow the coordinator's group-mute round-trip the way conventional members do — their hardware mute state stays independent. The previous optimistic propagation in `propagateMuteOptimistically` blindly wrote the coordinator's mute state to all members in the dict, leaving the dict desynced from speaker reality whenever a bonded set was in the group. The user-visible symptom was a slider stuck at 0, a mute button that couldn't unmute, and "every tap mutes more" — confirmed locally on a Sonos Five stereo pair.
+- Architectural fix: every outbound `setMute` / `setVolume` SOAP now schedules a per-device `GetMute` / `GetVolume` verifier 500 ms later (`scheduleDeviceMuteVerify` / `scheduleDeviceVolumeVerify`). Cancel-and-reschedule semantics, so a drag or rapid-toggle coalesces to one verify per quiet window. Verifier consumes any pending expected-echo entry (so the next NOTIFY can't double-apply) and writes the speaker's authoritative state back to `deviceMutes` / `deviceVolumes`. The optimistic propagation is preserved for the instant-UI-flip path, but the verifier ensures bonded-set members are reconciled within 500 ms.
+- `scheduleGroupMuteVerifier` mirrors the existing `scheduleGroupVolumeVerifier` for external coord mute changes. New diagnostic tags `[RC-VERIFY] mute|vol APPLY|NO-OP|FAIL` make the reconciliation visible in bug bundles. Closes [#28](https://github.com/scottwaters/Choragus/issues/28).
+
+### Master volume — drag-snapshot offsets, no drift at extremes
+
+- Replaced `lastAppliedMaster: Double` running-reference with `dragSnapshot: (master: Double, volumes: [String: Double])?` captured lazily on the first `applyMasterVolume` call after a commit. The snapshot is the immutable reference for the entire drag — every mid-drag tick computes targets against the snapshot, never the running per-member values. Without this, members that hit 0 or 100 had their offset to master permanently lost (the running clamped value was treated as the "real" value), and dragging back compressed the spread forever.
+- Extreme-as-absolute special case: master at 0 silences all members, master at 100 drives all to max. The snapshot stays intact, so as soon as master leaves the extreme the original spread recovers via the linear/proportional distribution math.
+- Snapshot cleared on `commitVolume`, `resetForGroupChange`, and at the end of `fetchCurrentState`.
+
+### Type-in volume popover
+
+- Double-click any volume number (master or per-speaker) to open a popover with a TextField pre-populated and pre-selected to the current value. Input filtered to digits only; values clamped to 0–100; Set/Cancel buttons with Return/Escape shortcuts. Implementation lives in `SliderPopup.swift` alongside the existing slider drag-popup.
+- Master `applyMasterVolume(Double(newVal))` + `commitVolume()` for instant apply; per-speaker routes through the existing `setSpeakerVolume` callback.
+
+### Browse cache — depth-keyed collisions fixed
+
+- `itemsCache` was keyed by navigation depth (Int), so drilling into folder A → back → folder B (both at the same depth) returned A's cached items. SMAPI Browse on the resulting stale objectIDs returned UPnP fault 701 No Such Object — the symptom in TuneIn sub-folder navigation. Fix: every push site now invalidates `itemsCache` entries for depths > current depth before appending, so sibling paths start with a clean cache below the divergence point. Applied at all four push sites (TuneIn handleTap, Apple Music artist drill, Apple Music album drill, SMAPI search drill).
+
+### Local Library — top-row buttons match right-click behaviour
+
+- Top-row Play All / Add All / Play Next on local-library browse views previously skipped the client-side container expansion that right-click → Play Now / Add to Queue / Play Next does, and submitted album rows directly to `addBrowseItemsToQueue`. Result: queue panel showed the bare container row instead of leaf tracks. New `BrowseViewModel.bulkPlayAll` / `bulkAddToQueue` methods route the visible items through the same expansion path, then submit the flattened leaf set.
+- Bulk queue cap at Sonos's 40 000 hard limit (`BrowseViewModel.sonosQueueLimit`). Per-container slicing fits remaining headroom; once capped, no further containers walk. User sees a clear "Stopped at Sonos's 40,000 track queue limit" message via `playbackError`.
+- Large-add prompt sheet (right-click on a 1 000+ track container) now fully localised to all 13 languages (`largeAddBuildingTitle/Body`, `largeAddReadyTitle/Body`).
+
+### Localisation sweep
+
+- 11 new translatable keys with full 13-language coverage (3-source verified per language: Apple's localization glossary, Microsoft Language Portal, plus an authoritative dictionary or native primary source). Apple-correct quotes per locale: German „…", French «\u{00A0}…\u{00A0}» with NBSP, Spanish/Italian/Portuguese guillemets, Swedish/Danish "…", Japanese 「…」, Polish „…", Simplified Chinese "…".
+- Backfilled translations for 8 previously English-only keys (`skipBack15` / `skipForward15` / `skipBack30` / `skipForward30`, `currentVersionLabel`, `openAboutWindowTooltip`, `versionBuildFormat`, `blockedFavoritesPlayableHint`).
+- Hardcoded literals replaced in `BrowseView` (Cancel / Add All in the large-add sheet), `SliderPopup` (Cancel / Set), `NowPlayingView` + `VolumeControlView` (double-click tooltip), `PlayHistoryView` (alert titles), `PresetManagerView` (alert title + status toast), and `BrowseViewModel` (queue-limit messages).
+
+### Media keys (carryover from v4.7-wip)
+
+- `MPRemoteCommandCenter` for transport (play/pause/next/previous), `⌃⌥↑/↓/M` chord for group volume + mute, `MPNowPlayingInfoCenter` mirror with proper `playbackState` for OS routing. Works system-wide regardless of focus.
+
+### Diagnostics overhaul (carryover from v4.7-wip)
+
+- All diagnostic event routing now flows through `ErrorHandler.handle` → `sonosDiagLog`. SMAPI auth, repository SQLite, Last.fm, Plex Direct, and SOAPClient errors all surface through the unified path. URL scrubbing applied at bundle export. Encrypted bug-report form no longer pre-fills an empty title.
+
+### Radio Paradise + SiriusXM (carryover from v4.7-wip)
+
+- Radio Paradise (sid=633): per-service catalog overrides — `x-sonosapi-radio:` scheme, flags=8232, DIDL prefixes `100c2028` / `10fe2064`, auth-token-aware cdudn. Two-stage `resolveMediaURI`. Closes [#20](https://github.com/scottwaters/Choragus/issues/20).
+- SiriusXM (sid=37): added to `unsupportedAppLink` + `blockedServices` (red Unavailable). Closes [#21](https://github.com/scottwaters/Choragus/issues/21), [#22](https://github.com/scottwaters/Choragus/issues/22), [#23](https://github.com/scottwaters/Choragus/issues/23), [#27](https://github.com/scottwaters/Choragus/issues/27).
+
+### Queue and right-click flow (carryover from v4.7-wip)
+
+- Right-click queue add: client-side container expansion (depth-first, alpha sort, 6-level cap, 40 000 leaf cap). `pagedBrowse` ignores speaker-reported `total` (composite containers under-report). M3U/PLS/CUE skipped. Mid-expansion sheet at 1 000 leaves with live count, Cancel always live, Add All disabled until walk completes. Speaker-cap detection (5 consecutive 402s → log once, stop). Bulk-add tolerates failures.
+- Queue panel: `loadQueue` pages full queue (500/page, 40 k cap), one-shot 600 ms post-add retry, live-count status text. Closes [#8](https://github.com/scottwaters/Choragus/issues/8).
+- Hybrid volume throttle: master + per-speaker run optimistic + 250 ms throttled mid-drag SOAP + authoritative drag-end commit.
+
+### Tests + cleanup
+
+- Code-quality pass before commit replaced hardcoded `"x-rincon-cpcontainer:"` with `URIPrefix.rinconContainer`, replaced duplicate `40_000` magic-number with `BrowseViewModel.sonosQueueLimit`, extracted duplicated token-snapshot block in `SMAPIAuthManager.init` to private `pushAuthTokenSnapshot()`.
+
 ## v4.6 — 2026-05-03 — SMAPI catalog + sandboxed auto-update + DMG distribution
 
 Streaming-service URI routing is now per-household instead of compile-time, the in-app auto-update path actually works on the sandboxed build (entitlements gap closed end-to-end), Settings is a real macOS Preferences window, and distribution moves from a bare ZIP to a signed/notarized DMG with a drag-to-Applications layout.

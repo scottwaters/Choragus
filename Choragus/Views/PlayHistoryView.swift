@@ -182,7 +182,7 @@ struct PlayHistoryView: View {
                 .disabled(historyManager.entries.isEmpty)
             }
         }
-        .alert("Delete \(cachedFilteredEntries.count) Filtered Entries?", isPresented: $showDeleteFilteredConfirm) {
+        .alert(L10n.deleteFilteredEntriesTitle(cachedFilteredEntries.count), isPresented: $showDeleteFilteredConfirm) {
             Button(L10n.cancel, role: .cancel) {}
             Button(L10n.delete, role: .destructive) {
                 let ids = Set(cachedFilteredEntries.map(\.id))
@@ -192,7 +192,7 @@ struct PlayHistoryView: View {
         } message: {
             Text(L10n.deleteFilteredWarning(cachedFilteredEntries.count))
         }
-        .alert("Clear Play History?", isPresented: $showClearConfirm) {
+        .alert(L10n.clearPlayHistoryTitle, isPresented: $showClearConfirm) {
             Button(L10n.cancel, role: .cancel) {}
             Button(L10n.clearHistory, role: .destructive) {
                 historyManager.clearHistory()

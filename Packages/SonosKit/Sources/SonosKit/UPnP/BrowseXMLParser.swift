@@ -182,6 +182,32 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
                     itemClass = BrowseItemClass.from(upnpClass: currentClass)
                 }
 
+                // Build a fallback DIDL when the speaker didn't
+                // provide `<r:resMD>` (the standard local-library
+                // browse responses don't include it). Without
+                // metadata `AddMultipleURIsToQueue` rejects the
+                // request with UPnP 402, even though the same call
+                // succeeds when given the item's full DIDL envelope.
+                // Verified via direct SOAP testing of Compilations
+                // tracks that were silently failing through
+                // Choragus.
+                let resolvedMeta: String?
+                if !currentResMD.isEmpty {
+                    resolvedMeta = currentResMD
+                } else if !isContainerEntry, !currentResURI.isEmpty {
+                    resolvedMeta = Self.buildFallbackDIDL(
+                        id: entryID,
+                        title: currentTitle,
+                        artist: currentArtist,
+                        album: currentAlbum,
+                        albumArtURI: currentArtURI,
+                        upnpClass: currentClass.isEmpty ? "object.item.audioItem.musicTrack" : currentClass,
+                        resourceURI: currentResURI
+                    )
+                } else {
+                    resolvedMeta = nil
+                }
+
                 let item = BrowseItem(
                     id: entryID,
                     title: currentTitle,
@@ -190,7 +216,7 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
                     albumArtURI: currentArtURI.isEmpty ? nil : currentArtURI,
                     itemClass: itemClass,
                     resourceURI: currentResURI.isEmpty ? nil : currentResURI,
-                    resourceMetadata: currentResMD.isEmpty ? nil : currentResMD,
+                    resourceMetadata: resolvedMeta,
                     serviceDescriptor: currentDesc.isEmpty ? nil : currentDesc
                 )
                 items.append(item)
@@ -200,5 +226,35 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
                 break
             }
         }
+    }
+
+    /// Minimal DIDL-Lite envelope built from parsed item fields. Used
+    /// for `AddMultipleURIsToQueue` when the speaker's browse response
+    /// did not include `<r:resMD>` (the standard local-library shape).
+    /// The speaker rejects bulk-add with empty metadata; this is the
+    /// fallback that keeps the format consistent with what Sonos's own
+    /// app sends for the same items.
+    static func buildFallbackDIDL(id: String,
+                                  title: String,
+                                  artist: String,
+                                  album: String,
+                                  albumArtURI: String,
+                                  upnpClass: String,
+                                  resourceURI: String) -> String {
+        func esc(_ s: String) -> String {
+            s.replacingOccurrences(of: "&", with: "&amp;")
+             .replacingOccurrences(of: "<", with: "&lt;")
+             .replacingOccurrences(of: ">", with: "&gt;")
+             .replacingOccurrences(of: "\"", with: "&quot;")
+             .replacingOccurrences(of: "'", with: "&apos;")
+        }
+        var inner = ""
+        inner += "<dc:title>\(esc(title))</dc:title>"
+        if !artist.isEmpty { inner += "<dc:creator>\(esc(artist))</dc:creator>" }
+        if !album.isEmpty { inner += "<upnp:album>\(esc(album))</upnp:album>" }
+        if !albumArtURI.isEmpty { inner += "<upnp:albumArtURI>\(esc(albumArtURI))</upnp:albumArtURI>" }
+        inner += "<upnp:class>\(esc(upnpClass))</upnp:class>"
+        inner += "<res protocolInfo=\"x-file-cifs:*:*:*\">\(esc(resourceURI))</res>"
+        return "<DIDL-Lite xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\" xmlns:r=\"urn:schemas-rinconnetworks-com:metadata-1-0/\" xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\"><item id=\"\(esc(id))\" parentID=\"\" restricted=\"true\">\(inner)</item></DIDL-Lite>"
     }
 }

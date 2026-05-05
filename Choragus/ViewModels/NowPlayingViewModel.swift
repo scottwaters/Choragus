@@ -86,11 +86,17 @@ final class NowPlayingViewModel {
     var dragVolume: Double = 0
     var isDraggingVolume = false
 
-    /// Tracks the last master value applied via `applyMasterVolume` so
-    /// proportional / linear distribution can compute the delta against
-    /// the prior tick during a drag. Reset on drag-start by the slider's
-    /// `onEditingChanged`.
-    private var lastAppliedMaster: Double = 0
+    /// Drag snapshot of per-member volumes + master baseline, captured
+    /// on the first `applyMasterVolume` call after the previous drag
+    /// committed. The snapshot is the IMMUTABLE reference for the entire
+    /// drag — every mid-drag tick computes targets against it, never
+    /// against the running per-member values. Without this, members that
+    /// hit 0/100 lose their offset to master permanently (the running
+    /// values get clamped, then on the way back the clamped value is
+    /// treated as the "real" value, leaving alignment compressed forever).
+    /// Cleared by `commitVolume`, `resetForGroupChange`, and at the end
+    /// of `fetchCurrentState`.
+    private var dragSnapshot: (master: Double, volumes: [String: Double])?
 
     // MARK: - Position
 
@@ -315,6 +321,17 @@ final class NowPlayingViewModel {
 
     private var scrollVolumeCommitTask: Task<Void, Never>?
 
+    /// Throttled mid-drag commit. Fires a per-member SOAP fan-out at
+    /// most once every 250 ms while the master slider is actively
+    /// being dragged so other listeners (Sonos app on phone, second
+    /// controller) hear progressive volume change instead of jumping
+    /// at drag-end. Cancelled at drag-end so `commitVolume` is the
+    /// authoritative final write.
+    private var throttledMasterCommitTask: Task<Void, Never>?
+    /// Per-device throttled commits for the per-speaker sliders.
+    private var throttledMemberCommitTasks: [String: Task<Void, Never>] = [:]
+    private static let throttleInterval: UInt64 = 250_000_000  // 250 ms
+
     /// Applies a scroll-wheel volume step to the coordinator's master volume
     /// and debounces the SOAP commit. Called from the mouse-wheel capture in
     /// NowPlayingView — intentionally not exposed to any other path so the
@@ -339,35 +356,97 @@ final class NowPlayingViewModel {
     /// (proportional or linear) and write the per-member values straight
     /// into `sonosManager.deviceVolumes`. The slider's get-side reads
     /// `dragVolume` while a drag is in flight, so visual position
-    /// matches the pointer regardless of proportional rounding drift.
+    /// matches the pointer regardless of clamping at 0/100.
+    ///
+    /// Computes targets against an immutable drag-start snapshot, NOT the
+    /// running per-member values. This preserves member offsets when the
+    /// master pushes them past 0/100 — clamping doesn't poison the next
+    /// tick's math, so dragging back recovers the original spread.
     /// SOAP commit is deferred to drag-end (`commitVolume`).
     func applyMasterVolume(_ newMaster: Double) {
         dragVolume = newMaster
-        let oldMaster = lastAppliedMaster > 0 ? lastAppliedMaster : currentAverageVolume
-        lastAppliedMaster = newMaster
+        let snap = dragSnapshot ?? captureDragSnapshot()
+
+        // Master at the extremes is absolute: 0 silences everything, 100
+        // drives everything to max. The snapshot is preserved unchanged,
+        // so as soon as the master leaves the extreme the original spread
+        // recovers via the normal distribution math below.
+        let absoluteTarget: Int?
+        if newMaster <= 0 { absoluteTarget = 0 }
+        else if newMaster >= 100 { absoluteTarget = 100 }
+        else { absoluteTarget = nil }
+
         let proportional = UserDefaults.standard.bool(forKey: UDKey.proportionalGroupVolume)
 
         for member in group.members {
-            let currentVol = Double(sonosManager.deviceVolumes[member.id] ?? 0)
-            let newVol: Double
-            if proportional && oldMaster > 0 {
-                // Proportional: each speaker keeps its ratio relative to the master.
-                // e.g. speakers at 30,40 (master=35) → master to 70 → speakers become 60,80
-                newVol = currentVol * (newMaster / oldMaster)
-            } else if proportional && oldMaster == 0 {
-                // Master was at 0 — can't scale proportionally, set all to new master
-                newVol = newMaster
+            let clamped: Int
+            if let abs = absoluteTarget {
+                clamped = abs
             } else {
-                // Linear: all speakers shift by the same absolute delta
-                newVol = currentVol + (newMaster - oldMaster)
+                let original = snap.volumes[member.id] ?? snap.master
+                let newVol: Double
+                if proportional, snap.master > 0 {
+                    // Each member keeps its ratio to the snapshot master.
+                    // e.g. members at 30,40 (master=35) → master to 70 → 60,80.
+                    newVol = original * (newMaster / snap.master)
+                } else if proportional {
+                    // Snapshot master was 0 — ratio undefined; drive all to newMaster.
+                    newVol = newMaster
+                } else {
+                    // Linear: shift each member by the master delta. Offsets
+                    // relative to the snapshot are preserved across the drag.
+                    newVol = original + (newMaster - snap.master)
+                }
+                clamped = Int(max(0, min(100, newVol)))
             }
-
-            let clamped = Int(max(0, min(100, newVol)))
             sonosManager.updateDeviceVolume(member.id, volume: clamped)
+        }
+        scheduleThrottledMasterCommit()
+    }
+
+    /// Captures the immutable drag-start state — current master baseline
+    /// and each member's current volume. Subsequent ticks within the
+    /// same drag use this as the reference; the snapshot itself is never
+    /// rewritten until `commitVolume` clears it.
+    @discardableResult
+    private func captureDragSnapshot() -> (master: Double, volumes: [String: Double]) {
+        var volumes: [String: Double] = [:]
+        for member in group.members {
+            volumes[member.id] = Double(sonosManager.deviceVolumes[member.id] ?? 0)
+        }
+        let snap = (master: currentAverageVolume, volumes: volumes)
+        dragSnapshot = snap
+        return snap
+    }
+
+    /// 250 ms-quiet throttled commit during master drag. Coalesces
+    /// rapid drag ticks: each tick cancels the prior pending task and
+    /// schedules a fresh one. SOAP only fires after the user pauses
+    /// for 250 ms, so a continuous drag produces 0 mid-drag SOAPs;
+    /// a slower drag produces ~4/sec, capped by the round-trip time
+    /// the speaker can drain anyway. `commitVolume` cancels the
+    /// pending task at drag-end and fires the final write itself.
+    private func scheduleThrottledMasterCommit() {
+        throttledMasterCommitTask?.cancel()
+        throttledMasterCommitTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.throttleInterval)
+            guard !Task.isCancelled, let self else { return }
+            let snapshot = self.group.members.map { ($0, self.sonosManager.deviceVolumes[$0.id] ?? 0) }
+            await withTaskGroup(of: Void.self) { tg in
+                for (member, vol) in snapshot {
+                    tg.addTask { @MainActor in
+                        try? await self.sonosManager.setVolume(device: member, volume: vol)
+                    }
+                }
+            }
         }
     }
 
     func commitVolume() {
+        // Cancel any pending throttled mid-drag commit; the final
+        // SOAP below is authoritative.
+        throttledMasterCommitTask?.cancel()
+        throttledMasterCommitTask = nil
         // Per-device SOAPs in parallel — for a group of N speakers a
         // serial loop took N × ~150 ms (the cumulative SOAP round-trip
         // time), which read as sluggish on 3+ speaker groups. TaskGroup
@@ -376,7 +455,7 @@ final class NowPlayingViewModel {
         // manager (the optimistic distribution wrote them there).
         let members = group.members
         let snapshot = members.map { ($0, sonosManager.deviceVolumes[$0.id] ?? 0) }
-        lastAppliedMaster = 0  // reset the drag-delta tracker for the next drag
+        dragSnapshot = nil
         Task {
             sonosDebugLog("[UI-SOAP-START] commitVolume group=\(self.group.name)")
             let started = Date()
@@ -399,6 +478,11 @@ final class NowPlayingViewModel {
     // MARK: - Per-Speaker Volume/Mute (called from VolumeControlView)
 
     func setSpeakerVolume(device: SonosDevice, volume: Int) async {
+        // Drag-end final commit. Cancel any pending throttled
+        // mid-drag SOAP for this device — this call is
+        // authoritative.
+        throttledMemberCommitTasks[device.id]?.cancel()
+        throttledMemberCommitTasks[device.id] = nil
         sonosDebugLog("[UI-TAP] setSpeakerVolume room=\(device.roomName) target=\(volume)")
         sonosManager.updateDeviceVolume(device.id, volume: volume)
         sonosDebugLog("[UI-OPT] setSpeakerVolume applied")
@@ -411,6 +495,27 @@ final class NowPlayingViewModel {
         }
         let elapsedMs = Int(Date().timeIntervalSince(started) * 1000)
         sonosDebugLog("[UI-SOAP-END] setSpeakerVolume room=\(device.roomName) elapsed=\(elapsedMs)ms")
+    }
+
+    /// Schedules a 250 ms-quiet SOAP commit for a single member,
+    /// invoked from the per-speaker slider's binding setter on each
+    /// drag tick. Same coalescing pattern as
+    /// `scheduleThrottledMasterCommit` but per-device — different
+    /// members can have independent in-flight throttles when the
+    /// user nudges them in turn. Cancelled by `setSpeakerVolume`
+    /// (drag-end) so the final SOAP is the authoritative write.
+    func scheduleThrottledSpeakerCommit(device: SonosDevice, volume: Int) {
+        throttledMemberCommitTasks[device.id]?.cancel()
+        throttledMemberCommitTasks[device.id] = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.throttleInterval)
+            guard !Task.isCancelled, let self else { return }
+            do {
+                try await self.sonosManager.setVolume(device: device, volume: volume)
+            } catch {
+                sonosDebugLog("[VOLUME] throttled mid-drag setVolume failed for \(device.roomName): \(error)")
+            }
+            self.throttledMemberCommitTasks[device.id] = nil
+        }
     }
 
     func setSpeakerMute(device: SonosDevice, muted: Bool) async {
@@ -476,7 +581,7 @@ final class NowPlayingViewModel {
     func resetForGroupChange() {
         isDraggingVolume = false
         isDraggingSeek = false
-        lastAppliedMaster = 0
+        dragSnapshot = nil
         sonosManager.setPositionAnchor(coordinatorID: group.coordinatorID, .zero)
         dragPosition = 0
         crossfadeOn = false
@@ -853,9 +958,9 @@ final class NowPlayingViewModel {
         // No local mirror to populate — `volume`, `isMuted`,
         // `speakerVolumes`, and `speakerMutes` derive directly from
         // `sonosManager.deviceVolumes` / `deviceMutes`, which `scanGroup`
-        // above just refreshed. Reset the proportional drag-delta
-        // tracker so the next user drag starts from a clean baseline.
-        lastAppliedMaster = 0
+        // above just refreshed. Clear any stale drag snapshot so the
+        // next user drag captures fresh state.
+        dragSnapshot = nil
     }
 
 }

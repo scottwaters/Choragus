@@ -43,6 +43,22 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 
 ---
 
+## What's New in v4.7
+
+- **Media keys work system-wide.** Play / pause / next / previous via the standard remote keys; ⌃⌥↑ / ⌃⌥↓ / ⌃⌥M chord drives the group volume and mute regardless of which app is focused.
+- **TuneIn shows and podcast episodes now play.** Choragus resolves them via TuneIn's public API and queues them as on-demand tracks. Music stations are unchanged.
+- **Pandora marked Unavailable.** Now part of SiriusXM, gated the same way — third-party Connect isn't permitted. Existing Pandora favorites you saved in the official Sonos app still play through the Favorites view.
+- **Bonded speakers (stereo pairs / surround sets) reconcile correctly.** Volume slider stuck at 0 and "can't unmute" on Master Bedroom or paired Five fixed — Choragus now reads the speaker's actual state after every change instead of guessing.
+- **Master volume preserves per-speaker offsets at the extremes.** Drag the master to 100 (or 0) and back, and the original spread of per-speaker volumes is restored — no permanent compression.
+- **Type a volume number directly.** Double-click any volume label to type an exact value (0–100).
+- **Local library Add All / Play All / Play Next** match the right-click behaviour — every leaf track ends up in the queue, capped at Sonos's 40 000 limit with a clear message.
+- **Browse navigation fix.** Drilling into a sub-folder, going back, and drilling into a different sibling no longer shows the wrong content.
+- **Fully translated.** Eleven new strings localised to all 13 languages, plus eight previously English-only strings backfilled. Apple-correct quote conventions per locale.
+
+Full change list in [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## What's New in v4.6
 
 - **Standard DMG installer.** Choragus now ships as a signed `.dmg` with the usual drag-to-Applications layout.

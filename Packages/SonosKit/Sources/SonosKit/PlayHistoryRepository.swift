@@ -60,7 +60,9 @@ public final class PlayHistoryRepository {
 
     private func openDatabase() {
         if sqlite3_open(dbPath, &db) != SQLITE_OK {
-            sonosDebugLog("[HISTORY] Failed to open database: \(String(cString: sqlite3_errmsg(db)))")
+            sonosDiagLog(.error, tag: "HISTORY",
+                         "Failed to open database: \(String(cString: sqlite3_errmsg(db)))",
+                         context: ["dbPath": dbPath])
             return
         }
 
@@ -158,7 +160,8 @@ public final class PlayHistoryRepository {
         }
 
         if sqlite3_step(stmt) != SQLITE_DONE {
-            sonosDebugLog("[HISTORY] Insert failed: \(String(cString: sqlite3_errmsg(db)))")
+            sonosDiagLog(.error, tag: "HISTORY",
+                         "Insert failed: \(String(cString: sqlite3_errmsg(db)))")
         }
     }
 
@@ -358,7 +361,8 @@ public final class PlayHistoryRepository {
         sqlite3_bind_text(stmt, 1, (artURL as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 2, (id.uuidString as NSString).utf8String, -1, nil)
         if sqlite3_step(stmt) != SQLITE_DONE {
-            sonosDebugLog("[HISTORY] Update art failed: \(String(cString: sqlite3_errmsg(db)))")
+            sonosDiagLog(.error, tag: "HISTORY",
+                         "Update art failed: \(String(cString: sqlite3_errmsg(db)))")
         }
     }
 
@@ -567,7 +571,8 @@ public final class PlayHistoryRepository {
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            sonosDebugLog("[SCROBBLE] Prepare recordScrobbleResult failed: \(String(cString: sqlite3_errmsg(db)))")
+            sonosDiagLog(.error, tag: "SCROBBLE",
+                         "Prepare recordScrobbleResult failed: \(String(cString: sqlite3_errmsg(db)))")
             return
         }
         defer { sqlite3_finalize(stmt) }
@@ -583,7 +588,8 @@ public final class PlayHistoryRepository {
         }
 
         if sqlite3_step(stmt) != SQLITE_DONE {
-            sonosDebugLog("[SCROBBLE] Record failed: \(String(cString: sqlite3_errmsg(db)))")
+            sonosDiagLog(.error, tag: "SCROBBLE",
+                         "Record failed: \(String(cString: sqlite3_errmsg(db)))")
         }
     }
 
@@ -725,7 +731,9 @@ public final class PlayHistoryRepository {
 
     private func exec(_ sql: String) {
         if sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
-            sonosDebugLog("[HISTORY] SQL error: \(String(cString: sqlite3_errmsg(db))) for: \(sql)")
+            sonosDiagLog(.error, tag: "HISTORY",
+                         "SQL error: \(String(cString: sqlite3_errmsg(db)))",
+                         context: ["sql": sql])
         }
     }
 }

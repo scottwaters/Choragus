@@ -111,7 +111,12 @@ public final class LastFMScrobbler: ObservableObject, ScrobbleService {
                 // Whole-batch failure — record every entry as retryable-failed
                 // (or ignored if the error is non-retryable).
                 let reason = error.errorDescription ?? "Last.fm error"
-                sonosDebugLog("[LASTFM] Scrobble batch failed: \(reason)")
+                sonosDiagLog(.error, tag: "LASTFM",
+                             "Scrobble batch failed: \(reason)",
+                             context: [
+                                "retryable": String(error.isRetryable),
+                                "batchSize": String(chunk.count)
+                             ])
                 for entry in chunk {
                     if error.isRetryable {
                         results.append(.failed(historyID: entry.id, error: reason))
@@ -120,7 +125,9 @@ public final class LastFMScrobbler: ObservableObject, ScrobbleService {
                     }
                 }
             } catch {
-                sonosDebugLog("[LASTFM] Scrobble batch failed (unknown): \(error)")
+                sonosDiagLog(.error, tag: "LASTFM",
+                             "Scrobble batch failed (unknown): \(error.localizedDescription)",
+                             context: ["batchSize": String(chunk.count)])
                 for entry in chunk {
                     results.append(.failed(historyID: entry.id, error: error.localizedDescription))
                 }

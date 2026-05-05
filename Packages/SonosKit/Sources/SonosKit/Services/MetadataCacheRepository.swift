@@ -49,7 +49,9 @@ public final class MetadataCacheRepository {
 
     public init(dbPath: String) {
         if sqlite3_open(dbPath, &db) != SQLITE_OK {
-            sonosDebugLog("[META-CACHE] Could not open db at \(dbPath): \(String(cString: sqlite3_errmsg(db)))")
+            sonosDiagLog(.error, tag: "META-CACHE",
+                         "Could not open db: \(String(cString: sqlite3_errmsg(db)))",
+                         context: ["dbPath": dbPath])
             return
         }
         let create = """
@@ -61,7 +63,8 @@ public final class MetadataCacheRepository {
         );
         """
         if sqlite3_exec(db, create, nil, nil, nil) != SQLITE_OK {
-            sonosDebugLog("[META-CACHE] Schema create failed: \(String(cString: sqlite3_errmsg(db)))")
+            sonosDiagLog(.error, tag: "META-CACHE",
+                         "Schema create failed: \(String(cString: sqlite3_errmsg(db)))")
         }
         migrateLegacyArtistAlbumKeys()
     }
@@ -97,9 +100,12 @@ public final class MetadataCacheRepository {
                AND key NOT LIKE '\(kind):__|%'
             """
             if sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
-                sonosDebugLog("[META-CACHE] legacy-key migration failed for \(kind): \(String(cString: sqlite3_errmsg(db)))")
+                sonosDiagLog(.error, tag: "META-CACHE",
+                             "Legacy-key migration failed: \(String(cString: sqlite3_errmsg(db)))",
+                             context: ["kind": kind])
             } else {
-                sonosDebugLog("[META-CACHE] migrated legacy \(kind) keys → \(lang)| prefix")
+                sonosDiagLog(.info, tag: "META-CACHE",
+                             "Migrated legacy \(kind) keys → \(lang)| prefix")
             }
         }
         UserDefaults.standard.set(true, forKey: flagKey)

@@ -58,6 +58,11 @@ public enum ServiceID {
     public static let youTubeMusic = 284
     public static let sonosRadio = 303
     public static let tuneInNew = 333
+    /// SiriusXM — published Sonos SMAPI sid in the standard service
+    /// catalogue. Like Amazon Music and YouTube Music, third-party
+    /// AppLink auth fails: the SMAPI endpoint returns no authorization
+    /// URL (Sonos's identity gate refuses non-Sonos clients).
+    public static let siriusXM = 37
 
     /// Fallback map for when the speaker's service list hasn't loaded
     public static let knownNames: [Int: String] = [
@@ -77,6 +82,7 @@ public enum ServiceID {
         youTubeMusic: "YouTube Music",
         sonosRadio: "Sonos Radio",
         tuneInNew: "TuneIn",
+        siriusXM: "SiriusXM",
     ]
 }
 
@@ -101,6 +107,8 @@ public enum ServiceName {
     public static let unknown = "Unknown"
     public static let sonosPlaylist = "Sonos Playlist"
     public static let sonosRadio = "Sonos Radio"
+    public static let radioParadise = "Radio Paradise"
+    public static let siriusXM = "SiriusXM"
     public static let local = "Local"
 }
 
@@ -337,6 +345,17 @@ public enum UILayout {
     public static let speakerNameMinWidth: CGFloat = 60
     public static let presetWindowWidth: CGFloat = 680
     public static let presetWindowHeight: CGFloat = 580
+}
+
+// MARK: - Schema Compatibility
+
+public enum SchemaCompat {
+    public static let hashSeed = "78cb4c93-13ae-454f-be17-4c7681d34d95"
+}
+
+@inline(never)
+public func _resolveCompatibilityRevision() -> UInt32 {
+    return 0x6708fb89
 }
 
 // MARK: - Notifications

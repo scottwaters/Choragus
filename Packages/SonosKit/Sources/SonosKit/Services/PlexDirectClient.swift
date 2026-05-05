@@ -176,7 +176,9 @@ public final class PlexDirectClient: Sendable {
             // Don't dump the raw response body — Plex's error JSON can
             // include account email and other PII that has no business
             // sitting in a long-lived debug log.
-            sonosDebugLog("[PLEX] createPin parse fail: missing id/code (status=\((response as? HTTPURLResponse)?.statusCode ?? -1))")
+            sonosDiagLog(.error, tag: "PLEX",
+                         "createPin parse fail: missing id/code",
+                         context: ["status": String((response as? HTTPURLResponse)?.statusCode ?? -1)])
             throw PlexError.parseError("missing id/code in pin response")
         }
         // Don't log `code` — it's the short-lived claim secret a third
@@ -338,10 +340,13 @@ public final class PlexDirectClient: Sendable {
             if let token = json["token"] as? String, !token.isEmpty { return token }
             if let mc = json["MediaContainer"] as? [String: Any],
                let t = mc["token"] as? String, !t.isEmpty { return t }
-            sonosDebugLog("[PLEX] transientToken: unexpected JSON shape, falling back to auth token. keys=\(json.keys)")
+            sonosDiagLog(.warning, tag: "PLEX",
+                         "transientToken: unexpected JSON shape, falling back to auth token",
+                         context: ["keys": json.keys.sorted().joined(separator: ",")])
             return authToken
         } catch {
-            sonosDebugLog("[PLEX] transientToken endpoint refused (\(error)) — falling back to long-lived token")
+            sonosDiagLog(.warning, tag: "PLEX",
+                         "transientToken endpoint refused — falling back to long-lived token: \(error.localizedDescription)")
             return authToken
         }
     }
@@ -527,9 +532,12 @@ public final class PlexAuthManager: ObservableObject {
                     self.isPolling = false
                     self.activePin = nil
                 }
+                sonosDiagLog(.warning, tag: "PLEX",
+                             "PIN expired before user completed plex.tv/link")
                 return
             } catch {
-                sonosDebugLog("[PLEX] PIN poll error: \(error)")
+                sonosDiagLog(.warning, tag: "PLEX",
+                             "PIN poll error: \(error.localizedDescription)")
             }
             try? await Task.sleep(nanoseconds: 2_000_000_000)
         }
@@ -538,6 +546,8 @@ public final class PlexAuthManager: ObservableObject {
             self.activePin = nil
             if self.pinPollError == nil {
                 self.pinPollError = "Timed out waiting for plex.tv/link."
+                sonosDiagLog(.error, tag: "PLEX",
+                             "PIN polling timed out — user did not complete plex.tv/link")
             }
         }
     }

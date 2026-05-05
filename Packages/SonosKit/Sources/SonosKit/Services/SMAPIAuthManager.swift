@@ -41,10 +41,18 @@ public final class SMAPIAuthManager: ObservableObject {
         UserDefaults.standard.register(defaults: [UDKey.smapiEnabled: true])
 
         // Forward nested ObservableObject changes — see comment on
-        // tokenStoreSubscription above.
+        // tokenStoreSubscription above. Also push the latest tokens
+        // into ServiceSearchProvider so its DIDL builder can stamp the
+        // authenticated cdudn form for AppLink-authenticated services.
         tokenStoreSubscription = tokenStore.objectWillChange.sink { [weak self] in
             self?.objectWillChange.send()
+            // objectWillChange fires before the dict mutation lands;
+            // hop to the next runloop tick so we read the new state.
+            DispatchQueue.main.async { [weak self] in self?.pushAuthTokenSnapshot() }
         }
+        // Initial seed in case tokens were already loaded from disk
+        // before this subscription was wired.
+        DispatchQueue.main.async { [weak self] in self?.pushAuthTokenSnapshot() }
 
         // Listen for token refresh notifications
         NotificationCenter.default.addObserver(forName: .smapiTokenRefreshed, object: nil, queue: .main) { [weak self] notification in
@@ -56,6 +64,19 @@ public final class SMAPIAuthManager: ObservableObject {
                 self?.tokenStore.updateToken(serviceID: serviceID, authToken: token, privateKey: key)
             }
         }
+    }
+
+    /// Snapshots authenticated tokens and pushes them to
+    /// `ServiceSearchProvider.shared` so DIDL builders stamp the
+    /// authenticated cdudn form for AppLink-authenticated services.
+    private func pushAuthTokenSnapshot() {
+        var snapshot: [Int: String] = [:]
+        for (sid, _) in tokenStore.authenticatedServices {
+            if let stored = tokenStore.getToken(for: sid)?.authToken, !stored.isEmpty {
+                snapshot[sid] = stored
+            }
+        }
+        ServiceSearchProvider.shared.updateAuthTokens(snapshot)
     }
 
     // MARK: - Service Discovery
@@ -77,7 +98,9 @@ public final class SMAPIAuthManager: ObservableObject {
             householdID = try await client.getHouseholdID(speakerIP: speakerIP)
             sonosDebugLog("[SMAPI] device identity loaded: deviceID=\(deviceID ?? "<none>") householdID=\(householdID)")
         } catch {
-            sonosDebugLog("[SMAPI] Failed to get device identity: \(error)")
+            sonosDiagLog(.error, tag: "SMAPI",
+                         "Failed to get device identity: \(error.localizedDescription)",
+                         context: ["speakerIP": speakerIP])
         }
 
         let catalog = MusicServiceCatalog.shared
@@ -94,6 +117,7 @@ public final class SMAPIAuthManager: ObservableObject {
 
     /// Known services that don't support third-party AppLink auth
     private static let unsupportedAppLink: Set<Int> = [
+        37,  // SiriusXM — returns empty auth URL; same Sonos identity-gate refusal as Amazon / YouTube Music
         144, // Calm Radio — AppLink auth fails; use dedicated browse view instead
         201, // Amazon Music — returns empty auth URL; requires Amazon's own OAuth
         204, // Apple Music — requires native iOS/macOS SDK for OAuth
@@ -125,7 +149,8 @@ public final class SMAPIAuthManager: ObservableObject {
                 extractSN(from: item.resourceURI, into: &snMap)
             }
         } catch {
-            sonosDebugLog("[SMAPI] Failed to scan favorites for serial numbers: \(error)")
+            sonosDiagLog(.warning, tag: "SMAPI",
+                         "Failed to scan favorites for serial numbers: \(error.localizedDescription)")
         }
 
         // Also scan play history URIs as fallback
@@ -159,22 +184,25 @@ public final class SMAPIAuthManager: ObservableObject {
     }
 
     /// Gets the account serial number for a service.
-    /// Defaults to 1 for subscription services (Apple Music, Spotify, etc.) when
-    /// no sn has been discovered yet — sn=0 causes auth failures on most services,
-    /// and sn=1 works for the common single-account setup.
+    ///
+    /// Resolution order: discovered binding (from favorites scan) →
+    /// per-service `defaultSerialNumber` from `MusicServiceCatalog` →
+    /// generic fallback of `1`.
+    ///
+    /// Generic fallback is `1` because most SMAPI services reject
+    /// SetAVTransportURI with `sn=0` (issue #28 / Radio Paradise — sid
+    /// not in the catalog defaulted to 0 and faulted with UPnP 402).
+    /// The few services that legitimately use `sn=0` (TuneIn anonymous,
+    /// Sonos Radio, Calm Radio) declare `defaultSerialNumber: 0` in
+    /// their catalog `ServiceRules`, so the generic-fallback branch
+    /// only fires for services the catalog has never seen.
     public func serialNumber(for serviceID: Int) -> Int {
-        let sn = serviceSerialNumbers[serviceID] ?? 0
-        if sn == 0 {
-            switch serviceID {
-            case ServiceID.appleMusic, ServiceID.spotify, ServiceID.amazonMusic,
-                 ServiceID.tidal, ServiceID.deezer, ServiceID.qobuz, ServiceID.soundCloud,
-                 ServiceID.youTubeMusic:
-                return 1
-            default:
-                return 0
-            }
+        let discovered = serviceSerialNumbers[serviceID] ?? 0
+        if discovered > 0 { return discovered }
+        if let rule = MusicServiceCatalog.shared.rules(forSid: serviceID) {
+            return rule.defaultSerialNumber
         }
-        return sn
+        return 1
     }
 
     /// Services that are already authenticated (with valid tokens), sorted alphabetically
@@ -210,6 +238,13 @@ public final class SMAPIAuthManager: ObservableObject {
 
             if link.regUrl.isEmpty {
                 authError = "\(service.name) did not return an authorization URL. This service may not support third-party authentication."
+                sonosDiagLog(.error, tag: "SMAPI",
+                             "AppLink returned empty regUrl — service likely does not support third-party auth",
+                             context: [
+                                "service": service.name,
+                                "sid": String(service.id),
+                                "authType": service.authType
+                             ])
                 isAuthenticating = false
                 return nil
             }
@@ -226,6 +261,13 @@ public final class SMAPIAuthManager: ObservableObject {
             return link.regUrl
         } catch {
             authError = "Failed to start authentication: \(error.localizedDescription)"
+            sonosDiagLog(.error, tag: "SMAPI",
+                         "startAuth threw: \(error.localizedDescription)",
+                         context: [
+                            "service": service.name,
+                            "sid": String(service.id),
+                            "authType": service.authType
+                         ])
             isAuthenticating = false
             return nil
         }
@@ -276,13 +318,81 @@ public final class SMAPIAuthManager: ObservableObject {
                 }
                 // Not linked yet — continue polling
             } catch {
-                sonosDebugLog("[SMAPI] Auth poll error: \(error.localizedDescription)")
+                sonosDiagLog(.warning, tag: "SMAPI",
+                             "Auth poll error: \(error.localizedDescription)",
+                             context: [
+                                "service": service.name,
+                                "sid": String(service.id)
+                             ])
             }
         }
 
         // Timeout
         authError = "Authentication timed out. Please try again."
+        sonosDiagLog(.error, tag: "SMAPI",
+                     "Authentication timed out after polling window",
+                     context: [
+                        "service": service.name,
+                        "sid": String(service.id)
+                     ])
         isAuthenticating = false
+    }
+
+    /// Resolves a SMAPI item ID (e.g. `channel:0:2:resume`) to the
+    /// direct stream URL the speaker can play via `SetAVTransportURI`.
+    ///
+    /// Two-stage resolution:
+    /// 1. `getMediaURI` — preferred; services that opt in return the
+    ///    URL plus optional HTTP headers and timeout.
+    /// 2. `getMediaMetadata` — fallback for services that don't
+    ///    implement `getMediaURI` (e.g. Radio Paradise: returns
+    ///    `Function 'getMediaURI' doesn't exist`). The mediaMetadata
+    ///    response usually carries the direct stream URL inline.
+    ///
+    /// Each stage tries the authenticated form first when Choragus
+    /// holds a token, otherwise the anonymous form. Returns `nil`
+    /// when both stages fail or yield an empty URI.
+    public func resolveMediaURI(serviceID: Int, itemID: String) async throws -> String? {
+        guard let descriptor = availableServices.first(where: { $0.id == serviceID }) else {
+            return nil
+        }
+        let serviceURI = descriptor.secureUri
+        let token = tokenStore.getToken(for: serviceID)
+        let hasToken = (token?.authToken.isEmpty == false)
+
+        // Stage 1 — getMediaURI
+        do {
+            let url: String
+            if hasToken, let t = token {
+                url = (try await client.getMediaURI(serviceURI: serviceURI, token: t, id: itemID)).uri
+            } else if let deviceID, !deviceID.isEmpty {
+                url = (try await client.getMediaURIAnonymous(
+                    serviceURI: serviceURI, deviceID: deviceID,
+                    householdID: householdID, id: itemID
+                )).uri
+            } else {
+                url = ""
+            }
+            if !url.isEmpty { return url }
+        } catch {
+            // Don't propagate — fall through to stage 2. The most
+            // common cause is "Function 'getMediaURI' doesn't exist".
+        }
+
+        // Stage 2 — getMediaMetadata
+        let item: SMAPIMediaItem?
+        if hasToken, let t = token {
+            item = try await client.getMediaMetadata(serviceURI: serviceURI, token: t, id: itemID)
+        } else if let deviceID, !deviceID.isEmpty {
+            item = try await client.getMediaMetadataAnonymous(
+                serviceURI: serviceURI, deviceID: deviceID,
+                householdID: householdID, id: itemID
+            )
+        } else {
+            item = nil
+        }
+        if let resolved = item?.uri, !resolved.isEmpty { return resolved }
+        return nil
     }
 
     /// Sign out from a service

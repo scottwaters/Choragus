@@ -124,6 +124,20 @@ public class SonosManager: ObservableObject {
     @Published public var browseSections: [BrowseSection] = []
     @Published public var musicServicesList: [MusicService] = []
 
+    /// Live track count during a large queue add. BrowseViewModel
+    /// updates this as it walks a deep local-library hierarchy; the
+    /// queue panel reads it to render "Adding N tracks…" instead of a
+    /// blank spinner. Resets to 0 when no add is in flight.
+    @Published public var addingToQueueProgress: Int = 0
+
+    /// SMAPI media-URI resolver. Wired at app startup to
+    /// `SMAPIAuthManager.resolveMediaURI`. The direct-play branch
+    /// invokes this for any `x-sonosapi-stream:` URI before calling
+    /// `SetAVTransportURI` so the speaker receives the resolved direct
+    /// stream URL (the only shape current Sonos firmware accepts via
+    /// the AVTransport service for SMAPI radio).
+    public var smapiURIResolver: ((_ sid: Int, _ itemID: String) async throws -> String?)?
+
     // Cache state — drives the "Using cached data" banner in ContentView
     @Published public var isUsingCachedData = false
     @Published public var cacheAge: String = ""
@@ -215,6 +229,42 @@ public class SonosManager: ObservableObject {
     /// slider drag — one GetVolume per member per coalesced action, not
     /// per intermediate slider tick.
     private var groupVolumeVerifyTasks: [String: Task<Void, Never>] = [:]
+
+    /// Per-group debounced mute verifier tasks. Mirrors the volume verifier
+    /// pattern: after `propagateMuteOptimistically` flips the dict for instant
+    /// UI feedback, a debounced GetMute fan-out polls each member's actual
+    /// state and corrects the dict for members that don't follow the
+    /// coordinator's group-mute round-trip — bonded stereo pairs and HT zones
+    /// keep independent mute state at the speaker level even when the
+    /// coordinator unmutes, and without this verifier the optimistic
+    /// propagation leaves the dict permanently desynced from speaker reality
+    /// (root cause of the "tap-mute-keeps-muting" bug for bonded primaries).
+    private var groupMuteVerifyTasks: [String: Task<Void, Never>] = [:]
+
+    /// Per-device debounced verifier tasks for our own outbound writes.
+    /// Every `setMute` / `setVolume` schedules one of these; if another write
+    /// for the same device happens within 500 ms, the prior task is cancelled
+    /// (drag/multi-tap coalescing). After the quiet window, a real GetMute /
+    /// GetVolume runs and the result is reconciled into the dict — making the
+    /// speaker the source of truth even when the dict was set optimistically
+    /// by `toggleMute` / `setSpeakerMute` and the speaker silently rejected
+    /// the SOAP (bonded stereo pair primaries observed to do this for
+    /// SetMute when the bonded set's hardware-mute is in a particular state).
+    private var deviceMuteVerifyTasks: [String: Task<Void, Never>] = [:]
+    private var deviceVolumeVerifyTasks: [String: Task<Void, Never>] = [:]
+
+    /// Per-group tracking for Sonos's TuneIn ad-pre-roll loop. The
+    /// speaker hosts a Sonos-Radio container station (sid=303,
+    /// `tunein:31971`) that occasionally takes over a normal TuneIn
+    /// station's slot and streams a never-advancing ad from
+    /// `tunein-ondemand.cdnstream1.com`. Multiple 2024–2025 Sonos
+    /// Community threads describe the same loop on the official app —
+    /// it is a Sonos-side issue, not a controller bug. Tracking each
+    /// group's current ad URI lets us log a single WARNING on entry
+    /// (so the diagnostic bundle pinpoints why a station "won't
+    /// advance") and INFO on exit (so the user can confirm the ad
+    /// finished).
+    private var groupTuneInAdLoopURI: [String: String] = [:]
 
     /// Value-aware echo absorption for our own SOAP writes.
     ///
@@ -1168,6 +1218,7 @@ public class SonosManager: ObservableObject {
         recordExpectedVolumeEcho(deviceID: device.id, value: volume)
         sonosDebugLog("[RC-SOAP-WRITE] setVolume room=\(device.roomName) id=\(device.id) → \(volume)")
         try await renderingControl.setVolume(device: device, volume: volume)
+        scheduleDeviceVolumeVerify(device: device)
     }
 
     public func getMute(device: SonosDevice) async throws -> Bool {
@@ -1178,6 +1229,7 @@ public class SonosManager: ObservableObject {
         recordExpectedMuteEcho(deviceID: device.id, value: muted)
         sonosDebugLog("[RC-SOAP-WRITE] setMute room=\(device.roomName) id=\(device.id) → \(muted)")
         try await renderingControl.setMute(device: device, muted: muted)
+        scheduleDeviceMuteVerify(device: device)
     }
 
     // MARK: - Expected-echo bookkeeping
@@ -1613,10 +1665,16 @@ public class SonosManager: ObservableObject {
     /// Joins a device to an existing group by pointing its transport at the coordinator's rincon URI
     public func joinGroup(device: SonosDevice, toCoordinator coordinator: SonosDevice) async throws {
         let uri = "x-rincon:\(coordinator.id)"
+        let priorVol = deviceVolumes[device.id].map(String.init) ?? "nil"
+        let priorMute = deviceMutes[device.id].map(String.init) ?? "nil"
+        sonosDebugLog("[JOIN-START] member=\(device.roomName) id=\(device.id) coord=\(coordinator.roomName) priorVolDict=\(priorVol) priorMuteDict=\(priorMute)")
         try await avTransport.setAVTransportURI(device: device, uri: uri)
         // User-initiated change — bypass the throttle so the sidebar reflects
         // the new grouping immediately.
         await refreshTopology(from: coordinator, force: true)
+        let postVol = deviceVolumes[device.id].map(String.init) ?? "nil"
+        let postMute = deviceMutes[device.id].map(String.init) ?? "nil"
+        sonosDebugLog("[JOIN-DONE] member=\(device.roomName) postVolDict=\(postVol) postMuteDict=\(postMute) — watch for RC-EVENT vol/mute that follow")
     }
 
     public func ungroupDevice(_ device: SonosDevice) async throws {
@@ -1877,13 +1935,135 @@ public class SonosManager: ObservableObject {
                 }
                 postQueueChanged(optimisticItems: [])
             } else {
-                // Direct playback — singles, radio streams, etc.
-                sonosDebugLog("[PLAYBACK] SetAVTransportURI: \(uri.prefix(80))")
+                // Direct playback — dispatch on the item's per-service
+                // playback strategy. Each strategy is a closed unit: one
+                // service's quirks live in one place and changes there
+                // can't bleed into another service's path.
+                var effectiveURI = uri
+                var effectiveMeta = meta
+                switch item.playbackStrategy {
+                case .smapiResolveThenEmpty:
+                    // SMAPI search items: getMediaURI returns the direct
+                    // stream URL (with embedded credentials). The speaker
+                    // rejects the raw `x-sonosapi-stream:` SMAPI control
+                    // URI with UPnP 402, but accepts the resolved URL
+                    // with empty DIDL. Recently-played items already hold
+                    // the resolved URL via play history.
+                    if let resolver = smapiURIResolver,
+                       item.objectID.hasPrefix("smapi:") {
+                        let trimmed = item.objectID.dropFirst("smapi:".count)
+                        if let colon = trimmed.firstIndex(of: ":"),
+                           let sid = Int(trimmed[..<colon]) {
+                            let itemID = String(trimmed[trimmed.index(after: colon)...])
+                            do {
+                                if let resolved = try await resolver(sid, itemID),
+                                   !resolved.isEmpty {
+                                    effectiveURI = resolved
+                                    effectiveMeta = ""
+                                }
+                            } catch {
+                                sonosDiagLog(.warning, tag: "PLAYBACK",
+                                             "SMAPI getMediaURI resolve failed; falling back to raw URI",
+                                             context: [
+                                                "sid": String(sid),
+                                                "itemID": itemID,
+                                                "error": String(describing: error)
+                                             ])
+                            }
+                        }
+                    }
+                case .directURIWithDIDL:
+                    // TuneIn music stations (s-prefix), Sonos favourites,
+                    // raw HTTP/HLS, line-in, etc. The URI is the
+                    // authoritative target and the DIDL carries cdudn /
+                    // source identification the speaker needs
+                    // (SA_RINCON3079_ for TuneIn). No resolve, no
+                    // metadata stripping.
+                    break
+                case .tuneInResolveViaRadioTime:
+                    // TuneIn topics / programs / podcast episodes
+                    // (t/p/g-prefix). Resolve via RadioTime's Tune.ashx
+                    // to the direct CDN URL, then play queue-based
+                    // (AddURIToQueue + SetAVTransportURI to queue +
+                    // play). Queue-based play is required because:
+                    //   - x-sonosapi-stream: rejects topics with 800
+                    //     (they're not audioBroadcasts).
+                    //   - x-rincon-mp3radio://<host_and_path> strips
+                    //     https:// and fails on HSTS-protected CDNs
+                    //     (fireside.fm rejects the speaker's plain
+                    //     HTTP fetch).
+                    //   - x-rincon-mp3radio:https://... is rejected
+                    //     with UPnP 714 (Illegal MIME Type).
+                    // AddURIToQueue with the raw https:// URL plus a
+                    // track DIDL declaring the MIME lets Sonos's queue
+                    // fetcher use TLS correctly. Mirrors how the
+                    // official app handles podcast playback.
+                    let guideId = item.objectID.hasPrefix("tunein:")
+                        ? String(item.objectID.dropFirst("tunein:".count))
+                        : item.objectID
+                    if let resolved = await ServiceSearchProvider.shared.resolveTuneIn(guideId: guideId) {
+                        let trackDIDL = ServiceSearchProvider.shared.buildResolvedTuneInTrackDIDL(
+                            title: item.title,
+                            artist: item.artist ?? "",
+                            url: resolved.directURL,
+                            mediaType: resolved.mediaType
+                        )
+                        sonosDiagLog(.info, tag: "PLAYBACK",
+                                     "TuneIn topic via queue: \(item.title)",
+                                     context: [
+                                        "guideId": guideId,
+                                        "directURL": resolved.directURL,
+                                        "mediaType": resolved.mediaType
+                                     ])
+                        do {
+                            try await withStaleHandling(for: group.name) {
+                                try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
+                                _ = try await contentDirectory.addURIToQueue(
+                                    device: coordinator,
+                                    uri: resolved.directURL,
+                                    metadata: trackDIDL
+                                )
+                                try await avTransport.setAVTransportURI(
+                                    device: coordinator,
+                                    uri: "x-rincon-queue:\(coordinator.id)#0"
+                                )
+                                try await avTransport.play(device: coordinator)
+                            }
+                            postQueueChanged(optimisticItems: [])
+                            return
+                        } catch {
+                            sonosDiagLog(.error, tag: "PLAYBACK",
+                                         "TuneIn topic queue-based play failed",
+                                         context: [
+                                            "guideId": guideId,
+                                            "directURL": resolved.directURL,
+                                            "error": String(describing: error)
+                                         ])
+                            throw error
+                        }
+                    } else {
+                        sonosDiagLog(.warning, tag: "PLAYBACK",
+                                     "TuneIn Tune.ashx resolve returned no playable URL; falling back to raw URI",
+                                     context: ["guideId": guideId])
+                    }
+                }
+                sonosDebugLog("[PLAYBACK] SetAVTransportURI: \(effectiveURI.prefix(80))")
+                sonosDiagLog(.info, tag: "PLAYBACK",
+                             "Direct play attempt: \(item.title.isEmpty ? "<no title>" : item.title)",
+                             context: [
+                                "uri": effectiveURI,
+                                "uri_original": uri,
+                                "didl_metadata": meta,
+                                "sent_metadata": effectiveMeta,
+                                "title": item.title,
+                                "artist": item.artist ?? "",
+                                "service": serviceLabel(for: item) ?? "unknown",
+                                "objectID": item.objectID
+                             ])
                 do {
                     try await withStaleHandling(for: group.name) {
-                        let effectiveMeta = meta
                         try await avTransport.setAVTransportURI(
-                            device: coordinator, uri: uri, metadata: effectiveMeta
+                            device: coordinator, uri: effectiveURI, metadata: effectiveMeta
                         )
                         try await avTransport.play(device: coordinator)
                     }
@@ -2025,14 +2205,24 @@ public class SonosManager: ObservableObject {
 
         var firstTrack = 0
         var numAdded = 0
-        var batchSucceeded = false
-        do {
-            let chunkSize = 16
-            var nextInsertAt = insertAt
-            for chunkStart in stride(from: 0, to: uris.count, by: chunkSize) {
-                let end = min(chunkStart + chunkSize, uris.count)
-                let uriChunk = Array(uris[chunkStart..<end])
-                let metaChunk = Array(metas[chunkStart..<end])
+        let chunkSize = 16
+        var nextInsertAt = insertAt
+        var failedChunks: [(start: Int, end: Int)] = []
+        var chunkIndex = 0
+        let queueRefreshInterval = 10  // refresh every ~160 tracks
+        var consecutiveBulkFailures = 0
+        let bulkFailureCapThreshold = 5
+        var queueCapHit = false
+        // Bulk path: try each chunk independently. A single mis-encoded
+        // track in the middle of a 21k-track sweep used to abort the
+        // whole add — verified via direct SOAP testing that the speaker
+        // accepts almost every chunk. Now we collect the failures and
+        // retry them per-track instead of throwing away everything.
+        for chunkStart in stride(from: 0, to: uris.count, by: chunkSize) {
+            let end = min(chunkStart + chunkSize, uris.count)
+            let uriChunk = Array(uris[chunkStart..<end])
+            let metaChunk = Array(metas[chunkStart..<end])
+            do {
                 let result = try await contentDirectory.addMultipleURIsToQueue(
                     device: coordinator,
                     uris: uriChunk, metadatas: metaChunk,
@@ -2042,44 +2232,77 @@ public class SonosManager: ObservableObject {
                 sonosDebugLog("[QUEUE] Batch chunk \(chunkStart)-\(end-1): firstTrack=\(result.firstTrackNumber) numAdded=\(result.numAdded)")
                 if firstTrack == 0 && result.firstTrackNumber > 0 { firstTrack = result.firstTrackNumber }
                 numAdded += result.numAdded
-                // Next chunk goes after the ones we just added (only relevant
-                // when playNext/insertAt > 0; append mode keeps nextInsertAt=0).
                 if nextInsertAt > 0 { nextInsertAt += result.numAdded }
-            }
-            batchSucceeded = numAdded > 0
-        } catch {
-            sonosDebugLog("[QUEUE] Batch add threw: \(error). Falling back to per-track adds.")
-            firstTrack = 0
-            numAdded = 0
-        }
-
-        if !batchSucceeded {
-            sonosDebugLog("[QUEUE] Entering per-track fallback for \(uris.count) items")
-            firstTrack = 0
-            numAdded = 0
-            for (i, item) in optimisticSource.enumerated() {
-                guard let uri = item.resourceURI, !uri.isEmpty else { continue }
-                var meta = item.resourceMetadata ?? ""
-                if meta.contains("&lt;") { meta = XMLResponseParser.xmlUnescape(meta) }
-                let target = insertAt > 0 ? insertAt + i : 0
-                do {
-                    let pos = try await contentDirectory.addURIToQueue(
-                        device: coordinator, uri: uri, metadata: meta,
-                        desiredFirstTrackNumberEnqueued: target, enqueueAsNext: false
-                    )
-                    sonosDebugLog("[QUEUE] Per-track fallback \(i+1)/\(uris.count) '\(item.title)' uri=\(uri.prefix(80)) -> pos=\(pos)")
-                    if firstTrack == 0 && pos > 0 { firstTrack = pos }
-                    if pos > 0 { numAdded += 1 }
-                } catch {
-                    sonosDebugLog("[QUEUE] Per-track fallback add FAILED for '\(item.title)': \(error)")
-                    ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
-                    // Abort the rest of the loop — if the speaker is rejecting
-                    // one track it will likely reject the rest too, and we
-                    // don't want to hammer it.
+                addingToQueueProgress = numAdded
+                consecutiveBulkFailures = 0
+                chunkIndex += 1
+                if chunkIndex % queueRefreshInterval == 0 {
+                    postQueueChanged(optimisticItems: [])
+                }
+            } catch {
+                consecutiveBulkFailures += 1
+                // Speaker queue-full detection. Once N chunks fail
+                // back-to-back with the same fault, we are past the
+                // speaker's queue capacity — stop adding and log
+                // once instead of continuing to flood diagnostics.
+                if consecutiveBulkFailures >= bulkFailureCapThreshold {
+                    sonosDiagLog(.warning, tag: "QUEUE",
+                                 "Speaker queue cap reached at \(numAdded) tracks — stopping bulk add",
+                                 context: ["faultsInARow": String(consecutiveBulkFailures)])
+                    queueCapHit = true
                     break
                 }
+                sonosDiagLog(.warning, tag: "QUEUE",
+                             "Batch chunk \(chunkStart)-\(end-1) threw — will retry per-track: \(error.localizedDescription)")
+                failedChunks.append((chunkStart, end))
             }
-            sonosDebugLog("[QUEUE] Per-track fallback complete: added=\(numAdded)")
+        }
+        if queueCapHit {
+            // Queue cap hit — skip the per-track retry on collected
+            // failed chunks; they will all hit the same cap and just
+            // produce more diagnostic noise.
+            failedChunks.removeAll()
+        }
+
+        // Per-track retry only for the chunks that bulk-failed. Skips
+        // tracks that throw individually (e.g., specific malformed
+        // path / metadata) without aborting the rest — the prior
+        // assumption "one fail = all fail" was empirically wrong.
+        if !failedChunks.isEmpty {
+            sonosDebugLog("[QUEUE] Retrying \(failedChunks.count) failed chunks per-track")
+            var consecutiveFailures = 0
+            for (chunkStart, chunkEnd) in failedChunks {
+                for i in chunkStart..<chunkEnd {
+                    let item = optimisticSource[i]
+                    guard let uri = item.resourceURI, !uri.isEmpty else { continue }
+                    var meta = item.resourceMetadata ?? ""
+                    if meta.contains("&lt;") { meta = XMLResponseParser.xmlUnescape(meta) }
+                    let target = insertAt > 0 ? insertAt + i : 0
+                    do {
+                        let pos = try await contentDirectory.addURIToQueue(
+                            device: coordinator, uri: uri, metadata: meta,
+                            desiredFirstTrackNumberEnqueued: target, enqueueAsNext: false
+                        )
+                        if firstTrack == 0 && pos > 0 { firstTrack = pos }
+                        if pos > 0 { numAdded += 1 }
+                        consecutiveFailures = 0
+                    } catch {
+                        consecutiveFailures += 1
+                        sonosDiagLog(.warning, tag: "QUEUE",
+                                     "Per-track retry skipped '\(item.title)': \(error.localizedDescription)",
+                                     context: ["uri": uri])
+                        // Only abort if many in a row — that signals a
+                        // global problem (network, speaker reset),
+                        // not a single bad track.
+                        if consecutiveFailures >= 10 {
+                            sonosDiagLog(.error, tag: "QUEUE",
+                                         "Per-track retry aborted after 10 consecutive failures")
+                            break
+                        }
+                    }
+                }
+                if consecutiveFailures >= 10 { break }
+            }
         }
 
         // Batch adds trigger a full queue reload instead of optimistic append.
@@ -2352,7 +2575,51 @@ extension SonosManager: TransportStrategyDelegate {
         }
     }
 
+    /// Detects the Sonos TuneIn ad-pre-roll loop by URI signature.
+    /// Logs a WARNING when a group enters the ad state and an INFO
+    /// when it exits. The user-visible signal is the diagnostic bundle:
+    /// when a station "won't play", the bundle now contains an
+    /// explicit `[TUNEIN-AD]` event so it's clear Sonos's ad backend
+    /// is the cause, not Choragus.
+    private func detectTuneInAdLoop(groupID: String, metadata: TrackMetadata) {
+        let adURI: String? = {
+            guard let uri = metadata.trackURI, !uri.isEmpty else { return nil }
+            // Sonos Radio container station 31971 is the ad pre-roll
+            // wrapper; the cdnstream1.com host is its content origin;
+            // sali.sonos.superhi.fi the art origin.
+            if uri.contains("tunein%3a31971") { return uri }
+            if uri.contains("tunein-ondemand.cdnstream1.com") { return uri }
+            return nil
+        }()
+        let prior = groupTuneInAdLoopURI[groupID]
+        switch (prior, adURI) {
+        case (nil, let new?):
+            groupTuneInAdLoopURI[groupID] = new
+            sonosDiagLog(.warning, tag: "TUNEIN-AD",
+                         "Sonos's TuneIn ad pre-roll is playing — station won't advance until the ad completes (or never, on stuck loops)",
+                         context: [
+                            "groupID": groupID,
+                            "uri": new,
+                            "title": metadata.title,
+                            "stationName": metadata.stationName
+                         ])
+        case (let was?, nil):
+            groupTuneInAdLoopURI[groupID] = nil
+            sonosDiagLog(.info, tag: "TUNEIN-AD",
+                         "Ad pre-roll cleared",
+                         context: [
+                            "groupID": groupID,
+                            "priorURI": was
+                         ])
+        default:
+            // No transition — either both nil (no ad) or both set
+            // (still in ad). Nothing to log.
+            break
+        }
+    }
+
     public func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata) {
+        detectTuneInAdLoop(groupID: groupID, metadata: metadata)
         guard let existing = groupTrackMetadata[groupID] else {
             // First metadata — also try to populate queue cache if playing from queue
             var initial = metadata
@@ -2792,6 +3059,13 @@ extension SonosManager: TransportStrategyDelegate {
         // poll catches any persistent drift.
         if changed, isGroupCoordinator(deviceID: deviceID) {
             propagateMuteOptimistically(triggerDeviceID: deviceID, muted: muted)
+            // Bonded stereo pairs and HT zones don't follow the coordinator's
+            // group-mute round-trip — their hardware mute state stays
+            // independent. The optimistic propagation above is fine for
+            // instant UI feedback on conventional members, but leaves the
+            // dict desynced from speaker reality for bonded sets. Schedule
+            // a debounced GetMute fan-out to reconcile.
+            scheduleGroupMuteVerifier(coordinatorID: deviceID)
         }
     }
 
@@ -2880,6 +3154,124 @@ extension SonosManager: TransportStrategyDelegate {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// Debounced fan-out poll of non-coordinator member mute state.
+    /// Mirrors `scheduleGroupVolumeVerifier`: cancels any pending verifier
+    /// for the same group on each call so a rapid mute/unmute toggle
+    /// coalesces to one fan-out ~500 ms after the last coord event.
+    /// Polled values are authoritative speaker state and override the
+    /// optimistic propagation written by `propagateMuteOptimistically`.
+    private func scheduleGroupMuteVerifier(coordinatorID: String) {
+        guard let group = groups.first(where: { $0.coordinatorID == coordinatorID })
+        else {
+            sonosDebugLog("[RC-VERIFY] mute SKIP no-coord-group trigger=\(coordinatorID)")
+            return
+        }
+        let others = group.members.filter { $0.id != coordinatorID }
+        guard !others.isEmpty else {
+            sonosDebugLog("[RC-VERIFY] mute SKIP solo-coord group=\(group.id)")
+            return
+        }
+        let coordRoom = devices[coordinatorID]?.roomName ?? coordinatorID
+        let cancelled = groupMuteVerifyTasks[group.id] != nil
+        groupMuteVerifyTasks[group.id]?.cancel()
+        sonosDebugLog("[RC-VERIFY] mute SCHED coord=\(coordRoom) groupID=\(group.id) others=\(others.count) replaced=\(cancelled)")
+        groupMuteVerifyTasks[group.id] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if Task.isCancelled {
+                sonosDebugLog("[RC-VERIFY] mute CANCELLED coord=\(coordRoom)")
+                return
+            }
+            guard let self else { return }
+            sonosDebugLog("[RC-VERIFY] mute FIRE coord=\(coordRoom) groupID=\(group.id)")
+            await withTaskGroup(of: Void.self) { tg in
+                for member in others {
+                    tg.addTask { [weak self] in
+                        guard let self else { return }
+                        do {
+                            let val = try await self.renderingControl.getMute(device: member)
+                            await MainActor.run {
+                                // Polled value is authoritative speaker state.
+                                // Consume any pending Choragus-write echo so
+                                // the matching NOTIFY (when it arrives)
+                                // doesn't double-apply.
+                                _ = self.consumeExpectedMuteEcho(deviceID: member.id, value: val)
+                                if self.deviceMutes[member.id] != val {
+                                    let prior = self.deviceMutes[member.id].map(String.init) ?? "nil"
+                                    self.deviceMutes[member.id] = val
+                                    sonosDebugLog("[RC-VERIFY] mute APPLY member=\(member.roomName) prior=\(prior) → \(val)")
+                                } else {
+                                    sonosDebugLog("[RC-VERIFY] mute NO-OP member=\(member.roomName) already=\(val)")
+                                }
+                            }
+                        } catch {
+                            sonosDebugLog("[RC-VERIFY] mute FAIL member=\(member.roomName) error=\(error)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Per-device debounced GetMute reconciliation, scheduled by `setMute`.
+    /// Speaker-as-source-of-truth: after we fire SetMute, schedule a real
+    /// GetMute 500 ms later and overwrite the dict with the actual hardware
+    /// state. Catches bonded-set members that silently ignore SetMute. Cancel
+    /// and reschedule on every successive setMute for the same device, so a
+    /// rapid mute/unmute toggle coalesces to one verify after the user stops.
+    private func scheduleDeviceMuteVerify(device: SonosDevice) {
+        deviceMuteVerifyTasks[device.id]?.cancel()
+        deviceMuteVerifyTasks[device.id] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if Task.isCancelled { return }
+            guard let self else { return }
+            do {
+                let val = try await self.renderingControl.getMute(device: device)
+                await MainActor.run {
+                    _ = self.consumeExpectedMuteEcho(deviceID: device.id, value: val)
+                    if self.deviceMutes[device.id] != val {
+                        let prior = self.deviceMutes[device.id].map(String.init) ?? "nil"
+                        self.deviceMutes[device.id] = val
+                        sonosDebugLog("[RC-VERIFY] mute APPLY device=\(device.roomName) prior=\(prior) → \(val)")
+                    } else {
+                        sonosDebugLog("[RC-VERIFY] mute NO-OP device=\(device.roomName) already=\(val)")
+                    }
+                    self.deviceMuteVerifyTasks[device.id] = nil
+                }
+            } catch {
+                sonosDebugLog("[RC-VERIFY] mute FAIL device=\(device.roomName) error=\(error)")
+                await MainActor.run { self.deviceMuteVerifyTasks[device.id] = nil }
+            }
+        }
+    }
+
+    /// Mirror of `scheduleDeviceMuteVerify` for SetVolume. Same coalescing
+    /// pattern; same source-of-truth contract.
+    private func scheduleDeviceVolumeVerify(device: SonosDevice) {
+        deviceVolumeVerifyTasks[device.id]?.cancel()
+        deviceVolumeVerifyTasks[device.id] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if Task.isCancelled { return }
+            guard let self else { return }
+            do {
+                let val = try await self.renderingControl.getVolume(device: device)
+                await MainActor.run {
+                    _ = self.consumeExpectedVolumeEcho(deviceID: device.id, value: val)
+                    if self.deviceVolumes[device.id] != val {
+                        let prior = self.deviceVolumes[device.id].map(String.init) ?? "nil"
+                        self.deviceVolumes[device.id] = val
+                        sonosDebugLog("[RC-VERIFY] vol APPLY device=\(device.roomName) prior=\(prior) → \(val)")
+                    } else {
+                        sonosDebugLog("[RC-VERIFY] vol NO-OP device=\(device.roomName) already=\(val)")
+                    }
+                    self.deviceVolumeVerifyTasks[device.id] = nil
+                }
+            } catch {
+                sonosDebugLog("[RC-VERIFY] vol FAIL device=\(device.roomName) error=\(error)")
+                await MainActor.run { self.deviceVolumeVerifyTasks[device.id] = nil }
             }
         }
     }

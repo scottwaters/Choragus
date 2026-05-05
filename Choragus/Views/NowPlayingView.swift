@@ -48,6 +48,7 @@ struct NowPlayingView: View {
     @State private var showEQ = false
     @State private var showCopied = false
     @State private var showExpandedArt = false
+    @State private var showMasterVolumeInput = false
     @State private var showArtSearch = false
     /// Persisted collapse state for the Lyrics / About / History panel.
     /// `false` (default) keeps the panel visible; `true` hides it for
@@ -654,7 +655,11 @@ struct NowPlayingView: View {
                 .padding(.horizontal, UILayout.horizontalPadding)
                 .frame(maxWidth: .infinity)
 
-                // Volume
+                // Volume — master row + per-speaker rows share an alignment
+                // column so the slider centres line up vertically. Master
+                // is the position anchor (untouched); sub rows shift to
+                // match via `.sliderCenter` alignment guides.
+                VStack(alignment: .sliderCenter, spacing: 6) {
                 HStack(spacing: 12) {
                     Button { toggleMute() } label: {
                         Image(systemName: isMuted ? "speaker.slash.fill" : volumeIcon)
@@ -684,6 +689,12 @@ struct NowPlayingView: View {
                         }
                     }
                     .frame(maxWidth: 300)
+                    .alignmentGuide(.sliderCenter) { d in d[HorizontalAlignment.center] }
+                    // Vertical-only scale — render the master slider as
+                    // visually thicker without altering its frame or any
+                    // horizontal positioning. Anchor center keeps the
+                    // track endpoints in place.
+                    .scaleEffect(x: 1, y: 1.4, anchor: .center)
                     // Explicit tint — the outer ScrollView tint can fall through
                     // to the system accent when resolvedAccentColor is nil, which
                     // loses the user's customization on the main volume slider.
@@ -694,6 +705,20 @@ struct NowPlayingView: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .frame(width: 28, alignment: .trailing)
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) { showMasterVolumeInput = true }
+                        .help(L10n.doubleClickToTypeValue)
+                        .popover(isPresented: $showMasterVolumeInput, arrowEdge: .top) {
+                            VolumeNumberInputPopover(
+                                initialValue: Int(volume),
+                                onCommit: { newVal in
+                                    vm.applyMasterVolume(Double(newVal))
+                                    vm.commitVolume()
+                                    showMasterVolumeInput = false
+                                },
+                                onCancel: { showMasterVolumeInput = false }
+                            )
+                        }
                 }
                 .padding(.horizontal, UILayout.horizontalPadding)
 
@@ -704,16 +729,23 @@ struct NowPlayingView: View {
                                           get: { vm.speakerVolumes },
                                           set: { newDict in
                                               // Per-row slider drag writes
-                                              // straight into the manager.
-                                              // The dict-as-binding pattern
-                                              // arrives here with the full
-                                              // map; we forward only the
-                                              // changed key.
+                                              // straight into the manager
+                                              // (optimistic) and schedules
+                                              // a throttled mid-drag SOAP
+                                              // per device — at most one
+                                              // commit every 250 ms while
+                                              // the slider is moving, so
+                                              // other listeners hear
+                                              // progressive change without
+                                              // hammering the speaker.
                                               for (id, v) in newDict {
                                                   let current = sonosManager.deviceVolumes[id] ?? 0
                                                   let target = Int(v)
                                                   if target != current {
                                                       sonosManager.updateDeviceVolume(id, volume: target)
+                                                      if let member = group.members.first(where: { $0.id == id }) {
+                                                          vm.scheduleThrottledSpeakerCommit(device: member, volume: target)
+                                                      }
                                                   }
                                               }
                                           }
@@ -734,6 +766,7 @@ struct NowPlayingView: View {
                                       onToggleMute: { device, muted in await vm.setSpeakerMute(device: device, muted: muted) },
                                       onDragStateChanged: { dragging in vm.isDraggingVolume = dragging })
                 }
+                } // VStack(alignment: .sliderCenter)
 
         }
     }

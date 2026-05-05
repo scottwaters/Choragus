@@ -71,6 +71,7 @@ public struct ServiceRules: Equatable, Sendable {
     public let streamURIScheme: String
     public let streamPlaybackFlags: Int
     public let didlTrackIdPrefix: String
+    public let didlStreamIdPrefix: String
     public let didlContainerIdPrefix: String
     public let supportsAppLink: Bool
     public let defaultSerialNumber: Int
@@ -82,6 +83,7 @@ public struct ServiceRules: Equatable, Sendable {
                 streamURIScheme: String = URIPrefix.sonosApiStream,
                 streamPlaybackFlags: Int = 8224,
                 didlTrackIdPrefix: String = "10032020",
+                didlStreamIdPrefix: String = "10092020",
                 didlContainerIdPrefix: String = "1004206c",
                 supportsAppLink: Bool = false,
                 defaultSerialNumber: Int = 0) {
@@ -92,17 +94,35 @@ public struct ServiceRules: Equatable, Sendable {
         self.streamURIScheme = streamURIScheme
         self.streamPlaybackFlags = streamPlaybackFlags
         self.didlTrackIdPrefix = didlTrackIdPrefix
+        self.didlStreamIdPrefix = didlStreamIdPrefix
         self.didlContainerIdPrefix = didlContainerIdPrefix
         self.supportsAppLink = supportsAppLink
         self.defaultSerialNumber = defaultSerialNumber
     }
 
-    /// `SA_RINCON{type}_X_#Svc{type}-0-Token` — the cdudn template Sonos
-    /// expects in DIDL `desc` elements for SMAPI tracks. Parameterised by
-    /// the runtime RINCON service type so it picks up any household
-    /// drift automatically.
-    public func cdudn(rinconServiceType type: Int) -> String {
-        "SA_RINCON\(type)_X_#Svc\(type)-0-Token"
+    /// cdudn (Service Account binding token) for DIDL `desc` elements.
+    ///
+    /// Two forms — pick by whether the controller holds an auth token
+    /// for the service:
+    /// - Anonymous (`SA_RINCON{type}_`) — used when no token. The
+    ///   speaker auto-resolves to the household's stored binding (set
+    ///   up via the official Sonos app). Confirmed by capturing the
+    ///   Sonos app's own SetAVTransportURI metadata for Radio Paradise:
+    ///   it sends a real per-household token (e.g. `bcf2efd3`) that
+    ///   Choragus can't fabricate, so the anonymous form is the
+    ///   correct fallback.
+    /// - Full (`SA_RINCON{type}_X_#Svc{type}-{token}-Token`) — used
+    ///   when the controller has authenticated the service via AppLink
+    ///   and holds the per-household token in the local SMAPI store.
+    ///
+    /// The legacy literal `-0-Token` form is rejected by Sonos for
+    /// services that require a binding (issue #28 / Radio Paradise),
+    /// so it is no longer emitted.
+    public func cdudn(rinconServiceType type: Int, authToken: String? = nil) -> String {
+        if let token = authToken, !token.isEmpty {
+            return "SA_RINCON\(type)_X_#Svc\(type)-\(token)-Token"
+        }
+        return "SA_RINCON\(type)_"
     }
 }
 
@@ -203,6 +223,37 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
 
     public func trackPlaybackFlags(forSid sid: Int) -> Int {
         rules(forSid: sid)?.trackPlaybackFlags ?? 8224
+    }
+
+    /// DIDL `item id` prefix lookup. Per-service when the catalog has
+    /// rules; generic Sonos defaults otherwise. Same pattern as
+    /// `trackURIScheme(forSid:)` — the catalog wins, the universal
+    /// prefix is the fallback.
+    public func didlTrackIdPrefix(forSid sid: Int) -> String {
+        rules(forSid: sid)?.didlTrackIdPrefix ?? "10032020"
+    }
+
+    public func didlStreamIdPrefix(forSid sid: Int) -> String {
+        rules(forSid: sid)?.didlStreamIdPrefix ?? "10092020"
+    }
+
+    public func didlContainerIdPrefix(forSid sid: Int) -> String {
+        rules(forSid: sid)?.didlContainerIdPrefix ?? "1004206c"
+    }
+
+    /// cdudn for the runtime sid. Resolves the RINCON service type
+    /// (catalog descriptor or `(sid << 8) + 7` fallback), then delegates
+    /// to the static rule's cdudn template.
+    public func cdudn(forSid sid: Int, authToken: String? = nil) -> String {
+        let type = rinconServiceType(forSid: sid)
+        if let rule = rules(forSid: sid) {
+            return rule.cdudn(rinconServiceType: type, authToken: authToken)
+        }
+        // No rule entry — apply the default template directly.
+        if let token = authToken, !token.isEmpty {
+            return "SA_RINCON\(type)_X_#Svc\(type)-\(token)-Token"
+        }
+        return "SA_RINCON\(type)_"
     }
 
     /// Returns the sid this household uses for a canonical service name,
@@ -418,6 +469,29 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
                 streamPlaybackFlags: 8224,
                 supportsAppLink: false,
                 defaultSerialNumber: 0
+            ),
+            // Radio Paradise — derived directly from a Sonos favorite
+            // dump (FV:2 ContentDirectory.Browse). The household-stamped
+            // <res> element on a Radio Paradise favorite shows:
+            //   x-sonosapi-radio:channel%3a0%3a2%3aresume?sid=308&flags=8232&sn=26
+            // and the embedded <r:resMD> DIDL uses item-id prefix
+            // 100c2028 plus parentID="10fe2064bitrate%3aradio128".
+            // The previous defaults (`x-sonosapi-stream:`, flags=8224,
+            // didl prefix `10092020`) produced UPnP fault 402 because
+            // every field was wrong for this service. Pandora uses a
+            // similar `x-sonosapi-radio:` shape, hence the precedent.
+            ServiceRules(
+                canonicalName: ServiceName.radioParadise,
+                trackURIScheme: URIPrefix.sonosApiRadio,
+                trackURIExtension: "",
+                trackPlaybackFlags: 8232,
+                streamURIScheme: URIPrefix.sonosApiRadio,
+                streamPlaybackFlags: 8232,
+                didlTrackIdPrefix: "100c2028",
+                didlStreamIdPrefix: "100c2028",
+                didlContainerIdPrefix: "10fe2064",
+                supportsAppLink: true,
+                defaultSerialNumber: 1
             ),
         ]
         var dict: [String: ServiceRules] = [:]

@@ -16,6 +16,7 @@ struct VolumeControlView: View {
     var onDragStateChanged: ((Bool) -> Void)?
 
     @State private var draggingSpeaker: String?
+    @State private var editingSpeakerID: String?
 
     private var sortedMembers: [SonosDevice] {
         let coordID = group.coordinatorID
@@ -27,12 +28,13 @@ struct VolumeControlView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .sliderCenter, spacing: 6) {
             Text(L10n.speakerVolumes)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, UILayout.horizontalPadding)
                 .padding(.top, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             ForEach(sortedMembers, id: \.id) { member in
                 HStack(spacing: 8) {
@@ -50,8 +52,7 @@ struct VolumeControlView: View {
                     Text(member.roomName)
                         .font(.caption)
                         .lineLimit(1)
-                        .frame(minWidth: UILayout.speakerNameMinWidth, alignment: .leading)
-                        .layoutPriority(-1)
+                        .fixedSize(horizontal: true, vertical: false)
 
                     SliderWithPopup(
                         value: Binding(
@@ -69,11 +70,33 @@ struct VolumeControlView: View {
                             Task { await onSetVolume?(member, vol) }
                         }
                     }
+                    .frame(maxWidth: 300)
+                    .alignmentGuide(.sliderCenter) { d in d[HorizontalAlignment.center] }
 
                     Text("\(Int(speakerVolumes[member.id] ?? 0))")
                         .font(.caption)
                         .monospacedDigit()
                         .frame(width: UILayout.volumeLabelWidth, alignment: .trailing)
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) { editingSpeakerID = member.id }
+                        .help(L10n.doubleClickToTypeValue)
+                        .popover(
+                            isPresented: Binding(
+                                get: { editingSpeakerID == member.id },
+                                set: { if !$0 { editingSpeakerID = nil } }
+                            ),
+                            arrowEdge: .top
+                        ) {
+                            VolumeNumberInputPopover(
+                                initialValue: Int(speakerVolumes[member.id] ?? 0),
+                                onCommit: { newVal in
+                                    speakerVolumes[member.id] = Double(newVal)
+                                    Task { await onSetVolume?(member, newVal) }
+                                    editingSpeakerID = nil
+                                },
+                                onCancel: { editingSpeakerID = nil }
+                            )
+                        }
                 }
                 .padding(.horizontal, UILayout.horizontalPadding)
             }

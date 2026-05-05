@@ -41,7 +41,7 @@ struct PresetManagerView: View {
                 .environmentObject(sonosManager)
                 .environmentObject(presetManager)
         }
-        .alert("Delete Preset?", isPresented: Binding(
+        .alert(L10n.deletePresetTitle, isPresented: Binding(
             get: { deleteConfirmPreset != nil },
             set: { if !$0 { deleteConfirmPreset = nil } }
         )) {
@@ -49,7 +49,7 @@ struct PresetManagerView: View {
             Button(L10n.delete, role: .destructive) {
                 if let preset = deleteConfirmPreset {
                     presetManager.deletePreset(id: preset.id)
-                    showStatus("Deleted \"\(preset.name)\"")
+                    showStatus(L10n.deletedPresetFormat(preset.name))
                 }
             }
         } message: {

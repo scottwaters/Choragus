@@ -363,7 +363,9 @@ public final class ScrobbleManager: ObservableObject {
             }
             sonosDebugLog("[SCROBBLE] \(sid): completed \(results.count) results")
         } catch {
-            sonosDebugLog("[SCROBBLE] \(sid): submission threw: \(error)")
+            sonosDiagLog(.error, tag: "SCROBBLE",
+                         "Submission threw: \(error.localizedDescription)",
+                         context: ["service": sid])
             lastRunError = error.localizedDescription
         }
     }

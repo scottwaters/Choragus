@@ -106,18 +106,85 @@ final class QueueViewModel: ObservableObject {
         // launch, speaker switch (queueItems just got cleared), and the
         // post-add reload after a batch — all cases where the user should
         // see that something is happening rather than a stale or empty list.
+        let priorTotal = totalTracks
         isLoading = true
         defer { isLoading = false }
         do {
-            let (items, total) = try await sonosManager.getQueue(group: group, start: 0, count: 100)
-            queueItems = items
-            totalTracks = total
+            // Page-fetch the entire queue. The previous fixed-100 fetch
+            // silently dropped any tracks past index 100, which is what
+            // the user-reported "added tracks visible in Sonos app but
+            // not in Choragus queue, even after refresh" symptom traced
+            // to: a multi-track add lands at the END of the queue, and
+            // any queue already past 100 hides the newly-appended
+            // tracks from view.
+            // 500 per page = roughly 80 round-trips for a fully-loaded
+            // 40 000-track queue. Sonos's `Browse` accepts larger
+            // RequestedCounts but starts truncating mid-page on slower
+            // (S1) coordinators around 600+; 500 is the sweet spot.
+            let pageSize = 500
+            var collected: [QueueItem] = []
+            var totalSeen = 0
+            var index = 0
+            while true {
+                let (page, total) = try await sonosManager.getQueue(group: group, start: index, count: pageSize)
+                totalSeen = total
+                collected.append(contentsOf: page)
+                if page.isEmpty { break }
+                index += page.count
+                if index >= total { break }
+                // Hard ceiling on pages so a runaway speaker-side total
+                // (e.g. corrupted state) doesn't loop forever. 50 pages
+                // = 5 000 items, well past Sonos's documented queue cap.
+                // Sonos's documented queue maximum is 40 000 tracks.
+                // Speaker-reported total is the natural terminator
+                // (line above); this is just belt-and-suspenders.
+                if index >= 40_000 { break }
+            }
+            queueItems = collected
+            totalTracks = totalSeen
             let posInfo = try await sonosManager.getPositionInfo(group: group)
             currentTrack = posInfo.trackNumber
+            sonosDiagLog(.info, tag: "QUEUE",
+                         "loadQueue done: \(collected.count) shown, total=\(totalSeen), prior=\(priorTotal)")
+
+            // One-shot retry for the post-add commit race: if a reload
+            // was triggered by `.queueChanged` and the speaker hadn't
+            // finished committing the server-side container expansion
+            // yet, the first sweep returns the stale total. 600 ms is
+            // empirically enough for AddURIToQueue + x-rincon-playlist
+            // expansion on S1 hardware.
+            if totalSeen == priorTotal && pendingPostAddRetry {
+                pendingPostAddRetry = false
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                var retryCollected: [QueueItem] = []
+                var retryTotal = 0
+                var retryIndex = 0
+                while true {
+                    let (page, total) = try await sonosManager.getQueue(group: group, start: retryIndex, count: pageSize)
+                    retryTotal = total
+                    retryCollected.append(contentsOf: page)
+                    if page.isEmpty { break }
+                    retryIndex += page.count
+                    if retryIndex >= total { break }
+                    if retryIndex >= 40_000 { break }
+                }
+                if retryTotal != totalSeen {
+                    queueItems = retryCollected
+                    totalTracks = retryTotal
+                    sonosDiagLog(.info, tag: "QUEUE",
+                                 "loadQueue retry caught commit lag: total=\(retryTotal)")
+                }
+            }
         } catch {
+            sonosDiagLog(.error, tag: "QUEUE",
+                         "loadQueue threw: \(error.localizedDescription)")
             ErrorHandler.shared.handle(error, context: "QUEUE")
         }
     }
+
+    /// Set by the `.queueChanged` observer when an add-style mutation
+    /// was just signalled — `loadQueue` honours it once and clears.
+    var pendingPostAddRetry: Bool = false
 
     func playTrack(_ trackNumber: Int) async {
         playingTrack = trackNumber

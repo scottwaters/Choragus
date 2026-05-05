@@ -36,11 +36,18 @@ struct MusicServicesSettingsSection: View {
     ]
 
     /// Services that can never authenticate from a third-party app —
-    /// Sonos's identity gate returns 403 to non-Sonos clients.
+    /// Sonos's identity gate returns 403 to non-Sonos clients. Pandora
+    /// joined this bucket after the SiriusXM acquisition; the same
+    /// per-household token plumbing that blocks SiriusXM blocks Pandora.
+    /// Users with existing Pandora favorites in their Sonos household
+    /// can still play them via the generic Favorites browser, which
+    /// replays the speaker-supplied DIDL verbatim.
     private static let blockedServices: Set<Int> = [
         ServiceID.amazonMusic,
         ServiceID.youTubeMusic,
         ServiceID.soundCloud,
+        ServiceID.siriusXM,
+        ServiceID.pandora,
     ]
 
     /// Services that work via direct API rather than AppLink OAuth — toggled
@@ -82,14 +89,13 @@ struct MusicServicesSettingsSection: View {
         .init(key: "254",       serviceID: ServiceID.tuneIn,     name: "TuneIn",       alternativeIDs: [ServiceID.tuneInNew], plexFlavor: .none),
         .init(key: "144",       serviceID: ServiceID.calmRadio,  name: "Calm Radio",   alternativeIDs: [], plexFlavor: .none),
         .init(key: "303",       serviceID: ServiceID.sonosRadio, name: "Sonos Radio",  alternativeIDs: [], plexFlavor: .none),
-        // Pandora is pinned so it surfaces as `connectableUntested`
-        // (yellow) for everyone, regardless of household state. Without
-        // this, Pandora only appeared if Sonos's catalogue explicitly
-        // listed it for that household — and US users who'd never
-        // favourited a Pandora track had no entry point at all. Pinning
-        // gives Connect-button visibility so users can try the AppLink
-        // flow and report results back via the upcoming "Report unknown
-        // services" button (task #97).
+        // Pandora is pinned so it surfaces as `.blocked` (red,
+        // Unavailable) for everyone, regardless of household state.
+        // After the SiriusXM acquisition Pandora moved behind the same
+        // Sonos-locked auth gate as Amazon / YouTube Music / SiriusXM:
+        // third-party AppLink isn't accepted, so showing a Connect
+        // button would be misleading. Existing Pandora favorites still
+        // play via the generic Favorites browser.
         .init(key: "519",       serviceID: ServiceID.pandora,    name: "Pandora",      alternativeIDs: [], plexFlavor: .none),
     ]
 
@@ -576,13 +582,16 @@ struct MusicServicesSettingsSection: View {
 
     private func rowHint(service: CanonicalService, state: ServiceRowState) -> String? {
         // Legend at the top of the collapsed section explains every
-        // state — per-row hints just duplicate that. Sole exception:
-        // needs-favorite, where the user has to take an action OUTSIDE
-        // the app (open Sonos's app and favourite a track) to flip the
-        // dot green; the legend can't carry that per-service step.
+        // state — per-row hints just duplicate that. Two exceptions:
+        // needs-favorite (action OUTSIDE the app to flip the dot green)
+        // and .blocked (favorites-replay path the user wouldn't otherwise
+        // know about — Pandora/SiriusXM/Amazon/YouTube Music/SoundCloud
+        // can't authenticate, but speaker-saved favorites still play).
         switch state {
         case .authenticated(let needsFavorite) where needsFavorite:
             return L10n.playAnySongAndFavoriteFormat(service.name)
+        case .blocked:
+            return L10n.blockedFavoritesPlayableHint
         default:
             return nil
         }
@@ -593,7 +602,7 @@ struct MusicServicesSettingsSection: View {
         case .authenticated(let needsFavorite):
             return needsFavorite ? "arrow.turn.down.right" : "checkmark.circle.fill"
         case .notInHousehold: return "info.circle"
-        case .blocked:        return "xmark.octagon.fill"
+        case .blocked:        return "star"
         default:              return "info.circle"
         }
     }

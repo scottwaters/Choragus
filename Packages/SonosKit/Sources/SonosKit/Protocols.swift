@@ -107,6 +107,7 @@ public protocol PlaybackServiceProtocol {
     func getSleepTimerRemaining(group: SonosGroup) async throws -> String
     func playURI(group: SonosGroup, uri: String, metadata: String, title: String, artist: String, stationName: String, albumArtURI: String?) async throws
     func playBrowseItem(_ item: BrowseItem, in group: SonosGroup) async throws
+    func playItemsReplacingQueue(_ items: [BrowseItem], in group: SonosGroup) async throws
     func pauseAll() async
     func resumeAll() async
 }
@@ -151,6 +152,8 @@ public protocol QueueServiceProtocol {
     func saveQueueAsPlaylist(group: SonosGroup, title: String) async throws -> String
     @discardableResult
     func addBrowseItemToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool, atPosition: Int) async throws -> Int
+    @discardableResult
+    func addBrowseItemsToQueue(_ items: [BrowseItem], in group: SonosGroup, playNext: Bool) async throws -> Int
 }
 
 // MARK: - Browsing Service (SRP: content browsing only)

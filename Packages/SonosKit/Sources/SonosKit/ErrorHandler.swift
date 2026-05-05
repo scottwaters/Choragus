@@ -57,8 +57,9 @@ public final class ErrorHandler: ObservableObject {
             appError = .unknown(error)
         }
 
-        // Always log
-        sonosDebugLog("[\(context)] \(appError.errorDescription ?? error.localizedDescription)")
+        // Always log — centralised error sink, so route to diagnostics.
+        sonosDiagLog(.error, tag: context,
+                     appError.errorDescription ?? error.localizedDescription)
 
         // Show to user if requested
         if userFacing {

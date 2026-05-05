@@ -236,6 +236,116 @@ public final class SMAPIClient {
         return result.items.map { ($0.id, $0.title) }
     }
 
+    /// Resolved media URL — what `SetAVTransportURI` actually accepts.
+    public struct MediaURIResult {
+        public let uri: String
+        /// Optional HTTP headers the speaker should attach when fetching
+        /// the URL (rare; some services use this for auth).
+        public let httpHeaders: String?
+        /// Seconds the resolved URL is valid for. After this the
+        /// controller should call `getMediaURI` again.
+        public let uriTimeout: Int?
+    }
+
+    /// Resolves a SMAPI item ID (e.g. `channel:0:2:resume`) to the
+    /// direct stream URL the speaker can play. Required for any SMAPI
+    /// service that publishes `audioBroadcast` items — passing the
+    /// `x-sonosapi-stream:` URI to `SetAVTransportURI` directly is
+    /// rejected by current Sonos firmware with UPnP fault 402.
+    /// Recently-played items work because Sonos's own play history
+    /// stores the post-resolve direct URL; controllers that go through
+    /// search must do this resolution step themselves.
+    public func getMediaURI(serviceURI: String, token: SMAPIToken, id: String) async throws -> MediaURIResult {
+        let body = buildAuthenticatedEnvelope(token: token, bodyContent: """
+        <s:getMediaURI>
+        <s:id>\(xmlEscape(id))</s:id>
+        </s:getMediaURI>
+        """)
+        let result = try await soapCallWithRefresh(
+            url: serviceURI,
+            action: "http://www.sonos.com/Services/1.1#getMediaURI",
+            body: body,
+            token: token
+        )
+        return parseMediaURI(result)
+    }
+
+    public func getMediaURIAnonymous(serviceURI: String, deviceID: String, householdID: String = "",
+                                     id: String) async throws -> MediaURIResult {
+        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(householdID)</s:householdId>"
+        let body = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+         xmlns:s="http://www.sonos.com/Services/1.1">
+        <soap:Header>
+        <s:credentials>
+        <s:deviceId>\(deviceID)</s:deviceId>
+        <s:deviceProvider>Sonos</s:deviceProvider>
+        \(householdElement)
+        </s:credentials>
+        </soap:Header>
+        <soap:Body>
+        <s:getMediaURI>
+        <s:id>\(xmlEscape(id))</s:id>
+        </s:getMediaURI>
+        </soap:Body></soap:Envelope>
+        """
+        let result = try await soapCall(url: serviceURI, action: "http://www.sonos.com/Services/1.1#getMediaURI", body: body)
+        return parseMediaURI(result)
+    }
+
+    private func parseMediaURI(_ xml: String) -> MediaURIResult {
+        let uri = extractValue(from: xml, tag: "getMediaURIResult")
+            ?? extractValue(from: xml, tag: "getMediaURIResponse")
+            ?? ""
+        let headers = extractValue(from: xml, tag: "httpHeaders")
+        let timeout = extractValue(from: xml, tag: "uriTimeout").flatMap(Int.init)
+        return MediaURIResult(uri: uri, httpHeaders: headers, uriTimeout: timeout)
+    }
+
+    /// Single-item metadata fetch. For services that don't implement
+    /// `getMediaURI` (e.g. Radio Paradise), `getMediaMetadata` is the
+    /// fallback path — the response often carries the direct stream
+    /// URL inside the mediaMetadata `<uri>` element.
+    public func getMediaMetadata(serviceURI: String, token: SMAPIToken, id: String) async throws -> SMAPIMediaItem? {
+        let body = buildAuthenticatedEnvelope(token: token, bodyContent: """
+        <s:getMediaMetadata>
+        <s:id>\(xmlEscape(id))</s:id>
+        </s:getMediaMetadata>
+        """)
+        let result = try await soapCallWithRefresh(
+            url: serviceURI,
+            action: "http://www.sonos.com/Services/1.1#getMediaMetadata",
+            body: body,
+            token: token
+        )
+        return parseMediaList(result).items.first
+    }
+
+    public func getMediaMetadataAnonymous(serviceURI: String, deviceID: String, householdID: String = "",
+                                          id: String) async throws -> SMAPIMediaItem? {
+        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(householdID)</s:householdId>"
+        let body = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+         xmlns:s="http://www.sonos.com/Services/1.1">
+        <soap:Header>
+        <s:credentials>
+        <s:deviceId>\(deviceID)</s:deviceId>
+        <s:deviceProvider>Sonos</s:deviceProvider>
+        \(householdElement)
+        </s:credentials>
+        </soap:Header>
+        <soap:Body>
+        <s:getMediaMetadata>
+        <s:id>\(xmlEscape(id))</s:id>
+        </s:getMediaMetadata>
+        </soap:Body></soap:Envelope>
+        """
+        let result = try await soapCall(url: serviceURI, action: "http://www.sonos.com/Services/1.1#getMediaMetadata", body: body)
+        return parseMediaList(result).items.first
+    }
+
     // MARK: - Internal
 
     private func buildAuthenticatedEnvelope(token: SMAPIToken, bodyContent: String) -> String {

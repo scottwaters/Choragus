@@ -636,7 +636,6 @@ struct DiagnosticsView: View {
     /// the primary affordance.
     private func buildPrefilledFormURL(target: EncryptedReportTarget,
                                        bundleFilename: String) -> URL? {
-        let title = L10n.diagEncryptedReportFormTitle
         let body = L10n.diagEncryptedReportFormBody(bundleFilename)
 
         let baseURL: String
@@ -648,8 +647,11 @@ struct DiagnosticsView: View {
         }
 
         guard var components = URLComponents(string: baseURL) else { return nil }
+        // Title intentionally NOT pre-filled — reporters were leaving
+        // the canned default in place, producing dozens of issues with
+        // identical generic titles. A blank title field forces the
+        // user to write something specific to their problem.
         components.queryItems = [
-            URLQueryItem(name: "title", value: title),
             URLQueryItem(name: "body", value: body),
         ]
         // GitHub silently truncates very long URL query bodies and

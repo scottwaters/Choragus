@@ -32,6 +32,11 @@ public final class DiagnosticsRepository: @unchecked Sendable {
     private static let hardCap = 5_000
 
     public init(dbPath: String) {
+        // Stays on sonosDebugLog (sidecar): this fires before
+        // `DiagnosticsService.attach(repository:)` runs, so routing it
+        // through `sonosDiagLog` would no-op against a service with no
+        // repo attached. If the diag DB itself is broken, the sidecar
+        // log is the only surviving record.
         if sqlite3_open(dbPath, &db) != SQLITE_OK {
             sonosDebugLog("[DIAG-REPO] open failed at \(dbPath): \(String(cString: sqlite3_errmsg(db)))")
             return

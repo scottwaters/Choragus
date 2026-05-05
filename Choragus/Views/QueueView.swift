@@ -62,8 +62,13 @@ struct QueueView: View {
             // Fast path — the sender told us exactly what was appended. Skips
             // the Browse(Q:0) round-trip, which is expensive on S1 coordinators.
             if let items = note.userInfo?[QueueChangeKey.optimisticItems] as? [QueueItem] {
+                sonosDiagLog(.info, tag: "QUEUE",
+                             "queueChanged: optimistic append \(items.count) items")
                 vm.optimisticallyAppend(items)
             } else {
+                sonosDiagLog(.info, tag: "QUEUE",
+                             "queueChanged: triggering full reload")
+                vm.pendingPostAddRetry = true
                 Task { await vm.loadQueue() }
             }
         }
@@ -180,15 +185,24 @@ struct QueueView: View {
             VStack(spacing: 12) {
                 ProgressView()
                     .scaleEffect(1.4)
-                Text(sonosManager.isAddingToQueue
-                     ? L10n.addingToQueueEllipsis
-                     : L10n.loadingQueueEllipsis)
+                Text(addingStatusText)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
         }
         .allowsHitTesting(false)
         .transition(.opacity)
+    }
+
+    private var addingStatusText: String {
+        if sonosManager.isAddingToQueue {
+            let n = sonosManager.addingToQueueProgress
+            if n > 0 {
+                return "Adding \(n) tracks…"
+            }
+            return L10n.addingToQueueEllipsis
+        }
+        return L10n.loadingQueueEllipsis
     }
 
     @ViewBuilder

@@ -572,27 +572,20 @@ struct BrowseListView: View {
     }
 
     private func playAllNow() async {
-        guard let group = vm.group else { return }
         let items = collectPlayable()
         guard !items.isEmpty else { return }
-        do {
-            try await sonosManager.playItemsReplacingQueue(items, in: group)
-        } catch {
-            sonosDebugLog("[BROWSE] playAllNow failed: \(error)")
-            vm.playbackError = "Couldn't play all: \(error.localizedDescription)"
-        }
+        // Route through the VM so containers (local-library albums, etc.)
+        // are client-side-expanded to leaf tracks the same way the
+        // right-click "Play Now" path does. Bypassing this was the cause
+        // of the toolbar buttons enqueueing the bare container row
+        // instead of the album's tracks.
+        await vm.bulkPlayAll(items)
     }
 
     private func addAllToQueue(playNext: Bool) async {
-        guard let group = vm.group else { return }
         let items = collectPlayable()
         guard !items.isEmpty else { return }
-        do {
-            _ = try await sonosManager.addBrowseItemsToQueue(items, in: group, playNext: playNext)
-        } catch {
-            sonosDebugLog("[BROWSE] addAllToQueue failed: \(error)")
-            vm.playbackError = "Couldn't add all: \(error.localizedDescription)"
-        }
+        await vm.bulkAddToQueue(items, playNext: playNext)
     }
 
     var body: some View {
@@ -792,6 +785,17 @@ struct BrowseListView: View {
         } message: {
             Text(L10n.confirmDeleteItem(vm.deleteItem?.title ?? ""))
         }
+        // Sheet (not .alert): SwiftUI's macOS .alert is AppKit-backed
+        // and renders title/message exactly once at present time, so
+        // a live-updating count would not show. A custom sheet view
+        // observes `vm.expansionCount` directly and re-renders as
+        // recursion progresses.
+        .sheet(isPresented: Binding(
+            get: { vm.expansionPromptVisible },
+            set: { _ in }
+        )) {
+            LargeAddPromptSheet(vm: vm)
+        }
     }
 
     @ViewBuilder
@@ -818,12 +822,8 @@ struct BrowseListView: View {
                     }
                     if !vm.playlists.isEmpty {
                         Divider()
-                        Menu(L10n.addToPlaylistMenu) {
-                            ForEach(vm.playlists) { playlist in
-                                Button(playlist.title) {
-                                    Task { await vm.addToPlaylist(playlistID: playlist.objectID, item: item) }
-                                }
-                            }
+                        AddToPlaylistMenu(playlists: vm.playlists, item: item) { playlistID, target in
+                            Task { await vm.addToPlaylist(playlistID: playlistID, item: target) }
                         }
                     }
                 }
@@ -1420,6 +1420,7 @@ struct AppleMusicSearchView: View {
         case .musicArtist:
             if let artistId = Int(item.objectID.replacingOccurrences(of: "apple:artist:", with: "")) {
                 itemsCache[navStack.count] = items
+                for k in itemsCache.keys where k > navStack.count { itemsCache.removeValue(forKey: k) }
                 navStack.append(.artistAlbums(artistId: artistId, artistName: item.title))
                 // Sensible default for an artist's discography: newest
                 // first. "Relevance" has no meaning for albums under
@@ -1430,6 +1431,7 @@ struct AppleMusicSearchView: View {
         case .musicAlbum:
             if let collectionId = Int(item.objectID.replacingOccurrences(of: "apple:album:", with: "")) {
                 itemsCache[navStack.count] = items
+                for k in itemsCache.keys where k > navStack.count { itemsCache.removeValue(forKey: k) }
                 navStack.append(.albumTracks(collectionId: collectionId, albumTitle: item.title))
                 // Tracks within an album: leave at relevance — the
                 // iTunes API returns them in track-number order
@@ -1720,6 +1722,13 @@ struct TuneInSearchView: View {
         } else if item.isContainer {
             // Cache current items before drilling in
             itemsCache[navStack.count] = items
+            // Invalidate cached deeper levels — they belong to a sibling
+            // path the user previously drilled into, and reusing them now
+            // would show the wrong sub-folder (and SMAPI Browse on stale
+            // objectIDs returns 701 No Such Object).
+            for k in itemsCache.keys where k > navStack.count {
+                itemsCache.removeValue(forKey: k)
+            }
             let browseURL = item.album.isEmpty ? nil : item.album
             navStack.append(TuneInLevel(title: item.title, url: browseURL))
         }
@@ -2156,6 +2165,7 @@ struct SMAPIServiceSearchView: View {
             }
         } else if item.isContainer {
             itemsCache[navStack.count] = items
+            for k in itemsCache.keys where k > navStack.count { itemsCache.removeValue(forKey: k) }
             let containerID = SMAPIPrefix.strip(item.objectID, serviceID: serviceID)
             navStack.append(SMAPISearchLevel(title: item.title, containerID: containerID))
         }
@@ -2431,3 +2441,87 @@ struct SMAPIServiceSearchView: View {
     }
 }
 
+
+// MARK: - Large-Add Prompt Sheet
+
+/// Modal sheet that pops up once a recursive container expansion
+/// crosses the large-add threshold. Recursion continues in the
+/// background while this sheet is visible — the count label re-renders
+/// every time `vm.expansionCount` changes (driven by `@Observable`).
+/// "Add All" is disabled until the walk completes, so the user can
+/// only confirm against a final count, not a moving target. Cancel is
+/// always enabled so the user can short-circuit a runaway expansion.
+private struct LargeAddPromptSheet: View {
+    @Bindable var vm: BrowseViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                if vm.expansionInProgress {
+                    ProgressView().scaleEffect(0.7)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+                Text(headerText)
+                    .font(.headline)
+            }
+
+            Text(bodyText)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button(L10n.cancel, role: .cancel) {
+                    vm.cancelExpansion()
+                }
+                .keyboardShortcut(.cancelAction)
+                Button(L10n.addAll) {
+                    vm.confirmExpansion()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(vm.expansionInProgress)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+    }
+
+    private var headerText: String {
+        if vm.expansionInProgress {
+            return L10n.largeAddBuildingTitle(vm.expansionCount)
+        }
+        return L10n.largeAddReadyTitle(vm.expansionCount)
+    }
+
+    private var bodyText: String {
+        if vm.expansionInProgress {
+            return L10n.largeAddBuildingBody
+        }
+        return L10n.largeAddReadyBody
+    }
+}
+
+/// Isolated submenu so a hover/scroll-driven re-render of the parent
+/// `BrowseListView` doesn't rebuild the open playlist submenu — that
+/// rebuild was the source of the visible flicker when hovering over
+/// "Add to Playlist". Only this view's body re-runs when `playlists`
+/// or `item` changes, and neither changes during hover.
+private struct AddToPlaylistMenu: View {
+    let playlists: [BrowseItem]
+    let item: BrowseItem
+    let onSelect: (String, BrowseItem) -> Void
+
+    var body: some View {
+        Menu(L10n.addToPlaylistMenu) {
+            ForEach(playlists) { playlist in
+                Button(playlist.title) {
+                    onSelect(playlist.objectID, item)
+                }
+            }
+        }
+    }
+}

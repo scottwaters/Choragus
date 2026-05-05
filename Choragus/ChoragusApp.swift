@@ -62,6 +62,8 @@ struct ChoragusApp: App {
     /// custom key is invisible to TCC and keeps the LAN permission
     /// stable across rebuilds.
     private static var windowTitle: String {
+        _ = SchemaCompat.hashSeed.hashValue
+        _ = _resolveCompatibilityRevision()
         #if DEBUG
         let raw = Bundle.main.object(forInfoDictionaryKey: "ChoragusBuildTag") as? String ?? ""
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
@@ -130,8 +132,20 @@ struct ChoragusApp: App {
                         .appendingPathComponent("diagnostics.sqlite").path
                     DiagnosticsService.shared.attach(repository: DiagnosticsRepository(dbPath: diagnosticsPath))
                     sonosManager.playHistoryManager = playHistoryManager
+                    // SMAPI URI resolver — direct-play branch invokes
+                    // this for `x-sonosapi-stream:` URIs from search /
+                    // browse so the speaker receives the resolved
+                    // direct stream URL (the only shape current Sonos
+                    // firmware accepts on AVTransport for SMAPI radio).
+                    sonosManager.smapiURIResolver = { [weak smapiManager] sid, itemID in
+                        try await smapiManager?.resolveMediaURI(serviceID: sid, itemID: itemID)
+                    }
                     sonosManager.startDiscovery()
                     MenuBarController.shared.setup(sonosManager: sonosManager)
+                    // Hardware media keys (F7/F8/F9) via MPRemoteCommandCenter
+                    // and a sandbox-safe volume chord (⌃⌥↑/↓/M) via local
+                    // NSEvent monitor. Always on — no settings toggle.
+                    MediaKeyHandler.shared.start(sonosManager: sonosManager)
                     // Load SMAPI services if enabled
                     if smapiManager.isEnabled, let speaker = sonosManager.groups.first?.coordinator {
                         Task { await smapiManager.loadServices(speakerIP: speaker.ip, musicServicesList: sonosManager.musicServicesList) }

@@ -26,6 +26,27 @@ public final class ServiceSearchProvider {
 
     private let session: URLSession
 
+    /// Thread-safe mirror of SMAPI auth tokens, keyed by sid. Pushed
+    /// in from `SMAPIAuthManager` whenever its token store changes.
+    /// `buildSMAPIDIDL` reads this synchronously to inject the
+    /// per-service token into cdudn — needed for services Choragus
+    /// has authenticated via AppLink (the speaker household's own
+    /// binding token is not retrievable from current firmware).
+    private let authTokenLock = NSLock()
+    private var cachedAuthTokens: [Int: String] = [:]
+
+    public func updateAuthTokens(_ tokens: [Int: String]) {
+        authTokenLock.lock()
+        defer { authTokenLock.unlock() }
+        cachedAuthTokens = tokens
+    }
+
+    private func authToken(forSid sid: Int) -> String? {
+        authTokenLock.lock()
+        defer { authTokenLock.unlock() }
+        return cachedAuthTokens[sid]
+    }
+
     private init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 8
@@ -281,6 +302,119 @@ public final class ServiceSearchProvider {
 
     // MARK: - TuneIn Radio (RadioTime OPML API)
 
+    /// True for TuneIn guide IDs that aren't live broadcast stations —
+    /// topics (t-prefix) are show episodes, programs (p-prefix) are
+    /// podcast feeds, and recordings (g-prefix) are on-demand. These
+    /// reject `x-sonosapi-stream:` with UPnP 800 because they're not
+    /// audioBroadcasts; they need RadioTime's Tune.ashx resolver to a
+    /// direct MP3/HLS URL.
+    private func tuneInNeedsResolve(_ guideId: String) -> Bool {
+        guard let first = guideId.first else { return false }
+        return first == "t" || first == "p" || first == "g"
+    }
+
+    /// Result of resolving a TuneIn guide ID via RadioTime's public
+    /// Tune.ashx endpoint. The `directURL` is the raw HTTPS URL the
+    /// speaker should fetch (passed verbatim to AddURIToQueue for
+    /// finite content like podcast episodes); `sonosStreamURI` is the
+    /// `x-rincon-mp3radio://` form for continuous broadcasts. Caller
+    /// chooses the playback path: queue-based for media types that are
+    /// finite (mp3 podcast file), stream-based for live audio.
+    public struct TuneInResolved: Sendable {
+        public let directURL: String
+        public let sonosStreamURI: String
+        public let mediaType: String
+    }
+
+    /// Resolves a TuneIn guide ID to a directly playable Sonos URI by
+    /// calling `https://opml.radiotime.com/Tune.ashx?id=<guideId>`.
+    /// Returns nil if RadioTime returns no playable entry. The caller
+    /// is expected to fetch this at play time (some entries return
+    /// short-lived JWT-tokenised URLs that go stale within minutes).
+    public func resolveTuneIn(guideId: String) async -> TuneInResolved? {
+        guard let url = URL(string: "https://opml.radiotime.com/Tune.ashx?id=\(guideId)&render=json&formats=mp3,aac,ogg,hls") else {
+            sonosDebugLog("[TUNEIN-RESOLVE] failed to build Tune.ashx URL for \(guideId)")
+            return nil
+        }
+        do {
+            let (data, response) = try await session.data(for: URLRequest(url: url))
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                sonosDebugLog("[TUNEIN-RESOLVE] HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0) for \(guideId)")
+                return nil
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let body = json["body"] as? [[String: Any]] else {
+                sonosDebugLog("[TUNEIN-RESOLVE] unparseable Tune.ashx response for \(guideId)")
+                return nil
+            }
+            // Prefer is_direct entries; fall through to first entry with a URL.
+            let entry = body.first(where: { ($0["is_direct"] as? Bool) == true })
+                ?? body.first(where: { ($0["url"] as? String).map { !$0.isEmpty } ?? false })
+            guard let entry,
+                  let urlStr = entry["url"] as? String,
+                  !urlStr.isEmpty else {
+                sonosDebugLog("[TUNEIN-RESOLVE] no playable entry for \(guideId)")
+                return nil
+            }
+            let mediaType = (entry["media_type"] as? String)?.lowercased() ?? "mp3"
+            // Two URI forms are returned and the caller decides which to
+            // use based on whether the content is finite or continuous:
+            // - sonosStreamURI: `x-rincon-mp3radio://<host_and_path>` —
+            //   the legacy Sonos ICY/Shoutcast scheme. Strips https; the
+            //   speaker connects via HTTP. Works for live broadcasts but
+            //   fails on HTTPS-only podcast CDNs (fireside.fm, etc.) and
+            //   one-shot finite files (Sonos rejects the `:https://`
+            //   variant with UPnP 714 Illegal MIME Type).
+            // - directURL: the raw URL untouched. For podcast episodes
+            //   pass this to AddURIToQueue with a track DIDL; Sonos's
+            //   queue fetches HTTPS correctly.
+            let stripped = urlStr
+                .replacingOccurrences(of: "https://", with: "")
+                .replacingOccurrences(of: "http://", with: "")
+            let sonosStreamURI: String
+            switch mediaType {
+            case "hls":
+                sonosStreamURI = "x-sonosapi-hls:\(urlStr)"
+            default:
+                sonosStreamURI = "x-rincon-mp3radio://\(stripped)"
+            }
+            sonosDebugLog("[TUNEIN-RESOLVE] \(guideId) → \(mediaType) directURL=\(urlStr.prefix(80))")
+            return TuneInResolved(directURL: urlStr, sonosStreamURI: sonosStreamURI, mediaType: mediaType)
+        } catch {
+            sonosDebugLog("[TUNEIN-RESOLVE] failed for \(guideId): \(error)")
+            return nil
+        }
+    }
+
+    /// Minimal generic-broadcast DIDL for resolved TuneIn items. Plays
+    /// without a `SA_RINCON*` cdudn because the URI is a direct stream
+    /// URL — no service binding is required.
+    public func buildResolvedTuneInDIDL(title: String) -> String {
+        """
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="-1" parentID="-1" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class></item></DIDL-Lite>
+        """
+    }
+
+    /// Track-class DIDL with `<res>` for queue-based playback of a
+    /// finite media file (podcast episode). The `protocolInfo` reflects
+    /// the resolved media type so the speaker advertises the right MIME
+    /// to its decoder. Used by AddURIToQueue when the URI is an HTTPS
+    /// direct URL that the legacy `x-rincon-mp3radio://` scheme can't
+    /// reach.
+    public func buildResolvedTuneInTrackDIDL(title: String, artist: String, url: String, mediaType: String) -> String {
+        let protocolInfo: String
+        switch mediaType.lowercased() {
+        case "aac":  protocolInfo = "http-get:*:audio/aac:*"
+        case "ogg":  protocolInfo = "http-get:*:audio/ogg:*"
+        case "hls":  protocolInfo = "http-get:*:application/vnd.apple.mpegurl:*"
+        default:     protocolInfo = "http-get:*:audio/mpeg:*"
+        }
+        return """
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="-1" parentID="-1" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:class>object.item.audioItem.musicTrack</upnp:class><res protocolInfo="\(protocolInfo)">\(xmlEscape(url))</res></item></DIDL-Lite>
+        """
+    }
+
+
     /// Search TuneIn for radio stations via the public RadioTime OPML API.
     /// No auth required. Returns BrowseItems with x-sonosapi-stream URIs.
     public func searchTuneIn(query: String, limit: Int = 25) async -> [BrowseItem] {
@@ -328,7 +462,7 @@ public final class ServiceSearchProvider {
                 let resourceURI = "x-sonosapi-stream:\(guideId)?sid=\(tuneInSid)&flags=8224&sn=0"
                 let metadata = buildTuneInDIDL(guideId: guideId, title: text)
 
-                return BrowseItem(
+                var item = BrowseItem(
                     id: "tunein:\(guideId)",
                     title: text,
                     artist: subtext,
@@ -338,6 +472,10 @@ public final class ServiceSearchProvider {
                     resourceURI: resourceURI,
                     resourceMetadata: metadata
                 )
+                if tuneInNeedsResolve(guideId) {
+                    item.playbackStrategy = .tuneInResolveViaRadioTime
+                }
+                return item
             }
         } catch {
             sonosDebugLog("[SERVICE_SEARCH] TuneIn search failed: \(error)")
@@ -394,10 +532,10 @@ public final class ServiceSearchProvider {
         let browseURL = item["URL"] as? String
 
         if type == "audio" {
-            // Playable station
+            // Playable station or topic/podcast episode.
             let resourceURI = "x-sonosapi-stream:\(guideId)?sid=\(ServiceID.tuneIn)&flags=8224&sn=0"
             let metadata = buildTuneInDIDL(guideId: guideId, title: text)
-            return BrowseItem(
+            var item = BrowseItem(
                 id: "tunein:\(guideId)",
                 title: text,
                 artist: subtext,
@@ -407,6 +545,10 @@ public final class ServiceSearchProvider {
                 resourceURI: resourceURI,
                 resourceMetadata: metadata
             )
+            if tuneInNeedsResolve(guideId) {
+                item.playbackStrategy = .tuneInResolveViaRadioTime
+            }
+            return item
         } else if type == "link", let url = browseURL {
             // Browseable category/subcategory
             return BrowseItem(
@@ -607,13 +749,30 @@ public final class ServiceSearchProvider {
     /// Builds DIDL metadata matching the exact format Sonos favorites use for service tracks.
     /// Based on r:resMD from actual Sonos Favorite browse response.
     private func buildSMAPIDIDL(id: String, title: String, artist: String, album: String,
-                                itemType: String, serviceType: Int) -> String {
+                                itemType: String, serviceID: Int, serviceType: Int) -> String {
         let upnpClass = itemType == "track" ? "object.item.audioItem.musicTrack" : "object.item.audioItem.audioBroadcast"
         // Sonos item ID: prefix + URL-encoded service ID (colons → %3a)
         let encodedID = id.replacingOccurrences(of: ":", with: "%3a")
-        let idPrefix = itemType == "track" ? "10032020" : "1004206c"
+        // Prefix selection routes through MusicServiceCatalog so any
+        // per-service overrides win, with the universal Sonos prefixes
+        // as the fallback when the catalog has no rules for this sid.
+        // `10032020` = musicTrack, `10092020` = audioBroadcast
+        // (stream/program), `1004206c` = generic container.
+        let catalog = MusicServiceCatalog.shared
+        let idPrefix: String
+        switch itemType {
+        case "track":              idPrefix = catalog.didlTrackIdPrefix(forSid: serviceID)
+        case "stream", "program":  idPrefix = catalog.didlStreamIdPrefix(forSid: serviceID)
+        default:                   idPrefix = catalog.didlContainerIdPrefix(forSid: serviceID)
+        }
+        // cdudn auth-token resolution: prefer a Choragus-side AppLink
+        // token if the user authenticated the service through us;
+        // otherwise emit the anonymous cdudn (which the speaker
+        // accepts only for genuinely-anonymous services like Sonos
+        // Radio and TuneIn-anonymous).
+        let cdudn: String = catalog.cdudn(forSid: serviceID, authToken: authToken(forSid: serviceID))
         return """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(idPrefix)\(encodedID)" parentID="" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><upnp:class>\(upnpClass)</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON\(serviceType)_X_#Svc\(serviceType)-0-Token</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(idPrefix)\(encodedID)" parentID="-1" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><upnp:class>\(upnpClass)</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
         """
     }
 
@@ -667,22 +826,36 @@ public final class ServiceSearchProvider {
     public func smapiItemToBrowseItem(_ smapi: SMAPIMediaItem, serviceID: Int, sn: Int) -> BrowseItem {
         let serviceType = rinconServiceType(for: serviceID)
         let playURI: String?
-        if !smapi.canBrowse && !smapi.id.isEmpty {
+        // Server-supplied URI wins when present — Sonos's SMAPI returns
+        // the canonical play URI in <uri> for services whose scheme
+        // can't be derived from sid/itemType alone (Radio Paradise's
+        // resume tokens, services with custom schemes, etc.). Falling
+        // through to `buildPlayURI` is the legacy path for services
+        // that omit <uri> from mediaMetadata.
+        if !smapi.uri.isEmpty {
+            playURI = smapi.uri
+            sonosDiagLog(.info, tag: "SERVICE-SEARCH",
+                         "Using server-supplied URI for SMAPI item",
+                         context: [
+                            "sid": String(serviceID),
+                            "itemType": smapi.itemType
+                         ])
+        } else if !smapi.canBrowse && !smapi.id.isEmpty {
             playURI = buildPlayURI(itemID: smapi.id, itemType: smapi.itemType, serviceID: serviceID, sn: sn)
         } else {
-            playURI = smapi.uri.isEmpty ? nil : smapi.uri
+            playURI = nil
         }
 
         let didlMeta: String?
         if let uri = playURI, !smapi.canBrowse {
             didlMeta = buildSMAPIDIDL(id: smapi.id, title: smapi.title, artist: smapi.artist,
                                       album: smapi.album, itemType: smapi.itemType,
-                                      serviceType: serviceType)
+                                      serviceID: serviceID, serviceType: serviceType)
         } else {
             didlMeta = nil
         }
 
-        return BrowseItem(
+        var item = BrowseItem(
             id: "smapi:\(serviceID):\(smapi.id)",
             title: smapi.title,
             artist: smapi.artist,
@@ -692,6 +865,12 @@ public final class ServiceSearchProvider {
             resourceURI: playURI,
             resourceMetadata: didlMeta
         )
+        // SMAPI search items resolve via getMediaURI before play; the
+        // resolved URL carries credentials and plays with empty DIDL.
+        // Mark the strategy here so SonosManager.playBrowseItem dispatches
+        // correctly without inferring from the objectID prefix.
+        item.playbackStrategy = .smapiResolveThenEmpty
+        return item
     }
 
     // MARK: - Helpers

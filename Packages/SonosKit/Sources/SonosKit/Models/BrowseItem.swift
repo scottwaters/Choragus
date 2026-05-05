@@ -5,6 +5,34 @@
 /// (e.g. "object.container.album.musicAlbum") to a simpler local enum.
 import Foundation
 
+/// Per-item playback strategy. Set when the item is constructed by its
+/// originating service path; consumed by `SonosManager.playBrowseItem`
+/// to dispatch to the right play sequence. Each strategy is a closed,
+/// single-place description of how a given service's items reach the
+/// speaker — adding/changing one strategy can no longer accidentally
+/// alter another service's behaviour, which has been a recurring
+/// regression class (TuneIn DIDL dropped while optimising SMAPI etc.).
+public enum BrowsePlaybackStrategy: String, Equatable, Sendable {
+    /// Send the item's URI as-is, with its DIDL metadata. Default for
+    /// TuneIn music stations (s-prefix guide IDs), Sonos favorites with
+    /// embedded credentials, raw HTTP/HLS URLs, and anything else where
+    /// the URI alone is the authoritative target.
+    case directURIWithDIDL
+
+    /// SMAPI search items (objectID prefix `smapi:<sid>:<id>`). Resolves
+    /// the URI via `getMediaURI`; the resolved URL plays with empty DIDL
+    /// because the resolver bakes the credential into the URL.
+    case smapiResolveThenEmpty
+
+    /// TuneIn topics / programs / podcast episodes (t/p/g-prefix guide
+    /// IDs). The legacy `x-sonosapi-stream:` scheme rejects these with
+    /// UPnP 800 because they aren't audioBroadcasts — they're on-demand
+    /// MP3 episodes. Resolve via RadioTime's public Tune.ashx API to a
+    /// direct URL, then play via `x-rincon-mp3radio://` (MP3) or
+    /// `x-sonosapi-hls:` (HLS) with a minimal generic-broadcast DIDL.
+    case tuneInResolveViaRadioTime
+}
+
 public struct BrowseItem: Identifiable, Equatable {
     public let instanceID: UUID // Unique per-instance (handles duplicate tracks in playlists)
     public var id: UUID { instanceID }
@@ -18,6 +46,7 @@ public struct BrowseItem: Identifiable, Equatable {
     public var resourceMetadata: String? // DIDL metadata for playback
     public var serviceDescriptor: String? // SA_RINCON descriptor from desc element
     public var releaseDate: Date? // Release date from service API (iTunes, Spotify, etc.)
+    public var playbackStrategy: BrowsePlaybackStrategy = .directURIWithDIDL
 
     /// Release year extracted from releaseDate, or nil if unknown
     public var releaseYear: Int? {
