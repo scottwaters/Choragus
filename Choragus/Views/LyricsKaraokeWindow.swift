@@ -152,20 +152,20 @@ struct LyricsKaraokeWindow: View {
             // dominating. Both assets carry a `luminosity dark`
             // appearance variant and auto-swap with the active
             // colour scheme.
-            HStack(spacing: 14) {
-                Image("ChoragusTextLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: Self.headerArtSize * 0.5625)
-                Image("ChoragusLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: Self.headerArtSize * 0.75,
-                           height: Self.headerArtSize * 0.75)
-            }
-            .opacity(0.55)
-            .accessibilityLabel("Choragus")
-            .allowsHitTesting(false)
+            Image("ChoragusTextLogo")
+                .resizable()
+                .scaledToFit()
+                // Match Club Vis wordmark height (64 pt). Width is
+                // intentionally unconstrained so `.scaledToFit()`
+                // picks the asset's natural aspect width instead of
+                // a fixed 320 pt frame — a fixed frame leaves
+                // whitespace on either side of the asset and visually
+                // pulls the trailing edge in from the 28 pt
+                // horizontal padding the album art sits at.
+                .frame(height: 64)
+                .opacity(0.55)
+                .accessibilityLabel("Choragus")
+                .allowsHitTesting(false)
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 18)

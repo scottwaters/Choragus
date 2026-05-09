@@ -131,6 +131,7 @@ public struct DIDLItem {
     /// `<upnp:artist>` elements differ by role.
     public var artist: String = ""
     public var album: String = ""
+    public var genre: String = ""
     public var albumArtURI: String = ""
     public var streamContent: String = ""  // r:streamContent — current track info for streams
     public var resourceURI: String = ""    // res element — track URI for art URL construction
@@ -327,6 +328,7 @@ private class DIDLParser: NSObject, XMLParserDelegate {
             }
             currentArtistRole = ""
         case "album": item.album = trimmed
+        case "genre": item.genre = trimmed
         case "albumArtURI": item.albumArtURI = trimmed
         case "streamContent": item.streamContent = trimmed
         case "res": item.resourceURI = trimmed

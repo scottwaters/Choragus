@@ -16,6 +16,17 @@ public final class ImageCache: ImageCacheProtocol {
     private var cachedDiskUsage: Int?
     private var cachedFileCount: Int?
 
+    /// Append-only index of every URL ever stored. The on-disk files
+    /// are keyed by DJB2 hash so the URL itself isn't recoverable
+    /// from a cache file alone; this index lets callers (e.g.
+    /// Club Vis) enumerate cached URLs as a fallback artwork source.
+    /// Entries pointing at evicted files are filtered out at read
+    /// time. The index can grow unbounded but the file is small
+    /// (~100 bytes per URL) and rebuilt lazily.
+    private static let urlIndexFileName = "urls.txt"
+    private let urlIndexQueue = DispatchQueue(label: "com.choragus.imagecache.urlindex")
+    private var pendingURLAppends: [String] = []
+
     private static let maxSizeMBKey = "imageCacheMaxSizeMB"
     private static let maxAgeDaysKey = "imageCacheMaxAgeDays"
     private static let defaultMaxSizeMB = CacheDefaults.imageDiskMaxSizeMB
@@ -113,6 +124,10 @@ public final class ImageCache: ImageCacheProtocol {
 
         invalidateDiskStats()
 
+        // Append to the URL index — debounced via the serial queue so
+        // bursts of stores coalesce into a single file write.
+        appendToURLIndex(url.absoluteString)
+
         // Periodically evict (roughly every 50 stores)
         if Int.random(in: 0..<CacheDefaults.imageEvictionFrequency) == 0 {
             DispatchQueue.global(qos: .utility).async { [weak self] in
@@ -120,6 +135,73 @@ public final class ImageCache: ImageCacheProtocol {
                 self.evictExpiredAndOversized()
             }
         }
+    }
+
+    /// Buffers a URL string for the index file and writes batched
+    /// appends. Avoids one file write per store on rapid bursts.
+    private func appendToURLIndex(_ urlString: String) {
+        urlIndexQueue.async { [weak self] in
+            guard let self else { return }
+            self.pendingURLAppends.append(urlString)
+            if self.pendingURLAppends.count >= 25 { self.flushURLIndexLocked() }
+        }
+        // Schedule a flush in 2 s in case we don't hit the threshold.
+        urlIndexQueue.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.flushURLIndexLocked()
+        }
+    }
+
+    /// MUST be called on `urlIndexQueue`. Appends pending URLs to the
+    /// on-disk index file in one write.
+    private func flushURLIndexLocked() {
+        guard !pendingURLAppends.isEmpty else { return }
+        let payload = pendingURLAppends.joined(separator: "\n") + "\n"
+        pendingURLAppends.removeAll(keepingCapacity: true)
+        guard let data = payload.data(using: .utf8) else { return }
+        let path = diskCacheURL.appendingPathComponent(Self.urlIndexFileName)
+        if fileManager.fileExists(atPath: path.path) {
+            if let handle = try? FileHandle(forWritingTo: path) {
+                handle.seekToEndOfFile()
+                try? handle.write(contentsOf: data)
+                try? handle.close()
+            }
+        } else {
+            try? data.write(to: path, options: .atomic)
+            try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path.path)
+        }
+    }
+
+    /// Returns every URL the index has seen whose cache file still
+    /// exists on disk, sampled uniformly across the file's
+    /// modification-date timeline. `count` upper-bounds the result.
+    /// "Evenly across time" is implemented by sorting surviving URLs
+    /// by their cache file's mtime and taking equally-spaced indices.
+    public func sampledCachedURLs(count: Int) -> [URL] {
+        guard count > 0 else { return [] }
+        let path = diskCacheURL.appendingPathComponent(Self.urlIndexFileName)
+        guard let raw = try? String(contentsOf: path, encoding: .utf8) else { return [] }
+        // Dedupe — index can have duplicates because store() doesn't
+        // check for existing entries.
+        let seenLines = Array(Set(raw.split(separator: "\n").map { String($0) }))
+        let withDates: [(url: URL, date: Date)] = seenLines.compactMap { line -> (URL, Date)? in
+            guard let url = URL(string: line) else { return nil }
+            let key = cacheKey(for: url)
+            let filePath = diskCacheURL.appendingPathComponent(key)
+            guard let attrs = try? fileManager.attributesOfItem(atPath: filePath.path),
+                  let date = attrs[.modificationDate] as? Date else { return nil }
+            return (url, date)
+        }
+        guard !withDates.isEmpty else { return [] }
+        let sorted = withDates.sorted { $0.date < $1.date }
+        if sorted.count <= count { return sorted.map(\.url) }
+        // Equally-spaced sampling for "evenly across time".
+        let step = Double(sorted.count) / Double(count)
+        var result: [URL] = []
+        for i in 0..<count {
+            let idx = min(sorted.count - 1, Int(Double(i) * step))
+            result.append(sorted[idx].url)
+        }
+        return result
     }
 
     public func clearDisk() {

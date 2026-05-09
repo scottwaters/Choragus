@@ -10,6 +10,7 @@ final class WindowManager {
     var sonosManager: SonosManager?
     var lyricsService: LyricsServiceHolder?
     var lyricsCoordinator: LyricsCoordinator?
+    var metadataServicesHolder: MusicMetadataServiceHolder?
     var colorScheme: ColorScheme?
 
     private var playHistoryWindow: NSWindow?
@@ -18,6 +19,8 @@ final class WindowManager {
     private var forFunWindow: NSWindow?
     private var karaokeLyricsWindow: NSWindow?
     private var diagnosticsWindow: NSWindow?
+    private var clubVisWindow: NSWindow?
+    private var clubVisDebugWindow: NSWindow?
 
     func openPlayHistory() {
         if let existing = playHistoryWindow, existing.isVisible {
@@ -97,6 +100,191 @@ final class WindowManager {
     /// the menu observer in `ContentView` are kept dormant so wiring
     /// it back on is a one-line restoration.
     func openForFun() { /* feature paused */ }
+
+    /// Club Vis popout — tiled poster wall for the active group.
+    /// Opens at 1920×1080 logical (16:9 locked) and fullscreens cleanly
+    /// to native 4K. See `ClubVisWindow.swift` for the layout pipeline.
+    @discardableResult
+    func openClubVisForActiveGroup() -> Bool {
+        guard let manager = sonosManager else { return false }
+        let lastID = UserDefaults.standard.string(forKey: UDKey.lastSelectedGroupID)
+        let group = manager.groups.first(where: { $0.id == lastID })
+            ?? manager.groups.first
+        guard let group else { return false }
+        openClubVis(group: group)
+        return true
+    }
+
+    private static let clubVisWindowIdentifier = NSUserInterfaceItemIdentifier("ChoragusClubVis")
+
+    func openClubVis(group: SonosGroup) {
+        sonosDebugLog("[CLUBVIS-OPEN] enter group=\(group.name) clubVisIvarSet=\(clubVisWindow != nil) appWindowsWithID=\(NSApp.windows.filter { $0.identifier == Self.clubVisWindowIdentifier }.count)")
+
+        // Reuse the tracked window only when it is genuinely usable
+        // from the user's current context: visible, on the active
+        // Space, and not minimised. ClubVis is `.fullScreenPrimary`
+        // so a user who fullscreened it then changed Spaces (or
+        // exited fullscreen via ⌘W, which doesn't fire willClose)
+        // leaves a window that AppKit still considers `isVisible`
+        // but is on a Space the user isn't on — `makeKeyAndOrderFront`
+        // alone doesn't pull them back. Diagnosed via `[CLUBVIS-OPEN]
+        // reuse existing visible=true` repeating across rapid retries
+        // with no `willClose fired` event ever logging.
+        if let existing = clubVisWindow,
+           existing.isVisible,
+           existing.isOnActiveSpace,
+           !existing.isMiniaturized {
+            sonosDebugLog("[CLUBVIS-OPEN] refocus existing")
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        // Reuse not viable — tear down anything we know about plus
+        // every orphan window with our identifier. Releasing the
+        // autosave name first lets the new window claim it; without
+        // this AppKit refuses re-registration while the stale window
+        // still holds the slot (isReleasedWhenClosed == false keeps
+        // it alive in NSApp.windows).
+        if let stale = clubVisWindow {
+            sonosDebugLog("[CLUBVIS-OPEN] discarding stale tracked visible=\(stale.isVisible) onActiveSpace=\(stale.isOnActiveSpace) miniaturised=\(stale.isMiniaturized)")
+            stale.setFrameAutosaveName("")
+            stale.contentViewController = nil
+            stale.close()
+            clubVisWindow = nil
+        }
+        for win in NSApp.windows
+        where win.identifier == Self.clubVisWindowIdentifier {
+            sonosDebugLog("[CLUBVIS-OPEN] closing orphan visible=\(win.isVisible)")
+            win.setFrameAutosaveName("")
+            win.contentViewController = nil
+            win.close()
+        }
+
+        guard let manager = sonosManager,
+              let history = playHistoryManager,
+              let metadata = metadataServicesHolder else {
+            sonosDebugLog("[CLUBVIS-OPEN] BAIL — sonos=\(sonosManager != nil) history=\(playHistoryManager != nil) metadata=\(metadataServicesHolder != nil)")
+            return
+        }
+
+        let view = ClubVisWindow(groupID: group.coordinatorID)
+            .environmentObject(manager)
+            .environmentObject(history)
+            .environmentObject(metadata)
+            .environmentObject(manager.artCache)
+
+        let title = group.name.isEmpty
+            ? L10n.clubVisWindowTitle
+            : L10n.clubVisWindowTitleFormat(group.name)
+
+        // Default to 1920×1080 logical canvas. The aspect ratio is
+        // locked to 16:9 below so the ClubVisWindow's GeometryReader
+        // scaler always receives a width/height that match its
+        // logical canvas, and fullscreen on a 4K display tiles
+        // edge-to-edge.
+        let window = createWindow(title: title, content: view, width: 1920, height: 1080)
+        window.identifier = Self.clubVisWindowIdentifier
+        window.contentAspectRatio = NSSize(width: 16, height: 9)
+        window.contentMinSize = NSSize(width: 1280, height: 720)
+        window.collectionBehavior.insert(.fullScreenPrimary)
+        window.setFrameAutosaveName("ChoragusClubVisWindow")
+
+        // Materialise the window at the intended default the first
+        // time it opens — `NSHostingController` would otherwise size
+        // it to the SwiftUI view's intrinsic size. Subsequent opens
+        // honour the user's persisted frame via `setFrameAutosaveName`.
+        let saved = UserDefaults.standard.string(forKey: "NSWindow Frame ChoragusClubVisWindow") ?? ""
+        if saved.isEmpty {
+            let screen = NSScreen.main?.visibleFrame
+                ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
+            // Open at 1280×720 if the screen is too small for native
+            // 1920×1080 — otherwise the window falls off the visible
+            // area on a 13" laptop.
+            let openWidth: CGFloat = min(1920, screen.width - 80)
+            let openHeight: CGFloat = openWidth * 9.0 / 16.0
+            let originX = screen.midX - openWidth / 2
+            let originY = screen.midY - openHeight / 2
+            window.setFrame(NSRect(x: originX, y: originY,
+                                   width: openWidth, height: openHeight),
+                            display: true)
+        }
+
+        clubVisWindow = window
+        sonosDebugLog("[CLUBVIS-OPEN] window created visible=\(window.isVisible) frame=\(window.frame)")
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self, weak window] _ in
+            sonosDebugLog("[CLUBVIS-CLOSE] willClose fired isCurrentIvar=\(self?.clubVisWindow === window)")
+            if self?.clubVisWindow === window {
+                self?.clubVisWindow = nil
+            }
+            // `isReleasedWhenClosed = false` keeps the NSWindow + its
+            // NSHostingController alive after close, which means the
+            // SwiftUI view tree (ClubVisWindow + ClubVisWallView) is
+            // never released — `.onDisappear` doesn't fire, swap loops
+            // and observers keep running, and every subsequent open
+            // adds another set. Drop the contentViewController to
+            // release the SwiftUI tree synchronously on close.
+            window?.contentViewController = nil
+        }
+        // The Back-of-the-Club debug companion window is no longer
+        // auto-opened. It remains in the codebase but isn't called
+        // from the production open path; it can be re-enabled by a
+        // local developer for debugging by uncommenting an
+        // `openClubVisDebugCompanion()` call here.
+    }
+
+    #if DEBUG
+    private static let clubVisDebugWindowIdentifier = NSUserInterfaceItemIdentifier("ChoragusClubVisDebug")
+
+    /// Auto-opens the Back of the Club debug companion window in
+    /// DEBUG builds whenever the main Club Vis window opens. The
+    /// companion window subscribes to `BackOfTheClubDebugState.shared`
+    /// which the main view + wall view publish into on every rebuild
+    /// and slot assignment.
+    private func openClubVisDebugCompanion() {
+        if let existing = clubVisDebugWindow {
+            if existing.isVisible {
+                existing.makeKeyAndOrderFront(nil)
+                return
+            }
+            existing.close()
+            clubVisDebugWindow = nil
+        }
+        let view = BackOfTheClubDebugWindow()
+        let window = createWindow(title: "Back of the Club — Debug",
+                                  content: view,
+                                  width: 760,
+                                  height: 720)
+        window.identifier = Self.clubVisDebugWindowIdentifier
+        // Position the debug window to the right of the main Club Vis
+        // window so they don't overlap. Falls back to screen edge if
+        // there's no room.
+        if let main = clubVisWindow {
+            let mainFrame = main.frame
+            let screen = main.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+            var x = mainFrame.maxX + 16
+            if x + 760 > screen.maxX { x = max(screen.minX, screen.maxX - 760) }
+            window.setFrame(NSRect(x: x, y: mainFrame.maxY - 720,
+                                   width: 760, height: 720),
+                            display: true)
+        }
+        clubVisDebugWindow = window
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            if self?.clubVisDebugWindow === window {
+                self?.clubVisDebugWindow = nil
+            }
+        }
+    }
+    #endif
 
     /// Stable identifier stamped onto every karaoke window so we can
     /// find orphans in `NSApp.windows` even after our ivar reference

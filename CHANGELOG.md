@@ -1,6 +1,53 @@
 
 # Changelog
 
+## v4.8 — 2026-05-10 — Back of the Club visualisation
+
+A focused release for a new full-screen "club back wall" visualisation, the surrounding plumbing (Visualisation menu group, settings reorganisation, Up Next gating fix, bio render correctness) and the localisation refresh that goes with it.
+
+**Back of the Club ships as beta.** Layout, lighting, tile-pool weighting, and the surrounding settings are subject to change in subsequent releases as the design lands.
+
+### Back of the Club visualisation
+
+- New full-screen popout (`⌘J` / Visualisation menu / toolbar). Renders to a fixed 1920×1080 logical canvas and fullscreens cleanly to native 4K. Layout is a tiled poster wall under a slow warm-bar lighting cue, with the now-playing card in the foreground and an Up Next + artist-info column on the right.
+- **Tile pool tiers.** The wall sources artwork from: (1) queue items — always preferred; (2) tier-1 history rows whose genre matches any queue-item genre; (3) tier-2 history rows whose genre is adjacent to the queue's genre set; (4) random history sprinkle (configurable percentage of cells); (5) ambient wallpaper. Pool is deduplicated — never the same URL on two cells. Radio-stream URIs are excluded at every step so only real album art enters the wall.
+- **Wall packing.** Greedy random placement of 3 large 4×4 super-cells, ≥28 medium 3×3 cells, and 1×1 fill across a 25×14 grid. A constraint-driven sweep breaks any 1×1 run of length ≥ 3 by force-placing extra 3×3s, keeping rows and columns visually varied.
+- **Lighting cue.** Fixed warm bar palette (amber / magenta / indigo). The cue picker iterates with no sequential repeats so the vis never holds the same hue twice in a row.
+- **Now-playing card.** Left-side card holds the album art, settled-key-gated so the card never flashes a station logo across an inter-track metadata gap. iTunes radio-track-art lookup gated to radio playback only — service streams (Spotify / Apple Music) keep their DIDL art instead of falling through to a popularity-ordered iTunes search that could resolve to the wrong cover (the Weird Al "Like a Surgeon" / *Dare to Be Stupid* case).
+- **Artist info panel.** Right-column card sourced from `last.fm artist.getInfo` via `MusicMetadataService.artistInfo` (with Wikipedia + MusicBrainz fallbacks, cached per artist + language). Shows artist name, scrolling bio (rasterised once per track to a `CGImage` and drawn into a SwiftUI `Canvas` for sub-pixel scrolling), and genre tags pinned at the bottom.
+- **Up Next list.** Right column above the artist panel. Gates on `queueItems` non-empty so Spotify Radio / Apple Music DJ tracks (where Sonos populates `stationName` despite a real queue) keep the list visible. True radio (empty queue) hides it automatically.
+- **Hero / wall fade pipeline.** Wall cross-fades to a new shuffle on track change; per-slot fade-in / fade-out over 3.2–5 s. Queue mutations (add / re-order / remove) update Up Next and the tile pool in place — they no longer trigger a full wall rebuild, so adding a song mid-track doesn't flash the whole wall.
+
+### Visualisation menu group
+
+- New top-level **Visualisation** menu containing Karaoke (⌘K) and Back of the Club (⌘J). Both moved out of the View menu, where they previously shared space with the panel toggles.
+- New toolbar `sparkles.tv` menu opens the same group from the main window.
+- Menu labels simplified to **Karaoke** and **Back of the Club (beta)**. The longer descriptive strings (e.g. `popOutLyrics` / `Pop out for karaoke view`) survive as tooltips for context.
+
+### Vis settings reorganised
+
+- Vis tab in Settings now has a single **Back of the Club** section with one row per setting and a short caption underneath each control: genre matching mode, random sprinkle percent, About panel toggle, history source.
+- New help-text strings (`visGenreMatchingHelp`, `visRandomArtMixHelp`, `visShowAboutPanelHelp`, `visHistorySourceHelp`) localised across all 13 languages.
+
+### Bio Canvas rendering correctness
+
+- Bio text rasterises once via `ImageRenderer` and draws into a SwiftUI `Canvas` for sub-pixel vertical scrolling. The previous `Image().offset(y:)` approach snapped to pixel boundaries and stepped visibly at the slow 5 pt/s cycle.
+- Fixed a track-change regression where the Canvas kept drawing the previous artist's bitmap. Removed `Equatable` conformance from the bio sub-view — Equatable was letting SwiftUI skip propagating the new bitmap into the inner `TimelineView` content closure, leaving every track-change render one bitmap behind.
+- Stale-fetch guard: artist-info fetches that arrive after a subsequent track change are discarded so the panel never flashes the previous artist's metadata.
+
+### Karaoke window polish
+
+- Wordmark resized to 64 pt height (matches the Back of the Club header). Width left unconstrained so `.scaledToFit()` picks the natural aspect-correct width — a fixed 320 pt frame had pulled the trailing edge inward from the album-art leading edge.
+- App icon removed from the karaoke header; only the wordmark remains.
+
+### Other
+
+- **Window leak fix.** `NSWindow.contentViewController = nil` on `willClose` for both visualisation and karaoke popouts so the SwiftUI tree is released, not kept alive by the host controller across reopens.
+- **Diagnostic-log async write.** `sonosDebugLog` writes via a serial utility-QoS dispatch queue, keeping file I/O off the main thread. Synchronous writes were causing visible stutter in the Vis fade pipeline at high log volume.
+- **Translation refresh.** Visualisation menu names, toolbar tooltip, settings section + help captions, About panel header, and the new short `karaoke` menu label all localised to 13 languages.
+
+---
+
 ## v4.7 — 2026-05-05 — TuneIn topic playback, bonded-set volume reconciliation, media keys, queue/UX robustness
 
 A combined release covering the v4.7-wip work (media keys, diagnostics overhaul, Radio Paradise + SiriusXM service classification, queue-add fixes, hybrid volume throttle) and a focused round of speaker-state correctness work prompted by issues #28 and #34. The headline is two architectural shifts: per-item playback strategies in `BrowseItem` so service-specific quirks live in one place each, and per-device `GetMute`/`GetVolume` verifiers triggered by every outbound write so the speaker is the source of truth instead of optimistic dictionary writes.

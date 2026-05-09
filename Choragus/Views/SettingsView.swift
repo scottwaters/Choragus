@@ -39,6 +39,7 @@ struct SettingsView: View {
                 Label(L10n.displayTab, systemImage: "paintbrush").tag(0)
                 Label(L10n.musicTab, systemImage: "music.note").tag(1)
                 Label(L10n.scrobbling, systemImage: "waveform").tag(3)
+                Label(L10n.visualisationsTab, systemImage: "sparkles").tag(5)
                 Label(L10n.systemTab, systemImage: "gearshape").tag(2)
                 if sparkleObserver.updater != nil {
                     Label(L10n.softwareUpdates, systemImage: "arrow.down.circle").tag(4)
@@ -97,6 +98,7 @@ private struct TabContentView: View {
                 case 1: musicTab
                 case 3: scrobblingTab
                 case 4: softwareUpdatesTab
+                case 5: visualisationsTab
                 default: systemTab
                 }
             }
@@ -217,6 +219,8 @@ private struct TabContentView: View {
     @State private var showClearHistoryConfirm = false
     @State private var isRebuildingSummaries = false
 
+    @AppStorage(UDKey.playHistoryMaxEntries) private var playHistoryMaxEntries: Int = 0
+
     private var musicTab: some View {
         Group {
             // ─── PLAY HISTORY ───
@@ -227,6 +231,19 @@ private struct TabContentView: View {
                 ))
 
                 Toggle(L10n.ignoreTVHDMILineIn, isOn: $ignoreTV)
+
+                settingsRow(L10n.historyDataCap) {
+                    Picker("", selection: $playHistoryMaxEntries) {
+                        Text(L10n.unlimited).tag(0)
+                        Text("50,000").tag(50_000)
+                        Text("100,000").tag(100_000)
+                        Text("250,000").tag(250_000)
+                        Text("500,000").tag(500_000)
+                        Text("1,000,000").tag(1_000_000)
+                    }
+                    .frame(maxWidth: 160)
+                    .labelsHidden()
+                }
 
                 Divider().padding(.vertical, 4)
 
@@ -360,6 +377,89 @@ private struct TabContentView: View {
 
     private var scrobblingTab: some View {
         SettingsScrobblingTab(lastfm: lastFMScrobbler)
+    }
+
+    // MARK: - Visualisations Tab
+
+    @AppStorage(UDKey.visGenreMatchMode) private var visGenreMatchModeRaw = VisGenreMatchMode.defaultMode.rawValue
+    @AppStorage(UDKey.visRandomSprinklePercent) private var visRandomSprinklePercent: Double = 5.0
+    @AppStorage(UDKey.visShowAboutPanel) private var visShowAboutPanel: Bool = true
+    @AppStorage(UDKey.visHistorySource) private var visHistorySourceRaw = VisHistorySource.defaultMode.rawValue
+
+    private var visualisationsTab: some View {
+        // All visualisation settings currently live under the Back of
+        // the Club (beta) feature. New visualisations slot in as
+        // additional sections at the same level so the user can scan
+        // settings per visualisation rather than per setting type.
+        settingsSection(L10n.visBackOfTheClubSection) {
+            VStack(alignment: .leading, spacing: 18) {
+                visSettingRow(label: L10n.visGenreMatching,
+                              help: L10n.visGenreMatchingHelp) {
+                    Picker("", selection: $visGenreMatchModeRaw) {
+                        Text(L10n.visGenreMatchPartial).tag(VisGenreMatchMode.partial.rawValue)
+                        Text(L10n.visGenreMatchFull).tag(VisGenreMatchMode.full.rawValue)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .languageReactive()
+                }
+
+                visSettingRow(label: L10n.visRandomArtMix,
+                              help: L10n.visRandomArtMixHelp) {
+                    HStack(spacing: 12) {
+                        Stepper(value: $visRandomSprinklePercent, in: 0...50, step: 1) {
+                            EmptyView()
+                        }
+                        .labelsHidden()
+                        Text("\(Int(visRandomSprinklePercent))%")
+                            .monospacedDigit()
+                            .frame(minWidth: 44, alignment: .leading)
+                    }
+                }
+
+                visSettingRow(label: L10n.visShowAboutPanel,
+                              help: L10n.visShowAboutPanelHelp) {
+                    Toggle("", isOn: $visShowAboutPanel)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                }
+
+                visSettingRow(label: L10n.visHistorySource,
+                              help: L10n.visHistorySourceHelp) {
+                    Picker("", selection: $visHistorySourceRaw) {
+                        Text(L10n.visHistorySourceGroup).tag(VisHistorySource.group.rawValue)
+                        Text(L10n.visHistorySourceAll).tag(VisHistorySource.all.rawValue)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .languageReactive()
+                }
+            }
+        }
+    }
+
+    /// Single setting row inside a visualisation section: the
+    /// control on the right, the label on the left, and a wrapped
+    /// help caption underneath. Caption is `.callout` and dimmed so
+    /// it reads as supporting copy without crowding the control.
+    @ViewBuilder
+    private func visSettingRow<Control: View>(
+        label: String,
+        help: String,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(label)
+                    .font(.body)
+                Spacer()
+                control()
+            }
+            Text(help)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     // MARK: - System Tab

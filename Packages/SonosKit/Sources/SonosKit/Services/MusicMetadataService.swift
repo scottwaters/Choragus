@@ -63,7 +63,7 @@ public struct AlbumInfo: Codable, Equatable, Sendable {
 }
 
 @MainActor
-public final class MusicMetadataService {
+public final class MusicMetadataService: ArtistInfoProvider {
 
     private let tokenStore: LastFMTokenStore
     private let cache: MetadataCacheRepository

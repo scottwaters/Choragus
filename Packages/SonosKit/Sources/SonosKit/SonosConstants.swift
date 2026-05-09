@@ -279,6 +279,70 @@ public enum UDKey {
     public static let scrobblingAutoScrobble = "scrobbling.autoScrobble"
     public static let realtimeStats = "realtimeStats"
     public static let rollupInterval = "rollupInterval"
+    /// User-overridable cap on play-history row count. Sentinel `0`
+    /// means unlimited (no pruning). Default for unset accounts is
+    /// effectively unlimited via `UserDefaults.integer`'s zero
+    /// fallback — users who were silently capped at the old 50k
+    /// `CacheDefaults.playHistoryMaxEntries` ceiling now keep
+    /// everything they have unless they explicitly opt back into a
+    /// smaller cap from Settings → Music → Play History.
+    public static let playHistoryMaxEntries = "playHistoryMaxEntries"
+
+    // MARK: - Visualisations (Club Vis)
+    /// Genre-match strictness for the Club Vis tile pool. Stored as a
+    /// raw String matching `VisGenreMatchMode.rawValue` ("partial" |
+    /// "full"). Default behaves as "partial" via the rawValue init's
+    /// fallback so an unset key behaves the same as the default.
+    public static let visGenreMatchMode = "vis.genreMatchMode"
+    /// Percentage (0–100) of the Club Vis tile pool reserved for
+    /// genre-agnostic random sprinkle. Default 5. Independent of queue
+    /// / genre rule precedence — the sprinkle always fires.
+    public static let visRandomSprinklePercent = "vis.randomSprinklePercent"
+    /// When true (default), the Back of the Club bottom-right About
+    /// panel renders the artist's bio + tags. Toggle off for users
+    /// who want a cleaner art-only wall.
+    public static let visShowAboutPanel = "vis.showAboutPanel"
+    /// History source for the Vis wall. Stored as a raw String
+    /// matching `VisHistorySource.rawValue` ("group" | "all").
+    /// "group" (default) restricts the history pool to plays in the
+    /// currently-selected group; "all" pools across every group.
+    public static let visHistorySource = "vis.historySource"
+}
+
+/// Stored as a raw String UserDefault under `UDKey.visHistorySource`.
+/// `group` (default) — wall only draws history art from plays that
+/// occurred on the speakers in the currently-selected group. `all` —
+/// draws across every entry in `playHistoryManager.entries`.
+public enum VisHistorySource: String, CaseIterable {
+    case group
+    case all
+
+    /// `.group` matches plays whose `groupName` contains ANY room
+    /// currently in the active group — not the exact group-name
+    /// string. So a 3-room group pulls history from all 3 rooms
+    /// across every constellation they've ever played in.
+    public static var defaultMode: VisHistorySource { .group }
+
+    public static var current: VisHistorySource {
+        let raw = UserDefaults.standard.string(forKey: UDKey.visHistorySource) ?? ""
+        return VisHistorySource(rawValue: raw) ?? .defaultMode
+    }
+}
+
+/// Stored as a raw String UserDefault under `UDKey.visGenreMatchMode`.
+/// `partial` (default) does case-insensitive substring match across
+/// comma-split genre tokens; `full` requires equality on the full
+/// stored genre string.
+public enum VisGenreMatchMode: String, CaseIterable {
+    case partial
+    case full
+
+    public static var defaultMode: VisGenreMatchMode { .partial }
+
+    public static var current: VisGenreMatchMode {
+        let raw = UserDefaults.standard.string(forKey: UDKey.visGenreMatchMode) ?? ""
+        return VisGenreMatchMode(rawValue: raw) ?? .defaultMode
+    }
 }
 
 

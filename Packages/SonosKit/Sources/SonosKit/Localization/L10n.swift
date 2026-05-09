@@ -716,6 +716,34 @@ public enum L10n {
     public static var displayTab: String { tr("displayTab") }
     public static var musicTab: String { tr("musicTab") }
     public static var systemTab: String { tr("systemTab") }
+
+    // MARK: - Visualisations tab (v4.8)
+    public static var visualisationsTab: String { tr("visualisationsTab") }
+    public static var visGenreMatching: String { tr("visGenreMatching") }
+    public static var visGenreMatchPartial: String { tr("visGenreMatchPartial") }
+    public static var visGenreMatchFull: String { tr("visGenreMatchFull") }
+    public static var visRandomArtMix: String { tr("visRandomArtMix") }
+    public static var visShowAboutPanel: String { tr("visShowAboutPanel") }
+    public static var visHistorySource: String { tr("visHistorySource") }
+    public static var visHistorySourceGroup: String { tr("visHistorySourceGroup") }
+    public static var visHistorySourceAll: String { tr("visHistorySourceAll") }
+    // Back of the Club section + per-setting help captions
+    public static var visBackOfTheClubSection: String { tr("visBackOfTheClubSection") }
+    public static var visGenreMatchingHelp: String { tr("visGenreMatchingHelp") }
+    public static var visRandomArtMixHelp: String { tr("visRandomArtMixHelp") }
+    public static var visShowAboutPanelHelp: String { tr("visShowAboutPanelHelp") }
+    public static var visHistorySourceHelp: String { tr("visHistorySourceHelp") }
+    // Visualisation menu (top-level + toolbar dropdown)
+    public static var visualisationMenu: String { tr("visualisationMenu") }
+    // ABOUT label on the visualisation's artist panel header
+    public static var aboutSectionLabel: String { tr("aboutSectionLabel") }
+    // Memorial overlay splash text (Choragus 2006-2015 in-memory)
+    public static var memorialOverlayTitle: String { tr("memorialOverlayTitle") }
+    public static var memorialOverlayIYKYK: String { tr("memorialOverlayIYKYK") }
+
+    // MARK: - History data cap (v4.8)
+    public static var historyDataCap: String { tr("historyDataCap") }
+    public static var unlimited: String { tr("unlimited") }
     public static var playbackSection: String { tr("playbackSection") }
     public static var musicServicesBeta: String { tr("musicServicesBeta") }
     public static var menuBarControls: String { tr("menuBarControls") }
@@ -854,6 +882,7 @@ public enum L10n {
     public static var visualisations: String { tr("visualisations") }
     public static var tapToResetOffset: String { tr("tapToResetOffset") }
     public static var popOutLyrics: String { tr("popOutLyrics") }
+    public static var karaoke: String { tr("karaoke") }
 
     // Diagnostics
     public static var diagnostics: String { tr("diagnostics") }
@@ -1020,6 +1049,13 @@ public enum L10n {
     public static var karaokeTheme: String { tr("karaokeTheme") }
     public static func karaokeWindowTitleFormat(_ groupName: String) -> String {
         String(format: tr("karaokeWindowTitleFormat"), groupName)
+    }
+
+    // Club Vis popout (tiled poster wall, v3.x)
+    public static var clubVis: String { tr("clubVis") }
+    public static var clubVisWindowTitle: String { tr("clubVisWindowTitle") }
+    public static func clubVisWindowTitleFormat(_ groupName: String) -> String {
+        String(format: tr("clubVisWindowTitleFormat"), groupName)
     }
 
     // MARK: - Software Updates (Sparkle, v4.x)
@@ -9132,6 +9168,21 @@ public enum L10n {
             "pl": "Otw\u{00F3}rz w trybie karaoke",
             "zh-Hans": "\u{5F39}\u{51FA}\u{5361}\u{62C9}\u{514B}\u{89C6}\u{56FE}",
         ],
+        "karaoke": [
+            "en": "Karaoke",
+            "de": "Karaoke",
+            "fr": "Karaok\u{00E9}",
+            "nl": "Karaoke",
+            "es": "Karaoke",
+            "it": "Karaoke",
+            "sv": "Karaoke",
+            "nb": "Karaoke",
+            "da": "Karaoke",
+            "ja": "\u{30AB}\u{30E9}\u{30AA}\u{30B1}",
+            "pt": "Karaoke",
+            "pl": "Karaoke",
+            "zh-Hans": "\u{5361}\u{62C9}OK",
+        ],
         "diagnostics": [
             "en": "Diagnostics",
             "de": "Diagnose",
@@ -11816,6 +11867,56 @@ public enum L10n {
         ],
 
         // ========================
+        // MARK: Club Vis popout (tiled poster wall)
+        // ========================
+
+        "clubVis": [
+            "en": "Back of the Club (beta)",
+            "de": "Back of the Club (beta)",
+            "fr": "Back of the Club (beta)",
+            "nl": "Back of the Club (beta)",
+            "es": "Back of the Club (beta)",
+            "it": "Back of the Club (beta)",
+            "sv": "Back of the Club (beta)",
+            "nb": "Back of the Club (beta)",
+            "da": "Back of the Club (beta)",
+            "ja": "Back of the Club (beta)",
+            "pt": "Back of the Club (beta)",
+            "pl": "Back of the Club (beta)",
+            "zh-Hans": "Back of the Club (beta)",
+        ],
+        "clubVisWindowTitle": [
+            "en": "Back of the Club (beta)",
+            "de": "Back of the Club (beta)",
+            "fr": "Back of the Club (beta)",
+            "nl": "Back of the Club (beta)",
+            "es": "Back of the Club (beta)",
+            "it": "Back of the Club (beta)",
+            "sv": "Back of the Club (beta)",
+            "nb": "Back of the Club (beta)",
+            "da": "Back of the Club (beta)",
+            "ja": "Back of the Club (beta)",
+            "pt": "Back of the Club (beta)",
+            "pl": "Back of the Club (beta)",
+            "zh-Hans": "Back of the Club (beta)",
+        ],
+        "clubVisWindowTitleFormat": [
+            "en": "Back of the Club \u{2014} %@",
+            "de": "Back of the Club \u{2014} %@",
+            "fr": "Back of the Club \u{2014} %@",
+            "nl": "Back of the Club \u{2014} %@",
+            "es": "Back of the Club \u{2014} %@",
+            "it": "Back of the Club \u{2014} %@",
+            "sv": "Back of the Club \u{2014} %@",
+            "nb": "Back of the Club \u{2014} %@",
+            "da": "Back of the Club \u{2014} %@",
+            "ja": "Back of the Club \u{2014} %@",
+            "pt": "Back of the Club \u{2014} %@",
+            "pl": "Back of the Club \u{2014} %@",
+            "zh-Hans": "Back of the Club \u{2014} %@",
+        ],
+
+        // ========================
         // MARK: Software updates (Sparkle, v4.x)
         // ========================
 
@@ -11893,6 +11994,306 @@ public enum L10n {
             "pt": "\u{00DA}ltima verifica\u{00E7}\u{00E3}o: %@",
             "pl": "Ostatnio sprawdzone: %@",
             "zh-Hans": "\u{4E0A}\u{6B21}\u{68C0}\u{67E5}：%@",
+        ],
+        "visualisationsTab": [
+            "en": "Visualisations",
+            "de": "Visualisierungen",
+            "fr": "Visualisations",
+            "nl": "Visualisaties",
+            "es": "Visualizaciones",
+            "it": "Visualizzazioni",
+            "sv": "Visualiseringar",
+            "nb": "Visualiseringer",
+            "da": "Visualiseringer",
+            "ja": "\u{30D3}\u{30B8}\u{30E5}\u{30A2}\u{30E9}\u{30A4}\u{30B6}",
+            "pt": "Visualiza\u{00E7}\u{00F5}es",
+            "pl": "Wizualizacje",
+            "zh-Hans": "\u{53EF}\u{89C6}\u{5316}",
+        ],
+        "visGenreMatching": [
+            "en": "Genre matching",
+            "de": "Genre-Abgleich",
+            "fr": "Correspondance de genre",
+            "nl": "Genre-overeenkomst",
+            "es": "Coincidencia de g\u{00E9}nero",
+            "it": "Corrispondenza di genere",
+            "sv": "Genrematchning",
+            "nb": "Sjangermatching",
+            "da": "Genrematchning",
+            "ja": "\u{30B8}\u{30E3}\u{30F3}\u{30EB}\u{306E}\u{4E00}\u{81F4}",
+            "pt": "Correspond\u{00EA}ncia de g\u{00EA}nero",
+            "pl": "Dopasowanie gatunku",
+            "zh-Hans": "\u{7C7B}\u{578B}\u{5339}\u{914D}",
+        ],
+        "visGenreMatchPartial": [
+            "en": "Partial",
+            "de": "Teilweise",
+            "fr": "Partielle",
+            "nl": "Gedeeltelijk",
+            "es": "Parcial",
+            "it": "Parziale",
+            "sv": "Delvis",
+            "nb": "Delvis",
+            "da": "Delvis",
+            "ja": "\u{90E8}\u{5206}",
+            "pt": "Parcial",
+            "pl": "Cz\u{0119}\u{015B}ciowe",
+            "zh-Hans": "\u{90E8}\u{5206}",
+        ],
+        "visGenreMatchFull": [
+            "en": "Full",
+            "de": "Vollst\u{00E4}ndig",
+            "fr": "Compl\u{00E8}te",
+            "nl": "Volledig",
+            "es": "Completa",
+            "it": "Completa",
+            "sv": "Fullst\u{00E4}ndig",
+            "nb": "Fullstendig",
+            "da": "Fuldst\u{00E6}ndig",
+            "ja": "\u{5B8C}\u{5168}",
+            "pt": "Completa",
+            "pl": "Pe\u{0142}ne",
+            "zh-Hans": "\u{5B8C}\u{5168}",
+        ],
+        "visRandomArtMix": [
+            "en": "Random art mix",
+            "de": "Zuf\u{00E4}llige Coverauswahl",
+            "fr": "Pochettes al\u{00E9}atoires",
+            "nl": "Willekeurige hoezen",
+            "es": "Car\u{00E1}tulas aleatorias",
+            "it": "Copertine casuali",
+            "sv": "Slumpm\u{00E4}ssiga omslag",
+            "nb": "Tilfeldige omslag",
+            "da": "Tilf\u{00E6}ldige omslag",
+            "ja": "\u{30E9}\u{30F3}\u{30C0}\u{30E0}\u{306A}\u{30A2}\u{30FC}\u{30C8}\u{30EF}\u{30FC}\u{30AF}",
+            "pt": "Capas aleat\u{00F3}rias",
+            "pl": "Losowe ok\u{0142}adki",
+            "zh-Hans": "\u{968F}\u{673A}\u{5C01}\u{9762}",
+        ],
+        "visShowAboutPanel": [
+            "en": "Show About panel",
+            "de": "Info-Panel anzeigen",
+            "fr": "Afficher le panneau \u{00C0} propos",
+            "nl": "Info-paneel tonen",
+            "es": "Mostrar panel Acerca de",
+            "it": "Mostra pannello Informazioni",
+            "sv": "Visa Om-panel",
+            "nb": "Vis Om-panel",
+            "da": "Vis Om-panel",
+            "ja": "\u{30A2}\u{30D0}\u{30A6}\u{30C8}\u{30D1}\u{30CD}\u{30EB}\u{3092}\u{8868}\u{793A}",
+            "pt": "Mostrar painel Sobre",
+            "pl": "Poka\u{017C} panel Informacje",
+            "zh-Hans": "\u{663E}\u{793A}\u{4ECB}\u{7ECD}\u{9762}\u{677F}",
+        ],
+        "visHistorySource": [
+            "en": "History source",
+            "de": "Verlaufsquelle",
+            "fr": "Source de l\u{2019}historique",
+            "nl": "Geschiedenisbron",
+            "es": "Fuente del historial",
+            "it": "Origine cronologia",
+            "sv": "Historikk\u{00E4}lla",
+            "nb": "Historikkkilde",
+            "da": "Historikkilde",
+            "ja": "\u{5C65}\u{6B74}\u{30BD}\u{30FC}\u{30B9}",
+            "pt": "Fonte do hist\u{00F3}rico",
+            "pl": "\u{0179}r\u{00F3}d\u{0142}o historii",
+            "zh-Hans": "\u{5386}\u{53F2}\u{6765}\u{6E90}",
+        ],
+        "visHistorySourceGroup": [
+            "en": "This group",
+            "de": "Diese Gruppe",
+            "fr": "Ce groupe",
+            "nl": "Deze groep",
+            "es": "Este grupo",
+            "it": "Questo gruppo",
+            "sv": "Denna grupp",
+            "nb": "Denne gruppen",
+            "da": "Denne gruppe",
+            "ja": "\u{3053}\u{306E}\u{30B0}\u{30EB}\u{30FC}\u{30D7}",
+            "pt": "Este grupo",
+            "pl": "Ta grupa",
+            "zh-Hans": "\u{6B64}\u{7EC4}",
+        ],
+        "visHistorySourceAll": [
+            "en": "All speakers",
+            "de": "Alle Lautsprecher",
+            "fr": "Toutes les enceintes",
+            "nl": "Alle luidsprekers",
+            "es": "Todos los altavoces",
+            "it": "Tutti gli altoparlanti",
+            "sv": "Alla h\u{00F6}gtalare",
+            "nb": "Alle h\u{00F8}yttalere",
+            "da": "Alle h\u{00F8}jttalere",
+            "ja": "\u{3059}\u{3079}\u{3066}\u{306E}\u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}",
+            "pt": "Todas as colunas",
+            "pl": "Wszystkie g\u{0142}o\u{015B}niki",
+            "zh-Hans": "\u{6240}\u{6709}\u{626C}\u{58F0}\u{5668}",
+        ],
+        "visBackOfTheClubSection": [
+            "en": "Back of the Club (beta)",
+            "de": "Back of the Club (beta)",
+            "fr": "Back of the Club (beta)",
+            "nl": "Back of the Club (beta)",
+            "es": "Back of the Club (beta)",
+            "it": "Back of the Club (beta)",
+            "sv": "Back of the Club (beta)",
+            "nb": "Back of the Club (beta)",
+            "da": "Back of the Club (beta)",
+            "ja": "Back of the Club (beta)",
+            "pt": "Back of the Club (beta)",
+            "pl": "Back of the Club (beta)",
+            "zh-Hans": "Back of the Club (beta)",
+        ],
+        "visGenreMatchingHelp": [
+            "en": "Controls how strictly artwork on the wall matches the playing track\u{2019}s genre. Partial allows related sub-genres to mix in; Full only includes art whose genre tag matches exactly.",
+            "de": "Legt fest, wie streng die Albumcover an der Wand zum Genre des laufenden Titels passen m\u{00FC}ssen. Teilweise l\u{00E4}sst verwandte Untergenres zu; Vollst\u{00E4}ndig zeigt nur Cover, deren Genre exakt \u{00FC}bereinstimmt.",
+            "fr": "D\u{00E9}finit \u{00E0} quel point les pochettes affich\u{00E9}es sur le mur doivent correspondre au genre du morceau en cours. Partielle autorise les sous-genres voisins\u{202F}; Compl\u{00E8}te n\u{2019}affiche que les pochettes dont le genre correspond exactement.",
+            "nl": "Bepaalt hoe streng hoezen op de muur moeten matchen met het genre van het huidige nummer. Gedeeltelijk laat verwante subgenres toe; Volledig toont alleen hoezen waarvan het genre precies overeenkomt.",
+            "es": "Controla con qu\u{00E9} precisi\u{00F3}n las car\u{00E1}tulas del muro coinciden con el g\u{00E9}nero del tema en reproducci\u{00F3}n. Parcial permite mezclar subg\u{00E9}neros relacionados; Completa solo incluye car\u{00E1}tulas cuya etiqueta de g\u{00E9}nero coincide exactamente.",
+            "it": "Determina quanto rigorosamente le copertine sulla parete corrispondono al genere del brano in riproduzione. Parziale ammette sottogeneri affini; Completa include solo copertine il cui genere coincide esattamente.",
+            "sv": "Styr hur strikt skivomslagen p\u{00E5} v\u{00E4}ggen matchar genren f\u{00F6}r sp\u{00E5}ret som spelas. Partiell till\u{00E5}ter relaterade undergenrer; Fullst\u{00E4}ndig visar endast omslag vars genretagg matchar exakt.",
+            "nb": "Bestemmer hvor strengt platecoverne p\u{00E5} veggen matcher sjangeren til sporet som spilles. Delvis tillater beslektede undersjangre; Fullstendig viser bare cover der sjangeretiketten samsvarer n\u{00F8}yaktig.",
+            "da": "Styrer, hvor pr\u{00E6}cist coverne p\u{00E5} v\u{00E6}ggen matcher genren for det sp\u{00F8}r, der afspilles. Delvis tillader beslægtede undergenrer; Fuldst\u{00E6}ndig viser kun cover, hvis genre-tag matcher n\u{00F8}jagtigt.",
+            "ja": "\u{75c1}\u{306e}\u{30a2}\u{30fc}\u{30c8}\u{30ef}\u{30fc}\u{30af}\u{3092}\u{73fe}\u{5728}\u{306e}\u{30c8}\u{30e9}\u{30c3}\u{30af}\u{306e}\u{30b8}\u{30e3}\u{30f3}\u{30eb}\u{306b}\u{3069}\u{306e}\u{7a0b}\u{5ea6}\u{53b3}\u{5bc6}\u{306b}\u{4e00}\u{81f4}\u{3055}\u{305b}\u{308b}\u{304b}\u{3092}\u{5236}\u{5fa1}\u{3057}\u{307e}\u{3059}\u{3002}\u{300c}\u{90e8}\u{5206}\u{4e00}\u{81f4}\u{300d}\u{306f}\u{95a2}\u{9023}\u{3059}\u{308b}\u{30b5}\u{30d6}\u{30b8}\u{30e3}\u{30f3}\u{30eb}\u{3082}\u{8868}\u{793a}\u{3057}\u{3001}\u{300c}\u{5b8c}\u{5168}\u{4e00}\u{81f4}\u{300d}\u{306f}\u{30b8}\u{30e3}\u{30f3}\u{30eb}\u{30bf}\u{30b0}\u{304c}\u{6b63}\u{78ba}\u{306b}\u{4e00}\u{81f4}\u{3059}\u{308b}\u{30a2}\u{30fc}\u{30c8}\u{30ef}\u{30fc}\u{30af}\u{306e}\u{307f}\u{3092}\u{8868}\u{793a}\u{3057}\u{307e}\u{3059}\u{3002}",
+            "pt": "Define com que rigor as capas na parede correspondem ao g\u{00E9}nero da faixa em reprodu\u{00E7}\u{00E3}o. Parcial permite subg\u{00E9}neros relacionados; Completa inclui apenas capas cuja etiqueta de g\u{00E9}nero coincide exatamente.",
+            "pl": "Okre\u{015B}la, jak \u{015B}ci\u{015B}le ok\u{0142}adki na \u{015B}cianie dopasowuj\u{0105} si\u{0119} do gatunku odtwarzanego utworu. Cz\u{0119}\u{015B}ciowe dopuszcza pokrewne podgatunki; Pe\u{0142}ne pokazuje tylko ok\u{0142}adki, kt\u{00F3}rych tag gatunku zgadza si\u{0119} dok\u{0142}adnie.",
+            "zh-Hans": "\u{63a7}\u{5236}\u{5899}\u{4e0a}\u{7684}\u{4e13}\u{8f91}\u{5c01}\u{9762}\u{4e0e}\u{5f53}\u{524d}\u{66f2}\u{76ee}\u{7c7b}\u{578b}\u{306e}\u{5339}\u{914d}\u{7a0b}\u{5ea6}\u{3002}\u{201c}\u{90e8}\u{5206}\u{5339}\u{914d}\u{201d}\u{5141}\u{8bb8}\u{6df7}\u{5165}\u{76f8}\u{5173}\u{7684}\u{5b50}\u{7c7b}\u{578b}；\u{201c}\u{5b8c}\u{5168}\u{5339}\u{914d}\u{201d}\u{4ec5}\u{5305}\u{542b}\u{7c7b}\u{578b}\u{6807}\u{7b7e}\u{5b8c}\u{5168}\u{4e00}\u{81f4}\u{306e}\u{5c01}\u{9762}\u{3002}",
+        ],
+        "visRandomArtMixHelp": [
+            "en": "Percentage of wall tiles drawn from your full play history at random rather than the current track\u{2019}s genre. Higher values keep the wall feeling varied even when one genre dominates the queue.",
+            "de": "Anteil der Wandkacheln, die zuf\u{00E4}llig aus deinem gesamten Wiedergabeverlauf statt aus dem Genre des aktuellen Titels gezogen werden. H\u{00F6}here Werte halten die Wand abwechslungsreich, auch wenn ein Genre dominiert.",
+            "fr": "Pourcentage des cases du mur tir\u{00E9}es au hasard dans l\u{2019}ensemble de votre historique d\u{2019}\u{00E9}coute plut\u{00F4}t que dans le genre du morceau en cours. Une valeur plus \u{00E9}lev\u{00E9}e maintient un mur vari\u{00E9} m\u{00EA}me lorsqu\u{2019}un genre domine la file.",
+            "nl": "Percentage muurtegels dat willekeurig uit je volledige afspeelgeschiedenis komt in plaats van het genre van het huidige nummer. Hogere waarden houden de muur gevarieerd, zelfs als \u{00E9}\u{00E9}n genre de wachtrij domineert.",
+            "es": "Porcentaje de mosaicos del muro tomados al azar de todo tu historial en lugar del g\u{00E9}nero del tema actual. Valores m\u{00E1}s altos mantienen el muro variado incluso cuando un g\u{00E9}nero domina la cola.",
+            "it": "Percentuale di tessere della parete prelevate a caso dall\u{2019}intera cronologia anziché dal genere del brano in riproduzione. Valori pi\u{00F9} alti mantengono la parete varia anche quando un genere domina la coda.",
+            "sv": "Andel av v\u{00E4}ggens rutor som dras slumpm\u{00E4}ssigt ur hela din lyssningshistorik i st\u{00E4}llet f\u{00F6}r det aktuella sp\u{00E5}rets genre. H\u{00F6}gre v\u{00E4}rden h\u{00E5}ller v\u{00E4}ggen omv\u{00E4}xlande \u{00E4}ven n\u{00E4}r en genre dominerar k\u{00F6}n.",
+            "nb": "Andel av rutene p\u{00E5} veggen som velges tilfeldig fra hele lyttehistorikken din i stedet for sjangeren til sporet som spilles. H\u{00F8}yere verdier holder veggen variert selv n\u{00E5}r en sjanger dominerer k\u{00F8}en.",
+            "da": "Andelen af felter p\u{00E5} v\u{00E6}ggen, der tr\u{00E6}kkes tilf\u{00E6}ldigt fra hele din afspilningshistorik i stedet for det aktuelle sp\u{00F8}rs genre. H\u{00F8}jere v\u{00E6}rdier holder v\u{00E6}ggen varieret, selv n\u{00E5}r \u{00E9}n genre dominerer k\u{00F8}en.",
+            "ja": "\u{73fe}\u{5728}\u{306e}\u{30c8}\u{30e9}\u{30c3}\u{30af}\u{306e}\u{30b8}\u{30e3}\u{30f3}\u{30eb}\u{3067}\u{306f}\u{306a}\u{304f}\u{518d}\u{751f}\u{5c65}\u{6b74}\u{5168}\u{4f53}\u{304b}\u{3089}\u{30e9}\u{30f3}\u{30c0}\u{30e0}\u{306b}\u{63cf}\u{753b}\u{3055}\u{308c}\u{308b}\u{75c1}\u{306e}\u{30bf}\u{30a4}\u{30eb}\u{306e}\u{5272}\u{5408}\u{3002}\u{5024}\u{304c}\u{9ad8}\u{3044}\u{307b}\u{3069}\u{3001}\u{30ad}\u{30e5}\u{30fc}\u{306e}\u{30b8}\u{30e3}\u{30f3}\u{30eb}\u{304c}\u{504f}\u{3063}\u{3066}\u{3082}\u{75c1}\u{306e}\u{591a}\u{69d8}\u{6027}\u{304c}\u{4fdd}\u{305f}\u{308c}\u{307e}\u{3059}\u{3002}",
+            "pt": "Percentagem das pe\u{00E7}as do mural retiradas ao acaso do hist\u{00F3}rico completo em vez do g\u{00E9}nero da faixa em reprodu\u{00E7}\u{00E3}o. Valores mais altos mant\u{00EA}m o mural variado mesmo quando um g\u{00E9}nero domina a fila.",
+            "pl": "Procent kafelk\u{00F3}w \u{015B}ciany dobieranych losowo z ca\u{0142}ej historii odtwarzania zamiast z gatunku bie\u{017C}\u{0105}cego utworu. Wy\u{017C}sze warto\u{015B}ci utrzymuj\u{0105} r\u{00F3}\u{017C}norodno\u{015B}\u{0107} \u{015B}ciany nawet wtedy, gdy w kolejce dominuje jeden gatunek.",
+            "zh-Hans": "\u{4ECE}\u{6574}\u{4E2A}\u{64AD}\u{653E}\u{5386}\u{53F2}\u{4E2D}\u{968F}\u{673A}\u{9009}\u{53D6}\u{800C}\u{975E}\u{53D6}\u{81EA}\u{5F53}\u{524D}\u{66F2}\u{76EE}\u{7C7B}\u{578B}\u{7684}\u{5899}\u{9762}\u{74F7}\u{7247}\u{767E}\u{5206}\u{6BD4}\u{3002}\u{6570}\u{503C}\u{8D8A}\u{9AD8}\u{FF0C}\u{5373}\u{4F7F}\u{67D0}\u{4E00}\u{7C7B}\u{578B}\u{4E3B}\u{5BFC}\u{961F}\u{5217}，\u{5899}\u{9762}\u{4E5F}\u{80FD}\u{4FDD}\u{6301}\u{4E30}\u{5BCC}\u{53D8}\u{5316}\u{3002}",
+        ],
+        "visShowAboutPanelHelp": [
+            "en": "Shows the artist About panel in the lower-right of the visualisation, with biography and genre tags. Hide it for a cleaner wall.",
+            "de": "Zeigt das Info-Panel mit Biografie und Genre-Tags rechts unten in der Visualisierung. Ausblenden f\u{00FC}r eine aufger\u{00E4}umtere Wand.",
+            "fr": "Affiche le panneau \u{00C0} propos avec la biographie et les genres en bas \u{00E0} droite de la visualisation. D\u{00E9}sactivez-le pour un mur plus \u{00E9}pur\u{00E9}.",
+            "nl": "Toont het Info-paneel met biografie en genre-tags rechtsonder in de visualisatie. Verberg voor een rustiger muur.",
+            "es": "Muestra el panel Acerca de con la biograf\u{00ED}a y las etiquetas de g\u{00E9}nero en la esquina inferior derecha de la visualizaci\u{00F3}n. Oc\u{00FA}ltalo para un muro m\u{00E1}s limpio.",
+            "it": "Mostra il pannello Informazioni con biografia e tag di genere in basso a destra nella visualizzazione. Nascondilo per una parete pi\u{00F9} pulita.",
+            "sv": "Visar Om-panelen med biografi och genretaggar nere till h\u{00F6}ger i visualiseringen. D\u{00F6}lj f\u{00F6}r en renare v\u{00E4}gg.",
+            "nb": "Viser Om-panelet med biografi og sjangertagger nede til h\u{00F8}yre i visualiseringen. Skjul for en renere vegg.",
+            "da": "Viser Om-panelet med biografi og genre-tags nederst til h\u{00F8}jre i visualiseringen. Skjul for en renere v\u{00E6}g.",
+            "ja": "\u{30D3}\u{30B8}\u{30E5}\u{30A2}\u{30E9}\u{30A4}\u{30BC}\u{30FC}\u{30B7}\u{30E7}\u{30F3}\u{306E}\u{53F3}\u{4E0B}\u{306B}\u{3001}\u{4F1D}\u{8A18}\u{3068}\u{30B8}\u{30E3}\u{30F3}\u{30EB}\u{30BF}\u{30B0}\u{3092}\u{542B}\u{3080}\u{30A2}\u{30D0}\u{30A6}\u{30C8}\u{30D1}\u{30CD}\u{30EB}\u{3092}\u{8868}\u{793A}\u{3057}\u{307E}\u{3059}\u{3002}\u{30AA}\u{30D5}\u{306B}\u{3059}\u{308B}\u{3068}\u{75C1}\u{304C}\u{3059}\u{3063}\u{304D}\u{308A}\u{3057}\u{307E}\u{3059}\u{3002}",
+            "pt": "Mostra o painel Sobre com biografia e etiquetas de g\u{00E9}nero no canto inferior direito da visualiza\u{00E7}\u{00E3}o. Oculte para um mural mais limpo.",
+            "pl": "Pokazuje panel Informacje z biografi\u{0105} i tagami gatunku w prawym dolnym rogu wizualizacji. Ukryj, aby uzyska\u{0107} czystsz\u{0105} \u{015B}cian\u{0119}.",
+            "zh-Hans": "\u{5728}\u{53EF}\u{89C6}\u{5316}\u{7684}\u{53F3}\u{4E0B}\u{89D2}\u{663E}\u{793A}\u{5305}\u{542B}\u{827A}\u{4EBA}\u{4F20}\u{8BB0}\u{4E0E}\u{7C7B}\u{578B}\u{6807}\u{7B7E}\u{306E}\u{4ECB}\u{7ECD}\u{9762}\u{677F}\u{3002}\u{5C06}\u{5176}\u{9690}\u{85CF}\u{4F7F}\u{5899}\u{9762}\u{66F4}\u{6E05}\u{723D}\u{3002}",
+        ],
+        "visHistorySourceHelp": [
+            "en": "Where the wall pulls its art pool from. This group uses only tracks the selected speakers have played; All speakers pulls from your entire library, giving a richer mix at the cost of focus.",
+            "de": "Quelle, aus der die Wand ihre Cover bezieht. Diese Gruppe verwendet nur Titel, die von den ausgew\u{00E4}hlten Lautsprechern abgespielt wurden; Alle Lautsprecher zieht aus der gesamten Bibliothek f\u{00FC}r mehr Vielfalt auf Kosten des Fokus.",
+            "fr": "D\u{00E9}finit l\u{2019}origine des pochettes affich\u{00E9}es sur le mur. Ce groupe utilise uniquement les titres lus par les enceintes s\u{00E9}lectionn\u{00E9}es\u{202F}; Toutes les enceintes pioche dans toute la biblioth\u{00E8}que pour un m\u{00E9}lange plus riche au prix de la coh\u{00E9}rence.",
+            "nl": "Waar de muur zijn hoezen vandaan haalt. Deze groep gebruikt alleen nummers die de geselecteerde luidsprekers hebben afgespeeld; Alle luidsprekers haalt uit je volledige bibliotheek voor meer variatie ten koste van focus.",
+            "es": "Origen del repertorio de car\u{00E1}tulas del muro. Este grupo usa solo temas que han sonado en los altavoces seleccionados; Todos los altavoces toma de toda tu biblioteca, con m\u{00E1}s variedad a costa de enfoque.",
+            "it": "Da dove la parete attinge le copertine. Questo gruppo usa solo i brani riprodotti dagli altoparlanti selezionati; Tutti gli altoparlanti pesca dall\u{2019}intera libreria, offrendo un mix pi\u{00F9} ricco a discapito della coerenza.",
+            "sv": "Var v\u{00E4}ggen h\u{00E4}mtar omslag. Denna grupp anv\u{00E4}nder bara sp\u{00E5}r som de valda h\u{00F6}gtalarna har spelat; Alla h\u{00F6}gtalare h\u{00E4}mtar fr\u{00E5}n hela biblioteket f\u{00F6}r en rikare blandning p\u{00E5} bekostnad av fokus.",
+            "nb": "Hvor veggen henter coverne fra. Denne gruppen bruker bare spor som de valgte h\u{00F8}yttalerne har spilt; Alle h\u{00F8}yttalere henter fra hele biblioteket for en rikere blanding p\u{00E5} bekostning av fokus.",
+            "da": "Hvor v\u{00E6}ggen henter sine cover fra. Denne gruppe bruger kun sp\u{00F8}r, som de valgte h\u{00F8}jttalere har afspillet; Alle h\u{00F8}jttalere tr\u{00E6}kker fra hele biblioteket og giver en rigere blanding p\u{00E5} bekostning af fokus.",
+            "ja": "\u{75C1}\u{306E}\u{30A2}\u{30FC}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{306E}\u{53D6}\u{5F97}\u{5143}\u{3067}\u{3059}\u{3002}\u{300C}\u{3053}\u{306E}\u{30B0}\u{30EB}\u{30FC}\u{30D7}\u{300D}\u{306F}\u{9078}\u{629E}\u{3055}\u{308C}\u{305F}\u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}\u{3067}\u{518D}\u{751F}\u{3057}\u{305F}\u{30C8}\u{30E9}\u{30C3}\u{30AF}\u{306E}\u{307F}\u{3092}\u{4F7F}\u{7528}\u{3057}\u{3001}\u{300C}\u{3059}\u{3079}\u{3066}\u{306E}\u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}\u{300D}\u{306F}\u{30E9}\u{30A4}\u{30D6}\u{30E9}\u{30EA}\u{5168}\u{4F53}\u{304B}\u{3089}\u{53D6}\u{5F97}\u{3057}\u{307E}\u{3059}\u{3002}",
+            "pt": "De onde o mural retira o seu acervo de capas. Este grupo usa apenas faixas reproduzidas pelas colunas selecionadas; Todas as colunas vai buscar a toda a biblioteca, com mais variedade \u{00E0} custa de foco.",
+            "pl": "Sk\u{0105}d \u{015B}ciana czerpie ok\u{0142}adki. Ta grupa u\u{017C}ywa tylko utwor\u{00F3}w odtworzonych przez wybrane g\u{0142}o\u{015B}niki; Wszystkie g\u{0142}o\u{015B}niki czerpie z ca\u{0142}ej biblioteki, daj\u{0105}c bogatszy wyb\u{00F3}r kosztem sp\u{00F3}jno\u{015B}ci.",
+            "zh-Hans": "\u{5899}\u{9762}\u{63D2}\u{56FE}\u{5E93}\u{306E}\u{6765}\u{6E90}\u{3002}\u{300C}\u{6B64}\u{7EC4}\u{300D}\u{4EC5}\u{4F7F}\u{7528}\u{6240}\u{9009}\u{626C}\u{58F0}\u{5668}\u{5DF2}\u{64AD}\u{653E}\u{306E}\u{66F2}\u{76EE}\u{FF1B}\u{300C}\u{6240}\u{6709}\u{626C}\u{58F0}\u{5668}\u{300D}\u{4ECE}\u{6574}\u{4E2A}\u{66F2}\u{5E93}\u{63D0}\u{53D6}，\u{4EE5}\u{8D34}\u{8FD1}\u{6027}\u{4E3A}\u{4EE3}\u{4EF7}\u{63DB}\u{53D6}\u{66F4}\u{4E30}\u{5BCC}\u{306E}\u{53D8}\u{5316}\u{3002}",
+        ],
+        "visualisationMenu": [
+            "en": "Visualisation",
+            "de": "Visualisierung",
+            "fr": "Visualisation",
+            "nl": "Visualisatie",
+            "es": "Visualizaci\u{00F3}n",
+            "it": "Visualizzazione",
+            "sv": "Visualisering",
+            "nb": "Visualisering",
+            "da": "Visualisering",
+            "ja": "\u{30D3}\u{30B8}\u{30E5}\u{30A2}\u{30E9}\u{30A4}\u{30BC}\u{30FC}\u{30B7}\u{30E7}\u{30F3}",
+            "pt": "Visualiza\u{00E7}\u{00E3}o",
+            "pl": "Wizualizacja",
+            "zh-Hans": "\u{53EF}\u{89C6}\u{5316}",
+        ],
+        "aboutSectionLabel": [
+            "en": "ABOUT",
+            "de": "INFO",
+            "fr": "\u{00C0} PROPOS",
+            "nl": "INFO",
+            "es": "ACERCA DE",
+            "it": "INFO",
+            "sv": "OM",
+            "nb": "OM",
+            "da": "OM",
+            "ja": "\u{30A2}\u{30FC}\u{30C6}\u{30A3}\u{30B9}\u{30C8}\u{306B}\u{3064}\u{3044}\u{3066}",
+            "pt": "SOBRE",
+            "pl": "O ARTY\u{015A}CIE",
+            "zh-Hans": "\u{5173}\u{4E8E}",
+        ],
+        "memorialOverlayTitle": [
+            "en": "In memory of 2006-2015\u{2026}",
+            "de": "Zum Gedenken an 2006\u{2013}2015\u{2026}",
+            "fr": "En m\u{00E9}moire de 2006-2015\u{2026}",
+            "nl": "Ter herinnering aan 2006-2015\u{2026}",
+            "es": "En memoria de 2006-2015\u{2026}",
+            "it": "In memoria di 2006-2015\u{2026}",
+            "sv": "Till minne av 2006\u{2013}2015\u{2026}",
+            "nb": "Til minne om 2006\u{2013}2015\u{2026}",
+            "da": "Til minde om 2006\u{2013}2015\u{2026}",
+            "ja": "2006\u{2013}2015\u{5e74}\u{306e}\u{8ffd}\u{61b6}\u{306b}\u{2026}",
+            "pt": "Em mem\u{00F3}ria de 2006-2015\u{2026}",
+            "pl": "Pami\u{0119}ci 2006\u{2013}2015\u{2026}",
+            "zh-Hans": "\u{7eaa}\u{5ff5} 2006\u{2013}2015\u{2026}",
+        ],
+        "memorialOverlayIYKYK": [
+            "en": "IYKYK",
+            "de": "IYKYK",
+            "fr": "IYKYK",
+            "nl": "IYKYK",
+            "es": "IYKYK",
+            "it": "IYKYK",
+            "sv": "IYKYK",
+            "nb": "IYKYK",
+            "da": "IYKYK",
+            "ja": "IYKYK",
+            "pt": "IYKYK",
+            "pl": "IYKYK",
+            "zh-Hans": "IYKYK",
+        ],
+        "historyDataCap": [
+            "en": "History size",
+            "de": "Verlaufsgr\u{00F6}\u{00DF}e",
+            "fr": "Taille de l\u{2019}historique",
+            "nl": "Geschiedenisgrootte",
+            "es": "Tama\u{00F1}o del historial",
+            "it": "Dimensione cronologia",
+            "sv": "Historikstorlek",
+            "nb": "Historikkst\u{00F8}rrelse",
+            "da": "Historikst\u{00F8}rrelse",
+            "ja": "\u{5C65}\u{6B74}\u{30B5}\u{30A4}\u{30BA}",
+            "pt": "Tamanho do hist\u{00F3}rico",
+            "pl": "Rozmiar historii",
+            "zh-Hans": "\u{5386}\u{53F2}\u{5927}\u{5C0F}",
+        ],
+        "unlimited": [
+            "en": "Unlimited",
+            "de": "Unbegrenzt",
+            "fr": "Illimit\u{00E9}",
+            "nl": "Onbeperkt",
+            "es": "Ilimitado",
+            "it": "Illimitato",
+            "sv": "Obegr\u{00E4}nsat",
+            "nb": "Ubegrenset",
+            "da": "Ubegr\u{00E6}nset",
+            "ja": "\u{7121}\u{5236}\u{9650}",
+            "pt": "Ilimitado",
+            "pl": "Bez limitu",
+            "zh-Hans": "\u{65E0}\u{9650}",
         ],
     ]
     // swiftlint:enable function_body_length

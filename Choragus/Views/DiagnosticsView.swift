@@ -377,11 +377,22 @@ struct DiagnosticsView: View {
         return s
     }
 
+    /// Short app-version tag for filenames and prefilled text.
+    /// Falls back to "unknown" if `CFBundleShortVersionString` is
+    /// somehow absent. Sanitised to filename-safe characters
+    /// (digits and dots only in practice; defensive trim anyway).
+    private var versionTag: String {
+        let raw = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        return (raw?.trimmingCharacters(in: .whitespaces).filter {
+            $0.isLetter || $0.isNumber || $0 == "." || $0 == "-"
+        }).flatMap { $0.isEmpty ? nil : $0 } ?? "unknown"
+    }
+
     private func saveBundle() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.plainText]
         let stamp = Self.fileNameFormatter.string(from: Date())
-        panel.nameFieldStringValue = "choragus-diagnostics-\(stamp).txt"
+        panel.nameFieldStringValue = "choragus-diagnostics-v\(versionTag)-\(stamp).txt"
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let url = panel.url {
             do {
@@ -410,6 +421,8 @@ struct DiagnosticsView: View {
         let bundle = bundleText(for: rows)
 
         let bodyTemplate = """
+        **Choragus version:** \(versionTag)
+
         ## What happened?
 
         <!-- Describe what you were doing when this error occurred. -->
@@ -604,7 +617,7 @@ struct DiagnosticsView: View {
         // extension also signals to the user that the file is opaque
         // / app-specific even though it's named like a log.
         let stamp = Self.fileNameFormatter.string(from: Date())
-        let filename = "Choragus-Bug-Bundle-\(stamp).choragus-bundle.log"
+        let filename = "Choragus-Bug-Bundle-v\(versionTag)-\(stamp).choragus-bundle.log"
         let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
         guard let target = downloads?.appendingPathComponent(filename) else {
             encryptedReportError = "Could not locate Downloads folder."

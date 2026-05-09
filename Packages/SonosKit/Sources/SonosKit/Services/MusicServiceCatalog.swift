@@ -25,8 +25,8 @@
 /// `MainActor` so the `@Published` descriptor list stays SwiftUI-safe
 /// for views that observe the catalog directly.
 ///
-/// See `docs/TODO.md` ("Multi-account support per service") for the
-/// per-(sid, sn) extension this catalog leaves room for.
+/// Leaves room for a per-(sid, sn) extension when multi-account
+/// support per service is added.
 import Foundation
 import Combine
 

@@ -9,6 +9,13 @@ import Foundation
 public final class PlayHistoryManager: ObservableObject {
     @Published public var entries: [PlayHistoryEntry] = []
 
+    /// Bumps every time `updateGenre(forArtist:genre:)` mutates an
+    /// existing entry. ClubVis observes this so the wall rebuilds
+    /// when async genre backfill writes new tags — `entries.count`
+    /// alone can't be used because backfill rewrites in place rather
+    /// than appending.
+    @Published public private(set) var genreVersion: Int = 0
+
     public var isEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: UDKey.playHistoryEnabled) }
         set { UserDefaults.standard.set(newValue, forKey: UDKey.playHistoryEnabled); objectWillChange.send() }
@@ -84,9 +91,14 @@ public final class PlayHistoryManager: ObservableObject {
     }
 
     private func pruneIfNeeded() {
-        let max = PlayHistoryRepository.maxEntries
-        guard entries.count > max else { return }
-        let toRemove = entries.count - max
+        // 0 (sentinel for "unlimited") and any negative value disable
+        // the cap entirely. `UserDefaults.integer(forKey:)` returns 0
+        // when the key has never been set, which is now also the
+        // intended unlimited default — pre-cap users keep their full
+        // history without any explicit opt-in.
+        let cap = UserDefaults.standard.integer(forKey: UDKey.playHistoryMaxEntries)
+        guard cap > 0, entries.count > cap else { return }
+        let toRemove = entries.count - cap
         let idsToDelete = entries.prefix(toRemove).map(\.id)
         repo.delete(ids: idsToDelete)
         entries.removeFirst(toRemove)
@@ -173,7 +185,8 @@ public final class PlayHistoryManager: ObservableObject {
             sourceURI: metadata.trackURI,
             groupName: groupName,
             duration: metadata.duration,
-            albumArtURI: artURI
+            albumArtURI: artURI,
+            genre: metadata.genre
         )
         repo.insert(entry)
         entries.append(entry)
@@ -248,6 +261,114 @@ public final class PlayHistoryManager: ObservableObject {
             }
         }
         sonosDebugLog("[HISTORY] Artwork backfill pass complete")
+    }
+
+    /// Tracks which artist keys we've already queried — persisted
+    /// across launches via UserDefaults so we don't re-attempt
+    /// artists whose lookup previously returned no useful tags.
+    /// Without this, each launch's 100-artist backfill quota was
+    /// burned re-trying the same empties instead of making progress
+    /// on new artists.
+    private static let attemptedGenreUDKey = "playHistoryAttemptedGenreBackfill"
+    private lazy var attemptedGenreBackfillArtists: Set<String> = {
+        Set(UserDefaults.standard.stringArray(forKey: Self.attemptedGenreUDKey) ?? [])
+    }()
+    private func persistAttemptedGenreSet() {
+        UserDefaults.standard.set(Array(attemptedGenreBackfillArtists),
+                                  forKey: Self.attemptedGenreUDKey)
+    }
+
+    /// Walks history entries with empty genre and runs an artist-info
+    /// lookup to backfill `genre` from `ArtistInfo.tags`. Mirrors
+    /// `backfillMissingArtwork`: per-artist dedup, throttled, skips
+    /// radio/stream entries.
+    ///
+    /// `priorityArtists` (case-insensitive) jumps those names to the
+    /// head of the queue before the newest-first walk. Used by
+    /// Club Vis when entering queue mode — backfilling the queue's
+    /// own artists first means the genre tier matching is reliable
+    /// for the wall context even when the rest of history is still
+    /// catching up.
+    public func backfillMissingGenres(using provider: ArtistInfoProvider,
+                                      maxArtists: Int = 100,
+                                      priorityArtists: [String] = []) async {
+        var seenKeys: Set<String> = []
+        var queue: [String] = []  // artist names to look up
+
+        // Priority pass — queue's distinct artists first.
+        for raw in priorityArtists {
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.lowercased()
+            if seenKeys.contains(key) || attemptedGenreBackfillArtists.contains(key) { continue }
+            // Skip if this artist already has at least one entry with
+            // a non-empty genre — nothing to backfill for them.
+            let needsBackfill = entries.contains {
+                $0.artist.lowercased() == key && $0.genre.isEmpty
+            }
+            guard needsBackfill else { continue }
+            seenKeys.insert(key)
+            queue.append(trimmed)
+            if queue.count >= maxArtists { break }
+        }
+
+        // Newest-first general pass to fill the rest of the quota.
+        if queue.count < maxArtists {
+            for entry in entries.reversed() {
+                guard entry.genre.isEmpty else { continue }
+                let trimmedArtist = entry.artist.trimmingCharacters(in: .whitespaces)
+                guard !trimmedArtist.isEmpty else { continue }
+                if let uri = entry.sourceURI, URIPrefix.isRadio(uri) { continue }
+                let key = trimmedArtist.lowercased()
+                guard !seenKeys.contains(key),
+                      !attemptedGenreBackfillArtists.contains(key) else { continue }
+                seenKeys.insert(key)
+                queue.append(trimmedArtist)
+                if queue.count >= maxArtists { break }
+            }
+        }
+
+        guard !queue.isEmpty else { return }
+        sonosDebugLog("[HISTORY] Backfilling genre for \(queue.count) artists (priority=\(priorityArtists.count))")
+        for artist in queue {
+            attemptedGenreBackfillArtists.insert(artist.lowercased())
+            guard let info = await provider.artistInfo(name: artist) else { continue }
+            let topTags = info.tags.prefix(3)
+            guard !topTags.isEmpty else { continue }
+            let joined = topTags.joined(separator: ", ")
+            updateGenre(forArtist: artist, genre: joined)
+            // Pace the loop. MusicMetadataService caches in SQLite for
+            // 30 days, so subsequent runs are mostly cache hits and
+            // this throttle effectively only applies to first-time
+            // lookups. Matches the cadence the artwork backfill uses.
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        // Persist once at the end of the pass — cheaper than per-loop
+        // and covers process crashes during the pass via the next
+        // launch retry on whatever remained unmarked.
+        persistAttemptedGenreSet()
+        sonosDebugLog("[HISTORY] Genre backfill pass complete (attempted set now \(attemptedGenreBackfillArtists.count))")
+    }
+
+    /// Sets the genre tag on every entry for `artist` (case-insensitive match)
+    /// that currently has an empty genre. Called by the async genre backfill
+    /// (Pipeline B) once `MusicMetadataService.fetchArtistInfo` returns the
+    /// artist's tags. Writes through to SQLite via `repo.updateGenre`.
+    public func updateGenre(forArtist artist: String, genre: String) {
+        guard !artist.isEmpty, !genre.isEmpty else { return }
+        let target = artist.lowercased()
+        var didUpdate = false
+        for i in entries.indices {
+            guard entries[i].artist.lowercased() == target else { continue }
+            guard entries[i].genre.isEmpty else { continue }
+            entries[i].genre = genre
+            repo.updateGenre(id: entries[i].id, genre: genre)
+            didUpdate = true
+        }
+        if didUpdate {
+            entries = entries
+            genreVersion &+= 1
+        }
     }
 
     /// Updates the album art URI for entries matching title+artist.

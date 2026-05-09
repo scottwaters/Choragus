@@ -158,6 +158,9 @@ struct ChoragusApp: App {
                     WindowManager.shared.lyricsCoordinator = metadataServicesHolder
                         .ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager)
                         .lyricsCoordinator
+                    WindowManager.shared.metadataServicesHolder = metadataServicesHolder
+                        .ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager)
+                        .metadata
                     WindowManager.shared.colorScheme = colorScheme
                     // Sparkle (when active) handles its own scheduled
                     // checks via `SUEnableAutomaticChecks` /
@@ -186,6 +189,18 @@ struct ChoragusApp: App {
                     Task.detached { @MainActor in
                         try? await Task.sleep(nanoseconds: 3_000_000_000)
                         await playHistoryManager.backfillMissingArtwork()
+                    }
+                    // Genre backfill via MusicMetadataService.artistInfo
+                    // (Wikipedia / MusicBrainz / Last.fm). Powers the
+                    // Club Vis genre-matched tile pool. Same launch-time
+                    // pattern as the artwork backfill — staggered after
+                    // it so the network bursts don't pile up.
+                    Task.detached { @MainActor in
+                        try? await Task.sleep(nanoseconds: 5_000_000_000)
+                        let services = metadataServicesHolder.ensureReady(
+                            lastfm: lastFMScrobbler, sonosManager: sonosManager)
+                        await playHistoryManager.backfillMissingGenres(
+                            using: services.metadata.service)
                     }
                 }
                 .onChange(of: sonosManager.appearanceMode) {
@@ -307,26 +322,27 @@ struct ChoragusApp: App {
                     NotificationCenter.default.post(name: .menuShowStats, object: nil)
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
+                // Karaoke (⌘K) and Back of the Club (⌘J) live under
+                // the dedicated `CommandMenu(L10n.visualisationMenu)`
+                // top-level menu, not the View menu, so they're
+                // grouped with future visualisations rather than mixed
+                // with panel toggles.
+            }
 
-                // ⌘K — Karaoke popout. Top-level View menu entry so
-                // the feature is discoverable without drilling into the
-                // lyrics tab. Calls `WindowManager` directly so we
-                // don't have to add another `.onReceive` to ContentView's
-                // body, which is already at the Swift type-inference
-                // complexity ceiling for the toolbar block.
-                Button(L10n.popOutLyrics) {
+            // Top-level Visualisation menu. Karaoke + Back of the
+            // Club (and any future visualisations) live here so the
+            // feature is discoverable independently of the View
+            // menu's panel toggles.
+            CommandMenu(L10n.visualisationMenu) {
+                Button(L10n.karaoke) {
                     WindowManager.shared.openKaraokeLyricsForActiveGroup()
                 }
                 .keyboardShortcut("k", modifiers: .command)
 
-                // Visualisations menu hidden until the feature is back —
-                // ForFunView is gitignored locally for now while the
-                // visualisations get reworked. Re-enable by restoring
-                // the file in project.pbxproj and re-adding this button.
-                // Button(L10n.visualisations) {
-                //     NotificationCenter.default.post(name: .menuShowForFun, object: nil)
-                // }
-                // .keyboardShortcut("f", modifiers: [.command, .shift])
+                Button(L10n.clubVis) {
+                    WindowManager.shared.openClubVisForActiveGroup()
+                }
+                .keyboardShortcut("j", modifiers: .command)
             }
 
             // Controls — playback. Shortcuts match Apple Music conventions:

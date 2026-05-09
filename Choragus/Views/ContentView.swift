@@ -473,19 +473,23 @@ struct ContentView: View {
                     }
                     .help(L10n.listeningStats)
 
-                    Button {
-                        WindowManager.shared.openKaraokeLyricsForActiveGroup()
+                    Menu {
+                        Button(L10n.karaoke) {
+                            WindowManager.shared.openKaraokeLyricsForActiveGroup()
+                        }
+                        Button(L10n.clubVis) {
+                            WindowManager.shared.openClubVisForActiveGroup()
+                        }
                     } label: {
-                        Image(systemName: "music.mic")
+                        Image(systemName: "sparkles.tv")
                     }
-                    .help(L10n.popOutLyrics)
+                    .menuIndicator(.hidden)
+                    .help(L10n.visualisationMenu)
 
-                    Button {
-                        sonosManager.rescan()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .help(L10n.rescanNetwork)
+                    // Rescan button moved to the room/speaker list
+                    // (RoomListView header) so it lives next to the
+                    // speakers it operates on. Removed from the
+                    // global toolbar to declutter.
 
                     if !hideDiagnosticsIcon {
                         Button {

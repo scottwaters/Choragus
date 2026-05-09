@@ -79,12 +79,15 @@ public final class PlayHistoryRepository {
                 source_uri TEXT,
                 group_name TEXT NOT NULL DEFAULT '',
                 duration REAL NOT NULL DEFAULT 0,
-                album_art_uri TEXT
+                album_art_uri TEXT,
+                genre TEXT NOT NULL DEFAULT ''
             )
         """)
 
         // Add starred column if it doesn't exist (migration for existing databases)
         exec("ALTER TABLE history ADD COLUMN starred INTEGER NOT NULL DEFAULT 0")
+        // Add genre column for visualisation genre-matching (Club Vis tile selection)
+        exec("ALTER TABLE history ADD COLUMN genre TEXT NOT NULL DEFAULT ''")
 
         exec("CREATE INDEX IF NOT EXISTS idx_history_timestamp ON history(timestamp)")
         exec("CREATE INDEX IF NOT EXISTS idx_history_artist ON history(artist)")
@@ -133,8 +136,8 @@ public final class PlayHistoryRepository {
 
     func insert(_ entry: PlayHistoryEntry) {
         let sql = """
-            INSERT OR IGNORE INTO history (id, timestamp, title, artist, album, station_name, source_uri, group_name, duration, album_art_uri)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO history (id, timestamp, title, artist, album, station_name, source_uri, group_name, duration, album_art_uri, genre)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
@@ -158,6 +161,7 @@ public final class PlayHistoryRepository {
         } else {
             sqlite3_bind_null(stmt, 10)
         }
+        sqlite3_bind_text(stmt, 11, (entry.genre as NSString).utf8String, -1, nil)
 
         if sqlite3_step(stmt) != SQLITE_DONE {
             sonosDiagLog(.error, tag: "HISTORY",
@@ -167,7 +171,7 @@ public final class PlayHistoryRepository {
 
     func loadAll() -> [PlayHistoryEntry] {
         var entries: [PlayHistoryEntry] = []
-        let sql = "SELECT id, timestamp, title, artist, album, station_name, source_uri, group_name, duration, album_art_uri, starred FROM history ORDER BY timestamp ASC"
+        let sql = "SELECT id, timestamp, title, artist, album, station_name, source_uri, group_name, duration, album_art_uri, starred, genre FROM history ORDER BY timestamp ASC"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return entries }
         defer { sqlite3_finalize(stmt) }
@@ -184,7 +188,8 @@ public final class PlayHistoryRepository {
                 groupName: String(cString: sqlite3_column_text(stmt, 7)),
                 duration: sqlite3_column_double(stmt, 8),
                 albumArtURI: sqlite3_column_type(stmt, 9) != SQLITE_NULL ? String(cString: sqlite3_column_text(stmt, 9)) : nil,
-                starred: sqlite3_column_int(stmt, 10) != 0
+                starred: sqlite3_column_int(stmt, 10) != 0,
+                genre: String(cString: sqlite3_column_text(stmt, 11))
             )
             entries.append(entry)
         }
@@ -227,7 +232,7 @@ public final class PlayHistoryRepository {
 
         let whereClause = clauses.isEmpty ? "" : "WHERE " + clauses.joined(separator: " AND ")
         let order = sortNewestFirst ? "DESC" : "ASC"
-        let sql = "SELECT id, timestamp, title, artist, album, station_name, source_uri, group_name, duration, album_art_uri, starred FROM history \(whereClause) ORDER BY timestamp \(order) LIMIT \(limit)"
+        let sql = "SELECT id, timestamp, title, artist, album, station_name, source_uri, group_name, duration, album_art_uri, starred, genre FROM history \(whereClause) ORDER BY timestamp \(order) LIMIT \(limit)"
 
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
@@ -254,7 +259,8 @@ public final class PlayHistoryRepository {
                 groupName: String(cString: sqlite3_column_text(stmt, 7)),
                 duration: sqlite3_column_double(stmt, 8),
                 albumArtURI: sqlite3_column_type(stmt, 9) != SQLITE_NULL ? String(cString: sqlite3_column_text(stmt, 9)) : nil,
-                starred: sqlite3_column_int(stmt, 10) != 0
+                starred: sqlite3_column_int(stmt, 10) != 0,
+                genre: String(cString: sqlite3_column_text(stmt, 11))
             )
             entries.append(entry)
         }
@@ -363,6 +369,19 @@ public final class PlayHistoryRepository {
         if sqlite3_step(stmt) != SQLITE_DONE {
             sonosDiagLog(.error, tag: "HISTORY",
                          "Update art failed: \(String(cString: sqlite3_errmsg(db)))")
+        }
+    }
+
+    func updateGenre(id: UUID, genre: String) {
+        let sql = "UPDATE history SET genre = ? WHERE id = ?"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, (genre as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 2, (id.uuidString as NSString).utf8String, -1, nil)
+        if sqlite3_step(stmt) != SQLITE_DONE {
+            sonosDiagLog(.error, tag: "HISTORY",
+                         "Update genre failed: \(String(cString: sqlite3_errmsg(db)))")
         }
     }
 
@@ -510,7 +529,7 @@ public final class PlayHistoryRepository {
     ) -> [PlayHistoryEntry] {
         let sql = """
             SELECT h.id, h.timestamp, h.title, h.artist, h.album, h.station_name,
-                   h.source_uri, h.group_name, h.duration, h.album_art_uri, h.starred
+                   h.source_uri, h.group_name, h.duration, h.album_art_uri, h.starred, h.genre
             FROM history h
             LEFT JOIN scrobble_log s
               ON s.history_id = h.id AND s.service = ?
@@ -540,7 +559,8 @@ public final class PlayHistoryRepository {
                 groupName: String(cString: sqlite3_column_text(stmt, 7)),
                 duration: sqlite3_column_double(stmt, 8),
                 albumArtURI: sqlite3_column_type(stmt, 9) != SQLITE_NULL ? String(cString: sqlite3_column_text(stmt, 9)) : nil,
-                starred: sqlite3_column_int(stmt, 10) != 0
+                starred: sqlite3_column_int(stmt, 10) != 0,
+                genre: String(cString: sqlite3_column_text(stmt, 11))
             )
             entries.append(entry)
         }

@@ -48,6 +48,12 @@ struct NowPlayingContextPanel: View {
     /// volume change) re-scan the whole store.
     @State private var historyEntries: [PlayHistoryEntry] = []
 
+    /// Cached result of `matchingArtistHistory()` for the current
+    /// artist. Drives the right-hand "By this artist" column added
+    /// alongside the per-track history. Same caching rationale as
+    /// `historyEntries`.
+    @State private var artistHistoryEntries: [PlayHistoryEntry] = []
+
     /// Initialises the VM eagerly so body's first render — which fires
     /// before any `.task` modifier — already has the real instance. The
     /// previous `@State var vm: VM?` + `assertionFailure`-guarded getter
@@ -83,7 +89,19 @@ struct NowPlayingContextPanel: View {
         lyricsCoordinator.offset(for: trackMetadata)
     }
 
-    private var trackKey: String { trackMetadata.stableKey }
+    /// Per-tab cache invalidation key. For non-radio playback the
+    /// shared `stableKey` is fine (URI changes per song). For radio
+    /// the URI is constant across an HLS stream's whole session and
+    /// `stableKey` falls back to just the URI when the artist field
+    /// is empty — meaning per-song About / History refreshes never
+    /// fire. Use title+artist directly on radio so any change to
+    /// either field re-runs `loadActiveTab`.
+    private var trackKey: String {
+        if trackMetadata.isRadioStream || !trackMetadata.stationName.isEmpty {
+            return "radio|\(trackMetadata.title)|\(trackMetadata.artist)"
+        }
+        return trackMetadata.stableKey
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -264,14 +282,20 @@ struct NowPlayingContextPanel: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            // `contentShape` makes the WHOLE VStack frame accept the
+            // right-click — without it, the VStack collapses to the
+            // small empty-placeholder bounds when no info has loaded
+            // yet, so the user can't right-click "Refresh metadata"
+            // anywhere in the empty area.
+            .contentShape(Rectangle())
             .contextMenu {
                 Button {
                     Task { await ctxVM.refreshAbout(trackMetadata) }
                 } label: {
                     Label(L10n.refreshMetadata, systemImage: "arrow.clockwise")
                 }
-                .disabled(trackMetadata.title.isEmpty)
+                .disabled(trackMetadata.artist.isEmpty && trackMetadata.title.isEmpty)
             }
             // Whole tab contents selectable so the user can copy any
             // bio paragraph, tag, or track name and paste into a
@@ -538,8 +562,27 @@ struct NowPlayingContextPanel: View {
     // MARK: - History
 
     private var historyTab: some View {
+        HStack(alignment: .top, spacing: 0) {
+            trackHistoryColumn
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Divider()
+            artistHistoryColumn
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task(id: HistoryCacheKey(trackKey: trackKey,
+                                  entriesCount: playHistoryManager.entries.count)) {
+            historyEntries = matchingHistory()
+            artistHistoryEntries = matchingArtistHistory()
+        }
+    }
+
+    private var trackHistoryColumn: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                Text("This Track")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
                 if historyEntries.isEmpty {
                     emptyPlaceholder(icon: "clock",
                                      text: L10n.noPreviousPlaysInHistory)
@@ -564,9 +607,40 @@ struct NowPlayingContextPanel: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task(id: HistoryCacheKey(trackKey: trackKey,
-                                  entriesCount: playHistoryManager.entries.count)) {
-            historyEntries = matchingHistory()
+    }
+
+    private var artistHistoryColumn: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("By This Artist")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                if artistHistoryEntries.isEmpty {
+                    emptyPlaceholder(icon: "music.mic",
+                                     text: L10n.noPreviousPlaysInHistory)
+                } else {
+                    artistSummary(artistHistoryEntries)
+                    Divider().padding(.vertical, 4)
+                    Text(L10n.topTracks).font(.body.weight(.semibold))
+                    let top = topTracksByArtist(artistHistoryEntries, limit: 12)
+                    ForEach(top, id: \.title) { row in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text(row.title)
+                                .font(.callout)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer()
+                            Text("\(row.count)")
+                                .font(.callout.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -592,6 +666,37 @@ struct NowPlayingContextPanel: View {
         }
     }
 
+    /// All plays of any track by the current artist, newest first.
+    private func matchingArtistHistory() -> [PlayHistoryEntry] {
+        let needleArtist = trackMetadata.artist.lowercased()
+        guard !needleArtist.isEmpty else { return [] }
+        let filtered: [PlayHistoryEntry] = playHistoryManager.entries.filter { entry in
+            entry.artist.lowercased() == needleArtist
+        }
+        return filtered.sorted { (lhs: PlayHistoryEntry, rhs: PlayHistoryEntry) in
+            lhs.timestamp > rhs.timestamp
+        }
+    }
+
+    private struct ArtistTopTrack {
+        let title: String
+        let count: Int
+    }
+
+    /// Counts plays per (title) for the artist's history and returns
+    /// the top `limit` by play count.
+    private func topTracksByArtist(_ entries: [PlayHistoryEntry], limit: Int) -> [ArtistTopTrack] {
+        var counts: [String: Int] = [:]
+        for entry in entries where !entry.title.isEmpty {
+            counts[entry.title, default: 0] += 1
+        }
+        return counts
+            .map { ArtistTopTrack(title: $0.key, count: $0.value) }
+            .sorted { $0.count > $1.count }
+            .prefix(limit)
+            .map { $0 }
+    }
+
     private func historySummary(_ entries: [PlayHistoryEntry]) -> some View {
         let rooms = Set(entries.map(\.groupName).filter { !$0.isEmpty })
         return VStack(alignment: .leading, spacing: 4) {
@@ -604,6 +709,22 @@ struct NowPlayingContextPanel: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let last = entries.first {
+                Text(L10n.lastPlayedFormat(formatRelativeDate(last.timestamp)))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func artistSummary(_ entries: [PlayHistoryEntry]) -> some View {
+        let uniqueTracks = Set(entries.map(\.title).filter { !$0.isEmpty }).count
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(L10n.playsCountFormat(entries.count))
+                .font(.title3.weight(.semibold))
+            Text("\(uniqueTracks) unique track\(uniqueTracks == 1 ? "" : "s")")
+                .font(.callout)
+                .foregroundStyle(.secondary)
             if let last = entries.first {
                 Text(L10n.lastPlayedFormat(formatRelativeDate(last.timestamp)))
                     .font(.callout)

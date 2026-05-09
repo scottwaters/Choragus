@@ -85,6 +85,16 @@ public extension AlbumArtSearchProtocol {
     }
 }
 
+// MARK: - Artist Info Provider
+
+/// Minimal seam over `MusicMetadataService.artistInfo(name:)` so the
+/// play-history genre backfill in `PlayHistoryManager` can be unit-tested
+/// without standing up the real Wikipedia/MusicBrainz/Last.fm fetch path.
+@MainActor
+public protocol ArtistInfoProvider {
+    func artistInfo(name: String) async -> ArtistInfo?
+}
+
 // MARK: - Playback Service (SRP: transport control only)
 
 @MainActor

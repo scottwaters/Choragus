@@ -60,6 +60,15 @@ public final class LyricsService: Sendable {
     private let session: URLSession
     private let cache: MetadataCacheRepository
 
+    /// In-flight fetch counter keyed on the cache key. Lets us
+    /// detect concurrent duplicate requests for the same track —
+    /// the duplicate `[LYRICS] resolved via /api/get (full)` log
+    /// pairs the user reported indicate two callers (now-playing
+    /// card + ClubVis About panel + karaoke window all subscribing)
+    /// hit `fetch` simultaneously without de-duplication.
+    private let inflightLock = NSLock()
+    private nonisolated(unsafe) var inflightCountByKey: [String: Int] = [:]
+
     public init(cache: MetadataCacheRepository) {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 8
@@ -73,9 +82,27 @@ public final class LyricsService: Sendable {
     /// LRCLIB; result (or a "no lyrics" sentinel) is written back so
     /// repeated plays of the same track are free.
     public func fetch(artist: String, title: String,
-                      album: String? = nil, durationSeconds: Int? = nil) async -> Lyrics? {
+                      album: String? = nil, durationSeconds: Int? = nil,
+                      callSite: String = "\(#fileID):\(#line)") async -> Lyrics? {
         let key = MetadataCacheRepository.Kind.lyrics.key(artist, title, album ?? "")
         let summary = "[\(artist)|\(title)|\(album ?? "")|d=\(durationSeconds.map(String.init) ?? "-")]"
+
+        // De-duplication telemetry: bump the in-flight counter for
+        // this key on entry; if it was already ≥ 1, log the dup.
+        inflightLock.lock()
+        let priorInflight = inflightCountByKey[key, default: 0]
+        inflightCountByKey[key] = priorInflight + 1
+        inflightLock.unlock()
+        if priorInflight > 0 {
+            sonosDebugLog("[LYRICS-DUP] concurrent fetch — \(summary) priorInflight=\(priorInflight) caller=\(callSite)")
+        }
+        defer {
+            inflightLock.lock()
+            let next = (inflightCountByKey[key] ?? 1) - 1
+            if next <= 0 { inflightCountByKey.removeValue(forKey: key) }
+            else { inflightCountByKey[key] = next }
+            inflightLock.unlock()
+        }
 
         // Cache lookup. We accept a cached *hit* unconditionally, but cached
         // *misses* are only authoritative if they came from the v2 fallback

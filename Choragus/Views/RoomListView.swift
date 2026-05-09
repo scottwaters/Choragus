@@ -65,6 +65,32 @@ struct RoomListView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
+            VStack(spacing: 0) {
+                // Refresh control — moved from the global toolbar so
+                // the rescan action lives next to the speaker list it
+                // operates on. Useful after router changes / DHCP
+                // shuffles when cached topology has stale IPs.
+                HStack {
+                    Spacer()
+                    Button {
+                        sonosManager.rescan()
+                    } label: {
+                        if sonosManager.isRefreshing {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .frame(width: 14, height: 14)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .imageScale(.small)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(sonosManager.isRefreshing)
+                    .help(L10n.rescanNetwork)
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 6)
+                .padding(.bottom, 2)
             ScrollView {
                 VStack(spacing: 1) {
                     let allSections = sections
@@ -104,6 +130,7 @@ struct RoomListView: View {
                 .padding(.horizontal, 4)
             }
             .clipped()
+            }
             .navigationTitle(L10n.rooms)
             .onChange(of: sonosManager.groups) {
                 validateAndScrollSelection(proxy: proxy)

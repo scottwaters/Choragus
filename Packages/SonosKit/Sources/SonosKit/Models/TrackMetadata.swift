@@ -12,11 +12,12 @@ public struct TrackMetadata: Equatable {
     public var stationName: String
     public var trackURI: String?
     public var isQueueSource: Bool  // true when CurrentURI is x-rincon-queue (playing from queue)
+    public var genre: String
 
     public init(title: String = "", artist: String = "", album: String = "",
                 albumArtURI: String? = nil, duration: TimeInterval = 0,
                 position: TimeInterval = 0, trackNumber: Int = 0, queueSize: Int = 0,
-                stationName: String = "", isQueueSource: Bool = false) {
+                stationName: String = "", isQueueSource: Bool = false, genre: String = "") {
         self.title = title
         self.artist = artist
         self.album = album
@@ -27,6 +28,7 @@ public struct TrackMetadata: Equatable {
         self.queueSize = queueSize
         self.stationName = stationName
         self.isQueueSource = isQueueSource
+        self.genre = genre
     }
 
     // MARK: - Computed State
@@ -118,6 +120,7 @@ public struct TrackMetadata: Equatable {
             }
         }
         if album.isEmpty { album = parsed.album }
+        if genre.isEmpty { genre = parsed.genre }
 
         let artURI = device.makeAbsoluteURL(parsed.albumArtURI)
         if !artURI.isEmpty {

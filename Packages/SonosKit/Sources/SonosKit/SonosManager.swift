@@ -15,16 +15,36 @@ private let debugLogPath: String = {
     AppPaths.appSupportDirectory.appendingPathComponent("sonos_debug.log").path
 }()
 
+/// Serial background queue for log writes. Previously `sonosDebugLog`
+/// did 4 synchronous syscalls (`open`/`seek`/`write`/`close`) on the
+/// calling thread per log line. Combined with RC-EVENT volume polling
+/// (~50 lines/second across all rooms) and per-frame STUTTER logging,
+/// this saturated the main thread and caused the very stutter the
+/// instrumentation was meant to capture — stutter logs that caused
+/// stutter that caused more stutter logs. Writes now dispatch to this
+/// utility-QoS serial queue; ordering is preserved (serial), the
+/// caller returns immediately, and frame work is no longer blocked
+/// on disk I/O.
+private let _sonosDebugLogQueue = DispatchQueue(label: "sonos-debug-log",
+                                                qos: .utility)
+
 public func sonosDebugLog(_ msg: String) {
     #if DEBUG
+    // Build the timestamped line on the caller's thread (cheap)
+    // so the log preserves wall-clock order even if the queue
+    // backs up briefly.
     let line = "\(Date()): \(msg)\n"
     guard let data = line.data(using: .utf8) else { return }
-    if let handle = FileHandle(forWritingAtPath: debugLogPath) {
-        handle.seekToEndOfFile()
-        handle.write(data)
-        handle.closeFile()
-    } else {
-        FileManager.default.createFile(atPath: debugLogPath, contents: data, attributes: [.posixPermissions: 0o600])
+    _sonosDebugLogQueue.async {
+        if let handle = FileHandle(forWritingAtPath: debugLogPath) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            handle.closeFile()
+        } else {
+            FileManager.default.createFile(atPath: debugLogPath,
+                                           contents: data,
+                                           attributes: [.posixPermissions: 0o600])
+        }
     }
     #endif
 }
@@ -635,9 +655,22 @@ public class SonosManager: ObservableObject {
     }
 
     public func rescan() {
+        sonosDebugLog("[DISCOVERY] Manual rescan triggered — clearing \(discoveredLocations.count) cached locations, pinging \(discoveryTransports.count) transport(s)")
         discoveredLocations.removeAll()
         isRefreshing = true
         for t in discoveryTransports { t.rescan() }
+        // Safety timeout — without this, `isRefreshing` stays true
+        // forever when no speakers respond to the M-SEARCH (router
+        // change wedged the network, multicast blocked, etc.) and
+        // the spinner spins indefinitely.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard let self else { return }
+            if self.isRefreshing {
+                sonosDebugLog("[DISCOVERY] Rescan timeout — no devices responded within 8 s")
+                self.isRefreshing = false
+            }
+        }
     }
 
     /// Builds the active transport list from `discoveryMode` and wires the
@@ -1067,27 +1100,64 @@ public class SonosManager: ObservableObject {
 
     // MARK: - Stale Data Handling
 
-    /// Wraps a SOAP action with stale-data detection. If the action fails due to
-    /// network error (device unreachable), triggers a background refresh and shows a message.
-    /// This is the key mechanism for gracefully recovering from cached data that has gone stale:
-    /// code 701 = "invalid object" (speaker regrouped), s:Client = generic SOAP client error.
+    /// Per-room consecutive AVTransport-failure counter. Reset on the
+    /// next successful call. Used by `handleStaleness` to escalate
+    /// the user-facing message after the second failure in a row.
+    private var consecutiveStaleFailures: [String: Int] = [:]
+    /// Debounces `rescan()` calls triggered by `handleStaleness` so a
+    /// burst of failures (e.g., the user mashing Play after a router
+    /// change) doesn't fire repeated discovery rounds. 10 s window
+    /// is long enough for one rescan to publish topology before the
+    /// next is considered.
+    private var lastStalenessRescanAt: Date = .distantPast
+
+    /// Wraps a SOAP action with stale-data detection. Successful
+    /// returns clear the per-room failure counter. Triggers covered:
+    ///   - `networkError` (device unreachable)
+    ///   - SOAP 701 ("invalid object" — speaker regrouped or stale
+    ///     topology cache)
+    ///   - SOAP 714 ("no such resource" — the URI we sent doesn't
+    ///     resolve, often after a household auth/account hash refresh
+    ///     post network change)
+    ///   - `s:Client` (generic SOAP client-side error)
+    /// Two consecutive failures surface a clearer "speakers
+    /// reconnecting…" message hinting that a power-cycle may be
+    /// needed if the auto-rediscovery doesn't fix it.
     private func withStaleHandling<T>(for roomName: String, _ action: () async throws -> T) async throws -> T {
         do {
-            return try await action()
+            let result = try await action()
+            consecutiveStaleFailures[roomName] = 0
+            return result
         } catch let error as SOAPError {
             switch error {
             case .networkError:
-                staleMessage = "\(roomName) is not responding. Refreshing speakers..."
-                rescan()
+                handleStaleness(for: roomName, kind: "network")
                 throw StaleDataError.deviceUnreachable(roomName)
-            case .soapFault(let code, _) where code == "701" || code == "s:Client":
-                staleMessage = "Command failed — speaker layout may have changed. Refreshing..."
-                rescan()
+            case .soapFault(let code, _) where code == "701" || code == "714" || code == "s:Client":
+                handleStaleness(for: roomName, kind: code)
                 throw StaleDataError.topologyStale
             default:
                 throw error
             }
         }
+    }
+
+    private func handleStaleness(for roomName: String, kind: String) {
+        let count = (consecutiveStaleFailures[roomName] ?? 0) + 1
+        consecutiveStaleFailures[roomName] = count
+        if count >= 2 {
+            staleMessage = "Speakers reconnecting after network change… If this persists, power-cycle the speakers and relaunch Choragus."
+        } else {
+            staleMessage = kind == "network"
+                ? "\(roomName) is not responding. Refreshing speakers..."
+                : "Command failed — speaker layout may have changed. Refreshing..."
+        }
+        let now = Date()
+        if now.timeIntervalSince(lastStalenessRescanAt) > 10 {
+            lastStalenessRescanAt = now
+            rescan()
+        }
+        sonosDebugLog("[STALE] \(roomName) AVTransport fault=\(kind) consecutive=\(count) — rescan triggered=\(now.timeIntervalSince(lastStalenessRescanAt) <= 0.1)")
     }
 
     public func dismissStaleMessage() {
@@ -2991,22 +3061,33 @@ extension SonosManager: TransportStrategyDelegate {
     }
 
     public func transportDidUpdateVolume(_ deviceID: String, volume: Int) {
-        let room = devices[deviceID]?.roomName ?? deviceID
-        let isCoord = isGroupCoordinator(deviceID: deviceID)
         let prior = deviceVolumes[deviceID]
         let echoMatched = consumeExpectedVolumeEcho(deviceID: deviceID, value: volume)
-        sonosDebugLog("[RC-EVENT] vol room=\(room) id=\(deviceID) coord=\(isCoord) value=\(volume) prior=\(prior.map(String.init) ?? "nil") echoMatched=\(echoMatched)")
+        let isNoOp = !echoMatched && prior == volume
+        let isCoord = isGroupCoordinator(deviceID: deviceID)
+        // Suppress logs for the steady-state no-op case — every
+        // device's volume is republished on every poll cycle, and
+        // logging "value=X prior=X" pairs here was costing ~50
+        // string formats / sec on the main thread (peak observed
+        // 4–6 dropped frames per RC-EVENT burst). Only log when
+        // something actually changed or an echo was matched.
+        if !isNoOp {
+            let room = devices[deviceID]?.roomName ?? deviceID
+            sonosDebugLog("[RC-EVENT] vol room=\(room) id=\(deviceID) coord=\(isCoord) value=\(volume) prior=\(prior.map(String.init) ?? "nil") echoMatched=\(echoMatched)")
+        }
         if echoMatched {
-            sonosDebugLog("[RC-WRITE] vol DROP-ECHO room=\(room) value=\(volume)")
+            if !isNoOp {
+                let room = devices[deviceID]?.roomName ?? deviceID
+                sonosDebugLog("[RC-WRITE] vol DROP-ECHO room=\(room) value=\(volume)")
+            }
             return
         }
         let changed = deviceVolumes[deviceID] != volume
         if changed {
+            let room = devices[deviceID]?.roomName ?? deviceID
             tagPublish("vol")
             deviceVolumes[deviceID] = volume
             sonosDebugLog("[RC-WRITE] vol APPLY room=\(room) value=\(volume) changed=true")
-        } else {
-            sonosDebugLog("[RC-WRITE] vol NO-OP room=\(room) value=\(volume)")
         }
         // Group-volume propagation: when a coordinator's volume changes,
         // the Sonos cluster sets per-member volumes at proportional values,
@@ -3022,22 +3103,29 @@ extension SonosManager: TransportStrategyDelegate {
     }
 
     public func transportDidUpdateMute(_ deviceID: String, muted: Bool) {
-        let room = devices[deviceID]?.roomName ?? deviceID
-        let isCoord = isGroupCoordinator(deviceID: deviceID)
         let prior = deviceMutes[deviceID]
         let echoMatched = consumeExpectedMuteEcho(deviceID: deviceID, value: muted)
-        sonosDebugLog("[RC-EVENT] mute room=\(room) id=\(deviceID) coord=\(isCoord) value=\(muted) prior=\(prior.map(String.init) ?? "nil") echoMatched=\(echoMatched)")
+        let isNoOp = !echoMatched && prior == muted
+        let isCoord = isGroupCoordinator(deviceID: deviceID)
+        // Same no-op suppression as the volume path — see comment
+        // there. Mute polling republishes per device per cycle.
+        if !isNoOp {
+            let room = devices[deviceID]?.roomName ?? deviceID
+            sonosDebugLog("[RC-EVENT] mute room=\(room) id=\(deviceID) coord=\(isCoord) value=\(muted) prior=\(prior.map(String.init) ?? "nil") echoMatched=\(echoMatched)")
+        }
         if echoMatched {
-            sonosDebugLog("[RC-WRITE] mute DROP-ECHO room=\(room) value=\(muted)")
+            if !isNoOp {
+                let room = devices[deviceID]?.roomName ?? deviceID
+                sonosDebugLog("[RC-WRITE] mute DROP-ECHO room=\(room) value=\(muted)")
+            }
             return
         }
         let changed = deviceMutes[deviceID] != muted
         if changed {
+            let room = devices[deviceID]?.roomName ?? deviceID
             tagPublish("mute")
             deviceMutes[deviceID] = muted
             sonosDebugLog("[RC-WRITE] mute APPLY room=\(room) value=\(muted) changed=true")
-        } else {
-            sonosDebugLog("[RC-WRITE] mute NO-OP room=\(room) value=\(muted)")
         }
         // Optimistic group propagation: when the *coordinator's* mute
         // event arrives, mirror to all other members on the assumption it
