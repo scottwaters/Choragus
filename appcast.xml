@@ -9,6 +9,19 @@
     <language>en</language>
 <item>
       <title>Version 4.8</title>
+      <pubDate>Wed, 13 May 2026 20:10:33 +1000</pubDate>
+      <sparkle:version>25</sparkle:version>
+      <sparkle:shortVersionString>4.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/scottwaters/Choragus/releases/tag/v4.8</sparkle:releaseNotesLink>
+      <enclosure
+        url="https://github.com/scottwaters/Choragus/releases/download/v4.8/Choragus.dmg"
+        length="21715673"
+        type="application/x-apple-diskimage"
+        sparkle:edSignature="M/NK0O6jktG3cFtIQNA3H7CPZbKP/Jar5MXqEjpSeBq81BD+L7WtBbG1XrqkY/Jnf5ys1p4sIlUiz38Tw1X0Bw=="/>
+    </item>
+<item>
+      <title>Version 4.8</title>
       <pubDate>Sun, 10 May 2026 01:36:06 +1000</pubDate>
       <sparkle:version>25</sparkle:version>
       <sparkle:shortVersionString>4.8</sparkle:shortVersionString>
