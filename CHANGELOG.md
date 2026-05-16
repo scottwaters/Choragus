@@ -1,6 +1,18 @@
 
 # Changelog
 
+## v4.9.2 — 2026-05-16 — Sparkle auto-update fix (regression from v4.9)
+
+> **If the in-app Install Update button fails with "An error occurred while launching the installer", download `Choragus.dmg` manually from the [v4.9.2 release page](https://github.com/scottwaters/Choragus/releases/tag/v4.9.2) and drag it into `/Applications` as normal.** Required for any user upgrading from v4.9 or v4.9.1 — the entitlements bug fixed in v4.9.2 lives inside those installed builds' Sparkle component, so the in-app updater can't fix itself. After this one-time manual install, future auto-updates work.
+
+### In-app updater now installs
+
+`Sparkle-Installer.entitlements` shipped with `com.apple.security.app-sandbox = true` from v4.9 onward, which blocked Sparkle's `Installer.xpc` from calling `AuthorizationCreate` / `SMJobSubmit` for the privileged install into `/Applications`. Symptom: "Update Error! An error occurred while launching the installer." Visible in the Sparkle subsystem log as `Failed copying system domain rights: -60005` → `Failed to submit installer job` → `Failed to gain authorization required to update target`.
+
+- Entitlements file is now empty — `Installer.xpc` runs unsandboxed, matching Sparkle's binary-distribution posture. `release.sh` unchanged (still passes `--entitlements` for both XPC services; `Downloader.xpc` keeps `app-sandbox = true` + `network.client` since that combination works).
+- Bundle version bumped to 28 so Sparkle clients see this as an update over v4.9.1.
+- **Already on v4.9 or v4.9.1?** The in-app updater can't run because the bug is in those installed builds' Installer XPC. Download `Choragus.dmg` from the [v4.9.2 release page](https://github.com/scottwaters/Choragus/releases/tag/v4.9.2) and drag to `/Applications` once — auto-update works from v4.9.2 forward. The v4.9 and v4.9.1 DMGs on their release pages have been rebuilt with the fix, so new manual downloaders of those versions are safe.
+
 ## v4.9.1 — 2026-05-16 — Spotify single-track playback fix, bug-bundle topology snapshot, system Now Playing fixes
 
 ### Spotify single-track click fix (issue #42)

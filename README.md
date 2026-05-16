@@ -43,6 +43,18 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 
 ---
 
+## What's New in v4.9.2
+
+> **If the in-app Install Update button fails with "An error occurred while launching the installer", download `Choragus.dmg` manually from the [v4.9.2 release page](https://github.com/scottwaters/Choragus/releases/tag/v4.9.2) and drag it into `/Applications` as normal.** This is required for any user upgrading from v4.9 or v4.9.1 — the entitlements bug fixed in v4.9.2 lives inside those installed builds' Sparkle component, so the in-app updater can't fix itself. After this one-time manual install, future auto-updates work.
+
+Patch release. Fixes a regression in v4.9 that broke the in-app updater.
+
+- **Auto-update works again.** v4.9 shipped with a Sparkle Installer entitlements bug that blocked the Install Update button — clicking it surfaced "An error occurred while launching the installer". Fixed.
+
+Full change list in [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## What's New in v4.9.1
 
 Patch release. Fixes a Spotify single-track playback bug and adds a speaker-topology snapshot to bug reports.

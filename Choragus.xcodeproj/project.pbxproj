@@ -457,7 +457,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Choragus/Info.plist;
@@ -468,7 +468,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 4.9.1;
+				MARKETING_VERSION = 4.9.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -483,7 +483,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Choragus/Info.plist;
@@ -494,7 +494,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 4.9.1;
+				MARKETING_VERSION = 4.9.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;
