@@ -20,6 +20,8 @@ import SonosKit
 
 struct NowPlayingView: View {
     @EnvironmentObject var sonosManager: SonosManager
+    @EnvironmentObject var anchorTracker: AnchorTracker
+    @EnvironmentObject var positionTracker: PositionTracker
     /// Forwarded into `NowPlayingContextPanel` so its VM can be
     /// initialised eagerly (services come from the SwiftUI environment
     /// at the App level — `ChoragusApp.swift`).
@@ -357,11 +359,54 @@ struct NowPlayingView: View {
                                     .lineLimit(1)
                             }
 
-                            // Service tag
-                            if let serviceName = currentServiceName {
-                                Label(serviceName, systemImage: "music.note.tv")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                            // Service tag + audio format badge
+                            HStack(spacing: 8) {
+                                if let serviceName = currentServiceName {
+                                    Label(serviceName, systemImage: "music.note.tv")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                // Dolby Atmos badge — fires only when the
+                                // speaker is reporting an Atmos stream
+                                // (`r:streamInfo` d:1) AND the group's
+                                // coordinator is Atmos-capable. Apple
+                                // Spatial Audio rides the same E-AC3-JOC
+                                // carrier, so this badge covers both
+                                // modes on Apple Music.
+                                if trackMetadata.audioFormat == .atmos,
+                                   group.isAtmosCapable(devices: sonosManager.devices) {
+                                    Label(L10n.audioFormatAtmos,
+                                          systemImage: "hifispeaker.and.homepod")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .strokeBorder(.secondary.opacity(0.35),
+                                                              lineWidth: 1)
+                                        )
+                                        .help(L10n.audioFormatAtmos)
+                                }
+                                // TV / HDMI format pill — separate from
+                                // the streaming Atmos badge above. Only
+                                // fires for HDMI / line-in track URIs and
+                                // only when we've recognised the integer
+                                // bitfield. Unknown values fall through
+                                // silently rather than guess.
+                                if let tvFormatLabel = tvAudioFormatLabel(trackMetadata) {
+                                    Label(tvFormatLabel, systemImage: "tv")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .strokeBorder(.secondary.opacity(0.35),
+                                                              lineWidth: 1)
+                                        )
+                                        .help(tvFormatLabel)
+                                }
                             }
                         } else {
                             Text(L10n.nothingPlaying)
@@ -886,6 +931,20 @@ struct NowPlayingView: View {
                     album: trackMetadata.album
                 ) { selectedURL in
                     vm.art.setManualArtwork(selectedURL, trackMetadata: trackMetadata, group: group)
+                    // Propagate the manual choice into the shared art
+                    // cache so every other view (karaoke window, club
+                    // vis, browse rows) picks up the new URL instead of
+                    // sticking on whatever Sonos / iTunes resolved
+                    // automatically. ArtResolver only owns the
+                    // now-playing display; `artCache` is what the rest
+                    // of the app reads through `lookupCachedArt`.
+                    let uri = trackMetadata.trackURI ?? ""
+                    sonosManager.cacheArtURL(
+                        selectedURL,
+                        forURI: uri,
+                        title: trackMetadata.title,
+                        itemID: ""
+                    )
                     showArtSearch = false
                 }
             }
@@ -895,6 +954,23 @@ struct NowPlayingView: View {
 
     private var volumeIcon: String { vm.volumeIcon }
     private var repeatIcon: String { vm.repeatIcon }
+    /// Localised label for the HDMI / line-in audio format pill. Returns
+    /// nil when the track isn't an HDMI / line-in source or the speaker
+    /// hasn't classified the format yet — in either case the pill is
+    /// suppressed so we never show a stale or guessed label.
+    private func tvAudioFormatLabel(_ metadata: TrackMetadata) -> String? {
+        guard let uri = metadata.trackURI else { return nil }
+        let isHTSource = uri.contains("x-sonos-htastream:") || uri.contains("x-rincon-stream:")
+        guard isHTSource else { return nil }
+        switch metadata.tvAudioFormat {
+        case .stereoPCM:        return L10n.tvAudioStereoPCM
+        case .multichannelPCM:  return L10n.tvAudioMultichannelPCM
+        case .dolbyDigital:     return L10n.tvAudioDolbyDigital
+        case .dolbyAtmos:       return L10n.audioFormatAtmos
+        case .noSignal, .unknown: return nil
+        }
+    }
+
     private func formatTime(_ interval: TimeInterval) -> String { vm.formatTime(interval) }
 
     // MARK: - Actions (delegated to ViewModel)

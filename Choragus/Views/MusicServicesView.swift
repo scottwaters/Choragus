@@ -120,7 +120,16 @@ struct MusicServicesSettingsSection: View {
         // `availableServices`. SMAPI calls (browse, search, auth) must
         // use the household sid or they fail. The original sid is kept
         // as an alternative so dedupe still catches it.
-        var out = Self.pinnedServices.map { pin -> CanonicalService in
+        // Filter out legacy SMAPI Apple Music in release builds — the
+        // dedicated MusicKit row (`AppleMusicKitConnectRow`) is the
+        // only Apple Music surface that ships, so the search-only
+        // toggle for the SMAPI search path would be a confusing
+        // dead control.
+        var out = Self.pinnedServices
+            .filter { pin in
+                pin.serviceID != ServiceID.appleMusic || AppleMusicProviderFactory.showLegacyAppleMusic
+            }
+            .map { pin -> CanonicalService in
             guard let match = smapiManager.availableServices.first(where: {
                 $0.name.lowercased() == pin.name.lowercased()
             }), match.id != pin.serviceID else { return pin }
@@ -188,6 +197,15 @@ struct MusicServicesSettingsSection: View {
                              alternativeIDs: [], plexFlavor: .none))
             coveredIDs.insert(desc.id)
             coveredNames.insert(desc.name.lowercased())
+        }
+        // Final sweep — the catalog-tail / authenticated-IDs / serial-IDs
+        // append paths above all read from `smapiManager` state which
+        // includes Apple Music (sid 204) for any user whose Sonos
+        // household has it registered. Without this sweep the pinned-
+        // services filter for Apple Music is undone the moment the
+        // household catalog loads.
+        if !AppleMusicProviderFactory.showLegacyAppleMusic {
+            out.removeAll { $0.serviceID == ServiceID.appleMusic }
         }
         return out
     }
@@ -339,6 +357,14 @@ struct MusicServicesSettingsSection: View {
         .buttonStyle(.plain)
         .sheet(isPresented: $showHelp) {
             MusicServicesHelpView()
+        }
+
+        // ─── APPLE MUSIC (MusicKit) — release+dev builds only ───
+        // Separate row above the SMAPI-driven service list because
+        // MusicKit auth is local-to-this-Mac via TCC, not bound to a
+        // household-wide Sonos service registration.
+        if AppleMusicProviderFactory.hasMusicKitSupport {
+            AppleMusicKitConnectRow()
         }
 
         // ─── LINKED SERVICES (always visible) ───

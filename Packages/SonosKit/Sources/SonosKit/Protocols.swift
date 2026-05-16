@@ -260,7 +260,12 @@ public protocol TransportStateProviding {
     var albumArtSearch: AlbumArtSearchProtocol { get }
 
     // MARK: Metadata update (with merge logic)
-    func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata)
+    /// `source` lets the receiver discriminate event-driven (push)
+    /// updates from polling responses; SonosManager treats events as
+    /// authoritative and drops poll responses that disagree with a
+    /// recent event so a stale in-flight poll can't roll back state
+    /// after a Prev/Next click.
+    func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata, source: TrackMetadataSource)
 }
 
 // MARK: - Art Cache Protocol (SRP: art URL cache management)

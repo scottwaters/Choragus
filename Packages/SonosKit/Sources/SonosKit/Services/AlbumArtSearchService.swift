@@ -8,6 +8,15 @@ import Foundation
 public final class AlbumArtSearchService: AlbumArtSearchProtocol {
     public static let shared = AlbumArtSearchService()
 
+    /// Optional Apple Music enrichment hooks. Set by the host app when
+    /// MusicKit authorisation is granted; consulted before iTunes Search
+    /// in every artwork lookup. Returning nil falls through to the
+    /// existing iTunes-based strategies, so a MusicKit miss never
+    /// degrades the result vs. the no-MusicKit baseline.
+    public nonisolated(unsafe) static var appleMusicAlbumArtLookup: ((_ artist: String, _ album: String) async -> String?)?
+    public nonisolated(unsafe) static var appleMusicArtistArtLookup: ((_ artist: String) async -> String?)?
+    public nonisolated(unsafe) static var appleMusicTrackArtLookup: ((_ artist: String, _ title: String) async -> String?)?
+
     private let session: URLSession
     private var cache: [String: String?] = [:] // cacheKey -> artURL (nil = not found)
     private let cacheLock = NSLock()
@@ -48,6 +57,17 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
             return cached
         }
         cacheLock.unlock()
+
+        // Strategy 0: Apple Music catalog when the user has authorised
+        // MusicKit. Tried first because catalog metadata is higher-quality
+        // than iTunes Search results and the rate limits are separate, so
+        // a hit here also relieves pressure on the iTunes-side throttle.
+        if let lookup = Self.appleMusicAlbumArtLookup, !artist.isEmpty || !album.isEmpty {
+            if let url = await lookup(artist, album) {
+                cacheSet(cacheKey, url)
+                return url
+            }
+        }
 
         // Strategy 1: Combined artist + album search
         if !artist.isEmpty && !album.isEmpty {
@@ -109,6 +129,14 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
         }
         cacheLock.unlock()
 
+        // Apple Music catalog first when authorised — see `appleMusicArtistArtLookup`.
+        if let lookup = Self.appleMusicArtistArtLookup {
+            if let url = await lookup(trimmed) {
+                cacheSet(cacheKey, url)
+                return url
+            }
+        }
+
         // Strip straight + smart quotes from the query. iTunes Search
         // treats query quotes as phrase delimiters — names like
         // `"Weird Al" Yankovic` return zero results when sent literally
@@ -156,6 +184,15 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
             return cached
         }
         cacheLock.unlock()
+
+        // Apple Music catalog first when authorised. Same dual-key arrangement
+        // as the album/artist paths above.
+        if let lookup = Self.appleMusicTrackArtLookup, !title.isEmpty {
+            if let url = await lookup(artist, title) {
+                cacheSet(cacheKey, url)
+                return url
+            }
+        }
 
         // The user is actively watching the now-playing pane while a
         // radio track plays — this is a user-facing latency-sensitive

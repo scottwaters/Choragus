@@ -59,6 +59,14 @@
 		A10065 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10065 /* DiagnosticsView.swift */; };
 		A10066 /* LiveEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10066 /* LiveEventsView.swift */; };
 		A10067 /* ClubVisWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10067 /* ClubVisWindow.swift */; };
+		A100A0 /* PlaybackIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A0 /* PlaybackIntents.swift */; };
+		A100B0 /* MainThreadHeartbeat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100B0 /* MainThreadHeartbeat.swift */; };
+		A100A1 /* AppleMusicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A1 /* AppleMusicProvider.swift */; };
+		A100A2 /* MusicKitAppleMusicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A2 /* MusicKitAppleMusicProvider.swift */; };
+		A100A3 /* MusicKitAppleMusicView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A3 /* MusicKitAppleMusicView.swift */; };
+		A100A4 /* AppleMusicDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A4 /* AppleMusicDetailViews.swift */; };
+		A100A5 /* AppleMusicPlaybackHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A5 /* AppleMusicPlaybackHelpers.swift */; };
+		A100A6 /* AppleMusicKitConnectRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A6 /* AppleMusicKitConnectRow.swift */; };
 		A10800 /* NowPlayingContextPanelViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10800 /* NowPlayingContextPanelViewModel.swift */; };
 /* End PBXBuildFile section */
 
@@ -117,6 +125,14 @@
 		B10065 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		B10066 /* LiveEventsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsView.swift; sourceTree = "<group>"; };
 		B10067 /* ClubVisWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClubVisWindow.swift; sourceTree = "<group>"; };
+		B100A0 /* PlaybackIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackIntents.swift; sourceTree = "<group>"; };
+		B100B0 /* MainThreadHeartbeat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainThreadHeartbeat.swift; sourceTree = "<group>"; };
+		B100A1 /* AppleMusicProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicProvider.swift; sourceTree = "<group>"; };
+		B100A2 /* MusicKitAppleMusicProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicKitAppleMusicProvider.swift; sourceTree = "<group>"; };
+		B100A3 /* MusicKitAppleMusicView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicKitAppleMusicView.swift; sourceTree = "<group>"; };
+		B100A4 /* AppleMusicDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicDetailViews.swift; sourceTree = "<group>"; };
+		B100A5 /* AppleMusicPlaybackHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicPlaybackHelpers.swift; sourceTree = "<group>"; };
+		B100A6 /* AppleMusicKitConnectRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicKitConnectRow.swift; sourceTree = "<group>"; };
 		B10800 /* NowPlayingContextPanelViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingContextPanelViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -146,6 +162,9 @@
 			isa = PBXGroup;
 			children = (
 				B10001 /* ChoragusApp.swift */,
+				B100A0 /* PlaybackIntents.swift */,
+				B100B0 /* MainThreadHeartbeat.swift */,
+				E100A0 /* AppleMusic */,
 				E10002 /* Views */,
 				E10003 /* ViewModels */,
 				B10005 /* Assets.xcassets */,
@@ -226,6 +245,19 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		E100A0 /* AppleMusic */ = {
+			isa = PBXGroup;
+			children = (
+				B100A1 /* AppleMusicProvider.swift */,
+				B100A2 /* MusicKitAppleMusicProvider.swift */,
+				B100A3 /* MusicKitAppleMusicView.swift */,
+				B100A4 /* AppleMusicDetailViews.swift */,
+				B100A5 /* AppleMusicPlaybackHelpers.swift */,
+				B100A6 /* AppleMusicKitConnectRow.swift */,
+			);
+			path = AppleMusic;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -304,6 +336,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10001 /* ChoragusApp.swift in Sources */,
+				A100A0 /* PlaybackIntents.swift in Sources */,
+				A100B0 /* MainThreadHeartbeat.swift in Sources */,
+				A100A1 /* AppleMusicProvider.swift in Sources */,
+				A100A2 /* MusicKitAppleMusicProvider.swift in Sources */,
+				A100A3 /* MusicKitAppleMusicView.swift in Sources */,
+				A100A4 /* AppleMusicDetailViews.swift in Sources */,
+				A100A5 /* AppleMusicPlaybackHelpers.swift in Sources */,
+				A100A6 /* AppleMusicKitConnectRow.swift in Sources */,
 				A10002 /* ContentView.swift in Sources */,
 				A10003 /* RoomListView.swift in Sources */,
 				A10004 /* NowPlayingView.swift in Sources */,
@@ -416,10 +456,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
-				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 25;
-				DEVELOPMENT_TEAM = "";
+				CURRENT_PROJECT_VERSION = 26;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Choragus/Info.plist;
@@ -430,7 +468,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 4.8;
+				MARKETING_VERSION = 4.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -444,10 +482,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
-				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 25;
-				DEVELOPMENT_TEAM = "";
+				CURRENT_PROJECT_VERSION = 26;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Choragus/Info.plist;
@@ -458,7 +494,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 4.8;
+				MARKETING_VERSION = 4.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;

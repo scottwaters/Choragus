@@ -90,6 +90,27 @@ final class QueueViewModel: ObservableObject {
         }
     }
 
+    /// Lightweight current-track-only re-sync. Skips the `Browse(Q:0)`
+    /// queue paging that `loadQueue` does and only updates
+    /// `currentTrack` from `getPositionInfo`. Used by `QueueView` to
+    /// reconcile the playing-row indicator after a trackURI change
+    /// without flashing the full-pane loading spinner. The queue
+    /// items themselves don't change on Prev/Next/auto-advance, so
+    /// this is the cheap path; the full `loadQueue` stays for the
+    /// queue-mutation paths (add / remove / move).
+    func refreshCurrentTrack() async {
+        do {
+            let posInfo = try await sonosManager.getPositionInfo(group: group)
+            guard posInfo.trackNumber > 0 else { return }
+            if currentTrack != posInfo.trackNumber {
+                sonosDebugLog("[QUEUE] refreshCurrentTrack: \(currentTrack) → \(posInfo.trackNumber)")
+                currentTrack = posInfo.trackNumber
+            }
+        } catch {
+            // Best-effort. The event-driven `currentTrack` stays put.
+        }
+    }
+
     /// Appends tracks the user just added, without hitting the speaker again.
     /// A real `loadQueue` later will reconcile. Skips items whose id already
     /// exists so a racing real reload doesn't produce duplicates.

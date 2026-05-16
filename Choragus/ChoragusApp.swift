@@ -103,6 +103,8 @@ struct ChoragusApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(sonosManager)
+                .environmentObject(sonosManager.positionTracker)
+                .environmentObject(sonosManager.anchorTracker)
                 .environmentObject(presetManager)
                 .environmentObject(playHistoryManager)
                 .environmentObject(playlistScanner)
@@ -115,6 +117,46 @@ struct ChoragusApp: App {
                 .environmentObject(metadataServicesHolder.ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager).lyricsCoordinator)
                 .environmentObject(sparkleObserver)
                 .onAppear {
+                    // Expose the live managers to AppIntents (Shortcuts /
+                    // Spotlight / Siri) which run outside the SwiftUI
+                    // environment and need reachable references.
+                    SonosManager.current = sonosManager
+                    PresetManager.current = presetManager
+                    // Wire Apple Music catalog as the preferred artwork source.
+                    // The closures consult a shared MusicKit provider on
+                    // every call; nil-return (not operational / no match)
+                    // falls through to the existing iTunes Search path,
+                    // so this is purely additive.
+                    let amProvider = AppleMusicProviderFactory.makeCurrent()
+                    AlbumArtSearchService.appleMusicAlbumArtLookup = { [weak amProvider = amProvider] artist, album in
+                        guard let amProvider, !album.isEmpty else { return nil }
+                        guard let result = await amProvider.lookupAlbum(artist: artist, title: album) else { return nil }
+                        return result.artworkURL?.absoluteString
+                    }
+                    AlbumArtSearchService.appleMusicArtistArtLookup = { [weak amProvider = amProvider] artist in
+                        guard let amProvider else { return nil }
+                        guard let result = await amProvider.lookupArtist(name: artist) else { return nil }
+                        return result.artworkURL?.absoluteString
+                    }
+                    AlbumArtSearchService.appleMusicTrackArtLookup = { [weak amProvider = amProvider] artist, title in
+                        guard let amProvider else { return nil }
+                        guard let song = await amProvider.lookupSong(title: title, artist: artist) else { return nil }
+                        return song.artworkURL?.absoluteString
+                    }
+                    MusicMetadataService.appleMusicArtistEnrichment = { [weak amProvider = amProvider] artist in
+                        guard let amProvider else { return nil }
+                        guard let details = await amProvider.lookupArtist(name: artist) else { return nil }
+                        return (details.artworkURL?.absoluteString, details.genreNames)
+                    }
+                    MusicMetadataService.appleMusicAlbumEnrichment = { [weak amProvider = amProvider] artist, album in
+                        guard let amProvider else { return nil }
+                        // Use song-level lookup with first track from the album
+                        // to surface the album's catalog genres (the song
+                        // detail carries genre tags; standalone album lookup
+                        // returns only artwork).
+                        guard let song = await amProvider.lookupSong(title: album, artist: artist) else { return nil }
+                        return (song.artworkURL?.absoluteString, song.genreNames)
+                    }
                     // Register defaults for new toggles before any
                     // view reads them — keeps them ON for fresh
                     // installs / fresh sandbox containers.
@@ -141,6 +183,9 @@ struct ChoragusApp: App {
                         try await smapiManager?.resolveMediaURI(serviceID: sid, itemID: itemID)
                     }
                     sonosManager.startDiscovery()
+                    #if DEBUG
+                    MainThreadHeartbeat.shared.start()
+                    #endif
                     MenuBarController.shared.setup(sonosManager: sonosManager)
                     // Hardware media keys (F7/F8/F9) via MPRemoteCommandCenter
                     // and a sandbox-safe volume chord (⌃⌥↑/↓/M) via local
@@ -233,6 +278,8 @@ struct ChoragusApp: App {
         Settings {
             SettingsView()
                 .environmentObject(sonosManager)
+                .environmentObject(sonosManager.positionTracker)
+                .environmentObject(sonosManager.anchorTracker)
                 .environmentObject(presetManager)
                 .environmentObject(playHistoryManager)
                 .environmentObject(playlistScanner)

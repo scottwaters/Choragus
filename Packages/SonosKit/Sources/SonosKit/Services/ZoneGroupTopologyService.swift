@@ -38,4 +38,23 @@ public final class ZoneGroupTopologyService {
         )
         return result["CurrentHouseholdID"] ?? ""
     }
+
+    /// Queries DeviceProperties for the speaker's current home-theater
+    /// audio input format. Returns Sonos's undocumented `HTAudioIn`
+    /// integer bitfield, which encodes stereo PCM / multichannel PCM /
+    /// Dolby Digital / Dolby Atmos for whatever is on the HDMI ARC /
+    /// eARC / optical / TOSLink input. Caller should only invoke this
+    /// when the coordinator's `trackURI` begins with `x-sonos-htastream:`
+    /// or `x-rincon-stream:`; the field is meaningless otherwise.
+    public func getHTAudioIn(device: SonosDevice) async throws -> Int {
+        let result = try await soap.send(
+            to: device.baseURL,
+            path: "/DeviceProperties/Control",
+            service: "DeviceProperties",
+            action: "GetZoneInfo",
+            arguments: []
+        )
+        guard let raw = result["HTAudioIn"], let value = Int(raw) else { return 0 }
+        return value
+    }
 }

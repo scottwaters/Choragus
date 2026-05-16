@@ -8,6 +8,22 @@
 /// Both strategies update state through a delegate callback to SonosManager.
 import Foundation
 
+/// Where a track-metadata update came from. UPnP event subscriptions
+/// are pushed by the speaker the moment its state changes, so they
+/// reflect the latest authoritative state. Reconciliation polls
+/// (`fetchGroupState` -> `getPositionInfo`) are request/response
+/// round-trips whose response can land seconds after the request
+/// was issued — long enough for a Prev/Next click to fly past
+/// inbetween. Letting an in-flight poll's response overwrite a
+/// freshly-pushed event manifested as "queue row one behind the
+/// playing track" because the poll snapshot was the *pre-Prev*
+/// state. SonosManager uses this tag to drop poll responses that
+/// disagree with the latest event when the event is still recent.
+public enum TrackMetadataSource: Sendable {
+    case event
+    case poll
+}
+
 // MARK: - Protocol
 
 public protocol TransportStrategy: AnyObject {
@@ -20,7 +36,7 @@ public protocol TransportStrategy: AnyObject {
 @MainActor
 public protocol TransportStrategyDelegate: AnyObject {
     func transportDidUpdateState(_ groupID: String, state: TransportState)
-    func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata)
+    func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata, source: TrackMetadataSource)
     func transportDidUpdatePlayMode(_ groupID: String, mode: PlayMode)
     func transportDidUpdateVolume(_ deviceID: String, volume: Int)
     func transportDidUpdateMute(_ deviceID: String, muted: Bool)
@@ -290,6 +306,33 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
     private func handleAVTransportEvent(body: String, deviceID: String) {
         let event = LastChangeParser.parseAVTransportEvent(body)
 
+        // Foundation's XMLParser silently fails on Sonos's LastChange
+        // event XML for some service streams (Apple Music HLS-static
+        // among them), so `event.currentTrackMetaData` arrives empty
+        // and the `r:streamInfo` codec descriptor that Sonos publishes
+        // never reaches `enrichFromDIDL`. Sidestep the parser entirely
+        // by string-matching the descriptor directly out of the raw
+        // event body. The body holds it triple-escaped — we look for
+        // the deepest-escape form (`&amp;lt;r:streamInfo&amp;gt;...`)
+        // which sits in the val= attribute of `<CurrentTrackMetaData>`,
+        // then fall back to single-escape (`&lt;r:streamInfo&gt;...`)
+        // for events where one decode pass has already happened.
+        let bodyStreamInfo: String = {
+            let needles: [(open: String, close: String)] = [
+                ("&amp;lt;r:streamInfo&amp;gt;", "&amp;lt;/r:streamInfo&amp;gt;"),
+                ("&lt;r:streamInfo&gt;", "&lt;/r:streamInfo&gt;"),
+                ("<r:streamInfo>", "</r:streamInfo>")
+            ]
+            for (open, close) in needles {
+                if let r1 = body.range(of: open),
+                   let r2 = body.range(of: close, range: r1.upperBound..<body.endIndex) {
+                    return String(body[r1.upperBound..<r2.lowerBound])
+                }
+            }
+            return ""
+        }()
+        let eventAudioFormat = TrackMetadata.audioFormat(fromStreamInfo: bodyStreamInfo)
+
         // Find the group this coordinator belongs to
         guard let group = currentGroups.first(where: { $0.coordinatorID == deviceID }) else {
             return
@@ -333,11 +376,20 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             if let numTracks = event.numberOfTracks {
                 metadata.queueSize = numTracks
             }
+            // Sidestep — the raw-body streamInfo parsed above carries
+            // the Atmos codec flag that the DIDL parser couldn't see
+            // because Foundation.XMLParser strips it. Apply it before
+            // dispatching to the delegate so the audioFormat reaches
+            // the merged TrackMetadata.
+            if eventAudioFormat != .unknown {
+                metadata.audioFormat = eventAudioFormat
+            }
 
-            delegate?.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: metadata)
+            delegate?.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: metadata, source: .event)
         } else if event.currentTrackURI != nil || event.currentTrackDuration != nil {
             // Event has URI/duration but no DIDL — trigger a position refresh
             // This happens on some radio stations when tracks change
+            let capturedAudioFormat = eventAudioFormat
             Task {
                 guard let delegate = await self.delegate else { return }
                 let avTransport = await delegate.getAVTransportService()
@@ -348,7 +400,10 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                     if let mediaInfo = try? await avTransport.getMediaInfo(device: device) {
                         enriched.enrichFromMediaInfo(mediaInfo, device: device)
                     }
-                    await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enriched)
+                    if capturedAudioFormat != .unknown {
+                        enriched.audioFormat = capturedAudioFormat
+                    }
+                    await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enriched, source: .event)
                 }
             }
         }
@@ -419,6 +474,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
             let avTransport = await delegate.getAVTransportService()
             let renderingControl = await delegate.getRenderingControlService()
+            let zoneTopology = await delegate.getZoneGroupTopologyService()
 
             async let stateResult = avTransport.getTransportInfo(device: coordinator)
             async let positionResult = avTransport.getPositionInfo(device: coordinator)
@@ -433,8 +489,22 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                 enrichedPosition.enrichFromMediaInfo(mediaInfo, device: coordinator)
             }
 
+            // HDMI / line-in mode: pull the speaker's current audio
+            // input format from DeviceProperties.GetZoneInfo. The
+            // AVTransport channel only carries this on input-mode
+            // transitions, so reconciliation polling is what keeps the
+            // readout current as the TV's output format shifts (e.g.
+            // commercial break → 5.1 movie).
+            if let trackURI = enrichedPosition.trackURI,
+               trackURI.contains("x-sonos-htastream:") ||
+               trackURI.contains("x-rincon-stream:") {
+                if let raw = try? await zoneTopology.getHTAudioIn(device: coordinator) {
+                    enrichedPosition.tvAudioFormat = TVAudioFormat.from(htAudioIn: raw)
+                }
+            }
+
             await delegate.transportDidUpdateState(group.coordinatorID, state: state)
-            await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition)
+            await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enrichedPosition, source: .poll)
             await delegate.transportDidUpdatePlayMode(group.coordinatorID, mode: mode)
             await delegate.transportDidUpdatePosition(group.coordinatorID, position: enrichedPosition.position, duration: enrichedPosition.duration)
 
@@ -530,7 +600,7 @@ public final class LegacyPollingTransport: TransportStrategy, @unchecked Sendabl
                 let (state, position, mode) = try await (stateResult, positionResult, modeResult)
 
                 await delegate.transportDidUpdateState(group.coordinatorID, state: state)
-                await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: position)
+                await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: position, source: .poll)
                 await delegate.transportDidUpdatePlayMode(group.coordinatorID, mode: mode)
                 await delegate.transportDidUpdatePosition(group.coordinatorID, position: position.position, duration: position.duration)
 

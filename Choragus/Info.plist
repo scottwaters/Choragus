@@ -11,6 +11,19 @@
   covered by NSAllowsLocalNetworking below.
 -->
 <dict>
+	<!--
+	  Privacy purpose string for Apple Music access. macOS TCC requires
+	  this whenever the app calls MusicAuthorization.request() — even
+	  in builds where the com.apple.developer.musickit entitlement is
+	  not present at runtime. Without the key, the process is killed
+	  with __TCC_CRASHING_DUE_TO_PRIVACY_VIOLATION__. Fork builds with
+	  no entitlement won't actually surface a prompt (the runtime
+	  entitlement check in MusicKitAppleMusicProvider gates the call),
+	  so this string is only seen by users running builds that
+	  actually have the MusicKit capability bound.
+	-->
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Choragus searches and browses your Apple Music catalogue and library when you connect your Apple Music account.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

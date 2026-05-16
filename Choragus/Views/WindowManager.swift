@@ -169,6 +169,7 @@ final class WindowManager {
 
         let view = ClubVisWindow(groupID: group.coordinatorID)
             .environmentObject(manager)
+            .environmentObject(manager.anchorTracker)
             .environmentObject(history)
             .environmentObject(metadata)
             .environmentObject(manager.artCache)
@@ -347,6 +348,7 @@ final class WindowManager {
               let coordinator = lyricsCoordinator else { return }
         let view = LyricsKaraokeWindow(groupID: group.coordinatorID)
             .environmentObject(manager)
+            .environmentObject(manager.anchorTracker)
             .environmentObject(coordinator)
             .environmentObject(manager.artCache)
         // Note: no static `.preferredColorScheme(colorScheme)` here.

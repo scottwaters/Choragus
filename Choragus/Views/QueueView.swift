@@ -17,6 +17,16 @@ struct QueueView: View {
     @State private var dropTargetIndex: Int?
     @State private var showSavePlaylist = false
     @State private var newPlaylistName = ""
+    /// Last `trackURI` we acted on. When the metadata stream pushes a
+    /// new URI we schedule an authoritative `loadQueue()` so the
+    /// current-track indicator re-syncs from `getPositionInfo` — same
+    /// path the manual Refresh button uses. Sonos's UPnP events have
+    /// been observed to push wrong / stale URIs in the seconds after
+    /// a Prev/Next click, a queue-row jump, or a seek-then-auto-
+    /// advance combo; the speaker's own polling response is the only
+    /// source we've found that reliably agrees with the Sonos app.
+    @State private var lastObservedTrackURI: String?
+    @State private var trackURIRefreshTask: Task<Void, Never>?
 
     @EnvironmentObject private var sonosManager: SonosManager
 
@@ -55,8 +65,29 @@ struct QueueView: View {
             Task { await vm.loadQueue() }
             _ = newID
         }
-        .onReceive(sonosManager.$groupTrackMetadata) { _ in
+        .onReceive(sonosManager.$groupTrackMetadata) { newMap in
             vm.updateCurrentTrack()
+            // Auto-reconcile on any trackURI change. Events are racy
+            // (sometimes stale, sometimes wrong, sometimes out-of-
+            // order) so we use them only as a *signal* that something
+            // changed and then ask the speaker authoritatively. 2 s
+            // debounce lets a burst of transient events (STOPPED →
+            // PLAYING flap during Prev/Next, or the Sonos quirk where
+            // it briefly emits the prior track again) collapse to one
+            // refresh per real change.
+            let uri = newMap[group.coordinatorID]?.trackURI
+            if uri != lastObservedTrackURI {
+                lastObservedTrackURI = uri
+                trackURIRefreshTask?.cancel()
+                trackURIRefreshTask = Task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    if Task.isCancelled { return }
+                    // Lightweight indicator-only sync — no spinner.
+                    // Queue items don't change on track advance, so
+                    // we skip the full `Browse(Q:0)` round-trip.
+                    await vm.refreshCurrentTrack()
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .queueChanged)) { note in
             // Fast path — the sender told us exactly what was appended. Skips

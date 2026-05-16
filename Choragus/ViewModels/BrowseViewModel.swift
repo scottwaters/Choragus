@@ -11,7 +11,14 @@ final class BrowseViewModel {
     let sonosManager: any BrowsingServices
     let objectID: String
     let title: String
-    let group: SonosGroup?
+    /// Target group for play / queue actions on items in this view.
+    /// Must stay in sync with the user's current sidebar selection —
+    /// `BrowseListView` updates this via `.onChange(of: parentGroup)`
+    /// when the sidebar selection moves. Captured at init time as a
+    /// seed; pushed-and-still-displayed lists were previously sending
+    /// playback to the group selected when the list was first
+    /// navigated to, not the group currently highlighted.
+    var group: SonosGroup?
 
     // MARK: - State
 

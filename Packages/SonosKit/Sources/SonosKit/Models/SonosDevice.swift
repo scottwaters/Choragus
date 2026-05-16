@@ -50,4 +50,60 @@ public struct SonosDevice: Identifiable, Hashable {
         guard path.hasPrefix("/") else { return path }
         return "http://\(ip):\(port)\(path)"
     }
+
+    /// True if this speaker model can decode and render Dolby Atmos.
+    /// Used to gate the "Dolby Atmos" badge in Now Playing — the badge
+    /// only appears when the content carries the Dolby flag AND the
+    /// coordinator is capable of actually rendering it (otherwise the
+    /// content is downmixed to stereo). Conservatively whitelisted to
+    /// the models documented by Sonos as Atmos-capable.
+    /// True when the device is a portable Sonos speaker (Move, Move 2,
+    /// Roam, Roam 2). These models have two independent input sources
+    /// — WiFi (responds to SMAPI/UPnP control) and Bluetooth (local
+    /// pairing, isolated audio pipeline). When a portable is on
+    /// Bluetooth, the WiFi-side `RenderingControl` service still
+    /// answers SOAP calls but `GetVolume` returns 0 and `SetVolume`
+    /// no-ops at the audio pipeline. Use this flag to surface
+    /// portable-specific diagnostics so issues like #37 don't
+    /// require the maintainer to own a Move to reproduce.
+    public var isPortable: Bool {
+        let name = modelName.lowercased()
+        return name.contains("move") || name.contains("roam")
+    }
+
+    public var isAtmosCapable: Bool {
+        let name = modelName
+        if name.localizedCaseInsensitiveContains("Arc") { return true }
+        if name.localizedCaseInsensitiveContains("Era 300") { return true }
+        if name.localizedCaseInsensitiveContains("Beam") {
+            // Beam Gen 2 is Atmos-capable; original Beam is not. The
+            // model number is `S40` for Gen 2, `S14` for Gen 1.
+            return modelNumber.uppercased().contains("S40")
+                || name.localizedCaseInsensitiveContains("Gen 2")
+        }
+        return false
+    }
+}
+
+extension SonosGroup {
+    /// True if the group's coordinator can decode Dolby Atmos. Resolves
+    /// the model name via an explicit lookup dictionary because Sonos
+    /// publishes two device records per speaker — the bare ZonePlayer
+    /// (used as the coordinator) often carries an empty modelName,
+    /// while the sibling MediaRenderer sub-device (UUID suffixed
+    /// `_MR`) holds the descriptive metadata. The lookup walks both
+    /// so the gate doesn't fail purely because the bare record is
+    /// blank. Pass `SonosManager.devices` from the call site.
+    public func isAtmosCapable(devices: [String: SonosDevice]) -> Bool {
+        let bareID = coordinatorID
+        if let bare = devices[bareID], bare.isAtmosCapable { return true }
+        if let mr = devices["\(bareID)_MR"], mr.isAtmosCapable { return true }
+        // Fallback: scan all records whose ID shares the bare prefix.
+        // Catches stray ID-suffix variants Sonos may emit on future
+        // firmware without breaking the existing two-record split.
+        for (id, dev) in devices where id.hasPrefix(bareID) {
+            if dev.isAtmosCapable { return true }
+        }
+        return false
+    }
 }

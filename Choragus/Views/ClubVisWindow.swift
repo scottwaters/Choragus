@@ -41,6 +41,7 @@ fileprivate func visLog(_ msg: String) {
 
 struct ClubVisWindow: View {
     @EnvironmentObject var sonosManager: SonosManager
+    @EnvironmentObject var anchorTracker: AnchorTracker
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     @EnvironmentObject var metadataServicesHolder: MusicMetadataServiceHolder
     /// Live-tunable lighting parameters surfaced from the debug
@@ -441,10 +442,15 @@ struct ClubVisWindow: View {
             }
             await rebuildTiles()
         }
-        .task(id: trackMetadata.trackURI) {
-            // Track changed (or initial load). Backfill is small (5
-            // artists) but prioritises the new track's artist + the
-            // queue items so genre matching tracks the playback.
+        .task(id: "\(trackMetadata.trackURI ?? "")|\(trackMetadata.artist)") {
+            // Keyed on (trackURI, artist) — not URI alone — because
+            // service streams (Apple Music HLS-static, Spotify, etc.)
+            // land the URI first and the DIDL with artist arrives a
+            // few hundred ms later. If we only watched the URI, an
+            // empty-artist first event would take the SKIP branch
+            // below and the About panel would never populate until
+            // the next track. Composite key re-fires when the artist
+            // settles, restoring the fetch.
             queueHolder.vm?.updateCurrentTrack()
             Task { @MainActor in
                 var priority = [trackMetadata.artist]
@@ -761,7 +767,7 @@ struct ClubVisWindow: View {
                 trackMetadata: trackMetadata,
                 albumArtURL: settledArtURL,
                 sourceLabel: sourceLabel,
-                positionAnchor: sonosManager.groupPositionAnchors[groupID] ?? .zero
+                positionAnchor: anchorTracker.groupPositionAnchors[groupID] ?? .zero
             )
             .frame(width: 820, height: 320, alignment: .leading)
             .position(x: 60 + 410, y: 1080 - 60 - 160)

@@ -26,6 +26,12 @@ struct SlidingLyricsView: View, Equatable {
     var rowHeight: CGFloat = 34
     var peakSize: CGFloat = 19
     var baseSize: CGFloat = 13
+    /// Visual style for the lyrics readout. `.dynamic` (default) scales
+    /// the active line up and neighbours down. `.classic` renders all
+    /// lines at `peakSize` with only the opacity gradient marking the
+    /// active row — matches the traditional karaoke-bouncing-ball
+    /// presentation users associate with the term.
+    var style: KaraokeStyle = .dynamic
 
     init(lines: [(time: Double, line: String)],
          anchor: PositionAnchor,
@@ -33,7 +39,8 @@ struct SlidingLyricsView: View, Equatable {
          visibleRows: Int = 5,
          rowHeight: CGFloat = 34,
          peakSize: CGFloat = 19,
-         baseSize: CGFloat = 13) {
+         baseSize: CGFloat = 13,
+         style: KaraokeStyle = .dynamic) {
         self.lines = lines.map { LyricLine(time: $0.time, line: $0.line) }
         self.anchor = anchor
         self.offset = offset
@@ -41,6 +48,7 @@ struct SlidingLyricsView: View, Equatable {
         self.rowHeight = rowHeight
         self.peakSize = peakSize
         self.baseSize = baseSize
+        self.style = style
     }
 
     private var centreRow: Int { visibleRows / 2 }
@@ -56,6 +64,7 @@ struct SlidingLyricsView: View, Equatable {
             && lhs.rowHeight == rhs.rowHeight
             && lhs.peakSize == rhs.peakSize
             && lhs.baseSize == rhs.baseSize
+            && lhs.style == rhs.style
             && lhs.lines == rhs.lines
     }
 
@@ -153,8 +162,22 @@ struct SlidingLyricsView: View, Equatable {
         // wrap that forced an offscreen compositing pass each frame.
         let clamped = min(max(distance, 0), 2.5)
         let t = 1.0 - (clamped / 2.5)
-        let minScale = baseSize / peakSize
-        let scale = minScale + (1.0 - minScale) * CGFloat(t)
+        // Classic style holds every visible line at `peakSize` — no
+        // scale interpolation — and leans entirely on the opacity
+        // gradient to mark the active row. Matches the traditional
+        // karaoke presentation. Dynamic style keeps the existing
+        // peak-to-base size interpolation. Wrapped in a closure so
+        // the `switch` reads as control flow, not a SwiftUI
+        // `@ViewBuilder` branch.
+        let scale: CGFloat = {
+            switch style {
+            case .dynamic:
+                let minScale = baseSize / peakSize
+                return minScale + (1.0 - minScale) * CGFloat(t)
+            case .classic:
+                return 1.0
+            }
+        }()
         let opacity = CGFloat(t * t)
 
         Text(text)

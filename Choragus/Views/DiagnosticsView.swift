@@ -256,6 +256,21 @@ struct DiagnosticsView: View {
             }
             .buttonStyle(.bordered)
 
+            // Encrypted bundle to a user-chosen location. Mirrors the
+            // ReportBug encrypted flow's bundle assembly but skips the
+            // forced Downloads write + GitHub open, so the user can
+            // share the file out-of-band (email, Slack, etc.). Only
+            // shown when the build carries a maintainer public key.
+            if BugReportEncryptor.isConfigured {
+                Button {
+                    saveEncryptedLog()
+                } label: {
+                    Label(L10n.diagSaveEncryptedLog, systemImage: "lock.doc.fill")
+                }
+                .buttonStyle(.bordered)
+                .help(L10n.diagSaveEncryptedLogHelp)
+            }
+
             // When the build carries a maintainer public key (release
             // build, or dev build with the env var passed through),
             // expose the encrypted-bundle path. The encrypted bundle
@@ -399,6 +414,49 @@ struct DiagnosticsView: View {
                 try bundleText(for: filteredEntries).write(to: url, atomically: true, encoding: .utf8)
             } catch {
                 saveError = error.localizedDescription
+            }
+        }
+    }
+
+    /// Writes the encrypted diagnostic envelope to a user-chosen
+    /// location via NSSavePanel. Same payload shape the
+    /// "Report Bug (encrypted)" flow produces, minus the forced
+    /// Downloads write and the GitHub form opener — for users who
+    /// want to share the bundle out-of-band.
+    private func saveEncryptedLog() {
+        let rows = selection.isEmpty
+            ? filteredEntries
+            : filteredEntries.filter { selection.contains($0.id) }
+        let rawPayload = rows.map { e in
+            BugReportBundle.EntryPayload(
+                timestamp: Self.bundleStampFormatter.string(from: e.timestamp),
+                level: e.level.rawValue.uppercased(),
+                tag: e.tag,
+                message: e.message,
+                context: e.contextJSON
+            )
+        }
+        let payloadEntries = BugReportBundle.scrubForPublicOutput(rawPayload)
+        let envelope: Data
+        do {
+            envelope = try BugReportBundle.assemble(entries: payloadEntries)
+        } catch {
+            encryptedReportError = error.localizedDescription
+            return
+        }
+
+        let panel = NSSavePanel()
+        // `.log` suffix matches the ReportBug flow so GitHub's
+        // attachment uploader accepts the file on drag-drop without
+        // a manual rename.
+        let stamp = Self.fileNameFormatter.string(from: Date())
+        panel.nameFieldStringValue = "Choragus-Bug-Bundle-v\(versionTag)-\(stamp).choragus-bundle.log"
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try envelope.write(to: url, options: [.atomic])
+            } catch {
+                encryptedReportError = error.localizedDescription
             }
         }
     }

@@ -238,6 +238,13 @@ public enum UDKey {
     public static let tuneInSearchEnabled = "tuneInSearchEnabled"
     public static let calmRadioEnabled = "calmRadioEnabled"
     public static let appleMusicSearchEnabled = "appleMusicSearchEnabled"
+    /// Mirrors the live MusicKit authorisation state to a fast-readable
+    /// @AppStorage flag — BrowseView consults it to auto-show / auto-
+    /// hide the MusicKit Apple Music entry without an async
+    /// `MusicAuthorization.currentStatus` round-trip on every body
+    /// re-eval. Written by `AppleMusicKitConnectRow.refresh()` whenever
+    /// it polls the provider.
+    public static let appleMusicKitConnected = "appleMusicKitConnected"
     public static let sonosRadioEnabled = "sonosRadioEnabled"
     public static let ignoreTV = "ignoreTV"
     /// Collapses the Lyrics / About / History panel under Now Playing
@@ -307,6 +314,30 @@ public enum UDKey {
     /// "group" (default) restricts the history pool to plays in the
     /// currently-selected group; "all" pools across every group.
     public static let visHistorySource = "vis.historySource"
+    /// Karaoke text rendering style. Stored as a raw String matching
+    /// `KaraokeStyle.rawValue` ("dynamic" | "classic"). "dynamic"
+    /// (default) scales the active line up + neighbours down for a
+    /// modern Apple-Music-style readout; "classic" renders all lines
+    /// at one size and uses brightness to mark the active line.
+    public static let karaokeStyle = "karaoke.style"
+}
+
+/// Stored as a raw String UserDefault under `UDKey.karaokeStyle`.
+/// `dynamic` (default) — the active line scales up to `peakSize`,
+/// neighbours interpolate down to `baseSize`, opacity falls off with
+/// distance. `classic` — every visible line renders at `peakSize`,
+/// only opacity distinguishes the active line from the rest. The
+/// scroll motion and line-cadence are identical across both modes.
+public enum KaraokeStyle: String, CaseIterable, Sendable {
+    case dynamic
+    case classic
+
+    public static var defaultMode: KaraokeStyle { .dynamic }
+
+    public static var current: KaraokeStyle {
+        let raw = UserDefaults.standard.string(forKey: UDKey.karaokeStyle) ?? ""
+        return KaraokeStyle(rawValue: raw) ?? .defaultMode
+    }
 }
 
 /// Stored as a raw String UserDefault under `UDKey.visHistorySource`.

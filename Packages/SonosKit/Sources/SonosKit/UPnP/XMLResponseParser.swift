@@ -81,6 +81,22 @@ public enum XMLResponseParser {
         return nil
     }
 
+    /// Extracts Sonos's `r:streamInfo` codec descriptor from DIDL.
+    /// Format: `bd:<bitDepth>,sr:<sampleRate>,c:<channels>,l:<lossless>,d:<dolby>`.
+    /// Returns an empty string when the field is absent so callers can
+    /// distinguish "not reported" from "all-zero".
+    public static func extractStreamInfo(_ didl: String) -> String {
+        for openTag in ["<r:streamInfo>", "<streamInfo>"] {
+            let closeTag = openTag.replacingOccurrences(of: "<", with: "</")
+            if let startRange = didl.range(of: openTag),
+               let endRange = didl.range(of: closeTag, range: startRange.upperBound..<didl.endIndex) {
+                return String(didl[startRange.upperBound..<endRange.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return ""
+    }
+
     // MARK: - Helpers
 
     public static func xmlUnescape(_ string: String) -> String {

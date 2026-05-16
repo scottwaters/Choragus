@@ -32,6 +32,14 @@ public final class MediaKeyHandler: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var commandsRegistered = false
     private var lastPublishedNowPlayingKey: String = ""
+    /// Tracks the album-art URL most recently published to
+    /// `MPNowPlayingInfoCenter`. Used to dedupe artwork fetches and to
+    /// detect when the underlying art changed so we can re-download.
+    private var lastPublishedArtURL: String = ""
+    /// In-flight artwork download. Cancelled when the art URL changes
+    /// so a slow LAN fetch for a previous track can't overwrite a fresh
+    /// fetch's result.
+    private var artworkFetchTask: URLSessionDataTask?
 
     /// Linear step applied per ⌃⌥↑/↓ press. Matches the scroll-wheel
     /// step in `NowPlayingViewModel.applyScrollVolumeStep` so the two
@@ -317,6 +325,49 @@ public final class MediaKeyHandler: ObservableObject {
         // `nowPlayingInfo` alone is insufficient and Music.app wins the
         // key route. Map TransportState → MPNowPlayingPlaybackState.
         center.playbackState = mapPlaybackState(transport)
+
+        // Fetch the album art asynchronously and patch it onto the
+        // info dict once decoded. Without `MPMediaItemPropertyArtwork`
+        // macOS substitutes the app icon in the system Now Playing
+        // strip — fine for the initial seed but wrong once a real
+        // track is loaded.
+        publishArtwork(forURL: meta.albumArtURI, expectedKey: key)
+    }
+
+    /// Downloads the speaker-reported album art and pushes it into
+    /// `MPNowPlayingInfoCenter`. Off-main-thread, deduped against the
+    /// previous URL, and gated by the `expectedKey` snapshot so a slow
+    /// art fetch can't overwrite a newer track's artwork.
+    private func publishArtwork(forURL artURL: String?, expectedKey: String) {
+        let url = (artURL?.isEmpty == false) ? artURL! : ""
+        // Same URL as last publish → nothing to do.
+        guard url != lastPublishedArtURL else { return }
+        lastPublishedArtURL = url
+        // Cancel any prior in-flight fetch; its result would be stale.
+        artworkFetchTask?.cancel()
+        artworkFetchTask = nil
+        // No URL — leave any previously-published artwork in place
+        // until the next track explicitly provides new art. Avoids the
+        // OS briefly falling back to the app icon on a transient
+        // empty-art event mid-playback.
+        guard !url.isEmpty, let parsed = URL(string: url) else { return }
+        let task = URLSession.shared.dataTask(with: parsed) { [weak self] data, _, error in
+            guard let self = self else { return }
+            guard error == nil, let data = data, let image = NSImage(data: data) else { return }
+            DispatchQueue.main.async {
+                // Guard against late arrival: if the displayed track
+                // has moved on since we kicked off the fetch, drop the
+                // result on the floor.
+                guard self.lastPublishedNowPlayingKey == expectedKey else { return }
+                let center = MPNowPlayingInfoCenter.default()
+                var info = center.nowPlayingInfo ?? [:]
+                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                info[MPMediaItemPropertyArtwork] = artwork
+                center.nowPlayingInfo = info
+            }
+        }
+        artworkFetchTask = task
+        task.resume()
     }
 
     /// First publish on launch. Establishes Choragus as a Now Playing

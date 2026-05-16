@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Entitlements applied to Sparkle's Downloader.xpc when re-signing for
+  distribution. The Sparkle-for-Swift-Package-Manager xcframework ships
+  the XPC services with empty entitlements (designed for host-managed
+  re-signing); a sandboxed host (Choragus) must restore the sandbox +
+  network-client posture so the XPC can fetch the appcast.
+
+  Without `network.client` here the XPC's URLSession returns
+  -1004 "Could not connect to the server" and the user sees
+  "Update Error! An error occurred in retrieving update information."
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+</dict>
+</plist>

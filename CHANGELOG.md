@@ -1,6 +1,61 @@
 
 # Changelog
 
+## v4.9 — 2026-05-15 — MusicKit Apple Music, karaoke stutter fix, queue self-resync
+
+Native Apple Music replaces the SMAPI-routed browse path, the karaoke window stops stuttering during playback, and the queue indicator self-corrects after track changes when Sonos's UPnP event stream disagrees with the speaker's actual state.
+
+### Apple Music — MusicKit-backed
+
+A complete native Apple Music surface backed by Apple's `MusicKit` framework, replacing the legacy SMAPI search/browse for Apple Music in release builds. Auth is handled by macOS's TCC prompt (Privacy & Security → Media & Apple Music); no Sonos-side configuration. Playback still flows through Sonos via the speaker's Apple Music SMAPI service — MusicKit drives discovery, search, metadata, and library access only.
+
+- **Browse landing**: Your Library (Songs / Albums / Artists / Playlists), Recently Played, Made for You, Charts (Top Songs / Top Albums / Top Playlists), Genres, Stations For You (sourced from `MusicRecentlyPlayedContainerRequest` + `MusicPersonalRecommendation.stations`), Radio Stations (Apple Music catalogue station search), Now in Spatial Audio (Dolby Atmos albums filtered from the chart feed).
+- **Search**: Spotify-style `Browse | Search` tab toggle. Sub-tabs `All / Artists / Albums / Tracks / Playlists`. The "All" tab does the original prefix-5 + "See All" overview; per-category tabs hand off to the same list views used by drilldowns (sort pickers, right-click context menus, bulk action bars).
+- **Prefix-matching search**: every search runs `MusicCatalogSearchRequest` and `MusicCatalogSearchSuggestionsRequest(includingTopResultsOfTypes:)` in parallel and merges results (top-results first, then broad search, de-duped by id). Apple Music's plain catalogue search misses prefix queries ("yankov" returns no Yankovic); the suggestions API with top-results does the prefix completion the same way the Apple Music app's type-ahead does.
+- **Detail views**: Album / Artist / Playlist / Recommendation / Library / Genre drilldowns, all with right-click context menus (Play Now / Play Next / Add to Queue) on every row and bulk action bars (Play All / Add All Next / Add All Last) at the top. Sort pickers everywhere (Title / Artist / Album / Duration / Date Added / Release Date for tracks; Title / Artist / Newest / Oldest / Recently Added for albums; Name for artists / playlists / genres). Defaults: alpha for tracks/artists/playlists/genres, release-date-oldest for albums.
+- **Artist drilldown** splits into two further drilldowns ("Top Songs" → track list, "Albums" → album list) instead of an inline scroll, matching the Apple Music app's structure.
+- **Library artwork via Apple's `ArtworkImage` view**. Library item artwork URLs use a `musicKit://artwork/transient/...` scheme that `URLSession` cannot load. A new `MusicKitArtworkRegistry` stashes each `Artwork` value against the URL it would render to so `AppleMusicArtworkSquare` / `AppleMusicArtworkCircle` can render via Apple's native `ArtworkImage` — catalogue items still use the existing `CachedAsyncImage` path with the https URL.
+- **Settings entry** (`AppleMusicKitConnectRow`) sits in Settings → Music Services with Connect / Re-check / Open System Settings actions. The Browse-pane sidebar entry auto-shows when MusicKit authorisation flips to `.authorised` and auto-hides if access is revoked, mirroring how the other services (TuneIn, Calm Radio, Sonos Radio) only surface their entry when enabled. Persisted via a new `appleMusicKitConnected` `@AppStorage` flag.
+- **Legacy SMAPI Apple Music is removed from release builds**. Dev builds keep both visible for side-by-side comparison via the `SHOW_LEGACY_APPLE_MUSIC` compilation condition; the signed release omits it. The Settings → Music Services row for the legacy SMAPI Apple Music is also filtered out when `showLegacyAppleMusic` is false so there's no dead toggle.
+- **Library item filtering**: `playParameters != nil && !title.isEmpty && !artistName.isEmpty && trackCount > 0` for albums; `playParameters != nil && !title.isEmpty && !artistName.isEmpty` for songs. Hash-style library ids (negative or 13+ digit positives) and letter-prefixed ids (`l.`/`p.`/`r.`/`i.`) route through a title+artist catalogue resolve at play time so Sonos receives a catalogue-shape song id; without the resolve `AddURIToQueue` faults with SOAP 800. The `idLane` heuristic was widened to accept legacy small artist ids (Beatles `136975`, etc.) — anything in `0 < id ≤ 1e12` counts as catalogue.
+
+### Karaoke stutter — architectural fix
+
+Resolved a ~70–85 ms main-thread stall that fired on every 1 Hz position update and dropped frames in `SlidingLyricsView`'s `TimelineView(.animation)`. Diagnosed via a new `MainThreadHeartbeat` probe (DEBUG-only; release builds drop the type and call site entirely).
+
+- **Split high-churn playhead state out of `SonosManager`** into dedicated `PositionTracker` (`groupPositions`, `groupDurations`) and `AnchorTracker` (`groupPositionAnchors`) `ObservableObject`s. Internal writes route through the trackers; the original property names on `SonosManager` remain as computed forwarders so `TransportStateProviding` protocol consumers and `NowPlayingViewModel` keep compiling without changes. `SonosManager.objectWillChange` no longer fires for any position-related state.
+- **Wired the trackers as separate `@EnvironmentObject`s** in `ChoragusApp` (WindowGroup + Settings) and explicitly on the karaoke / ClubVis windows in `WindowManager`. `LyricsKaraokeWindow` now observes `anchorTracker` for anchor reads instead of `sonosManager`; ClubVis and Now Playing got the same treatment so their re-renders only fire when the anchor actually changes.
+- **Content-equality gate on `groupTrackMetadata` publishes**. `TrackMetadata` includes `position` and `duration` fields that get rewritten on every 1 Hz poll — full-struct equality tripped the publish gate every poll and re-evaluated every observing view. New `TrackMetadata.contentEquals(_:)` compares every field except `position` / `duration`; both publish gates now use it.
+
+### Queue current-track self-correction
+
+After a Prev/Next click, queue-row jump, or seek-then-auto-advance, Sonos's UPnP event stream has been observed to push wrong / stale track metadata for several seconds. Diagnosed against the Sonos iPhone app showing the correct state while our metadata insisted otherwise.
+
+- `QueueView` tracks `lastObservedTrackURI` and schedules a 2 s-debounced `vm.refreshCurrentTrack()` on any `trackURI` change in `groupTrackMetadata`. The refresh calls `sonosManager.getPositionInfo(group:)` directly and updates `currentTrack` only — no queue browse, no loading spinner — same authoritative path the manual Refresh button uses. Whichever source (events or polls) happens to be racy in a given moment, the speaker's direct response wins.
+- Removed an earlier stale-poll guard (`TrackMetadataSource.event` vs `.poll`) from `transportDidUpdateTrackMetadata`. Empirically Sonos's events also lie after a seek/auto-advance combo, so dropping disagreeing polls sometimes filtered the only correct source. The `TrackMetadataSource` enum stays on the protocol for future use.
+- `addBrowseItemToQueue(playNext: true)` skips the optimistic-append payload and forces a full reload. Insert-at-N shifts every following row's id by one; the simple "append by id" path was dropping the new row as a duplicate of the track that just shifted down, leaving the queue stuck after a "Play Next".
+
+### UX / Settings
+
+- **Lyrics timing offset** moved from its own Lyrics tab to Settings → Visualisations → Karaoke alongside the karaoke style picker. The standalone Lyrics section is removed.
+- **Manual album-art selection propagates to `ArtCacheService`** via `sonosManager.cacheArtURL(...)` so the karaoke window and play history reflect the user's choice immediately. Previously the Now Playing panel updated but `artCache.lookupCachedArt(uri:title:)` — which the karaoke window reads through — kept returning the auto-resolved URL.
+- **Full-row back-button hit targets** across every drilldown header. `MusicKitAppleMusicView.detailBar`, `BrowseView` Plex / TuneIn / SMAPI drill headers, and `PlexDirectBrowseView` now wrap the entire `chevron + title + Spacer` HStack in a single Button with `.contentShape(Rectangle())`. A click anywhere across the bar pops the nav stack.
+
+### Diagnostics
+
+- **Diagnostics → Save Encrypted Log File…** Pick the destination via NSSavePanel instead of being routed to Downloads + GitHub. Same `BugReportBundle` envelope shape as the Report Bug (encrypted) path, minus the forced reveal and GitHub form open. Visible only when `BugReportEncryptor.isConfigured` (release builds). L10n keys `diagSaveEncryptedLog` / `diagSaveEncryptedLogHelp` added with translations for all 13 supported languages.
+- **Portable-speaker diagnostic** for issue #37. New `SonosDevice.isPortable` flag (modelName contains "Move" or "Roam"). `setVolume(device:)` logs `[PORTABLE_VOL] setVolume on portable …` with model + group context when the target is a portable. `updateDeviceVolume(_:volume:)` logs `[PORTABLE_VOL] Portable … reports volume=0` with model + transport URI + transport state + group state when a portable reports zero — the signature for Sonos's Bluetooth-input quirk where the WiFi-side `RenderingControl` accepts SOAP but the audio pipeline ignores the value because it's reading from BT. Combined with the existing `[RC-VERIFY]` debug-log lines, the bug bundle from an affected user traces intent → SOAP send → verify read → next event without the maintainer needing a Move to reproduce.
+- **`MainThreadHeartbeat` probe** (DEBUG-only). Background utility-queue `DispatchSourceTimer` pulses every 10 ms, dispatches a tiny block to `DispatchQueue.main`, measures the delivery delay. Delays > 50 ms log as `[MAIN-STALL] <N>ms` via `sonosDebugLog`. Coalesces back-to-back pulses behind one long stall to a single log line. Release builds drop the type and start call entirely via `#if DEBUG`.
+
+### Internal
+
+- New file `Choragus/AppleMusic/AppleMusicDetailViews.swift` — album / artist / playlist / library / recommendation / genre / station detail views.
+- New file `Choragus/AppleMusic/AppleMusicKitConnectRow.swift` — Settings entry.
+- New file `Choragus/AppleMusic/AppleMusicPlaybackHelpers.swift` — `AppleMusicPlayHelper`, sort enums, `AppleMusicBulkActionTracker`, context-menu builders, DIDL construction (`00032020song%3a<id>` + `parentID="0004206calbum%3a<albumID>"` + `cdudn=SA_RINCON<rinconServiceType>_X_#Svc<rinconServiceType>-0-Token`).
+- New file `Choragus/AppleMusic/MusicKitAppleMusicView.swift` — root browse view with manual breadcrumb stack (`@State path: [AppleMusicDestination]`) replacing the SwiftUI `NavigationStack` which was hijacking the whole-app navigation context.
+- New file `Packages/SonosKit/Sources/SonosKit/Services/PositionTrackers.swift` — `PositionTracker` + `AnchorTracker` observable objects.
+- New file `Choragus/MainThreadHeartbeat.swift` — DEBUG-only main-thread responsiveness probe.
+
 ## v4.8 — 2026-05-10 — Back of the Club visualisation
 
 A focused release for a new full-screen "club back wall" visualisation, the surrounding plumbing (Visualisation menu group, settings reorganisation, Up Next gating fix, bio render correctness) and the localisation refresh that goes with it.

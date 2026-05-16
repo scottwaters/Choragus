@@ -137,18 +137,26 @@ struct PlexDirectBrowseView: View {
     /// permanent fixture, matching the rest of the app's search views
     /// (SMAPI, Apple Music, TuneIn).
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
             if stack.count > 1 {
                 Button { stack.removeLast() } label: {
-                    Image(systemName: "chevron.backward")
-                        .font(.system(size: 14, weight: .semibold))
+                    HStack(spacing: 8) {
+                        Image(systemName: "chevron.backward")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(stack.last?.title ?? "Plex")
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+            } else {
+                Text(stack.last?.title ?? "Plex")
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                Spacer()
             }
-            Text(stack.last?.title ?? "Plex")
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-            Spacer()
             if !plexAuth.serverName.isEmpty {
                 Text(plexAuth.serverName)
                     .font(.caption)

@@ -6,6 +6,13 @@ public final class PresetManager: ObservableObject {
     @Published public var presets: [GroupPreset] = []
     @Published public var applyingPreset: UUID?
 
+    /// Weak global handle used by AppIntents (Shortcuts / Spotlight /
+    /// Siri) so the activate-preset intent can reach the live preset
+    /// list outside the SwiftUI environment. Mirrors `SonosManager.current`.
+    /// Set from `ChoragusApp` at first appearance; cleared automatically
+    /// when the manager deinits.
+    nonisolated(unsafe) public static weak var current: PresetManager?
+
     private let fileURL: URL
 
     public init() {

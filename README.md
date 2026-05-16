@@ -43,6 +43,22 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 
 ---
 
+## What's New in v4.9
+
+Apple Music gets a proper native pane this release, and the karaoke window stops stuttering.
+
+- **Apple Music — native.** Browse and search your Apple Music library, catalogue, charts, radio, "Stations for You", "Made for You" rows and now-in-Spatial-Audio albums directly from Choragus. Sign in with the Apple ID on this Mac under Settings → Music Services; no Sonos-side fiddling required. The old browse path that searched through Sonos's service is gone — this one is faster, looks better, and matches what the Apple Music app shows.
+- **Karaoke runs smooth.** Resolved a stutter where every Sonos poll re-rendered the karaoke window; the lyrics line scrolls cleanly at the display refresh rate now.
+- **Queue position always matches the playing track.** If Sonos's events ever disagreed about the current track (Prev/Next clicks, seek-then-auto-advance) the queue used to lag by one. Now it re-asks the speaker directly and corrects itself.
+- **Full-row back buttons.** Hitting the `<` in any drilldown panel (Apple Music, Plex, TuneIn, etc.) now accepts a click anywhere across the title bar, not just the chevron glyph.
+- **Lyrics timing offset moved.** Now lives under Settings → Visualisations → Karaoke alongside the karaoke style picker.
+- **Manual album-art picks propagate everywhere.** Choosing replacement art in Now Playing now updates the karaoke window and play history immediately, not just the Now Playing panel.
+- **Diagnostics → Save Encrypted Log File.** Pick where the encrypted bug bundle goes instead of being forced into Downloads. The existing "Report Bug" flow still saves to Downloads + opens GitHub.
+
+Full change list in [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## What's New in v4.8
 
 It's the weekend. Fire up your Sonos speakers, queue up a chill or party playlist, kick off the **Back of the Club** visualisation, grab a drink or whatever you fancy and sit back and relax.

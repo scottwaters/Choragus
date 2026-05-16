@@ -329,27 +329,6 @@ private struct TabContentView: View {
                 }
             }
 
-            // ─── LYRICS ───
-            settingsSection(L10n.tabLyrics) {
-                HStack(spacing: 12) {
-                    Text(L10n.lyricsGlobalTimingOffset)
-                    Spacer()
-                    Text(String(format: "%@%.1fs",
-                                lyricsGlobalOffset > 0 ? "+" : "",
-                                lyricsGlobalOffset))
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(minWidth: 60, alignment: .trailing)
-                    Button(L10n.reset) { lyricsGlobalOffset = -2.0 }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                }
-                Slider(value: $lyricsGlobalOffset, in: -5.0...5.0, step: 0.1)
-                Text(L10n.lyricsGlobalOffsetHint)
-                    .font(.callout)
-                    .foregroundStyle(.tertiary)
-            }
-
             // ─── MUSIC SERVICES ───
             settingsSection(L10n.musicServicesBeta) {
                 MusicServicesSettingsSection()
@@ -385,12 +364,14 @@ private struct TabContentView: View {
     @AppStorage(UDKey.visRandomSprinklePercent) private var visRandomSprinklePercent: Double = 5.0
     @AppStorage(UDKey.visShowAboutPanel) private var visShowAboutPanel: Bool = true
     @AppStorage(UDKey.visHistorySource) private var visHistorySourceRaw = VisHistorySource.defaultMode.rawValue
+    @AppStorage(UDKey.karaokeStyle) private var karaokeStyleRaw = KaraokeStyle.defaultMode.rawValue
 
+    @ViewBuilder
     private var visualisationsTab: some View {
-        // All visualisation settings currently live under the Back of
-        // the Club (beta) feature. New visualisations slot in as
-        // additional sections at the same level so the user can scan
-        // settings per visualisation rather than per setting type.
+        // All visualisation settings live as sibling sections so users
+        // can scan settings per visualisation rather than per setting
+        // type. New visualisations slot in as additional sections at
+        // the same level (Back of the Club, Karaoke, …).
         settingsSection(L10n.visBackOfTheClubSection) {
             VStack(alignment: .leading, spacing: 18) {
                 visSettingRow(label: L10n.visGenreMatching,
@@ -433,6 +414,44 @@ private struct TabContentView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .languageReactive()
+                }
+            }
+        }
+        settingsSection(L10n.karaokeSection) {
+            VStack(alignment: .leading, spacing: 18) {
+                visSettingRow(label: L10n.karaokeStyleLabel,
+                              help: L10n.karaokeStyleHelp) {
+                    Picker("", selection: $karaokeStyleRaw) {
+                        Text(L10n.karaokeStyleDynamic).tag(KaraokeStyle.dynamic.rawValue)
+                        Text(L10n.karaokeStyleClassic).tag(KaraokeStyle.classic.rawValue)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .languageReactive()
+                }
+                // Lyrics timing offset — moved out of its own LYRICS
+                // settings tab since the karaoke window is the only
+                // visible consumer of synced lyrics.
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 12) {
+                        Text(L10n.lyricsGlobalTimingOffset)
+                            .font(.body)
+                        Spacer()
+                        Text(String(format: "%@%.1fs",
+                                    lyricsGlobalOffset > 0 ? "+" : "",
+                                    lyricsGlobalOffset))
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(minWidth: 60, alignment: .trailing)
+                        Button(L10n.reset) { lyricsGlobalOffset = -2.0 }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                    Slider(value: $lyricsGlobalOffset, in: -5.0...5.0, step: 0.1)
+                    Text(L10n.lyricsGlobalOffsetHint)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

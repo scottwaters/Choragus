@@ -140,6 +140,14 @@ public class SonosManager: ObservableObject {
 
     @Published public var groups: [SonosGroup] = []
     @Published public var devices: [String: SonosDevice] = [:]
+
+    /// Weak global handle to the most recently constructed manager.
+    /// Used by `AppIntents` (Shortcuts / Spotlight / Siri actions) to
+    /// reach the live manager without going through the SwiftUI
+    /// environment — intents run in code paths that don't have access
+    /// to `@EnvironmentObject`. Set from `ChoragusApp` at first
+    /// appearance; cleared automatically when the manager deinits.
+    nonisolated(unsafe) public static weak var current: SonosManager?
     @Published public var isDiscovering = false
     @Published public var browseSections: [BrowseSection] = []
     @Published public var musicServicesList: [MusicService] = []
@@ -170,22 +178,33 @@ public class SonosManager: ObservableObject {
     @Published public var groupTransportStates: [String: TransportState] = [:]
     @Published public var groupTrackMetadata: [String: TrackMetadata] = [:]
     @Published public var groupPlayModes: [String: PlayMode] = [:]
-    @Published public var groupPositions: [String: TimeInterval] = [:]
-    @Published public var groupDurations: [String: TimeInterval] = [:]
-
-    /// Drift-tolerant playhead anchor per group. Single source of truth
-    /// for every view that displays a continuously-advancing playhead
-    /// (now-playing seek bar, time text, synced lyrics — both the inline
-    /// panel and the karaoke popout window). Maintained internally by
-    /// `transportDidUpdatePosition` and `updateTransportState`; views
-    /// read via `projected(at:)` inside a `TimelineView`.
+    /// High-churn playhead state lives on dedicated publishers rather
+    /// than directly on this class — see `PositionTrackers.swift`.
+    /// `groupPositions`/`groupDurations` update ~1 Hz; `anchors` rebases
+    /// only on drift / play-state / seek. Views observe whichever
+    /// publisher matches their churn tolerance (the karaoke window
+    /// observes only `anchorTracker` so per-second position polls don't
+    /// trigger 70 ms body re-evals on every tick).
     ///
-    /// Without a single shared anchor, secondary views that subscribe
-    /// to `$groupPositions` independently rebuild anchors with their
-    /// own `wallClock` stamps and drift apart from the main panel —
-    /// the karaoke window's lyrics ended up several hundred ms ahead
-    /// or behind the panel's exactly because of this.
-    @Published public var groupPositionAnchors: [String: PositionAnchor] = [:]
+    /// The old `groupPositions` / `groupDurations` / `groupPositionAnchors`
+    /// names are kept below as computed-forwarder properties for the
+    /// existing read-side consumers (NowPlayingViewModel, protocols,
+    /// etc.) so the call sites don't have to change.
+    public let positionTracker = PositionTracker()
+    public let anchorTracker = AnchorTracker()
+
+    public var groupPositions: [String: TimeInterval] {
+        get { positionTracker.groupPositions }
+        set { positionTracker.groupPositions = newValue }
+    }
+    public var groupDurations: [String: TimeInterval] {
+        get { positionTracker.groupDurations }
+        set { positionTracker.groupDurations = newValue }
+    }
+    public var groupPositionAnchors: [String: PositionAnchor] {
+        get { anchorTracker.groupPositionAnchors }
+        set { anchorTracker.groupPositionAnchors = newValue }
+    }
 
     /// Per-device volume/mute state, keyed by device ID
     @Published public var deviceVolumes: [String: Int] = [:]
@@ -1031,7 +1050,7 @@ public class SonosManager: ObservableObject {
             if let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator) {
                 enriched.enrichFromMediaInfo(mediaInfo, device: coordinator)
             }
-            transportDidUpdateTrackMetadata(coordinator.id, metadata: enriched)
+            transportDidUpdateTrackMetadata(coordinator.id, metadata: enriched, source: .poll)
 
             for member in group.members {
                 let vol = try await renderingControl.getVolume(device: member)
@@ -1287,6 +1306,26 @@ public class SonosManager: ObservableObject {
     public func setVolume(device: SonosDevice, volume: Int) async throws {
         recordExpectedVolumeEcho(deviceID: device.id, value: volume)
         sonosDebugLog("[RC-SOAP-WRITE] setVolume room=\(device.roomName) id=\(device.id) → \(volume)")
+        // Portable speakers (Move/Roam) have a known firmware quirk:
+        // when on Bluetooth input the RenderingControl service accepts
+        // SetVolume but the audio pipeline ignores it — the next
+        // GetVolume event reads back 0. Issue #37 reported "slider
+        // jumps back to 0" on a grouped Move. Capture model + group
+        // context at the point of intent so the bug bundle from the
+        // affected user contains both the SET attempt and the
+        // subsequent rejection (logged in `updateDeviceVolume`).
+        if device.isPortable {
+            let groupCoord = groups.first(where: { g in g.members.contains(where: { $0.id == device.id }) })?.coordinatorID ?? "?"
+            sonosDiagLog(.info, tag: "PORTABLE_VOL",
+                         "setVolume on portable \(device.modelName) → \(volume) (room=\(device.roomName))",
+                         context: [
+                            "deviceID": device.id,
+                            "model": device.modelName,
+                            "modelNumber": device.modelNumber,
+                            "desiredVolume": String(volume),
+                            "groupCoordinator": groupCoord
+                         ])
+        }
         try await renderingControl.setVolume(device: device, volume: volume)
         scheduleDeviceVolumeVerify(device: device)
     }
@@ -1473,6 +1512,15 @@ public class SonosManager: ObservableObject {
         let playable = items.filter { ($0.resourceURI ?? "").isEmpty == false }
         guard let first = playable.first else { return }
 
+        // Stop playback first. `RemoveAllTracksFromQueue` on a Sonos
+        // coordinator that's actively playing leaves the currently-
+        // playing track in the queue (Sonos-side behaviour) — without
+        // the stop, "Play All" on a playlist appended its tracks
+        // *after* whatever was already playing, producing a 51-track
+        // queue from a 50-track playlist with the prior track stuck at
+        // position 1. Stopping first lets the clear actually empty the
+        // queue, then we rebuild from scratch.
+        try? await avTransport.stop(device: coordinator)
         try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
         lastQueueItems[group.coordinatorID] = nil
         cachedTrackByPosition[group.coordinatorID] = nil
@@ -1947,7 +1995,23 @@ public class SonosManager: ObservableObject {
             setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
         }
 
-        if let uri = item.resourceURI, !uri.isEmpty {
+        // Containers (local-library playlists, library albums, Sonos
+        // saved queues, streaming-service containers) report a
+        // `resourceURI` that points at the source — e.g. the raw CIFS
+        // path to `iTunes Music Library.xml` for a local playlist.
+        // `SetAVTransportURI` rejects those with UPnP fault 800 because
+        // they're containers, not playable resources. Route containers
+        // through `makeContainerURI`, which rewrites `S:` / `A:` /
+        // `SQ:` objectIDs to the Sonos-internal `x-rincon-playlist:` /
+        // `file:///jffs/` form the queue-based playlist branch below
+        // knows how to enqueue and play. Items without a recognised
+        // prefix fall through to their original `resourceURI`, so
+        // streaming-service `x-rincon-cpcontainer:` containers keep
+        // their existing path.
+        let candidateURI: String? = item.isContainer
+            ? makeContainerURI(item)
+            : item.resourceURI
+        if let uri = candidateURI, !uri.isEmpty {
             // Unescape metadata — browse parser stores it XML-escaped
             var meta = item.resourceMetadata ?? ""
             if meta.contains("&lt;") {
@@ -2445,7 +2509,12 @@ public class SonosManager: ObservableObject {
             // hardware the full Browse round-trip after each add adds ~3-5 s of
             // delay per track; this eliminates it. Fallback reload happens only
             // when we don't know the resulting track number (result == 0).
-            let optimistic: [QueueItem] = result > 0 ? [QueueItem(
+            //
+            // playNext = true skips optimistic — the insert shifts every
+            // following queue position by one, so the simple "append by id"
+            // path drops the new row as a duplicate of the existing track
+            // that just got pushed down. Force a full reload in that case.
+            let optimistic: [QueueItem] = (result > 0 && !playNext) ? [QueueItem(
                 id: result,
                 title: item.title,
                 artist: item.artist ?? "",
@@ -2688,7 +2757,14 @@ extension SonosManager: TransportStrategyDelegate {
         }
     }
 
-    public func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata) {
+    public func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata, source: TrackMetadataSource = .event) {
+        // The stale-poll guard that used to live here was wrong in the
+        // general case — empirically Sonos's events also lie after a
+        // seek/auto-advance combo, so dropping disagreeing polls
+        // sometimes filters the only correct source. QueueView now
+        // schedules an authoritative `loadQueue()` refresh on any
+        // trackURI change instead, which converges on the right state
+        // regardless of which source happened to be racy this time.
         detectTuneInAdLoop(groupID: groupID, metadata: metadata)
         guard let existing = groupTrackMetadata[groupID] else {
             // First metadata — also try to populate queue cache if playing from queue
@@ -2782,14 +2858,16 @@ extension SonosManager: TransportStrategyDelegate {
                    let newArt = enriched.albumArtURI, !newArt.isEmpty {
                     merged.albumArtURI = newArt
                 }
-                // Equality gate: @Published fires `objectWillChange` on
-                // every assignment, even identical-value ones. Same-track
-                // poll cycles (15 s reconciliation) hit this path with
-                // unchanged metadata and were burst-firing the publisher
-                // 10–20 ×/s, invalidating every `@EnvironmentObject
-                // sonosManager` consumer (karaoke window included) and
-                // colliding with the TimelineView animation tick.
-                if groupTrackMetadata[groupID] != merged {
+                // Content-equality gate: skip the publish when only
+                // position/duration drifted. The displayed-content view
+                // tree (karaoke header, lyrics, ClubVis card) doesn't
+                // care about per-poll position deltas — those live on
+                // `PositionTracker`. Storing `merged` here without
+                // republishing would only affect the snapshot value
+                // anyone reads from `groupTrackMetadata`, so we just
+                // skip outright when content matches.
+                let existingMeta = groupTrackMetadata[groupID]
+                if existingMeta == nil || !(existingMeta?.contentEquals(merged) ?? false) {
                     tagPublish("metadata")
                     groupTrackMetadata[groupID] = merged
                 }
@@ -2900,11 +2978,62 @@ extension SonosManager: TransportStrategyDelegate {
         // with multiple iTunes matches). We just pass through whatever the
         // speaker reported; the view asks ArtResolver for the canonical
         // URL to display.
-        // Equality gate: see `merged` write above for the rationale.
-        // Skipping no-op writes here is what stops the karaoke
-        // TimelineView from being invalidated 10–20 ×/s during a
-        // reconciliation poll burst.
-        let changed = groupTrackMetadata[groupID] != updated
+        // Persist audioFormat across event-to-event rebuilds. The
+        // speaker only includes `r:streamInfo` (where the Dolby/Atmos
+        // flag lives) in TRANSITIONING-state events at track start;
+        // subsequent steady-state polls and events arrive with the tag
+        // missing, so a freshly-constructed `TrackMetadata` defaults to
+        // `.unknown`. Without this carry-over a track briefly badged
+        // `.atmos` on transition would lose the badge a second later.
+        if !trackChanged, updated.audioFormat == .unknown,
+           existing.audioFormat != .unknown {
+            updated.audioFormat = existing.audioFormat
+        }
+        // Same sticky-carry-over for the TV/HDMI audio format. Only
+        // `fetchGroupState` (reconciliation poll) repopulates it from
+        // `DeviceProperties.GetZoneInfo`; per-tick event-driven
+        // rebuilds otherwise reset the field to `.unknown` and the UI
+        // pill would flicker between updates.
+        if !trackChanged, updated.tvAudioFormat == .unknown,
+           existing.tvAudioFormat != .unknown {
+            updated.tvAudioFormat = existing.tvAudioFormat
+        }
+
+        // On a real track change, write a single diagnostic line
+        // recording the audio format the speaker reported for the
+        // incoming track. Surfaces in the bug-report bundle so users
+        // who file "the Atmos badge didn't show on track X" reports
+        // include the wire evidence (or its absence). Skipped for
+        // mid-track refreshes — once per track is enough.
+        if trackChanged, !updated.title.isEmpty {
+            let trackLabel = updated.artist.isEmpty
+                ? updated.title
+                : "\(updated.artist) — \(updated.title)"
+            let isHTSource = (updated.trackURI?.contains("x-sonos-htastream:") ?? false)
+                || (updated.trackURI?.contains("x-rincon-stream:") ?? false)
+            let formatLabel: String
+            if isHTSource {
+                formatLabel = "tv:\(updated.tvAudioFormat.rawValue)"
+            } else {
+                formatLabel = "stream:\(updated.audioFormat.rawValue)"
+            }
+            sonosDiagLog(.info, tag: "PLAYBACK",
+                         "Track started: \(trackLabel) [\(formatLabel)]",
+                         context: [
+                            "groupID": groupID,
+                            "trackURI": updated.trackURI ?? "",
+                            "audioFormat": updated.audioFormat.rawValue,
+                            "tvAudioFormat": updated.tvAudioFormat.rawValue
+                         ])
+        }
+
+        // Content-equality gate: see `merged` write above for the
+        // rationale. Position-only drift (every 1 Hz poll) used to
+        // burst-fire this publisher and re-evaluate every observing
+        // view; the content-only check pins the publish to actual
+        // content changes (track / album art / station / format flip).
+        let existingMeta = groupTrackMetadata[groupID]
+        let changed = existingMeta == nil || !(existingMeta?.contentEquals(updated) ?? false)
         if changed {
             tagPublish("metadata")
             groupTrackMetadata[groupID] = updated
@@ -3399,14 +3528,15 @@ extension SonosManager: TransportStrategyDelegate {
     public func transportDidUpdatePosition(_ groupID: String, position: TimeInterval, duration: TimeInterval) {
         let now = Date()
         if let grace = positionGraceUntils[groupID], now < grace { return }
-        // Only publish if values actually changed (avoids unnecessary SwiftUI re-renders)
-        if groupPositions[groupID] != position {
-            tagPublish("position")
-            groupPositions[groupID] = position
+        // Position + duration live on `positionTracker` (own publisher).
+        // Writing here no longer triggers `SonosManager.objectWillChange`,
+        // so views observing only the manager don't re-evaluate per
+        // 1 Hz position poll. The `[MGR-PUB]` diagnostic stays accurate.
+        if positionTracker.groupPositions[groupID] != position {
+            positionTracker.groupPositions[groupID] = position
         }
-        if groupDurations[groupID] != duration {
-            tagPublish("duration")
-            groupDurations[groupID] = duration
+        if positionTracker.groupDurations[groupID] != duration {
+            positionTracker.groupDurations[groupID] = duration
         }
         // Drive the shared anchor too. Skip while user is dragging the
         // seek bar — the slider would otherwise fight the pre-drag
@@ -3431,12 +3561,11 @@ extension SonosManager: TransportStrategyDelegate {
                                                        position: TimeInterval,
                                                        isPlaying: Bool,
                                                        at: Date) {
-        let current = groupPositionAnchors[coordinatorID] ?? .zero
+        let current = anchorTracker.groupPositionAnchors[coordinatorID] ?? .zero
         let wasUninitialised = current.wallClock == .distantPast
         let playingFlipped = current.isPlaying != isPlaying
         if wasUninitialised || playingFlipped {
-            tagPublish("anchor")
-            groupPositionAnchors[coordinatorID] = PositionAnchor(time: max(0, position),
+            anchorTracker.groupPositionAnchors[coordinatorID] = PositionAnchor(time: max(0, position),
                                                                  wallClock: at,
                                                                  isPlaying: isPlaying)
             return
@@ -3446,8 +3575,7 @@ extension SonosManager: TransportStrategyDelegate {
         let shouldRebase = drift >= Self.forwardRebaseThreshold
             || drift <= -Self.backwardRebaseThreshold
         if shouldRebase {
-            tagPublish("anchor")
-            groupPositionAnchors[coordinatorID] = PositionAnchor(time: max(0, position),
+            anchorTracker.groupPositionAnchors[coordinatorID] = PositionAnchor(time: max(0, position),
                                                                  wallClock: at,
                                                                  isPlaying: isPlaying)
         }
@@ -3462,10 +3590,10 @@ extension SonosManager: TransportStrategyDelegate {
     private func updatePositionAnchorPlayingState(coordinatorID: String,
                                                   isPlaying: Bool,
                                                   at: Date = Date()) {
-        let current = groupPositionAnchors[coordinatorID] ?? .zero
+        let current = anchorTracker.groupPositionAnchors[coordinatorID] ?? .zero
         guard current.isPlaying != isPlaying else { return }
         let frozenAt = current.projected(at: at)
-        groupPositionAnchors[coordinatorID] = PositionAnchor(time: frozenAt,
+        anchorTracker.groupPositionAnchors[coordinatorID] = PositionAnchor(time: frozenAt,
                                                              wallClock: at,
                                                              isPlaying: isPlaying)
     }
@@ -3474,7 +3602,7 @@ extension SonosManager: TransportStrategyDelegate {
     /// paths where the caller already has an authoritative time.
     /// Bypasses drift thresholds.
     public func setPositionAnchor(coordinatorID: String, _ anchor: PositionAnchor) {
-        groupPositionAnchors[coordinatorID] = anchor
+        anchorTracker.groupPositionAnchors[coordinatorID] = anchor
     }
 
     /// Mark/unmark the seek bar as being dragged. While set, authoritative
@@ -3536,6 +3664,34 @@ extension SonosManager: TransportStateProviding {
     }
 
     public func updateDeviceVolume(_ deviceID: String, volume: Int) {
+        // Portable-speaker volume diagnostic. When a Move/Roam reports
+        // volume=0 we capture model + transport URI + group state so
+        // the maintainer can confirm whether the speaker is on
+        // Bluetooth input (the audio pipeline ignores WiFi-side
+        // RenderingControl in that mode). Fires before the equality
+        // gate so a sustained "always 0" condition still leaves one
+        // entry in the diag log per group state change. Gated to
+        // portables to avoid drowning the log in legitimate
+        // user-muted=0 reads from regular speakers.
+        if volume == 0,
+           let device = devices[deviceID],
+           device.isPortable {
+            let group = groups.first(where: { g in g.members.contains(where: { $0.id == deviceID }) })
+            let coord = group?.coordinatorID ?? "?"
+            let trackURI = group.flatMap { groupTrackMetadata[$0.coordinatorID]?.trackURI } ?? "?"
+            let transport = group.flatMap { groupTransportStates[$0.coordinatorID]?.rawValue } ?? "?"
+            sonosDiagLog(.info, tag: "PORTABLE_VOL",
+                         "Portable \(device.modelName) reports volume=0 (room=\(device.roomName))",
+                         context: [
+                            "deviceID": deviceID,
+                            "model": device.modelName,
+                            "modelNumber": device.modelNumber,
+                            "groupCoordinator": coord,
+                            "trackURI": trackURI,
+                            "transportState": transport,
+                            "groupMemberCount": String(group?.members.count ?? 0)
+                         ])
+        }
         // Equality gate — `scanGroup()` calls this for every member of
         // every group after every topology refresh, and the value is
         // typically unchanged from the prior poll. Without the guard,

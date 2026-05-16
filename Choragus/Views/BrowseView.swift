@@ -19,7 +19,8 @@ struct BrowseView: View {
     private var isInServiceView: Bool {
         guard let current = breadcrumbs.last else { return false }
         let id = current.objectID
-        return id == "APPLEMUSICPROMPT:" || id == "TUNEINPROMPT:" ||
+        return id == "APPLEMUSICPROMPT:" || id == "APPLEMUSICKIT:" ||
+               id == "TUNEINPROMPT:" ||
                id == "CALMRADIOPROMPT:" || id == "SONOSRADIOPROMPT:" ||
                id == "RECENT:" || id.hasPrefix("SMAPISEARCHPROMPT:") ||
                id.hasPrefix("SMAPI:") || id.hasPrefix("SERVICESEARCH:")
@@ -114,6 +115,8 @@ struct BrowseView: View {
                     AppleMusicSearchView(group: group, onNavigate: { dest in
                         breadcrumbs.append(dest)
                     })
+                } else if current.objectID == "APPLEMUSICKIT:" {
+                    MusicKitAppleMusicView(group: group)
                 } else if current.objectID == "TUNEINPROMPT:" {
                     TuneInSearchView(group: group)
                 } else if current.objectID == "CALMRADIOPROMPT:" {
@@ -265,6 +268,7 @@ struct BrowseSectionsView: View {
     @AppStorage(UDKey.tuneInSearchEnabled) private var tuneInEnabled = false
     @AppStorage(UDKey.calmRadioEnabled) private var calmRadioEnabled = false
     @AppStorage(UDKey.appleMusicSearchEnabled) private var appleMusicEnabled = false
+    @AppStorage(UDKey.appleMusicKitConnected) private var appleMusicKitConnected = false
     @AppStorage(UDKey.sonosRadioEnabled) private var sonosRadioEnabled = false
     @AppStorage("browse_favorites_expanded") private var favoritesExpanded = true
     @AppStorage("browse_library_expanded") private var libraryExpanded = true
@@ -287,8 +291,33 @@ struct BrowseSectionsView: View {
     /// All service search entries in user-defined order — only includes enabled services
     private var orderedServiceEntries: [ServiceSearchEntry] {
         var entries: [ServiceSearchEntry] = []
-        if appleMusicEnabled {
-            entries.append(ServiceSearchEntry(key: "applemusic", title: "Apple Music", objectID: "APPLEMUSICPROMPT:", icon: "magnifyingglass"))
+        // MusicKit-driven Apple Music entry — only present when the
+        // build compiled with `ENABLE_MUSICKIT`. Surfaces a native
+        // catalog search backed by the user's Apple Music account,
+        // independent of Sonos's SMAPI search.
+        // Show only when the user has actually authorised MusicKit —
+        // mirrors the other services (Spotify / Plex / TuneIn) which
+        // only surface a sidebar entry once connected. The
+        // `appleMusicKitConnected` flag is written by
+        // `AppleMusicKitConnectRow` whenever it polls the provider.
+        if AppleMusicProviderFactory.hasMusicKitSupport, appleMusicKitConnected {
+            // Dev builds (legacy still visible) distinguish the two
+            // entries by suffix; release builds (legacy hidden) drop
+            // the suffix since there's no ambiguity.
+            let title = AppleMusicProviderFactory.showLegacyAppleMusic
+                ? "Apple Music (MusicKit)"
+                : "Apple Music"
+            entries.append(ServiceSearchEntry(key: "applemusickit", title: title, objectID: "APPLEMUSICKIT:", icon: "music.note"))
+        }
+        // Legacy SMAPI Apple Music — kept visible for fork builds and
+        // alongside the MusicKit entry in dev builds for side-by-side
+        // comparison; hidden in signed release builds where MusicKit
+        // is the sole Apple Music surface.
+        if appleMusicEnabled && AppleMusicProviderFactory.showLegacyAppleMusic {
+            let title = AppleMusicProviderFactory.hasMusicKitSupport
+                ? "Apple Music (Sonos)"
+                : "Apple Music"
+            entries.append(ServiceSearchEntry(key: "applemusic", title: title, objectID: "APPLEMUSICPROMPT:", icon: "magnifyingglass"))
         }
         if tuneInEnabled {
             entries.append(ServiceSearchEntry(key: "tunein", title: "TuneIn", objectID: "TUNEINPROMPT:", icon: "radio"))
@@ -489,6 +518,14 @@ struct BrowseListView: View {
     @State private var vm: BrowseViewModel
     let onNavigate: (BrowseDestination) -> Void
 
+    /// Live parent-passed group. The struct is recreated by SwiftUI on
+    /// every parent body re-eval — so this property tracks the current
+    /// sidebar selection even while this list is in a navigation stack.
+    /// `body` syncs it into `vm.group` via `.onChange` so play / queue
+    /// actions on this list always target the currently-selected group,
+    /// not the one selected when the list was first navigated to.
+    let parentGroup: SonosGroup?
+
     private let smapiServiceID: Int?
     private let smapiServiceURI: String?
     private let smapiAuthType: String?
@@ -500,6 +537,7 @@ struct BrowseListView: View {
         self.smapiServiceID = smapiServiceID
         self.smapiServiceURI = smapiServiceURI
         self.smapiAuthType = smapiAuthType
+        self.parentGroup = group
         _vm = State(wrappedValue: BrowseViewModel(sonosManager: sonosManager, objectID: objectID, title: title, group: group))
     }
 
@@ -795,6 +833,18 @@ struct BrowseListView: View {
             set: { _ in }
         )) {
             LargeAddPromptSheet(vm: vm)
+        }
+        // Keep `vm.group` in sync with the sidebar selection. When the
+        // user changes selectedGroupID in the sidebar while a drilled-in
+        // list is still on the navigation stack, SwiftUI recreates this
+        // struct with the new `parentGroup` value but does NOT re-run
+        // `State(wrappedValue:)`, so `vm.group` would otherwise stay
+        // frozen to the group selected when the list was first pushed.
+        // Right-click → Play Now then sent SetAVTransportURI to the
+        // wrong coordinator. Syncing here makes every play / queue
+        // action on this list target the currently-selected group.
+        .onChange(of: parentGroup) { _, newGroup in
+            vm.group = newGroup
         }
     }
 
@@ -1130,24 +1180,23 @@ struct AppleMusicSearchView: View {
         VStack(spacing: 0) {
             // Header with back button for drill-down levels
             if !navStack.isEmpty {
-                HStack(spacing: 6) {
-                    Button {
-                        navStack.removeLast()
-                    } label: {
+                Button {
+                    navStack.removeLast()
+                } label: {
+                    HStack(spacing: 6) {
                         Image(systemName: "chevron.backward")
                             .font(.system(size: 14, weight: .semibold))
+                        Text(levelTitle)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
-
-                    Text(levelTitle)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-
-                    Spacer()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .buttonStyle(.plain)
 
                 Divider()
             }
@@ -1588,24 +1637,23 @@ struct TuneInSearchView: View {
         VStack(spacing: 0) {
             // Back button for drill-down
             if !navStack.isEmpty {
-                HStack(spacing: 6) {
-                    Button {
-                        navStack.removeLast()
-                    } label: {
+                Button {
+                    navStack.removeLast()
+                } label: {
+                    HStack(spacing: 6) {
                         Image(systemName: "chevron.backward")
                             .font(.system(size: 14, weight: .semibold))
+                        Text(navStack.last?.title ?? "")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
-
-                    Text(navStack.last?.title ?? "")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-
-                    Spacer()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .buttonStyle(.plain)
 
                 Divider()
             }
@@ -1911,24 +1959,23 @@ struct SMAPIServiceSearchView: View {
 
             // Back button for drill-down
             if !navStack.isEmpty {
-                HStack(spacing: 6) {
-                    Button {
-                        navStack.removeLast()
-                    } label: {
+                Button {
+                    navStack.removeLast()
+                } label: {
+                    HStack(spacing: 6) {
                         Image(systemName: "chevron.backward")
                             .font(.system(size: 14, weight: .semibold))
+                        Text(navStack.last?.title ?? "")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
-
-                    Text(navStack.last?.title ?? "")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-
-                    Spacer()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .buttonStyle(.plain)
 
                 Divider()
             }

@@ -10,6 +10,7 @@ import SonosKit
 
 struct LyricsKaraokeWindow: View {
     @EnvironmentObject var sonosManager: SonosManager
+    @EnvironmentObject var anchorTracker: AnchorTracker
     @EnvironmentObject var lyricsCoordinator: LyricsCoordinator
     // Observed directly so user-driven art changes ("Search Artwork",
     // "Force Web Art", iTunes auto-resolve) republish through the
@@ -23,6 +24,7 @@ struct LyricsKaraokeWindow: View {
     /// per-track manual offset (the `±` toolbar) before being passed
     /// to `SlidingLyricsView`. Default `−2.0 s` empirically.
     @AppStorage(UDKey.lyricsGlobalOffset) private var lyricsGlobalOffset: Double = -2.0
+    @AppStorage(UDKey.karaokeStyle) private var karaokeStyleRaw = KaraokeStyle.defaultMode.rawValue
 
     let groupID: String
 
@@ -31,7 +33,7 @@ struct LyricsKaraokeWindow: View {
     }
 
     private var anchor: PositionAnchor {
-        sonosManager.groupPositionAnchors[groupID] ?? .zero
+        anchorTracker.groupPositionAnchors[groupID] ?? .zero
     }
 
     private var resolved: LyricsCoordinator.Resolved {
@@ -240,7 +242,8 @@ struct LyricsKaraokeWindow: View {
                 visibleRows: 5,
                 rowHeight: 120,
                 peakSize: 72,
-                baseSize: 44
+                baseSize: 44,
+                style: KaraokeStyle(rawValue: karaokeStyleRaw) ?? .defaultMode
             )
             .equatable()
             .frame(maxWidth: .infinity, maxHeight: .infinity)

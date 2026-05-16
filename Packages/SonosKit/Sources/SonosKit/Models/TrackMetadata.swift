@@ -1,6 +1,74 @@
 import Foundation
 
+/// Audio delivery format inferred from Sonos's `r:streamInfo` DIDL
+/// extension. Drives the optional format badge in Now Playing.
+///   - `.atmos` — Dolby Atmos / Apple Spatial Audio (`d:1` flag set;
+///     both ride the same E-AC3-JOC carrier on Apple Music).
+///   - `.lossless` — non-Atmos lossless (`l:1` without `d:1`, e.g.
+///     ALAC, FLAC).
+///   - `.stereo` — anything else with populated stream info.
+///   - `.unknown` — speaker hasn't reported a format yet (STOPPED /
+///     pre-decode state).
+public enum AudioFormat: String, Equatable, Sendable {
+    case unknown
+    case stereo
+    case lossless
+    case atmos
+}
+
+/// Audio format for content arriving on the speaker's HDMI ARC / eARC
+/// or optical / line-in inputs. Sonos publishes the current input format
+/// as an undocumented integer bitfield via `DeviceProperties.GetZoneInfo`
+/// → `HTAudioIn`. The set of cases here only covers values empirically
+/// observed; unknown integers map to `.unknown` and the UI falls back to
+/// the bare "TV input" label rather than guessing.
+public enum TVAudioFormat: String, Equatable, Sendable {
+    case unknown
+    case noSignal
+    case stereoPCM
+    case multichannelPCM
+    case dolbyDigital
+    case dolbyAtmos
+
+    /// Maps Sonos's `HTAudioIn` integer to a TVAudioFormat. The wire
+    /// format is undocumented; cases are populated as captures from
+    /// real HDMI inputs accumulate. Unknown integers fall through to
+    /// `.unknown` — never guessed.
+    public static func from(htAudioIn: Int) -> TVAudioFormat {
+        switch htAudioIn {
+        case 0:        return .noSignal
+        case 33554434: return .stereoPCM         // 0x2000002 — observed on TV stereo PCM
+        case 84934658: return .multichannelPCM   // 0x5100002 — observed on TV multichannel PCM 5.1
+        case 84934713: return .dolbyDigital      // 0x5100039 — observed on TV Dolby Digital 5.1
+        // .dolbyAtmos integer value to be filled in once a capture is
+        // available — see issue #39 follow-up.
+        default:       return .unknown
+        }
+    }
+}
+
 public struct TrackMetadata: Equatable {
+    /// Equality predicate that excludes the per-poll `position` and
+    /// `duration` fields. Used as the publish gate inside SonosManager
+    /// so a position-only change (every Sonos poll, ~1 Hz) doesn't fire
+    /// `groupTrackMetadata`'s publisher and invalidate every observing
+    /// view. Live position is owned by `PositionTracker` — consumers
+    /// that need a continuously-advancing playhead read it there.
+    public func contentEquals(_ other: TrackMetadata) -> Bool {
+        title == other.title
+            && artist == other.artist
+            && album == other.album
+            && albumArtURI == other.albumArtURI
+            && trackNumber == other.trackNumber
+            && queueSize == other.queueSize
+            && stationName == other.stationName
+            && trackURI == other.trackURI
+            && isQueueSource == other.isQueueSource
+            && genre == other.genre
+            && audioFormat == other.audioFormat
+            && tvAudioFormat == other.tvAudioFormat
+    }
+
     public var title: String
     public var artist: String
     public var album: String
@@ -13,11 +81,21 @@ public struct TrackMetadata: Equatable {
     public var trackURI: String?
     public var isQueueSource: Bool  // true when CurrentURI is x-rincon-queue (playing from queue)
     public var genre: String
+    /// Audio format inferred from `r:streamInfo`. `.unknown` until the
+    /// speaker has reported a populated stream descriptor for the
+    /// current track.
+    public var audioFormat: AudioFormat
+    /// Audio format for HDMI / optical / line-in input on home-theater
+    /// speakers. Only meaningful when `trackURI` starts with
+    /// `x-sonos-htastream:` or `x-rincon-stream:`; ignored otherwise.
+    public var tvAudioFormat: TVAudioFormat
 
     public init(title: String = "", artist: String = "", album: String = "",
                 albumArtURI: String? = nil, duration: TimeInterval = 0,
                 position: TimeInterval = 0, trackNumber: Int = 0, queueSize: Int = 0,
-                stationName: String = "", isQueueSource: Bool = false, genre: String = "") {
+                stationName: String = "", isQueueSource: Bool = false, genre: String = "",
+                audioFormat: AudioFormat = .unknown,
+                tvAudioFormat: TVAudioFormat = .unknown) {
         self.title = title
         self.artist = artist
         self.album = album
@@ -29,6 +107,34 @@ public struct TrackMetadata: Equatable {
         self.stationName = stationName
         self.isQueueSource = isQueueSource
         self.genre = genre
+        self.audioFormat = audioFormat
+        self.tvAudioFormat = tvAudioFormat
+    }
+
+    /// Parses Sonos's `r:streamInfo` field — format
+    /// `bd:<bitDepth>,sr:<sampleRate>,c:<channels>,l:<lossless>,d:<dolby>`.
+    /// Returns `.unknown` when the field is missing or all-zero
+    /// (speaker hasn't decoded yet — STOPPED state).
+    public static func audioFormat(fromStreamInfo info: String) -> AudioFormat {
+        guard !info.isEmpty else { return .unknown }
+        var dolby = false
+        var lossless = false
+        var anyNonZero = false
+        for part in info.split(separator: ",") {
+            let kv = part.split(separator: ":", maxSplits: 1).map(String.init)
+            guard kv.count == 2 else { continue }
+            switch kv[0] {
+            case "d": dolby = (kv[1] == "1")
+            case "l": lossless = (kv[1] == "1")
+            case "bd", "sr", "c":
+                if let n = Int(kv[1]), n > 0 { anyNonZero = true }
+            default: break
+            }
+        }
+        guard anyNonZero else { return .unknown }
+        if dolby { return .atmos }
+        if lossless { return .lossless }
+        return .stereo
     }
 
     // MARK: - Computed State
@@ -125,6 +231,19 @@ public struct TrackMetadata: Equatable {
         let artURI = device.makeAbsoluteURL(parsed.albumArtURI)
         if !artURI.isEmpty {
             albumArtURI = artURI
+        }
+
+        // Sonos publishes its audio format in the `r:streamInfo`
+        // DIDL extension (e.g. `bd:16,sr:48000,c:11,l:0,d:1` for an
+        // Atmos / Apple Spatial Audio stream). Only overwrite when the
+        // current field is `.unknown` OR the new info is richer — the
+        // first event for a new track often arrives during STOPPED /
+        // TRANSITIONING with an all-zero streamInfo, and we don't want
+        // to clobber a previously-decoded `.atmos` flag with that.
+        let streamInfo = XMLResponseParser.extractStreamInfo(didl)
+        let parsedFormat = Self.audioFormat(fromStreamInfo: streamInfo)
+        if audioFormat == .unknown || parsedFormat != .unknown {
+            audioFormat = parsedFormat
         }
     }
 

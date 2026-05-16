@@ -883,6 +883,15 @@ public enum L10n {
     public static var tapToResetOffset: String { tr("tapToResetOffset") }
     public static var popOutLyrics: String { tr("popOutLyrics") }
     public static var karaoke: String { tr("karaoke") }
+    public static var karaokeSection: String { tr("karaokeSection") }
+    public static var karaokeStyleLabel: String { tr("karaokeStyleLabel") }
+    public static var karaokeStyleHelp: String { tr("karaokeStyleHelp") }
+    public static var karaokeStyleDynamic: String { tr("karaokeStyleDynamic") }
+    public static var karaokeStyleClassic: String { tr("karaokeStyleClassic") }
+    public static var audioFormatAtmos: String { tr("audioFormatAtmos") }
+    public static var tvAudioStereoPCM: String { tr("tvAudioStereoPCM") }
+    public static var tvAudioMultichannelPCM: String { tr("tvAudioMultichannelPCM") }
+    public static var tvAudioDolbyDigital: String { tr("tvAudioDolbyDigital") }
 
     // Diagnostics
     public static var diagnostics: String { tr("diagnostics") }
@@ -900,6 +909,8 @@ public enum L10n {
     public static var diagLevelError: String { tr("diagLevelError") }
     public static var diagCopyAll: String { tr("diagCopyAll") }
     public static var diagSaveBundle: String { tr("diagSaveBundle") }
+    public static var diagSaveEncryptedLog: String { tr("diagSaveEncryptedLog") }
+    public static var diagSaveEncryptedLogHelp: String { tr("diagSaveEncryptedLogHelp") }
     public static var diagClearAll: String { tr("diagClearAll") }
     public static var diagCopyRow: String { tr("diagCopyRow") }
     public static var diagHelpTitle: String { tr("diagHelpTitle") }
@@ -9183,6 +9194,141 @@ public enum L10n {
             "pl": "Karaoke",
             "zh-Hans": "\u{5361}\u{62C9}OK",
         ],
+        "karaokeSection": [
+            "en": "Karaoke",
+            "de": "Karaoke",
+            "fr": "Karaok\u{00E9}",
+            "nl": "Karaoke",
+            "es": "Karaoke",
+            "it": "Karaoke",
+            "sv": "Karaoke",
+            "nb": "Karaoke",
+            "da": "Karaoke",
+            "ja": "\u{30AB}\u{30E9}\u{30AA}\u{30B1}",
+            "pt": "Karaoke",
+            "pl": "Karaoke",
+            "zh-Hans": "\u{5361}\u{62C9}OK",
+        ],
+        "karaokeStyleLabel": [
+            "en": "Style",
+            "de": "Stil",
+            "fr": "Style",
+            "nl": "Stijl",
+            "es": "Estilo",
+            "it": "Stile",
+            "sv": "Stil",
+            "nb": "Stil",
+            "da": "Stil",
+            "ja": "\u{30B9}\u{30BF}\u{30A4}\u{30EB}",
+            "pt": "Estilo",
+            "pl": "Styl",
+            "zh-Hans": "\u{6837}\u{5F0F}",
+        ],
+        "karaokeStyleHelp": [
+            "en": "Dynamic scales the active line up and dims neighbours. Classic holds every visible line at one size so the readout matches a traditional karaoke screen — only opacity marks the active row.",
+            "de": "\u{201E}Dynamisch\u{201C} vergr\u{00F6}\u{00DF}ert die aktive Zeile und blendet benachbarte Zeilen ab. \u{201E}Klassisch\u{201C} h\u{00E4}lt jede sichtbare Zeile auf einer Gr\u{00F6}\u{00DF}e wie auf einem traditionellen Karaoke-Bildschirm \u{2014} nur die Deckkraft markiert die aktive Zeile.",
+            "fr": "\u{00AB}\u{00A0}Dynamique\u{00A0}\u{00BB} agrandit la ligne active et att\u{00E9}nue les voisines. \u{00AB}\u{00A0}Classique\u{00A0}\u{00BB} maintient chaque ligne visible \u{00E0} la m\u{00EA}me taille, comme un \u{00E9}cran de karaok\u{00E9} traditionnel\u{00A0}; seule l\u{2019}opacit\u{00E9} marque la ligne active.",
+            "nl": "Dynamisch vergroot de actieve regel en dimt de buren. Klassiek houdt elke zichtbare regel op \u{00E9}\u{00E9}n grootte zoals een traditioneel karaokescherm \u{2014} alleen de dekking markeert de actieve regel.",
+            "es": "\u{201C}Din\u{00E1}mico\u{201D} aumenta la l\u{00ED}nea activa y atenu\u{00E1} las vecinas. \u{201C}Cl\u{00E1}sico\u{201D} mantiene cada l\u{00ED}nea visible al mismo tama\u{00F1}o, como una pantalla de karaoke tradicional; solo la opacidad marca la l\u{00ED}nea activa.",
+            "it": "\u{201C}Dinamico\u{201D} ingrandisce la riga attiva e attenua le vicine. \u{201C}Classico\u{201D} mantiene ogni riga visibile alla stessa dimensione, come uno schermo karaoke tradizionale; solo l\u{2019}opacit\u{00E0} segna la riga attiva.",
+            "sv": "Dynamiskt f\u{00F6}rstorar den aktiva raden och d\u{00E4}mpar grannraderna. Klassiskt h\u{00E5}ller varje synlig rad i en storlek som en traditionell karaokesk\u{00E4}rm \u{2014} bara opaciteten markerar den aktiva raden.",
+            "nb": "Dynamisk forst\u{00F8}rrer den aktive linjen og demper naboene. Klassisk holder hver synlig linje i \u{00E9}n st\u{00F8}rrelse som en tradisjonell karaokeskjerm \u{2014} bare opasiteten markerer den aktive linjen.",
+            "da": "Dynamisk forst\u{00F8}rrer den aktive linje og d\u{00E6}mper naboerne. Klassisk holder hver synlig linje i \u{00E9}n st\u{00F8}rrelse som en traditionel karaokesk\u{00E6}rm \u{2014} kun gennemsigtigheden markerer den aktive linje.",
+            "ja": "\u{300C}\u{30C0}\u{30A4}\u{30CA}\u{30DF}\u{30C3}\u{30AF}\u{300D}\u{306F}\u{30A2}\u{30AF}\u{30C6}\u{30A3}\u{30D6}\u{884C}\u{3092}\u{62E1}\u{5927}\u{3057}\u{3001}\u{96A3}\u{63A5}\u{884C}\u{3092}\u{6697}\u{304F}\u{3057}\u{307E}\u{3059}\u{3002}\u{300C}\u{30AF}\u{30E9}\u{30B7}\u{30C3}\u{30AF}\u{300D}\u{306F}\u{4F1D}\u{7D71}\u{7684}\u{306A}\u{30AB}\u{30E9}\u{30AA}\u{30B1}\u{753B}\u{9762}\u{306E}\u{3088}\u{3046}\u{306B}\u{3001}\u{8868}\u{793A}\u{3055}\u{308C}\u{308B}\u{3059}\u{3079}\u{3066}\u{306E}\u{884C}\u{3092}\u{540C}\u{3058}\u{30B5}\u{30A4}\u{30BA}\u{3067}\u{8868}\u{793A}\u{3057}\u{3001}\u{4E0D}\u{900F}\u{660E}\u{5EA6}\u{3060}\u{3051}\u{3067}\u{30A2}\u{30AF}\u{30C6}\u{30A3}\u{30D6}\u{884C}\u{3092}\u{793A}\u{3057}\u{307E}\u{3059}\u{3002}",
+            "pt": "Din\u{00E2}mico amplia a linha ativa e atenua as vizinhas. Cl\u{00E1}ssico mant\u{00E9}m cada linha vis\u{00ED}vel num \u{00FA}nico tamanho, como uma tela de karaok\u{00EA} tradicional; apenas a opacidade marca a linha ativa.",
+            "pl": "Tryb dynamiczny powi\u{0119}ksza aktywn\u{0105} lini\u{0119} i przyciemnia s\u{0105}siednie. Klasyczny utrzymuje ka\u{017C}d\u{0105} widoczn\u{0105} lini\u{0119} w jednym rozmiarze \u{2014} tylko nieprzezroczysto\u{015B}\u{0107} oznacza aktywn\u{0105} lini\u{0119}.",
+            "zh-Hans": "\u{300C}\u{52A8}\u{6001}\u{300D}\u{4F1A}\u{653E}\u{5927}\u{5F53}\u{524D}\u{6B4C}\u{8BCD}\u{884C}\u{5E76}\u{6DE1}\u{5316}\u{76F8}\u{90BB}\u{884C}\u{3002}\u{300C}\u{7ECF}\u{5178}\u{300D}\u{4FDD}\u{6301}\u{6240}\u{6709}\u{53EF}\u{89C1}\u{884C}\u{4E3A}\u{540C}\u{4E00}\u{5C3A}\u{5BF8}，\u{4E0E}\u{4F20}\u{7EDF}\u{5361}\u{62C9}OK\u{5C4F}\u{5E55}\u{4E00}\u{81F4}，\u{4EC5}\u{901A}\u{8FC7}\u{4E0D}\u{900F}\u{660E}\u{5EA6}\u{6807}\u{6CE8}\u{5F53}\u{524D}\u{884C}\u{3002}",
+        ],
+        "karaokeStyleDynamic": [
+            "en": "Dynamic",
+            "de": "Dynamisch",
+            "fr": "Dynamique",
+            "nl": "Dynamisch",
+            "es": "Din\u{00E1}mico",
+            "it": "Dinamico",
+            "sv": "Dynamiskt",
+            "nb": "Dynamisk",
+            "da": "Dynamisk",
+            "ja": "\u{30C0}\u{30A4}\u{30CA}\u{30DF}\u{30C3}\u{30AF}",
+            "pt": "Din\u{00E2}mico",
+            "pl": "Dynamiczny",
+            "zh-Hans": "\u{52A8}\u{6001}",
+        ],
+        "karaokeStyleClassic": [
+            "en": "Classic",
+            "de": "Klassisch",
+            "fr": "Classique",
+            "nl": "Klassiek",
+            "es": "Cl\u{00E1}sico",
+            "it": "Classico",
+            "sv": "Klassiskt",
+            "nb": "Klassisk",
+            "da": "Klassisk",
+            "ja": "\u{30AF}\u{30E9}\u{30B7}\u{30C3}\u{30AF}",
+            "pt": "Cl\u{00E1}ssico",
+            "pl": "Klasyczny",
+            "zh-Hans": "\u{7ECF}\u{5178}",
+        ],
+        "audioFormatAtmos": [
+            "en": "Dolby Atmos",
+            "de": "Dolby Atmos",
+            "fr": "Dolby Atmos",
+            "nl": "Dolby Atmos",
+            "es": "Dolby Atmos",
+            "it": "Dolby Atmos",
+            "sv": "Dolby Atmos",
+            "nb": "Dolby Atmos",
+            "da": "Dolby Atmos",
+            "ja": "Dolby Atmos",
+            "pt": "Dolby Atmos",
+            "pl": "Dolby Atmos",
+            "zh-Hans": "Dolby Atmos",
+        ],
+        "tvAudioStereoPCM": [
+            "en": "Stereo PCM",
+            "de": "Stereo-PCM",
+            "fr": "PCM st\u{00E9}r\u{00E9}o",
+            "nl": "Stereo PCM",
+            "es": "PCM est\u{00E9}reo",
+            "it": "PCM stereo",
+            "sv": "Stereo-PCM",
+            "nb": "Stereo-PCM",
+            "da": "Stereo-PCM",
+            "ja": "\u{30B9}\u{30C6}\u{30EC}\u{30AA} PCM",
+            "pt": "PCM est\u{00E9}reo",
+            "pl": "Stereo PCM",
+            "zh-Hans": "\u{7ACB}\u{4F53}\u{58F0} PCM",
+        ],
+        "tvAudioMultichannelPCM": [
+            "en": "Multichannel PCM",
+            "de": "Mehrkanal-PCM",
+            "fr": "PCM multicanal",
+            "nl": "Meerkanaals PCM",
+            "es": "PCM multicanal",
+            "it": "PCM multicanale",
+            "sv": "Flerkanals-PCM",
+            "nb": "Flerkanals-PCM",
+            "da": "Flerkanals-PCM",
+            "ja": "\u{30DE}\u{30EB}\u{30C1}\u{30C1}\u{30E3}\u{30F3}\u{30CD}\u{30EB} PCM",
+            "pt": "PCM multicanal",
+            "pl": "Wielokana\u{0142}owy PCM",
+            "zh-Hans": "\u{591A}\u{58F0}\u{9053} PCM",
+        ],
+        "tvAudioDolbyDigital": [
+            "en": "Dolby Digital",
+            "de": "Dolby Digital",
+            "fr": "Dolby Digital",
+            "nl": "Dolby Digital",
+            "es": "Dolby Digital",
+            "it": "Dolby Digital",
+            "sv": "Dolby Digital",
+            "nb": "Dolby Digital",
+            "da": "Dolby Digital",
+            "ja": "Dolby Digital",
+            "pt": "Dolby Digital",
+            "pl": "Dolby Digital",
+            "zh-Hans": "Dolby Digital",
+        ],
         "diagnostics": [
             "en": "Diagnostics",
             "de": "Diagnose",
@@ -9407,6 +9553,36 @@ public enum L10n {
             "pt": "Guardar pacote\u{2026}",
             "pl": "Zapisz pakiet\u{2026}",
             "zh-Hans": "存储包\u{2026}",
+        ],
+        "diagSaveEncryptedLog": [
+            "en": "Save Encrypted Log File\u{2026}",
+            "de": "Verschl\u{fc}sselte Logdatei sichern\u{2026}",
+            "fr": "Enregistrer le journal chiffr\u{e9}\u{2026}",
+            "nl": "Versleuteld logbestand bewaren\u{2026}",
+            "es": "Guardar archivo de registro cifrado\u{2026}",
+            "it": "Salva file di log cifrato\u{2026}",
+            "sv": "Spara krypterad loggfil\u{2026}",
+            "nb": "Lagre kryptert loggfil\u{2026}",
+            "da": "Arkiv\u{e9}r krypteret logfil\u{2026}",
+            "ja": "暗号化されたログファイルを書き出す\u{2026}",
+            "pt": "Guardar ficheiro de registo cifrado\u{2026}",
+            "pl": "Zapisz zaszyfrowany plik dziennika\u{2026}",
+            "zh-Hans": "存储加密日志文件\u{2026}",
+        ],
+        "diagSaveEncryptedLogHelp": [
+            "en": "Writes an encrypted diagnostic bundle to a location you choose. The bundle is opaque to anyone except the maintainer — share it directly with them.",
+            "de": "Schreibt ein verschl\u{fc}sseltes Diagnose-Bundle an einen Ort deiner Wahl. Das Bundle ist f\u{fc}r alle au\u{df}er dem Betreuer undurchsichtig \u{2014} teile es direkt mit ihm.",
+            "fr": "\u{c9}crit un lot de diagnostic chiffr\u{e9} \u{e0} l\u{2019}emplacement de votre choix. Le lot est opaque pour tous sauf le mainteneur \u{2014} partagez-le directement avec lui.",
+            "nl": "Schrijft een versleuteld diagnostisch pakket naar een door u gekozen locatie. Het pakket is ondoorzichtig voor iedereen behalve de beheerder \u{2014} deel het rechtstreeks met hem.",
+            "es": "Escribe un paquete de diagn\u{f3}stico cifrado en la ubicaci\u{f3}n que elijas. El paquete es opaco para cualquiera excepto el responsable \u{2014} comp\u{e1}rtelo directamente con \u{e9}l.",
+            "it": "Scrive un pacchetto diagnostico cifrato in una posizione a tua scelta. Il pacchetto \u{e8} opaco per chiunque tranne il manutentore \u{2014} condividilo direttamente con lui.",
+            "sv": "Skriver ett krypterat diagnospaket till en plats du v\u{e4}ljer. Paketet \u{e4}r ogenomskinligt f\u{f6}r alla utom underh\u{e5}llaren \u{2014} dela det direkt med honom.",
+            "nb": "Skriver en kryptert diagnosepakke til en plassering du velger. Pakken er ugjennomsiktig for alle unntatt vedlikeholderen \u{2014} del den direkte med vedkommende.",
+            "da": "Skriver en krypteret diagnosepakke til en placering, du v\u{e6}lger. Pakken er ugennemsigtig for alle undtagen vedligeholderen \u{2014} del den direkte med vedkommende.",
+            "ja": "選択した場所に暗号化された診断バンドルを書き出します。バンドルはメンテナー以外には不透明です。直接共有してください。",
+            "pt": "Escreve um pacote de diagn\u{f3}stico cifrado num local \u{e0} sua escolha. O pacote \u{e9} opaco para todos exceto o respons\u{e1}vel \u{2014} partilhe-o diretamente com ele.",
+            "pl": "Zapisuje zaszyfrowany pakiet diagnostyczny w wybranej lokalizacji. Pakiet jest nieczytelny dla wszystkich opr\u{f3}cz opiekuna \u{2014} udost\u{119}pnij go bezpo\u{15b}rednio.",
+            "zh-Hans": "将加密的诊断包写入您选择的位置。除维护者外的任何人都看不到包内容\u{2014}\u{2014}请直接与维护者分享。",
         ],
         "diagClearAll": [
             "en": "Clear All",

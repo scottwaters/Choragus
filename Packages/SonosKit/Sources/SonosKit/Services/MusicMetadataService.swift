@@ -65,6 +65,15 @@ public struct AlbumInfo: Codable, Equatable, Sendable {
 @MainActor
 public final class MusicMetadataService: ArtistInfoProvider {
 
+    /// Optional Apple Music catalog enrichment hooks. Set by the host
+    /// app when MusicKit is authorised. Returning `nil` falls through to
+    /// the existing Wikipedia / MusicBrainz / Last.fm merge, so this is
+    /// purely additive — fork builds without MusicKit see no change.
+    /// Tuple shape: `(imageURL: String?, genres: [String])` — Apple
+    /// Music doesn't expose artist bios, only artwork + genre tags.
+    public nonisolated(unsafe) static var appleMusicArtistEnrichment: ((_ artist: String) async -> (imageURL: String?, genres: [String])?)?
+    public nonisolated(unsafe) static var appleMusicAlbumEnrichment: ((_ artist: String, _ album: String) async -> (imageURL: String?, genres: [String])?)?
+
     private let tokenStore: LastFMTokenStore
     private let cache: MetadataCacheRepository
     private let session: URLSession
@@ -197,6 +206,36 @@ public final class MusicMetadataService: ArtistInfoProvider {
             )
         }
 
+        // Apple Music catalog enrichment, when authorised. Adds Apple's
+        // editorial genre tags to the top of `tags` (kept de-duplicated)
+        // and replaces `imageURL` with the catalog artist photo when
+        // the upstream sources came back empty/placeholder. Last.fm /
+        // Wikipedia stay as the bio source — Apple's catalog doesn't
+        // expose artist bios via MusicKit.
+        if let enrich = Self.appleMusicArtistEnrichment,
+           let amDetails = await enrich(trimmed),
+           let current = merged {
+            var newTags = amDetails.genres
+            for tag in current.tags where !newTags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+                newTags.append(tag)
+            }
+            let newImage: String?
+            if let amImage = amDetails.imageURL, !amImage.isEmpty {
+                newImage = amImage
+            } else {
+                newImage = current.imageURL
+            }
+            merged = ArtistInfo(
+                name: current.name,
+                bio: current.bio,
+                tags: newTags,
+                similarArtists: current.similarArtists,
+                listeners: current.listeners,
+                imageURL: newImage,
+                wikipediaURL: current.wikipediaURL
+            )
+        }
+
         if let final = merged,
            let encoded = try? JSONEncoder().encode(final),
            let str = String(data: encoded, encoding: .utf8) {
@@ -306,15 +345,43 @@ public final class MusicMetadataService: ArtistInfoProvider {
         async let lfm = lastFMAlbum(artist: artist, album: album)
 
         let parts: [AlbumInfo?] = await [wiki, mb, lfm]
-        let merged = mergeAlbum(title: album, artist: artist,
+        var merged = mergeAlbum(title: album, artist: artist,
                                 parts: parts.compactMap { $0 })
-        guard let merged else { return nil }
+        guard let unwrapped = merged else { return nil }
 
-        if let encoded = try? JSONEncoder().encode(merged),
+        // Apple Music catalog enrichment — same shape as the artist
+        // path. Adds Apple's genre tags + replaces image when empty.
+        // No-op when the host app hasn't installed the callback (fork
+        // builds without MusicKit).
+        if let enrich = Self.appleMusicAlbumEnrichment,
+           let amDetails = await enrich(artist, album) {
+            var newTags = amDetails.genres
+            for tag in unwrapped.tags where !newTags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+                newTags.append(tag)
+            }
+            let newImage: String?
+            if let amImage = amDetails.imageURL, !amImage.isEmpty {
+                newImage = amImage
+            } else {
+                newImage = unwrapped.imageURL
+            }
+            merged = AlbumInfo(
+                title: unwrapped.title,
+                artist: unwrapped.artist,
+                releaseDate: unwrapped.releaseDate,
+                summary: unwrapped.summary,
+                tags: newTags,
+                tracks: unwrapped.tracks,
+                imageURL: newImage
+            )
+        }
+
+        guard let finalMerged = merged else { return nil }
+        if let encoded = try? JSONEncoder().encode(finalMerged),
            let str = String(data: encoded, encoding: .utf8) {
             cache.set(key, payload: str, ttlSeconds: 30 * 24 * 60 * 60)
         }
-        return merged
+        return finalMerged
     }
 
     // MARK: - Merge

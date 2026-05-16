@@ -39,6 +39,10 @@ struct NowPlayingContextPanel: View {
     /// `NowPlayingView`). Carries the URL so the same `ExpandedArtView`
     /// can render it.
     @State private var expandedArtistPhotoURL: URL?
+    @State private var appleArtistArtURL: URL?
+    @State private var appleAlbumArtURL: URL?
+    @State private var appleAlbumReleaseDate: Date?
+    @State private var appleMusicProvider: AppleMusicProvider = AppleMusicProviderFactory.makeCurrent()
 
     /// Cached result of `matchingHistory()` for the current track.
     /// Recomputed only when the track changes or the history store
@@ -53,6 +57,13 @@ struct NowPlayingContextPanel: View {
     /// alongside the per-track history. Same caching rationale as
     /// `historyEntries`.
     @State private var artistHistoryEntries: [PlayHistoryEntry] = []
+
+    /// Cached top-tracks ranking for the current artist's history.
+    /// Computed alongside `artistHistoryEntries` in the same `.task(id:)`
+    /// so the body just reads a stored array instead of re-running the
+    /// dict-allocate + map + sort pipeline on every position-tick
+    /// re-eval (once per second per active panel).
+    @State private var artistTopTracks: [ArtistTopTrack] = []
 
     /// Initialises the VM eagerly so body's first render — which fires
     /// before any `.task` modifier — already has the real instance. The
@@ -81,6 +92,7 @@ struct NowPlayingContextPanel: View {
     /// per-track manual offset (the `±` toolbar) before being passed
     /// to `SlidingLyricsView`. Default `−2.0 s` empirically.
     @AppStorage(UDKey.lyricsGlobalOffset) private var lyricsGlobalOffset: Double = -2.0
+    @AppStorage(UDKey.karaokeStyle) private var karaokeStyleRaw = KaraokeStyle.defaultMode.rawValue
 
     private var lyricsResolved: LyricsCoordinator.Resolved {
         lyricsCoordinator.resolved(for: trackMetadata)
@@ -184,7 +196,8 @@ struct NowPlayingContextPanel: View {
                 SlidingLyricsView(
                     lines: lyricsCoordinator.parsedLines(for: trackMetadata),
                     anchor: positionAnchor,
-                    offset: lyricsOffset + lyricsGlobalOffset
+                    offset: lyricsOffset + lyricsGlobalOffset,
+                    style: KaraokeStyle(rawValue: karaokeStyleRaw) ?? .defaultMode
                 )
                 .equatable()
                 .frame(maxWidth: .infinity)
@@ -316,6 +329,41 @@ struct NowPlayingContextPanel: View {
                 stationName: ""
             )
         }
+        .task(id: "\(trackMetadata.artist)|\(trackMetadata.album)") {
+            await loadAppleMusicCompanions()
+        }
+    }
+
+    /// Pulls the Apple Music artist photo + album artwork + release
+    /// date for the currently-playing track. Runs in parallel with the
+    /// existing Wikipedia/MusicBrainz/Last.fm About fetch — these are
+    /// supplementary visuals, not the primary About content. No-op on
+    /// fork builds without MusicKit (factory returns the disabled
+    /// provider; lookups return nil).
+    private func loadAppleMusicCompanions() async {
+        guard AppleMusicProviderFactory.hasMusicKitSupport else { return }
+        let artist = trackMetadata.artist
+        let album = trackMetadata.album
+        sonosDiagLog(.info, tag: "APPLE_MUSICKIT",
+                     "About companions: lookup starting",
+                     context: ["artist": artist, "album": album])
+        async let artistDetails = artist.isEmpty ? nil : appleMusicProvider.lookupArtist(name: artist)
+        async let albumDetails = (artist.isEmpty || album.isEmpty)
+            ? nil
+            : appleMusicProvider.lookupAlbumDetails(artist: artist, title: album)
+        let (a, b) = await (artistDetails, albumDetails)
+        appleArtistArtURL = a?.artworkURL
+        appleAlbumArtURL = b?.artworkURL
+        appleAlbumReleaseDate = b?.releaseDate
+        sonosDiagLog(.info, tag: "APPLE_MUSICKIT",
+                     "About companions: lookup done",
+                     context: [
+                        "artist": artist, "album": album,
+                        "artistArt": a?.artworkURL?.absoluteString ?? "nil",
+                        "albumArt": b?.artworkURL?.absoluteString ?? "nil",
+                        "albumReleaseDate": b?.releaseDate.map(String.init(describing:)) ?? "nil",
+                        "albumLookupReturned": b != nil ? "true" : "false"
+                     ])
     }
 
     /// Identifiable URL wrapper so we can use `.sheet(item:)` with a
@@ -337,6 +385,10 @@ struct NowPlayingContextPanel: View {
                         if let s = info.imageURL, let url = URL(string: s) {
                             expandedArtistPhotoURL = url
                         }
+                    },
+                    appleImageURL: appleArtistArtURL,
+                    onAppleImageTap: {
+                        if let url = appleArtistArtURL { expandedArtistPhotoURL = url }
                     }
                 )
                 if !info.tags.isEmpty {
@@ -405,7 +457,13 @@ struct NowPlayingContextPanel: View {
                 sectionHeader(
                     icon: "square.stack.fill",
                     title: info.title,
-                    subtitle: albumSubtitle(info)
+                    subtitle: albumSubtitle(info),
+                    imageURL: nil,
+                    onImageTap: nil,
+                    appleImageURL: appleAlbumArtURL,
+                    onAppleImageTap: {
+                        if let url = appleAlbumArtURL { expandedArtistPhotoURL = url }
+                    }
                 )
                 if !info.tags.isEmpty { tagRow(info.tags) }
                 if let summary = info.summary, !summary.isEmpty {
@@ -458,7 +516,9 @@ struct NowPlayingContextPanel: View {
     private func sectionHeader(icon: String, title: String,
                                subtitle: String?,
                                imageURL: String? = nil,
-                               onImageTap: (() -> Void)? = nil) -> some View {
+                               onImageTap: (() -> Void)? = nil,
+                               appleImageURL: URL? = nil,
+                               onAppleImageTap: (() -> Void)? = nil) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
                 .font(.callout)
@@ -476,6 +536,21 @@ struct NowPlayingContextPanel: View {
                 }
             }
             Spacer(minLength: 8)
+            // Apple Music artwork on the LEFT of the Wikipedia/Last.fm
+            // artwork when MusicKit is enabled. Tappable like the
+            // existing one — both pipe to the same expand sheet.
+            if let appleImageURL {
+                CachedAsyncImage(url: appleImageURL, cornerRadius: 8, priority: .interactive)
+                    .frame(width: 64, height: 64)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(.tint.opacity(0.25), lineWidth: 0.5)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture { onAppleImageTap?() }
+                    .help(L10n.clickToEnlarge)
+                    .accessibilityLabel("\(title) Apple Music image")
+            }
             if let imageURL, let url = URL(string: imageURL) {
                 CachedAsyncImage(url: url, cornerRadius: 8, priority: .interactive)
                     .frame(width: 64, height: 64)
@@ -502,10 +577,22 @@ struct NowPlayingContextPanel: View {
     }
 
     private func albumSubtitle(_ info: AlbumInfo) -> String? {
-        var parts: [String] = []
-        if !info.artist.isEmpty { parts.append(info.artist) }
-        if let d = info.releaseDate, !d.isEmpty { parts.append(d) }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        var lines: [String] = []
+        if !info.artist.isEmpty { lines.append(info.artist) }
+        // Prefer the Apple Music release date when present — Wikipedia /
+        // MusicBrainz often return year-only or partial dates while Apple
+        // returns the full release date. Falls back to whatever the
+        // other sources supplied. Rendered on its own line under the
+        // artist so the date stands as a labelled fact rather than a
+        // run-on inline detail.
+        if let appleDate = appleAlbumReleaseDate {
+            let f = DateFormatter()
+            f.dateStyle = .medium
+            lines.append("Released \(f.string(from: appleDate))")
+        } else if let d = info.releaseDate, !d.isEmpty {
+            lines.append("Released \(d)")
+        }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
     /// Row in the album tracklist. The current track is rendered with a
@@ -572,7 +659,9 @@ struct NowPlayingContextPanel: View {
         .task(id: HistoryCacheKey(trackKey: trackKey,
                                   entriesCount: playHistoryManager.entries.count)) {
             historyEntries = matchingHistory()
-            artistHistoryEntries = matchingArtistHistory()
+            let artistEntries = matchingArtistHistory()
+            artistHistoryEntries = artistEntries
+            artistTopTracks = topTracksByArtist(artistEntries, limit: 12)
         }
     }
 
@@ -623,8 +712,7 @@ struct NowPlayingContextPanel: View {
                     artistSummary(artistHistoryEntries)
                     Divider().padding(.vertical, 4)
                     Text(L10n.topTracks).font(.body.weight(.semibold))
-                    let top = topTracksByArtist(artistHistoryEntries, limit: 12)
-                    ForEach(top, id: \.title) { row in
+                    ForEach(artistTopTracks, id: \.title) { row in
                         HStack(alignment: .top, spacing: 8) {
                             Text(row.title)
                                 .font(.callout)
@@ -684,7 +772,11 @@ struct NowPlayingContextPanel: View {
     }
 
     /// Counts plays per (title) for the artist's history and returns
-    /// the top `limit` by play count.
+    /// the top `limit` by play count. Tie-break by title ascending so
+    /// the visible order is stable across renders — `Dictionary`
+    /// iteration order is non-deterministic between calls, and without
+    /// a tie-break equal-count rows would re-sort on every body
+    /// re-eval (once per second under the position-tick).
     private func topTracksByArtist(_ entries: [PlayHistoryEntry], limit: Int) -> [ArtistTopTrack] {
         var counts: [String: Int] = [:]
         for entry in entries where !entry.title.isEmpty {
@@ -692,7 +784,9 @@ struct NowPlayingContextPanel: View {
         }
         return counts
             .map { ArtistTopTrack(title: $0.key, count: $0.value) }
-            .sorted { $0.count > $1.count }
+            .sorted { lhs, rhs in
+                lhs.count != rhs.count ? lhs.count > rhs.count : lhs.title < rhs.title
+            }
             .prefix(limit)
             .map { $0 }
     }
