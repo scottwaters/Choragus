@@ -192,7 +192,7 @@ final class MockStateExtendedTests: XCTestCase {
     func testTransportDidUpdateTrackMetadata() {
         let mock = MockSonosServices()
         let meta = TrackMetadata(title: "Song", artist: "Artist")
-        mock.transportDidUpdateTrackMetadata("g1", metadata: meta)
+        mock.transportDidUpdateTrackMetadata("g1", metadata: meta, source: .poll)
         XCTAssertEqual(mock.groupTrackMetadata["g1"]?.title, "Song")
         XCTAssertEqual(mock.groupTrackMetadata["g1"]?.artist, "Artist")
     }

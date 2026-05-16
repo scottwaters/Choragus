@@ -291,6 +291,24 @@ public final class MediaKeyHandler: ObservableObject {
                 DispatchQueue.main.async { self?.refreshNowPlayingInfo() }
             }
             .store(in: &cancellables)
+
+        // Group selection lives in UserDefaults, not on SonosManager, so
+        // `objectWillChange` does not fire when the user picks a
+        // different group. Without this notification observer the
+        // system Now Playing widget stayed pinned to the previous
+        // group's metadata until some unrelated state change (next
+        // poll tick, an event) happened to fire objectWillChange.
+        // ContentView and MenuBarController post `.selectedGroupChanged`
+        // right after writing the new id; clear the dedup key so the
+        // refresh isn't skipped if the new group happens to have the
+        // same title/artist/album as the previous group's last state.
+        NotificationCenter.default.publisher(for: .selectedGroupChanged)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.lastPublishedNowPlayingKey = ""
+                self?.refreshNowPlayingInfo()
+            }
+            .store(in: &cancellables)
     }
 
     private func refreshNowPlayingInfo() {
@@ -303,6 +321,20 @@ public final class MediaKeyHandler: ObservableObject {
         let meta = manager.groupTrackMetadata[group.coordinatorID] ?? TrackMetadata()
         let transport = manager.groupTransportStates[group.coordinatorID] ?? .stopped
         let isPlaying = transport.isPlaying
+
+        // Mid-track-change blip suppression. When Sonos auto-advances
+        // (or the user clicks Next), the speaker briefly reports empty
+        // metadata before the new track's info lands. Publishing that
+        // empty state would flash the app icon for ~1 s between the
+        // outgoing artwork and the incoming track. Skip the publish
+        // while the transport is mid-transition AND we already had a
+        // non-empty publish for this group — the next refresh tick
+        // will land within a few hundred ms with the new metadata.
+        if meta.title.isEmpty && (transport == .transitioning || transport == .playing)
+           && lastPublishedNowPlayingKey.hasPrefix("\(group.coordinatorID)|") {
+            return
+        }
+
         // Cheap dedup: skip the system call when the user-visible payload
         // hasn't changed. objectWillChange fires far more often than the
         // displayed track / state actually changes.
@@ -318,19 +350,55 @@ public final class MediaKeyHandler: ObservableObject {
         info[MPMediaItemPropertyTitle] = title
         if !meta.artist.isEmpty { info[MPMediaItemPropertyArtist] = meta.artist }
         if !meta.album.isEmpty { info[MPMediaItemPropertyAlbumTitle] = meta.album }
+
         let center = MPNowPlayingInfoCenter.default()
+
+        // Include the artwork IN the same publish as the metadata so
+        // there's no visual gap between "title appears" and "art
+        // appears". Three sources, in order:
+        //   1. URL unchanged from last publish → carry the existing
+        //      MPMediaItemArtwork forward (no work).
+        //   2. URL changed but ImageCache already has the bytes (true
+        //      whenever Choragus's own UI has already rendered the art,
+        //      which is the common case on group switches) → wrap and
+        //      include synchronously.
+        //   3. URL changed and cache miss → publish without artwork now,
+        //      then publishArtwork fetches and patches when the bytes
+        //      land. Acceptable brief gap; only hits on first sight of
+        //      a brand-new track.
+        //
+        // When meta is empty (nothing playing on the selected group)
+        // newArtURL is "" — none of the three branches fire, the dict
+        // ships without artwork, and the OS renders the app icon,
+        // matching the "if nothing is playing, the icon" requirement.
+        let newArtURL = (meta.albumArtURI?.isEmpty == false) ? meta.albumArtURI! : ""
+        if !newArtURL.isEmpty {
+            if newArtURL == lastPublishedArtURL,
+               let priorArt = center.nowPlayingInfo?[MPMediaItemPropertyArtwork] {
+                info[MPMediaItemPropertyArtwork] = priorArt
+            } else if let parsed = URL(string: newArtURL),
+                      let cached = ImageCache.shared.image(for: parsed) {
+                let size = cached.size
+                info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: size) { _ in cached }
+            }
+        }
         center.nowPlayingInfo = info
         // playbackState is the master signal `rcd` uses to pick the
         // active media app on macOS 11.4+. Without this set,
         // `nowPlayingInfo` alone is insufficient and Music.app wins the
         // key route. Map TransportState → MPNowPlayingPlaybackState.
-        center.playbackState = mapPlaybackState(transport)
+        // For an empty group we use `.paused` rather than `.stopped` —
+        // `.stopped` causes macOS's Now Playing widget to freeze on the
+        // last-displayed art instead of refreshing, which is the
+        // "15–30 s lag" the user reported on group-switch to a silent
+        // group.
+        let publishedState: MPNowPlayingPlaybackState =
+            meta.title.isEmpty ? .paused : mapPlaybackState(transport)
+        center.playbackState = publishedState
 
-        // Fetch the album art asynchronously and patch it onto the
-        // info dict once decoded. Without `MPMediaItemPropertyArtwork`
-        // macOS substitutes the app icon in the system Now Playing
-        // strip — fine for the initial seed but wrong once a real
-        // track is loaded.
+        sonosDebugLog("[NOWPLAYING] publish group=\(group.name) title=\(meta.title.prefix(40)) state=\(publishedState.rawValue) artURL=\(newArtURL.isEmpty ? "<none>" : String(newArtURL.prefix(60))) artSource=\(info[MPMediaItemPropertyArtwork] != nil ? "sync" : "fetch")")
+
+        // Async fallback fetch for the cache-miss case.
         publishArtwork(forURL: meta.albumArtURI, expectedKey: key)
     }
 
@@ -351,9 +419,28 @@ public final class MediaKeyHandler: ObservableObject {
         // OS briefly falling back to the app icon on a transient
         // empty-art event mid-playback.
         guard !url.isEmpty, let parsed = URL(string: url) else { return }
+
+        // Synchronous cache hit: when Choragus already has the image on
+        // disk (the app's own UI is almost certainly displaying it),
+        // skip the network round-trip and patch the artwork in
+        // immediately. Eliminates the "app icon → artwork" flash users
+        // see when changing groups or toggling transport state on a
+        // track Choragus has already rendered.
+        if let cached = ImageCache.shared.image(for: parsed) {
+            let center = MPNowPlayingInfoCenter.default()
+            var info = center.nowPlayingInfo ?? [:]
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: cached.size) { _ in cached }
+            center.nowPlayingInfo = info
+            return
+        }
+
         let task = URLSession.shared.dataTask(with: parsed) { [weak self] data, _, error in
             guard let self = self else { return }
             guard error == nil, let data = data, let image = NSImage(data: data) else { return }
+            // Store the freshly-fetched bytes so the next group/track
+            // refresh that points at this URL goes through the
+            // synchronous cache-hit branch above.
+            ImageCache.shared.store(image, for: parsed)
             DispatchQueue.main.async {
                 // Guard against late arrival: if the displayed track
                 // has moved on since we kicked off the fetch, drop the

@@ -146,5 +146,240 @@ final class BugReportBundleScrubTests: XCTestCase {
         XCTAssertTrue(combined.contains("sid=9"),
                       "sid= must survive end-to-end so the maintainer can identify which SMAPI service the row references.")
     }
+
+    // MARK: - v2 topology snapshot
+
+    /// `topologySnapshot` walks `groups[*].members`, falls back to the
+    /// `_MR` sibling when the bare ZonePlayer record has empty model
+    /// fields, marks the coordinator, and labels the group by the
+    /// coordinator's room name (matching Sonos's UI convention).
+    func testTopologySnapshotShapeAndGrouping() {
+        let arcBare = SonosDevice(
+            id: "RINCON_ARC", ip: "192.168.1.10", roomName: "Living Room",
+            modelName: "", modelNumber: "", softwareVersion: "",
+            swGen: "2", isCoordinator: true, groupID: "G1"
+        )
+        let arcMR = SonosDevice(
+            id: "RINCON_ARC_MR", ip: "192.168.1.10", roomName: "Living Room",
+            modelName: "Arc", modelNumber: "S27", softwareVersion: "80.1-58220",
+            swGen: "2"
+        )
+        let one = SonosDevice(
+            id: "RINCON_ONE", ip: "192.168.1.11", roomName: "Bedroom",
+            modelName: "Sonos One", modelNumber: "S18", softwareVersion: "80.1-58220",
+            swGen: "2", isCoordinator: false, groupID: "G1"
+        )
+        let move = SonosDevice(
+            id: "RINCON_MOVE", ip: "192.168.1.12", roomName: "Kitchen",
+            modelName: "Move 2", modelNumber: "S40", softwareVersion: "80.1-58220",
+            swGen: "2", isCoordinator: true, groupID: "G2"
+        )
+
+        let group1 = SonosGroup(id: "G1", coordinatorID: "RINCON_ARC", members: [arcBare, one])
+        let group2 = SonosGroup(id: "G2", coordinatorID: "RINCON_MOVE", members: [move])
+
+        let devicesDict: [String: SonosDevice] = [
+            arcBare.id: arcBare, arcMR.id: arcMR, one.id: one, move.id: move
+        ]
+        let snapshot = BugReportBundle.topologySnapshot(
+            groups: [group1, group2], devices: devicesDict
+        )
+
+        XCTAssertEqual(snapshot.count, 3)
+
+        let arc = snapshot.first { $0.roomName == "Living Room" }
+        XCTAssertEqual(arc?.modelName, "Arc",
+                       "Bare ZonePlayer modelName is empty on some firmware — must resolve via the _MR sibling.")
+        XCTAssertEqual(arc?.modelNumber, "S27")
+        XCTAssertEqual(arc?.softwareVersion, "80.1-58220")
+        XCTAssertEqual(arc?.systemVersion, "S2")
+        XCTAssertTrue(arc?.isCoordinator == true)
+        XCTAssertEqual(arc?.groupCoordinatorRoom, "Living Room")
+        XCTAssertTrue(arc?.isAtmosCapable == true)
+
+        let bedroom = snapshot.first { $0.roomName == "Bedroom" }
+        XCTAssertEqual(bedroom?.groupCoordinatorRoom, "Living Room",
+                       "Group label is the coordinator's room name — matches Sonos's UI convention.")
+        XCTAssertTrue(bedroom?.isCoordinator == false)
+
+        let kitchen = snapshot.first { $0.roomName == "Kitchen" }
+        XCTAssertTrue(kitchen?.isPortable == true,
+                      "Move 2 is portable — flag must be set so the maintainer notices Bluetooth-mode quirks.")
+        XCTAssertEqual(kitchen?.groupCoordinatorRoom, "Kitchen")
+    }
+
+    /// HT 5.1 setup (Arc + Sub + 2× Era): when `htSatChannelMaps` is
+    /// populated, every bonded satellite must appear in the snapshot
+    /// with its correct surround role even though Sonos marks them
+    /// `Invisible="1"` and excludes them from `groups[*].members`.
+    func testTopologySnapshotIncludesBondedSatellitesViaChannelMap() {
+        let arc = SonosDevice(
+            id: "RINCON_ARC", ip: "192.168.1.10", roomName: "Living Room",
+            modelName: "Arc", modelNumber: "S27", softwareVersion: "80.1-58220",
+            swGen: "2", isCoordinator: true, groupID: "G1"
+        )
+        let sub = SonosDevice(
+            id: "RINCON_SUB", ip: "192.168.1.11", roomName: "Living Room",
+            modelName: "Sub", modelNumber: "S26", softwareVersion: "80.1-58220",
+            swGen: "2", groupID: "G1"
+        )
+        let lr = SonosDevice(
+            id: "RINCON_LR", ip: "192.168.1.12", roomName: "Living Room",
+            modelName: "Sonos One SL", modelNumber: "S22", softwareVersion: "80.1-58220",
+            swGen: "2", groupID: "G1"
+        )
+        let rr = SonosDevice(
+            id: "RINCON_RR", ip: "192.168.1.13", roomName: "Living Room",
+            modelName: "Sonos One SL", modelNumber: "S22", softwareVersion: "80.1-58220",
+            swGen: "2", groupID: "G1"
+        )
+        // Only Arc is in the visible group members (sub/satellites are invisible).
+        let group = SonosGroup(id: "G1", coordinatorID: "RINCON_ARC", members: [arc])
+        let devicesDict: [String: SonosDevice] = [
+            arc.id: arc, sub.id: sub, lr.id: lr, rr.id: rr
+        ]
+        let htMap: [String: [(String, SpeakerChannel)]] = [
+            "RINCON_ARC": [
+                ("RINCON_ARC", .soundbar),
+                ("RINCON_SUB", .sub),
+                ("RINCON_LR", .rearLeft),
+                ("RINCON_RR", .rearRight)
+            ]
+        ]
+        let snapshot = BugReportBundle.topologySnapshot(
+            groups: [group], devices: devicesDict, htSatChannelMaps: htMap
+        )
+
+        XCTAssertEqual(snapshot.count, 4,
+                       "All 4 speakers must appear — Arc + 3 invisible satellites.")
+        XCTAssertEqual(snapshot.first(where: { $0.modelName == "Arc" })?.surroundRole,
+                       "Soundbar")
+        XCTAssertEqual(snapshot.first(where: { $0.modelName == "Sub" })?.surroundRole,
+                       "Sub")
+        let surrounds = snapshot.filter { $0.modelName == "Sonos One SL" }
+        XCTAssertEqual(surrounds.count, 2)
+        let roles = surrounds.compactMap(\.surroundRole).sorted()
+        XCTAssertEqual(roles, ["Left Rear", "Right Rear"])
+    }
+
+    /// Cold-launch path: `htSatChannelMaps` / `stereoChannelMaps`
+    /// aren't persisted, so they're empty until the first discovery
+    /// completes. The snapshot must still emit invisible bonded
+    /// satellites by scanning `devices` for matching `groupID`, tagged
+    /// generically as `[Bonded]`. Without this fallback B1208 dropped
+    /// the entire TV surround set whenever a bundle was captured
+    /// shortly after launch.
+    func testTopologySnapshotBondedFallbackWhenChannelMapEmpty() {
+        let arc = SonosDevice(
+            id: "RINCON_ARC", ip: "192.168.1.10", roomName: "Living Room",
+            modelName: "Arc", modelNumber: "S27", softwareVersion: "80.1-58220",
+            swGen: "2", isCoordinator: true, groupID: "G1"
+        )
+        let sub = SonosDevice(
+            id: "RINCON_SUB", ip: "192.168.1.11", roomName: "Living Room",
+            modelName: "Sub", modelNumber: "S26", softwareVersion: "80.1-58220",
+            swGen: "2", groupID: "G1"
+        )
+        let group = SonosGroup(id: "G1", coordinatorID: "RINCON_ARC", members: [arc])
+        let devicesDict: [String: SonosDevice] = [arc.id: arc, sub.id: sub]
+        let snapshot = BugReportBundle.topologySnapshot(
+            groups: [group], devices: devicesDict
+            // No channel maps — simulates cold launch state.
+        )
+
+        XCTAssertEqual(snapshot.count, 2,
+                       "Bonded Sub must still appear via the devices[groupID] fallback even when channel maps are empty.")
+        let subRow = snapshot.first { $0.modelName == "Sub" }
+        XCTAssertEqual(subRow?.surroundRole, "Bonded",
+                       "Without channel-map data, the fallback uses generic 'Bonded' so the maintainer at least sees the speaker exists.")
+    }
+
+    /// Stereo-pair primary + invisible right half. The right speaker
+    /// is in `devices` but not in `group.members`. The fold pulls it
+    /// in via `stereoChannelMaps` and tags both sides with Left/Right.
+    func testTopologySnapshotIncludesStereoPairRightHalf() {
+        let left = SonosDevice(
+            id: "RINCON_LEFT", ip: "192.168.1.20", roomName: "Bedroom",
+            modelName: "Era 100", modelNumber: "S37", softwareVersion: "80.1-58220",
+            swGen: "2", isCoordinator: true, groupID: "G3"
+        )
+        let right = SonosDevice(
+            id: "RINCON_RIGHT", ip: "192.168.1.21", roomName: "Bedroom",
+            modelName: "Era 100", modelNumber: "S37", softwareVersion: "80.1-58220",
+            swGen: "2", groupID: "G3"
+        )
+        let group = SonosGroup(id: "G3", coordinatorID: "RINCON_LEFT", members: [left])
+        let devicesDict: [String: SonosDevice] = [left.id: left, right.id: right]
+        let stereoMap: [String: [(String, SpeakerChannel)]] = [
+            "RINCON_LEFT": [
+                ("RINCON_LEFT", .leftPair),
+                ("RINCON_RIGHT", .rightPair)
+            ]
+        ]
+        let snapshot = BugReportBundle.topologySnapshot(
+            groups: [group], devices: devicesDict,
+            stereoChannelMaps: stereoMap
+        )
+
+        XCTAssertEqual(snapshot.count, 2,
+                       "Both halves of the stereo pair must be emitted.")
+        let roles = snapshot.compactMap(\.surroundRole).sorted()
+        XCTAssertEqual(roles, ["Left", "Right"])
+    }
+
+    /// `_MR` MediaRenderer sub-devices stored in `devices` for
+    /// metadata-lookup purposes are NOT real speakers — the fallback
+    /// must skip them so they don't appear as ghost rows in the
+    /// snapshot.
+    func testTopologySnapshotFallbackSkipsMRSiblings() {
+        let arc = SonosDevice(
+            id: "RINCON_ARC", ip: "192.168.1.10", roomName: "Living Room",
+            modelName: "", modelNumber: "", softwareVersion: "",
+            swGen: "2", isCoordinator: true, groupID: "G1"
+        )
+        let arcMR = SonosDevice(
+            id: "RINCON_ARC_MR", ip: "192.168.1.10", roomName: "Living Room",
+            modelName: "Arc", modelNumber: "S27", softwareVersion: "80.1-58220",
+            swGen: "2", groupID: "G1"
+        )
+        let group = SonosGroup(id: "G1", coordinatorID: "RINCON_ARC", members: [arc])
+        let devicesDict: [String: SonosDevice] = [arc.id: arc, arcMR.id: arcMR]
+        let snapshot = BugReportBundle.topologySnapshot(
+            groups: [group], devices: devicesDict
+        )
+        XCTAssertEqual(snapshot.count, 1,
+                       "_MR sibling is a parsing artefact, not a physical speaker — fallback must skip it.")
+        XCTAssertEqual(snapshot.first?.modelName, "Arc",
+                       "The visible Arc record's empty modelName must still resolve via the _MR sibling.")
+    }
+
+    /// v2 body JSON round-trip — assembling a real envelope requires
+    /// the maintainer pubkey from `Bundle.main.Info.plist` which the
+    /// test target doesn't carry, so this asserts on the
+    /// `BodyV2` codable contract directly (the same shape `assemble`
+    /// serialises into ciphertext).
+    func testV2BodyRoundTripCarriesEntriesAndDevices() throws {
+        let entries = [
+            makeRawEntry(message: "play tap on Kitchen", context: nil)
+        ]
+        let devices = [
+            BugReportBundle.DevicePayload(
+                roomName: "Kitchen", modelName: "Move 2", modelNumber: "S40",
+                softwareVersion: "80.1-58220", systemVersion: "S2",
+                isCoordinator: true, groupCoordinatorRoom: "Kitchen",
+                isPortable: true, isAtmosCapable: false,
+                surroundRole: nil
+            )
+        ]
+        let bodyJSON = try JSONEncoder().encode(
+            BugReportBundle.BodyV2(entries: entries, devices: devices)
+        )
+        let decoded = try JSONDecoder().decode(BugReportBundle.BodyV2.self, from: bodyJSON)
+        XCTAssertEqual(decoded.entries.count, 1)
+        XCTAssertEqual(decoded.devices.count, 1)
+        XCTAssertEqual(decoded.devices.first?.roomName, "Kitchen")
+        XCTAssertEqual(decoded.devices.first?.isPortable, true)
+        XCTAssertNil(decoded.devices.first?.surroundRole)
+    }
 }
 

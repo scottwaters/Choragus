@@ -282,6 +282,7 @@ struct MenuBarPlayerView: View {
                         .controlSize(.small)
                         .onChange(of: selectedGroupID) {
                             UserDefaults.standard.set(selectedGroupID, forKey: UDKey.lastSelectedGroupID)
+                            NotificationCenter.default.post(name: .selectedGroupChanged, object: nil)
                         }
                     }
                 }

@@ -457,6 +457,15 @@ public func _resolveCompatibilityRevision() -> UInt32 {
 
 public extension Notification.Name {
     static let queueChanged = Notification.Name("sonosQueueChanged")
+    /// Posted by group-picker UI (`ContentView`, `MenuBarController`)
+    /// immediately after writing the new id to
+    /// `UDKey.lastSelectedGroupID`. `MediaKeyHandler` listens to refresh
+    /// the system Now Playing widget without waiting for the next
+    /// `objectWillChange` tick — group selection isn't `@Published`
+    /// state on `SonosManager`, so without this signal the menu-bar
+    /// widget lags by however long it takes some unrelated state
+    /// change to fire.
+    static let selectedGroupChanged = Notification.Name("choragusSelectedGroupChanged")
 }
 
 /// Keys used on `.queueChanged` notifications.

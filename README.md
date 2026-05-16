@@ -43,6 +43,20 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 
 ---
 
+## What's New in v4.9.1
+
+Patch release. Fixes a Spotify single-track playback bug and adds a speaker-topology snapshot to bug reports.
+
+- **Click a Spotify track and it plays.** v4.9 silently failed to play single tracks tapped from a Spotify playlist (issue #42); the misleading "Speaker layout has changed" toast appeared instead. Fixed — single-track taps now route through the queue path Sonos requires for service tracks, matching the "Play All" button that already worked.
+- **Accurate error message when a track does fail.** Per-track URI rejections no longer claim your speakers are mis-configured. The new banner reads "Speaker rejected request. Please raise bug report." and skips the unnecessary topology refresh.
+- **Bug reports now include your speaker layout.** The encrypted bundle generated from Diagnostics → Report Bug now lists every speaker — model, room, S1/S2, surround/stereo-pair role, Atmos/portable flags — so reports about grouping or service-routing bugs no longer need a follow-up. No LAN IPs or device IDs included; same redaction as the rest of the bundle.
+- **Test suite back online.** v4.9's tests didn't compile against a protocol change; repaired and extended with coverage for the bugs above so they don't reappear.
+- **macOS Now Playing widget gets the right artwork.** The system menu-bar Now Playing widget no longer falls back to the app icon when you change tracks or switch between speaker groups, and switching to a silent group refreshes the widget right away instead of leaving the previous track's artwork stuck for 15–30 seconds.
+
+Full change list in [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## What's New in v4.9
 
 Apple Music gets a proper native pane this release, and the karaoke window stops stuttering.
@@ -54,6 +68,7 @@ Apple Music gets a proper native pane this release, and the karaoke window stops
 - **Lyrics timing offset moved.** Now lives under Settings → Visualisations → Karaoke alongside the karaoke style picker.
 - **Manual album-art picks propagate everywhere.** Choosing replacement art in Now Playing now updates the karaoke window and play history immediately, not just the Now Playing panel.
 - **Diagnostics → Save Encrypted Log File.** Pick where the encrypted bug bundle goes instead of being forced into Downloads. The existing "Report Bug" flow still saves to Downloads + opens GitHub.
+- **Shortcuts (beta).** Apple Shortcuts and Siri can now drive Choragus — "Hey Siri, pause Choragus in Kitchen", "Set Choragus volume in Living Room", "Activate Choragus preset Movie Night". Seven intents shipped (Play / Pause / Toggle / Next / Previous / Set Volume / Activate Preset) targeting any room or group. Discoverable from the Shortcuts app and Spotlight.
 
 Full change list in [CHANGELOG.md](CHANGELOG.md).
 

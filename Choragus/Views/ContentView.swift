@@ -391,6 +391,7 @@ struct ContentView: View {
             .modifier(LocalNetworkPermissionAlert(monitor: localNetworkMonitor))
             .onChange(of: selectedGroupID) {
                 UserDefaults.standard.set(selectedGroupID, forKey: UDKey.lastSelectedGroupID)
+                NotificationCenter.default.post(name: .selectedGroupChanged, object: nil)
             }
             .onChange(of: sonosManager.groups) {
                 // When groups load/change, try to restore selection if nothing selected

@@ -1,6 +1,40 @@
 
 # Changelog
 
+## v4.9.1 — 2026-05-16 — Spotify single-track playback fix, bug-bundle topology snapshot, system Now Playing fixes
+
+### Spotify single-track click fix (issue #42)
+
+Tapping a single track in a Spotify playlist (and Calm Radio stations — anything whose URI is `x-sonos-spotify:` / `x-sonos-http:` / `x-sonos-hls:`) consistently failed with SOAP 714. Sonos rejects direct `SetAVTransportURI` for SMAPI service-track URIs even with valid DIDL; the speaker requires those tracks to be enqueued first, same path "Play All" already used.
+
+- `playBrowseItem` detects SMAPI service-track URIs before the strategy switch and routes them through the queue (`stop` → `removeAllTracksFromQueue` → `addURIToQueue` → `setAVTransportURI("x-rincon-queue:…")` → `play`). Matches the official Sonos app's "Play Now" — tapped track replaces the queue.
+- The gate is placed BEFORE `.smapiResolveThenEmpty` runs because that strategy rewrites `x-sonos-spotify:` to `x-spotify://spotify:track:<id>` (which Sonos also rejects) and strips the DIDL.
+- SOAP 714 no longer maps to `topologyStale`. New `StaleDataError.serviceRejected` reads "Speaker rejected request. Please raise bug report." and skips both the rescan and the misleading topology banner. 701 / `s:Client` continue to map to `topologyStale`.
+
+### Bug-report bundle v2 — topology snapshot
+
+`Diagnostics → Report Bug` now ships a per-speaker snapshot alongside the events — model, room, S1/S2, surround/stereo-pair role, Atmos/portable flags. Mirrors Sonos's "About My System", redacted to the same standard as the rest of the bundle (no LAN IPs, no RINCON UUIDs, no household IDs).
+
+- `ChoragusBugBundle` format bumped 1 → 2 (`{ "entries": […], "devices": […] }`). v1 envelopes still decode. Plaintext header gains `speakerCount`.
+- Includes invisible bonded members — HT sub + surrounds via `HTSatChanMapSet`, stereo-pair right halves via the newly-parsed `ChannelMapSet`. `SpeakerChannel` extended with `.leftPair` / `.rightPair`.
+- Cold-launch fallback: when the in-memory channel maps haven't populated yet, `topologySnapshot` scans `devices` for matching `groupID` and tags those rows `[Bonded]` so the snapshot is never empty.
+
+### Diagnostics
+
+- `MockSonosServices` repaired — the SonosKit test target failed to compile in v4.9, so the entire test suite was dormant. 389 tests now run and pass.
+- New tests pin the regression class: `StaleHandlingTests` (SOAP fault classification, SMAPI URI detection, error-copy contract) and 4 new `topologySnapshot` cases (HT via channel map, cold-launch bonded fallback, stereo-pair fold, `_MR` skip).
+- `StaleDataError` is now `Equatable`. `SonosManager.classifySOAPFault(_:roomName:)` extracted as a pure helper for testability.
+
+### System Now Playing widget
+
+The macOS menu-bar Now Playing widget — separate from Choragus's own UI — had three artwork / refresh bugs that landed together:
+
+- **Artwork no longer disappears on transport-state changes or group switches.** `MediaKeyHandler.refreshNowPlayingInfo` was rebuilding the `nowPlayingInfo` dict from scratch on every metadata update, wiping `MPMediaItemPropertyArtwork` and then relying on `publishArtwork`'s URL dedup to re-add it. When the URL matched the previous publish, the dedup skipped → widget fell back to the app icon until the next track URL change. The new path carries the existing artwork forward into the rebuilt dict whenever the URL is unchanged, and on cache hit includes a fresh `MPMediaItemArtwork` in the same publish.
+- **Group switches now refresh the widget immediately instead of waiting 15–30 s.** Group selection lives in `UserDefaults` (`UDKey.lastSelectedGroupID`), not on `SonosManager`, so the widget previously waited for an unrelated `objectWillChange` tick to fire. New `Notification.Name.selectedGroupChanged` is posted by `ContentView` and `MenuBarController` right after the UserDefaults write, and `MediaKeyHandler` subscribes to it.
+- **Empty-group widget shows the app icon promptly.** Switching to a group with nothing playing previously left the widget frozen on the prior group's artwork because `MPNowPlayingPlaybackState.stopped` freezes macOS's widget on the last-displayed art. Empty groups now publish `.paused` instead, which prompts the widget to refresh while keeping Choragus's claim on the media-key route.
+- **Brief mid-transition empty-metadata blip suppressed.** When Sonos auto-advances or the user clicks Next, the speaker reports empty metadata for ~1 s between tracks. Publishing that empty state was flashing the app icon. Skipped while the transport is `.transitioning` or `.playing` AND the prior publish was for the same group — the next refresh tick lands with the new metadata.
+- **`ImageCache.shared` integrated into the artwork publish path.** Cache hits patch the artwork synchronously in the same publish; cache misses fall through to the existing URLSession fetch and now write back to the cache so the next group/track refresh hits.
+
 ## v4.9 — 2026-05-15 — MusicKit Apple Music, karaoke stutter fix, queue self-resync
 
 Native Apple Music replaces the SMAPI-routed browse path, the karaoke window stops stuttering during playback, and the queue indicator self-corrects after track changes when Sonos's UPnP event stream disagrees with the speaker's actual state.
@@ -46,6 +80,14 @@ After a Prev/Next click, queue-row jump, or seek-then-auto-advance, Sonos's UPnP
 - **Diagnostics → Save Encrypted Log File…** Pick the destination via NSSavePanel instead of being routed to Downloads + GitHub. Same `BugReportBundle` envelope shape as the Report Bug (encrypted) path, minus the forced reveal and GitHub form open. Visible only when `BugReportEncryptor.isConfigured` (release builds). L10n keys `diagSaveEncryptedLog` / `diagSaveEncryptedLogHelp` added with translations for all 13 supported languages.
 - **Portable-speaker diagnostic** for issue #37. New `SonosDevice.isPortable` flag (modelName contains "Move" or "Roam"). `setVolume(device:)` logs `[PORTABLE_VOL] setVolume on portable …` with model + group context when the target is a portable. `updateDeviceVolume(_:volume:)` logs `[PORTABLE_VOL] Portable … reports volume=0` with model + transport URI + transport state + group state when a portable reports zero — the signature for Sonos's Bluetooth-input quirk where the WiFi-side `RenderingControl` accepts SOAP but the audio pipeline ignores the value because it's reading from BT. Combined with the existing `[RC-VERIFY]` debug-log lines, the bug bundle from an affected user traces intent → SOAP send → verify read → next event without the maintainer needing a Move to reproduce.
 - **`MainThreadHeartbeat` probe** (DEBUG-only). Background utility-queue `DispatchSourceTimer` pulses every 10 ms, dispatches a tiny block to `DispatchQueue.main`, measures the delivery delay. Delays > 50 ms log as `[MAIN-STALL] <N>ms` via `sonosDebugLog`. Coalesces back-to-back pulses behind one long stall to a single log line. Release builds drop the type and start call entirely via `#if DEBUG`.
+
+### Shortcuts (beta)
+
+First-cut Apple Shortcuts / Siri integration via `AppIntents`. Lets the user automate Choragus from the Shortcuts app, Siri, the macOS menu bar, and Spotlight without going through the UI.
+
+- **Intents shipped**: Play, Pause, Toggle Play/Pause, Next Track, Previous Track, Set Volume, Activate Preset. Every intent takes a `RoomEntity` parameter (Sonos group name) and resolves it to the matching group at run time. `ChoragusActivatePresetIntent` takes a `PresetEntity` parameter resolved against the user's saved Group Presets.
+- **Siri phrases**: "Play / Resume / Pause / Stop Choragus in <Room>", "Toggle Choragus in <Room>", "Next track / Skip on Choragus in <Room>", "Previous track / Back on Choragus in <Room>", "Set / Change Choragus volume in <Room>" (Siri prompts for the level as a follow-up — `AppIntents` allows one placeholder per spoken phrase), "Activate / Apply Choragus preset <Preset>".
+- **Beta**: parameter resolution against rooms with non-ASCII characters and discoverability of the intents through Spotlight are still being tuned; the underlying playback / volume / preset paths are the same ones the UI uses, so the actions themselves are stable.
 
 ### Internal
 

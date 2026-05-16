@@ -934,6 +934,10 @@ public class SonosManager: ObservableObject {
 
             // Parse home theater channel maps
             parseHTChannelMaps(from: groupData)
+            // Parse stereo-pair channel maps (separate attribute, same
+            // shape — keeps homeTheaterZones consumer pure HT while
+            // letting the bug-bundle snapshot fold both bonded forms).
+            parseStereoChannelMaps(from: groupData)
 
             // Equality-gate the three @Published flag writes — they
             // fire after every topology refresh attempt (which runs
@@ -963,6 +967,44 @@ public class SonosManager: ObservableObject {
             Task { await scanAllGroups() }
         } catch {
             sonosDebugLog("[DISCOVERY] Topology fetch failed: \(error)")
+        }
+    }
+
+    /// Parses ChannelMapSet from topology data to identify stereo-pair
+    /// primaries and their invisible right-channel siblings. Same
+    /// shape as `parseHTChannelMaps`, different attribute source.
+    private func parseStereoChannelMaps(from groupData: [ZoneGroupData]) {
+        var maps: [String: [(String, SpeakerChannel)]] = [:]
+        for gd in groupData {
+            for md in gd.members where !md.channelMapSet.isEmpty {
+                var channelList: [(String, SpeakerChannel)] = []
+                let pairs = md.channelMapSet.components(separatedBy: ";")
+                for pair in pairs {
+                    let parts = pair.components(separatedBy: ":")
+                    guard parts.count == 2 else { continue }
+                    let deviceID = parts[0]
+                    let channelStr = parts[1]
+                    if let channel = SpeakerChannel(rawValue: channelStr) {
+                        channelList.append((deviceID, channel))
+                    }
+                }
+                if !channelList.isEmpty {
+                    // Key on the visible primary's UUID — stereo pairs
+                    // are not always at the group coordinator (a stereo
+                    // pair can be soft-grouped into a larger group).
+                    maps[md.uuid] = channelList
+                }
+            }
+        }
+        let serialised: ([String: [(String, SpeakerChannel)]]) -> String = { m in
+            m.keys.sorted().map { k in
+                let pairs = (m[k] ?? []).map { "\($0.0):\($0.1.rawValue)" }.joined(separator: ",")
+                return "\(k)=\(pairs)"
+            }.joined(separator: "|")
+        }
+        if serialised(stereoChannelMaps) != serialised(maps) {
+            tagPublish("stereoChannel")
+            stereoChannelMaps = maps
         }
     }
 
@@ -1135,29 +1177,78 @@ public class SonosManager: ObservableObject {
     ///   - `networkError` (device unreachable)
     ///   - SOAP 701 ("invalid object" — speaker regrouped or stale
     ///     topology cache)
-    ///   - SOAP 714 ("no such resource" — the URI we sent doesn't
-    ///     resolve, often after a household auth/account hash refresh
-    ///     post network change)
     ///   - `s:Client` (generic SOAP client-side error)
     /// Two consecutive failures surface a clearer "speakers
     /// reconnecting…" message hinting that a power-cycle may be
     /// needed if the auto-rediscovery doesn't fix it.
+    ///
+    /// SOAP 714 ("no such resource") is handled separately. It used
+    /// to be bundled with the topology-stale set, but in practice the
+    /// dominant trigger is the speaker rejecting a SMAPI single-track
+    /// direct-play URI we built — the speakers are fine, the URI
+    /// shape isn't accepted (issue #42). For 714 we throw
+    /// `.serviceRejected` with an actionable message and skip both
+    /// the topology rescan and the misleading "Speaker layout has
+    /// changed" banner.
+    /// True when `uri` is a SMAPI service-track scheme that the
+    /// speaker rejects via direct `SetAVTransportURI` (UPnP 714) and
+    /// must be enqueued instead. Issue #42. Covers:
+    ///   - `x-sonos-spotify:` — Spotify single tracks
+    ///   - `x-sonos-http:` — HTTP-backed SMAPI tracks (Calm Radio sid=310,
+    ///     and any other service whose tracks resolve to this scheme)
+    ///   - `x-sonos-hls:` — HLS-backed SMAPI tracks
+    /// Deliberately excludes `x-sonosapi-stream:` (TuneIn music
+    /// stations — direct play works), `x-rincon-mp3radio:` /
+    /// `https:` (raw radio streams), and the already-queue-based
+    /// `x-rincon-queue:` / `x-rincon-cpcontainer:` URIs.
+    nonisolated static func isSMAPIServiceTrackURI(_ uri: String) -> Bool {
+        return uri.hasPrefix("x-sonos-spotify:")
+            || uri.hasPrefix("x-sonos-http:")
+            || uri.hasPrefix("x-sonos-hls:")
+    }
+
+    /// Pure classification of a SOAP fault into a `StaleDataError`.
+    /// Returns `nil` to indicate "rethrow the underlying SOAP error as-is".
+    /// Side effects (rescan trigger, user-visible banner) live in
+    /// `withStaleHandling` and key off the same code paths. Extracted
+    /// as a static helper so the mapping rules can be unit-tested
+    /// without bringing up a live `SonosManager`.
+    nonisolated static func classifySOAPFault(_ error: SOAPError, roomName: String) -> StaleDataError? {
+        switch error {
+        case .networkError:
+            return .deviceUnreachable(roomName)
+        case .soapFault(let code, _) where code == "714":
+            return .serviceRejected
+        case .soapFault(let code, _) where code == "701" || code == "s:Client":
+            return .topologyStale
+        default:
+            return nil
+        }
+    }
+
     private func withStaleHandling<T>(for roomName: String, _ action: () async throws -> T) async throws -> T {
         do {
             let result = try await action()
             consecutiveStaleFailures[roomName] = 0
             return result
         } catch let error as SOAPError {
-            switch error {
-            case .networkError:
-                handleStaleness(for: roomName, kind: "network")
-                throw StaleDataError.deviceUnreachable(roomName)
-            case .soapFault(let code, _) where code == "701" || code == "714" || code == "s:Client":
-                handleStaleness(for: roomName, kind: code)
-                throw StaleDataError.topologyStale
-            default:
+            guard let mapped = Self.classifySOAPFault(error, roomName: roomName) else {
                 throw error
             }
+            // Trigger rescan + banner for topology-like errors only.
+            // `.serviceRejected` is intentionally quiet — it's a
+            // per-track URI rejection, not a topology event.
+            switch mapped {
+            case .deviceUnreachable:
+                handleStaleness(for: roomName, kind: "network")
+            case .topologyStale:
+                if case .soapFault(let code, _) = error {
+                    handleStaleness(for: roomName, kind: code)
+                }
+            case .serviceRejected, .groupChanged:
+                break
+            }
+            throw mapped
         }
     }
 
@@ -1454,6 +1545,14 @@ public class SonosManager: ObservableObject {
 
     /// Parsed HTSatChanMapSet data: coordinator ID → [(deviceID, channel)]
     @Published public var htSatChannelMaps: [String: [(String, SpeakerChannel)]] = [:]
+
+    /// Parsed `ChannelMapSet` data — stereo-pair primaries map their
+    /// invisible right-channel sibling here (e.g. coordinator UUID →
+    /// `[(left=primary, .leftPair), (right=invisible, .rightPair)]`).
+    /// Distinct from `htSatChannelMaps` so the existing
+    /// `homeTheaterZones` consumer keeps its 5.1-only semantics
+    /// while the bug-bundle topology snapshot can fold both maps.
+    @Published public var stereoChannelMaps: [String: [(String, SpeakerChannel)]] = [:]
 
     // MARK: - Queue
 
@@ -2069,6 +2168,65 @@ public class SonosManager: ObservableObject {
                 }
                 postQueueChanged(optimisticItems: [])
             } else {
+                // Pre-strategy gate: SMAPI service-track URIs
+                // (`x-sonos-spotify:`, `x-sonos-http:`, `x-sonos-hls:`)
+                // are rejected by direct `SetAVTransportURI` with UPnP
+                // 714 regardless of which strategy would run next. The
+                // `.smapiResolveThenEmpty` resolver makes this strictly
+                // worse for Spotify — it rewrites the URI to
+                // `x-spotify://…` which the speaker also rejects, with
+                // the side effect of stripping the DIDL metadata. We
+                // route every SMAPI service track through the queue
+                // path (same as the working "Play All" button) using
+                // the ORIGINAL `uri` + `meta`, bypassing the strategy
+                // switch entirely. Issue #42.
+                if Self.isSMAPIServiceTrackURI(uri) {
+                    sonosDiagLog(.info, tag: "PLAYBACK",
+                                 "SMAPI single track via queue: \(item.title.isEmpty ? "<no title>" : item.title)",
+                                 context: [
+                                    "uri": uri,
+                                    "objectID": item.objectID,
+                                    "service": serviceLabel(for: item) ?? "unknown"
+                                 ])
+                    do {
+                        try await withStaleHandling(for: group.name) {
+                            // "Play Now" for a SMAPI single track:
+                            // match the official Sonos app — replace
+                            // the queue with this one track and play.
+                            // Sonos rejects direct `SetAVTransportURI`
+                            // for SMAPI URIs with UPnP 714, so the
+                            // queue path is the only working route.
+                            // Stop first because
+                            // `removeAllTracksFromQueue` on an
+                            // actively-playing coordinator leaves the
+                            // current track in place, which would push
+                            // the new row to position 2 and break
+                            // playback.
+                            try? await avTransport.stop(device: coordinator)
+                            try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
+                            _ = try await contentDirectory.addURIToQueue(
+                                device: coordinator, uri: uri, metadata: meta
+                            )
+                            try await avTransport.setAVTransportURI(
+                                device: coordinator,
+                                uri: "x-rincon-queue:\(coordinator.id)#0"
+                            )
+                            try await avTransport.play(device: coordinator)
+                        }
+                        postQueueChanged(optimisticItems: [])
+                        return
+                    } catch {
+                        sonosDiagLog(.error, tag: "PLAYBACK",
+                                     "SMAPI single track via queue failed for \(item.title.isEmpty ? "<no title>" : item.title)",
+                                     context: [
+                                        "uri": uri,
+                                        "error": String(describing: error),
+                                        "service": serviceLabel(for: item) ?? "unknown"
+                                     ])
+                        throw error
+                    }
+                }
+
                 // Direct playback — dispatch on the item's per-service
                 // playback strategy. Each strategy is a closed unit: one
                 // service's quirks live in one place and changes there

@@ -29,6 +29,12 @@ public enum SpeakerChannel: String, CaseIterable {
     case sub = "SW"
     case rearLeft = "LR"
     case rearRight = "RR"
+    /// Stereo-pair left primary (Sonos `ChannelMapSet` `LF,LF`). The
+    /// pair primary is a visible zone member; the right half is
+    /// invisible and only discoverable via the channel map.
+    case leftPair = "LF,LF"
+    /// Stereo-pair right (invisible) — `ChannelMapSet` `RF,RF`.
+    case rightPair = "RF,RF"
 
     public var displayName: String {
         switch self {
@@ -36,12 +42,16 @@ public enum SpeakerChannel: String, CaseIterable {
         case .sub: return "Sub"
         case .rearLeft: return "Left Rear"
         case .rearRight: return "Right Rear"
+        case .leftPair: return "Left"
+        case .rightPair: return "Right"
         }
     }
 
     public var sortOrder: Int {
         switch self {
         case .soundbar: return 0
+        case .leftPair: return 0
+        case .rightPair: return 1
         case .sub: return 1
         case .rearLeft: return 2
         case .rearRight: return 3

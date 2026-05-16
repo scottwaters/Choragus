@@ -102,7 +102,7 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
 
     var albumArtSearch: AlbumArtSearchProtocol = AlbumArtSearchService.shared
 
-    func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata) {
+    func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata, source: TrackMetadataSource) {
         groupTrackMetadata[groupID] = metadata
     }
 
@@ -137,6 +137,7 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
     func getSleepTimerRemaining(group: SonosGroup) async throws -> String { "" }
     func playURI(group: SonosGroup, uri: String, metadata: String, title: String, artist: String, stationName: String, albumArtURI: String?) async throws {}
     func playBrowseItem(_ item: BrowseItem, in group: SonosGroup) async throws {}
+    func playItemsReplacingQueue(_ items: [BrowseItem], in group: SonosGroup) async throws {}
     func pauseAll() async {}
     func resumeAll() async {}
 
@@ -174,6 +175,8 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
     func moveTrackInQueue(group: SonosGroup, from: Int, to: Int) async throws {}
     func saveQueueAsPlaylist(group: SonosGroup, title: String) async throws -> String { "SQ:1" }
     func addBrowseItemToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool, atPosition: Int) async throws -> Int { 1 }
+    @discardableResult
+    func addBrowseItemsToQueue(_ items: [BrowseItem], in group: SonosGroup, playNext: Bool) async throws -> Int { items.count }
 
     // MARK: - BrowsingServiceProtocol
 

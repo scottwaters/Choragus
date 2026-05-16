@@ -437,9 +437,18 @@ struct DiagnosticsView: View {
             )
         }
         let payloadEntries = BugReportBundle.scrubForPublicOutput(rawPayload)
+        let devicePayload = BugReportBundle.topologySnapshot(
+            groups: sonosManager.groups,
+            devices: sonosManager.devices,
+            htSatChannelMaps: sonosManager.htSatChannelMaps,
+            stereoChannelMaps: sonosManager.stereoChannelMaps
+        )
         let envelope: Data
         do {
-            envelope = try BugReportBundle.assemble(entries: payloadEntries)
+            envelope = try BugReportBundle.assemble(
+                entries: payloadEntries,
+                devices: devicePayload
+            )
         } catch {
             encryptedReportError = error.localizedDescription
             return
@@ -652,10 +661,19 @@ struct DiagnosticsView: View {
             )
         }
         let payloadEntries = BugReportBundle.scrubForPublicOutput(rawPayload)
+        let devicePayload = BugReportBundle.topologySnapshot(
+            groups: sonosManager.groups,
+            devices: sonosManager.devices,
+            htSatChannelMaps: sonosManager.htSatChannelMaps,
+            stereoChannelMaps: sonosManager.stereoChannelMaps
+        )
 
         let envelope: Data
         do {
-            envelope = try BugReportBundle.assemble(entries: payloadEntries)
+            envelope = try BugReportBundle.assemble(
+                entries: payloadEntries,
+                devices: devicePayload
+            )
         } catch {
             encryptedReportError = error.localizedDescription
             return

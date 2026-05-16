@@ -5,30 +5,44 @@
 /// maintainer can sort received bundles without decrypting first) and
 /// whose body is opaque ciphertext from `BugReportEncryptor`. The
 /// header carries non-PII context only — Choragus version, macOS
-/// version, build tag, locale, event count, timestamp.
+/// version, build tag, locale, event count, speaker count, timestamp.
 ///
 /// Wire layout (UTF-8 JSON):
 ///
 ///   {
 ///     "format": "ChoragusBugBundle",
-///     "formatVersion": 1,
+///     "formatVersion": 2,
 ///     "generatedAt": "2026-05-02T12:00:00Z",
 ///     "choragusVersion": "4.x",
 ///     "macOSVersion": "26.3.1",
 ///     "buildTag": "B2154",
 ///     "bundleId": "com.choragus.app",
 ///     "eventCount": 47,
+///     "speakerCount": 5,
 ///     "locale": "en_AU",
-///     "encryptedBody": "<base64 of BugReportEncryptor.wrap(events.json)>"
+///     "encryptedBody": "<base64 of BugReportEncryptor.wrap(body.json)>"
 ///   }
 ///
-/// The `encryptedBody` decrypts to a UTF-8 JSON array:
+/// For format v2, `encryptedBody` decrypts to a UTF-8 JSON object:
 ///
-///   [
-///     { "timestamp": "...", "level": "ERROR", "tag": "SOAP",
-///       "message": "...", "context": "..." },
-///     ...
-///   ]
+///   {
+///     "entries": [
+///       { "timestamp": "...", "level": "ERROR", "tag": "SOAP",
+///         "message": "...", "context": "..." },
+///       ...
+///     ],
+///     "devices": [
+///       { "roomName": "Kitchen", "modelName": "Sonos One",
+///         "modelNumber": "S18", "softwareVersion": "80.1-58220",
+///         "systemVersion": "S2", "isCoordinator": true,
+///         "groupCoordinatorRoom": "Kitchen",
+///         "isPortable": false, "isAtmosCapable": false },
+///       ...
+///     ]
+///   }
+///
+/// Format v1 envelopes (no devices section) decode as the bare
+/// `[EntryPayload]` array; the decoder branches on `formatVersion`.
 ///
 /// Wire format version is bumped whenever either layer's schema
 /// changes.
@@ -52,7 +66,7 @@ public enum BugReportBundle {
     }
 
     public static let formatTag = "ChoragusBugBundle"
-    public static let formatVersion: Int = 1
+    public static let formatVersion: Int = 2
 
     /// Plain-Swift representation of one diagnostic entry as it
     /// appears inside the encrypted body. Intentionally a flat dict
@@ -75,10 +89,53 @@ public enum BugReportBundle {
         }
     }
 
+    /// Per-speaker snapshot included alongside the event list. Mirrors
+    /// what Sonos's official "About My System" page shows, minus the
+    /// fields the export-tier redactor strips for every other payload
+    /// (IP, RINCON UUID, household ID). Grouping is described by the
+    /// `groupCoordinatorRoom` string — the reader buckets devices that
+    /// share the same coordinator room into one group, matching the
+    /// way Sonos's own UI labels groups by the coordinator's name.
+    public struct DevicePayload: Codable {
+        public let roomName: String
+        public let modelName: String
+        public let modelNumber: String
+        public let softwareVersion: String
+        public let systemVersion: String      // "S1" / "S2" / "Unknown"
+        public let isCoordinator: Bool
+        public let groupCoordinatorRoom: String
+        public let isPortable: Bool
+        public let isAtmosCapable: Bool
+        /// Surround/sub channel role for bonded home-theater satellites
+        /// (Sonos `HTSatChanMapSet`). Values mirror
+        /// `SpeakerChannel.displayName`: "Soundbar", "Sub", "Left Rear",
+        /// "Right Rear". `nil` for free-standing zones and regular
+        /// (non-bonded) group members. Optional so legacy bundles that
+        /// pre-date the field still decode.
+        public let surroundRole: String?
+
+        public init(roomName: String, modelName: String, modelNumber: String,
+                    softwareVersion: String, systemVersion: String,
+                    isCoordinator: Bool, groupCoordinatorRoom: String,
+                    isPortable: Bool, isAtmosCapable: Bool,
+                    surroundRole: String? = nil) {
+            self.roomName = roomName
+            self.modelName = modelName
+            self.modelNumber = modelNumber
+            self.softwareVersion = softwareVersion
+            self.systemVersion = systemVersion
+            self.isCoordinator = isCoordinator
+            self.groupCoordinatorRoom = groupCoordinatorRoom
+            self.isPortable = isPortable
+            self.isAtmosCapable = isAtmosCapable
+            self.surroundRole = surroundRole
+        }
+    }
+
     /// Plaintext envelope read by the maintainer-side decrypt CLI
     /// before any unwrap happens. Lets the maintainer sort received
-    /// bundles by version / macOS / timestamp without holding the
-    /// private key locally.
+    /// bundles by version / macOS / timestamp / topology size without
+    /// holding the private key locally.
     public struct Header: Codable {
         public let format: String
         public let formatVersion: Int
@@ -88,8 +145,168 @@ public enum BugReportBundle {
         public let buildTag: String?
         public let bundleId: String?
         public let eventCount: Int
+        public let speakerCount: Int
         public let locale: String?
         public let encryptedBody: String   // base64
+    }
+
+    /// Body shape for format v2: events plus a topology snapshot. The
+    /// reader picks this shape when `Header.formatVersion == 2`. v1
+    /// bodies are a bare `[EntryPayload]` array — the decoder branches
+    /// on version so older bundles still open.
+    public struct BodyV2: Codable {
+        public let entries: [EntryPayload]
+        public let devices: [DevicePayload]
+
+        public init(entries: [EntryPayload], devices: [DevicePayload]) {
+            self.entries = entries
+            self.devices = devices
+        }
+    }
+
+    /// Builds the per-speaker snapshot included in v2 bodies. Iterates
+    /// `groups` for user-visible zones, then folds in bonded
+    /// home-theater satellites (Sub, surrounds) AND stereo-pair right
+    /// halves — both of those classes of speaker exist in `devices`
+    /// but are excluded from `groups[*].members` because Sonos marks
+    /// them invisible. Without the fold, a 5.1 (Arc + Sub + 2× Era)
+    /// looks like a single Arc, and a stereo-paired Bedroom looks
+    /// like a single speaker.
+    ///
+    /// Both `htSatChannelMaps` and `stereoChannelMaps` are accepted —
+    /// HT maps are keyed by the soundbar coordinator UUID; stereo
+    /// maps are keyed by the visible primary's UUID (which may differ
+    /// from the group coordinator if a stereo pair is soft-grouped
+    /// into a larger group).
+    ///
+    /// Walks both the bare ZonePlayer record and the `_MR`
+    /// MediaRenderer sibling when picking model / firmware fields
+    /// because the bare record carries empty strings on some firmware
+    /// (same lookup pattern as `SonosGroup.isAtmosCapable`).
+    public static func topologySnapshot(
+        groups: [SonosGroup],
+        devices: [String: SonosDevice],
+        htSatChannelMaps: [String: [(String, SpeakerChannel)]] = [:],
+        stereoChannelMaps: [String: [(String, SpeakerChannel)]] = [:]
+    ) -> [DevicePayload] {
+        var out: [DevicePayload] = []
+        for group in groups {
+            let coordinatorRoom = group.coordinator?.roomName ?? group.name
+
+            // Merge every bonded entry that lives under any of this
+            // group's visible members (covers the case where a stereo
+            // pair is soft-grouped under a different coordinator) plus
+            // any HT map at the group coordinator.
+            var bondedMap: [(String, SpeakerChannel)] = htSatChannelMaps[group.coordinatorID] ?? []
+            for member in group.members {
+                if let stereo = stereoChannelMaps[member.id] {
+                    bondedMap.append(contentsOf: stereo)
+                }
+            }
+
+            // Role lookup derived directly from the channel — works for
+            // every variant (Soundbar / Sub / Left/Right Rear /
+            // Left / Right). De-duplicates if a device appears in
+            // both maps (shouldn't happen on real Sonos hardware but
+            // keeps the snapshot deterministic if it ever does).
+            var roleByID: [String: String] = [:]
+            for (id, channel) in bondedMap {
+                roleByID[id] = channel.displayName
+            }
+
+            // Visible group members (coordinator + soft-grouped zones +
+            // stereo-pair primaries — primaries are visible).
+            for member in group.members {
+                out.append(buildDevicePayload(
+                    member,
+                    devices: devices,
+                    coordinatorID: group.coordinatorID,
+                    coordinatorRoom: coordinatorRoom,
+                    surroundRole: roleByID[member.id]
+                ))
+            }
+
+            // Invisible bonded satellites + stereo-pair right halves.
+            // Pulled via the channel map because Sonos excludes them
+            // from `group.members`. De-dupe against IDs we already
+            // emitted.
+            let emittedIDs = Set(group.members.map(\.id))
+            var seen = emittedIDs
+            for (satID, channel) in bondedMap where !seen.contains(satID) {
+                seen.insert(satID)
+                guard let satDevice = devices[satID] else { continue }
+                out.append(buildDevicePayload(
+                    satDevice,
+                    devices: devices,
+                    coordinatorID: group.coordinatorID,
+                    coordinatorRoom: coordinatorRoom,
+                    surroundRole: channel.displayName
+                ))
+            }
+
+            // Fallback for invisible bonded members not covered by the
+            // channel maps. The HT/stereo channel maps live in memory
+            // only and aren't persisted to the topology cache, so on a
+            // cold launch they're empty until the first discovery cycle
+            // runs `parseHTChannelMaps` / `parseStereoChannelMaps`.
+            // Without this fallback, a bundle captured in that window
+            // misses every bonded sub/surround/right-pair speaker
+            // (issue raised against B1208 — fresh launch dropped the
+            // entire TV surround set from the snapshot). The fallback
+            // walks `devices` for anything carrying this group's
+            // `groupID` that we haven't already emitted; those are
+            // exactly the invisible bonded members. `_MR` MediaRenderer
+            // sub-records are skipped (parsing artefact, not a
+            // physical speaker).
+            for (id, dev) in devices
+            where dev.groupID == group.id
+                && !seen.contains(id)
+                && !id.hasSuffix("_MR")
+            {
+                seen.insert(id)
+                out.append(buildDevicePayload(
+                    dev,
+                    devices: devices,
+                    coordinatorID: group.coordinatorID,
+                    coordinatorRoom: coordinatorRoom,
+                    surroundRole: "Bonded"
+                ))
+            }
+        }
+        return out
+    }
+
+    private static func buildDevicePayload(
+        _ device: SonosDevice,
+        devices: [String: SonosDevice],
+        coordinatorID: String,
+        coordinatorRoom: String,
+        surroundRole: String?
+    ) -> DevicePayload {
+        let mr = devices["\(device.id)_MR"]
+        let modelName = !device.modelName.isEmpty
+            ? device.modelName
+            : (mr?.modelName ?? "")
+        let modelNumber = !device.modelNumber.isEmpty
+            ? device.modelNumber
+            : (mr?.modelNumber ?? "")
+        let softwareVersion = !device.softwareVersion.isEmpty
+            ? device.softwareVersion
+            : (mr?.softwareVersion ?? "")
+        let portable = device.isPortable || (mr?.isPortable ?? false)
+        let atmos = device.isAtmosCapable || (mr?.isAtmosCapable ?? false)
+        return DevicePayload(
+            roomName: device.roomName,
+            modelName: modelName,
+            modelNumber: modelNumber,
+            softwareVersion: softwareVersion,
+            systemVersion: device.systemVersion.rawValue,
+            isCoordinator: device.id == coordinatorID,
+            groupCoordinatorRoom: coordinatorRoom,
+            isPortable: portable,
+            isAtmosCapable: atmos,
+            surroundRole: surroundRole
+        )
     }
 
     /// Returns a new entry list with `DiagnosticsRedactor.scrubForPublicOutput`
@@ -115,17 +332,23 @@ public enum BugReportBundle {
         }
     }
 
-    /// Builds the envelope: serialises `entries` as JSON, runs the
-    /// JSON through `BugReportEncryptor.wrap(...)`, base64-encodes the
-    /// result, and wraps in the JSON header. Returns the file bytes
-    /// the caller writes to disk.
-    public static func assemble(entries: [EntryPayload]) throws -> Data {
-        // 1. Encode the entry list as compact JSON.
+    /// Builds the envelope: serialises `entries` + `devices` as a v2
+    /// body JSON object, runs the JSON through
+    /// `BugReportEncryptor.wrap(...)`, base64-encodes the result, and
+    /// wraps in the JSON header. Returns the file bytes the caller
+    /// writes to disk.
+    ///
+    /// `devices` defaults to empty so callers that don't yet have a
+    /// topology snapshot (or genuinely want to omit it) still produce
+    /// a valid v2 envelope.
+    public static func assemble(entries: [EntryPayload],
+                                devices: [DevicePayload] = []) throws -> Data {
+        // 1. Encode the v2 body object as compact JSON.
         let bodyEncoder = JSONEncoder()
         bodyEncoder.outputFormatting = [.sortedKeys]
         let bodyJSON: Data
         do {
-            bodyJSON = try bodyEncoder.encode(entries)
+            bodyJSON = try bodyEncoder.encode(BodyV2(entries: entries, devices: devices))
         } catch {
             throw Error.bodyEncoding
         }
@@ -143,6 +366,7 @@ public enum BugReportBundle {
             buildTag: Bundle.main.infoDictionary?["ChoragusBuildTag"] as? String,
             bundleId: Bundle.main.bundleIdentifier,
             eventCount: entries.count,
+            speakerCount: devices.count,
             locale: Locale.current.identifier,
             encryptedBody: ciphertext.base64EncodedString()
         )
@@ -170,11 +394,16 @@ public enum BugReportBundle {
     }
 
     /// Full read + unwrap. Called by the maintainer-side CLI with the
-    /// matching private key. Returns the entry list plus the header
-    /// metadata.
+    /// matching private key. Returns the entry list, the topology
+    /// snapshot, and the header metadata.
+    ///
+    /// Branches on `Header.formatVersion`: v2 bodies decode as
+    /// `BodyV2` (entries + devices); v1 bodies decode as a bare
+    /// `[EntryPayload]` array with an empty `devices` list so legacy
+    /// bundles still open.
     public static func decode(envelopeBytes: Data,
                               privateKey: Curve25519KeyAgreementPrivateKeyProtocol) throws
-        -> (header: Header, entries: [EntryPayload])
+        -> (header: Header, entries: [EntryPayload], devices: [DevicePayload])
     {
         let header = try readHeader(envelopeBytes)
         guard header.format == formatTag else { throw Error.envelopeMalformed }
@@ -184,8 +413,18 @@ public enum BugReportBundle {
         let bodyJSON = try privateKey.unwrap(envelope: ciphertext)
         let decoder = JSONDecoder()
         do {
-            let entries = try decoder.decode([EntryPayload].self, from: bodyJSON)
-            return (header, entries)
+            switch header.formatVersion {
+            case 1:
+                let entries = try decoder.decode([EntryPayload].self, from: bodyJSON)
+                return (header, entries, [])
+            case 2:
+                let body = try decoder.decode(BodyV2.self, from: bodyJSON)
+                return (header, body.entries, body.devices)
+            default:
+                throw Error.envelopeMalformed
+            }
+        } catch let err as Error {
+            throw err
         } catch {
             throw Error.bodyMalformed
         }

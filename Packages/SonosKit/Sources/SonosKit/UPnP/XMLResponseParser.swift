@@ -135,6 +135,23 @@ public struct ZoneMemberData {
     public let port: Int
     public let isInvisible: Bool
     public let htSatChanMapSet: String
+    /// Sonos `ChannelMapSet` attribute. Populated for stereo-pair
+    /// primaries (e.g. `RINCON_A:LF,LF;RINCON_B:RF,RF`). Distinct
+    /// from `htSatChanMapSet` which carries 5.1 surround mappings.
+    public let channelMapSet: String
+
+    public init(uuid: String, location: String, zoneName: String,
+                ip: String, port: Int, isInvisible: Bool,
+                htSatChanMapSet: String, channelMapSet: String = "") {
+        self.uuid = uuid
+        self.location = location
+        self.zoneName = zoneName
+        self.ip = ip
+        self.port = port
+        self.isInvisible = isInvisible
+        self.htSatChanMapSet = htSatChanMapSet
+        self.channelMapSet = channelMapSet
+    }
 }
 
 public struct DIDLItem {
@@ -244,7 +261,8 @@ private class ZoneGroupParser: NSObject, XMLParserDelegate {
             }
 
             let htSatMap = attributes["HTSatChanMapSet"] ?? ""
-            let member = ZoneMemberData(uuid: uuid, location: location, zoneName: zoneName, ip: ip, port: port, isInvisible: invisible, htSatChanMapSet: htSatMap)
+            let chanMap = attributes["ChannelMapSet"] ?? ""
+            let member = ZoneMemberData(uuid: uuid, location: location, zoneName: zoneName, ip: ip, port: port, isInvisible: invisible, htSatChanMapSet: htSatMap, channelMapSet: chanMap)
             currentGroup?.members.append(member)
 
         case "Satellite":
@@ -254,6 +272,7 @@ private class ZoneGroupParser: NSObject, XMLParserDelegate {
             let zoneName = attributes["ZoneName"] ?? ""
             let invisible = attributes["Invisible"] == "1"
             let htSatMap = attributes["HTSatChanMapSet"] ?? ""
+            let chanMap = attributes["ChannelMapSet"] ?? ""
 
             var ip = ""
             var port = SonosProtocol.defaultPort
@@ -262,7 +281,7 @@ private class ZoneGroupParser: NSObject, XMLParserDelegate {
                 port = url.port ?? SonosProtocol.defaultPort
             }
 
-            let satellite = ZoneMemberData(uuid: uuid, location: location, zoneName: zoneName, ip: ip, port: port, isInvisible: invisible, htSatChanMapSet: htSatMap)
+            let satellite = ZoneMemberData(uuid: uuid, location: location, zoneName: zoneName, ip: ip, port: port, isInvisible: invisible, htSatChanMapSet: htSatMap, channelMapSet: chanMap)
             currentGroup?.members.append(satellite)
 
         default:
