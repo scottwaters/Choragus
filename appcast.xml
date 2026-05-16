@@ -9,29 +9,29 @@
     <language>en</language>
     <item>
       <title>Version 4.9.1</title>
-      <pubDate>Sat, 16 May 2026 15:12:58 +1000</pubDate>
+      <pubDate>Sat, 16 May 2026 16:36:17 +1000</pubDate>
       <sparkle:version>27</sparkle:version>
       <sparkle:shortVersionString>4.9.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:releaseNotesLink>https://github.com/scottwaters/Choragus/releases/tag/v4.9.1</sparkle:releaseNotesLink>
       <enclosure
         url="https://github.com/scottwaters/Choragus/releases/download/v4.9.1/Choragus.dmg"
-        length="23838397"
+        length="23838713"
         type="application/x-apple-diskimage"
-        sparkle:edSignature="qM0SyJD9o2wkxPdMVcNK2zYjXQyo5Apf7zA8LCx1uf6wDcgx2LwXHui62XIlBW61ahJL9m+c779w+xFyvsIyAQ=="/>
+        sparkle:edSignature="xJAqnBNgqk7VpJSsWKidYltO5b96srFtKSSIziQwmt8exNJvfWwzI2lshRii21m9n6PjS7vm99VKHxgiovv5CQ=="/>
     </item>
     <item>
       <title>Version 4.9</title>
-      <pubDate>Fri, 15 May 2026 22:57:18 +1000</pubDate>
+      <pubDate>Sat, 16 May 2026 16:00:04 +1000</pubDate>
       <sparkle:version>26</sparkle:version>
       <sparkle:shortVersionString>4.9</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:releaseNotesLink>https://github.com/scottwaters/Choragus/releases/tag/v4.9</sparkle:releaseNotesLink>
       <enclosure
         url="https://github.com/scottwaters/Choragus/releases/download/v4.9/Choragus.dmg"
-        length="23751700"
+        length="23791419"
         type="application/x-apple-diskimage"
-        sparkle:edSignature="bv82cNWS72W4KxTh0dROXfrCbJrYAFJfXQHmWRG5i1dwyWHt5ByZwi5dy86XxqhCUEiDrZSF2mDwzfJqQMJUCA=="/>
+        sparkle:edSignature="nNA4Q7yF4052JUZxUFT/gvXeRtIjRDGDfY5Nw2gREG9Expd4mAXqyEuCNKPjjJ2y5OKfyVjA3uUhksJl4R11AQ=="/>
     </item>
 <item>
       <title>Version 4.8</title>
