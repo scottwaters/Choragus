@@ -9,7 +9,7 @@
     <language>en</language>
     <item>
       <title>Version 4.11</title>
-      <pubDate>Sat, 06 Jun 2026 19:17:32 +1000</pubDate>
+      <pubDate>Sat, 06 Jun 2026 21:29:12 +1000</pubDate>
       <sparkle:version>30</sparkle:version>
       <sparkle:shortVersionString>4.11</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
@@ -27,9 +27,9 @@
 </ul>]]></description>
       <enclosure
         url="https://github.com/scottwaters/Choragus/releases/download/v4.11/Choragus.dmg"
-        length="25007368"
+        length="25007336"
         type="application/x-apple-diskimage"
-        sparkle:edSignature="VMGFEUm6foO9cEr8AaSmumRJF+wdcf5GWLP1/sdNngl1XfyueyJboMJpE+UTslM5vea/J9Knth0NFGbLj4omCQ=="/>
+        sparkle:edSignature="617OYxKCnkEIQo7j1woHwJ7G5vfjTE/TIrDmpjad+L6d0SA1PdAW74SSnbU+3jCKXMZsbufL89ubE/zzQGiTBg=="/>
     </item>
     <item>
       <title>Version 4.10</title>
