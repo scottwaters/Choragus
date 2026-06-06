@@ -13,7 +13,7 @@
       <sparkle:version>30</sparkle:version>
       <sparkle:shortVersionString>4.11</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px/1.45 -apple-system,Helvetica,Arial,sans-serif;color:#1d1d1f;margin:8px 10px}ul{padding-left:20px;margin:8px 0}li{margin:6px 0}p{margin:8px 0}strong{font-weight:600}</style>
+      <description><![CDATA[<style>:root{color-scheme:light dark}body{font:13px/1.45 -apple-system,Helvetica,Arial,sans-serif;margin:8px 10px;color:#1d1d1f}@media(prefers-color-scheme:dark){body{color:#f5f5f7}}ul{padding-left:20px;margin:8px 0}li{margin:6px 0}p{margin:8px 0}strong{font-weight:600}a{color:#0a84ff}</style>
 <p>A feature release — three new services, save-queue-to-playlist, history actions, and a batch of playback and metadata fixes.</p>
 <ul>
 <li><strong>TIDAL is a connectable service now.</strong> Browse, search, play, and queue TIDAL with artwork, the same as any other service.</li>
