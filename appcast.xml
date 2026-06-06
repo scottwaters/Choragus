@@ -8,6 +8,30 @@
     <description>Auto-update feed for Choragus, the Sonos controller for macOS.</description>
     <language>en</language>
     <item>
+      <title>Version 4.11</title>
+      <pubDate>Sat, 06 Jun 2026 19:17:32 +1000</pubDate>
+      <sparkle:version>30</sparkle:version>
+      <sparkle:shortVersionString>4.11</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px/1.45 -apple-system,Helvetica,Arial,sans-serif;color:#1d1d1f;margin:8px 10px}ul{padding-left:20px;margin:8px 0}li{margin:6px 0}p{margin:8px 0}strong{font-weight:600}</style>
+<p>A feature release — three new services, save-queue-to-playlist, history actions, and a batch of playback and metadata fixes.</p>
+<ul>
+<li><strong>TIDAL is a connectable service now.</strong> Browse, search, play, and queue TIDAL with artwork, the same as any other service.</li>
+<li><strong>Explore Suno.ai — AI-generated music, subscription-free, without leaving the app.</strong> A first attempt at bringing a non-Sonos service directly into the Sonos system. A built-in browser plays public Suno songs and playlists to your speakers with cover art, genre, artist, and lyrics. Toggle it on under Settings → Music Services — no auth required.</li>
+<li><strong>SomaFM connects and plays.</strong> The anonymous SomaFM stations now browse and play.</li>
+<li><strong>Save the queue as an Apple Music playlist.</strong> One button saves the current queue to a Sonos playlist — or to an Apple Music playlist when every track is from Apple Music.</li>
+<li><strong>Act on your history with a right-click.</strong> Play, Play Next, or Add to Queue straight from any history entry, and filter history by room more precisely.</li>
+<li><strong>Fixed-volume speakers behave.</strong> Speakers set to fixed or line-out volume no longer show a slider that does nothing, and an active line-in shows which speaker it comes from.</li>
+<li><strong>Refresh your local music library from Settings.</strong> Re-scan your NAS or shared-folder music under Music Services; it runs on both S1 and S2 systems automatically.</li>
+<li><strong>Right details, right track.</strong> Apple Music tracks show the correct title, artist, and art instead of leftover details from the previous song, and replaying from history plays the track you picked. The queue is resizable and shows each track's source, and Settings plus the Apple Music browser are more fully translated.</li>
+</ul>]]></description>
+      <enclosure
+        url="https://github.com/scottwaters/Choragus/releases/download/v4.11/Choragus.dmg"
+        length="25007368"
+        type="application/x-apple-diskimage"
+        sparkle:edSignature="VMGFEUm6foO9cEr8AaSmumRJF+wdcf5GWLP1/sdNngl1XfyueyJboMJpE+UTslM5vea/J9Knth0NFGbLj4omCQ=="/>
+    </item>
+    <item>
       <title>Version 4.10</title>
       <pubDate>Fri, 22 May 2026 18:01:48 +1000</pubDate>
       <sparkle:version>29</sparkle:version>
