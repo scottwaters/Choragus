@@ -20,7 +20,6 @@ final class WindowManager {
     private var playHistoryWindow: NSWindow?
     private var homeTheaterWindow: NSWindow?
     private var helpWindow: NSWindow?
-    private var forFunWindow: NSWindow?
     private var karaokeLyricsWindow: NSWindow?
     private var diagnosticsWindow: NSWindow?
     private var clubVisWindow: NSWindow?
@@ -101,11 +100,58 @@ final class WindowManager {
         helpWindow = window
     }
 
-    /// Visualisations window is offline while `ForFunView.swift` is
-    /// gitignored for rework. The unused `forFunWindow` ivar above and
-    /// the menu observer in `ContentView` are kept dormant so wiring
-    /// it back on is a one-line restoration.
-    func openForFun() { /* feature paused */ }
+    // MARK: - Queue Library
+
+    private var queueLibraryWindow: NSWindow?
+    private static let queueLibraryWindowIdentifier = NSUserInterfaceItemIdentifier("ChoragusQueueLibrary")
+
+    @discardableResult
+    func openQueueLibraryForActiveGroup() -> Bool {
+        guard let manager = sonosManager else { return false }
+        let lastID = UserDefaults.standard.string(forKey: UDKey.lastSelectedGroupID)
+        let group = manager.groups.first(where: { $0.id == lastID }) ?? manager.groups.first
+        guard let group else { return false }
+        openQueueLibrary(group: group)
+        return true
+    }
+
+    func openQueueLibrary(group: SonosGroup) {
+        if let existing = queueLibraryWindow,
+           existing.isVisible, existing.isOnActiveSpace, !existing.isMiniaturized {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+        if let stale = queueLibraryWindow {
+            stale.setFrameAutosaveName("")
+            stale.contentViewController = nil
+            stale.close()
+            queueLibraryWindow = nil
+        }
+        for win in NSApp.windows where win.identifier == Self.queueLibraryWindowIdentifier {
+            win.setFrameAutosaveName("")
+            win.contentViewController = nil
+            win.close()
+        }
+        guard let manager = sonosManager else { return }
+
+        let view = QueueLibraryWindow(manager: manager, group: group)
+            .environmentObject(manager)
+        let window = createWindow(title: L10n.queueLibraryWindowTitle, content: view,
+                                  width: 1040, height: 720)
+        window.identifier = Self.queueLibraryWindowIdentifier
+        window.contentMinSize = NSSize(width: 720, height: 480)
+        window.setFrameAutosaveName("ChoragusQueueLibraryWindow")
+        queueLibraryWindow = window
+
+        var token: NSObjectProtocol?
+        token = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { [weak self, weak window] _ in
+            if self?.queueLibraryWindow === window { self?.queueLibraryWindow = nil }
+            window?.contentViewController = nil
+            if let token { NotificationCenter.default.removeObserver(token) }
+        }
+    }
 
     /// Club Vis popout — tiled poster wall for the active group.
     /// Opens at 1920×1080 logical (16:9 locked) and fullscreens cleanly

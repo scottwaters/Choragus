@@ -55,6 +55,23 @@ struct AppleMusicPlayHelper {
         let tracks = await provider.playlistTracks(playlistID: playlistID)
         await addAllToQueue(tracks, playNext: playNext)
     }
+
+    /// Resolves an album's tracks to Sonos browse items (for adding to a
+    /// Choragus-local queue).
+    func browseItems(albumID: String) async -> [BrowseItem] {
+        var out: [BrowseItem] = []
+        for t in await provider.albumTracks(albumID: albumID) {
+            if let bi = await buildBrowseItem(t) { out.append(bi) }
+        }
+        return out
+    }
+    func browseItems(playlistID: String) async -> [BrowseItem] {
+        var out: [BrowseItem] = []
+        for t in await provider.playlistTracks(playlistID: playlistID) {
+            if let bi = await buildBrowseItem(t) { out.append(bi) }
+        }
+        return out
+    }
     func playTopSongsOf(_ artistID: String) async {
         let tracks = await provider.artistTopSongs(artistID: artistID, limit: 25)
         await playAll(tracks)
@@ -125,7 +142,12 @@ struct AppleMusicPlayHelper {
         // valid-looking DIDL that Sonos accepted into the queue but
         // refused to play (silent transport-no-op observed 2026-05-14).
         let serviceType = MusicServiceCatalog.shared.rinconServiceType(forSid: sid)
-        let uri = "x-sonos-http:song%3a\(catalogID).mp4?sid=\(sid)&flags=8224&sn=\(sn)"
+        // HLS-static form — byte-identical to what the official Sonos app
+        // enqueues. The legacy `x-sonos-http:song:<id>.mp4` form made the
+        // speaker validate every track against Apple AT ENQUEUE TIME
+        // (~0.85 s/track, measured 13–15 s per 16-track chunk); hls-static
+        // defers resolution to play time, so enqueue is near-instant.
+        let uri = "x-sonosapi-hls-static:song%3a\(catalogID)?sid=\(sid)&flags=8232&sn=\(sn)"
         let metadata = buildDIDL(catalogID: catalogID, albumID: albumID, track: track, serviceType: serviceType)
         sonosDiagLog(.info, tag: "APPLE_MUSICKIT",
                      "buildBrowseItem: \(track.title)",
@@ -238,7 +260,7 @@ struct AppleMusicPlayHelper {
     private func buildDIDL(catalogID: String, albumID: String, track: AppleMusicTrack, serviceType: Int) -> String {
         let id = catalogID
         return """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="00032020song%3a\(id)" parentID="0004206calbum%3a\(albumID)" restricted="true"><dc:title>\(escape(track.title))</dc:title><dc:creator>\(escape(track.artist))</dc:creator><upnp:album>\(escape(track.album))</upnp:album><upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON\(serviceType)_X_#Svc\(serviceType)-0-Token</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="00032020song%3a\(id)" parentID="0004206calbum%3a\(albumID)" restricted="true"><dc:title>\(escape(track.title))</dc:title><dc:creator>\(escape(track.artist))</dc:creator><upnp:album>\(escape(track.album))</upnp:album><upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">RINCON_AssociatedZPUDN</desc></item></DIDL-Lite>
         """
     }
 
@@ -470,6 +492,27 @@ struct AppleMusicTrackRow: View {
             Button(L10n.playNow) { Task { await helper.playNow(track) } }
             Button(L10n.playNext) { Task { await helper.playNext(track) } }
             Button(L10n.addToQueue) { Task { await helper.addToQueue(track) } }
+            Divider()
+            Menu {
+                Button(L10n.newQueueEllipsis) {
+                    Task {
+                        guard let bi = await helper.buildBrowseItem(track) else { return }
+                        _ = helper.sonosManager.createChoragusQueue(items: [bi], name: track.title.isEmpty ? "New Queue" : track.title)
+                    }
+                }
+                let queues = helper.sonosManager.localSavedQueues()
+                if !queues.isEmpty {
+                    Divider()
+                    ForEach(queues) { q in
+                        Button(q.name) {
+                            Task {
+                                guard let bi = await helper.buildBrowseItem(track) else { return }
+                                _ = helper.sonosManager.addToChoragusQueue(items: [bi], queueID: q.id)
+                            }
+                        }
+                    }
+                }
+            } label: { Label("Add to Choragus Queue", systemImage: "internaldrive.fill") }
             #if DEBUG
             AddToTestFixturesMenuItem(service: "apple-music") {
                 await helper.buildBrowseItem(track)
@@ -553,6 +596,28 @@ func albumContextMenu(album: AppleMusicAlbum, helper: AppleMusicPlayHelper) -> s
             helper.tracker.run(L10n.amAddingToQueue(album.title)) { await helper.addAllInAlbumToQueue(album.id, playNext: false) }
         }
         .disabled(!helper.canPlay)
+        Divider()
+        Menu {
+            Button(L10n.newQueueEllipsis) {
+                Task {
+                    let items = await helper.browseItems(albumID: album.id)
+                    _ = helper.sonosManager.createChoragusQueue(items: items, name: album.title.isEmpty ? "New Queue" : album.title)
+                }
+            }
+            let queues = helper.sonosManager.localSavedQueues()
+            if !queues.isEmpty {
+                Divider()
+                ForEach(queues) { q in
+                    Button(q.name) {
+                        Task {
+                            let items = await helper.browseItems(albumID: album.id)
+                            _ = helper.sonosManager.addToChoragusQueue(items: items, queueID: q.id)
+                        }
+                    }
+                }
+            }
+        } label: { Label("Add to Choragus Queue", systemImage: "internaldrive.fill") }
+        .disabled(!helper.canPlay)
     }
     #if DEBUG
     AddToTestFixturesMenuItem(service: "apple-music") {
@@ -583,6 +648,28 @@ func playlistContextMenu(playlist: AppleMusicPlaylist, helper: AppleMusicPlayHel
         Button(L10n.addToQueue) {
             helper.tracker.run(L10n.amAddingToQueue(playlist.name)) { await helper.addAllInPlaylistToQueue(playlist.id, playNext: false) }
         }
+        .disabled(!helper.canPlay)
+        Divider()
+        Menu {
+            Button(L10n.newQueueEllipsis) {
+                Task {
+                    let items = await helper.browseItems(playlistID: playlist.id)
+                    _ = helper.sonosManager.createChoragusQueue(items: items, name: playlist.name.isEmpty ? "New Queue" : playlist.name)
+                }
+            }
+            let queues = helper.sonosManager.localSavedQueues()
+            if !queues.isEmpty {
+                Divider()
+                ForEach(queues) { q in
+                    Button(q.name) {
+                        Task {
+                            let items = await helper.browseItems(playlistID: playlist.id)
+                            _ = helper.sonosManager.addToChoragusQueue(items: items, queueID: q.id)
+                        }
+                    }
+                }
+            }
+        } label: { Label("Add to Choragus Queue", systemImage: "internaldrive.fill") }
         .disabled(!helper.canPlay)
     }
     #if DEBUG

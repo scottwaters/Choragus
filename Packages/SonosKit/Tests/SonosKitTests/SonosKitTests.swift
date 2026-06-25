@@ -28,6 +28,41 @@ final class XMLResponseParserTests: XCTestCase {
         XCTAssertEqual(groups[1].members[0].zoneName, "Bedroom")
     }
 
+    /// Issue #63: a room named "Foo & Bar" arrives as `ZoneName="Foo &amp; Bar"`
+    /// (valid XML — the SOAP layer already unescaped the outer encoding).
+    /// A second unescape produced a bare `&`, the parser rejected the whole
+    /// document, and every speaker in the household vanished.
+    func testParseZoneGroupStateWithAmpersandInRoomName() {
+        let xml = """
+        <ZoneGroups>
+          <ZoneGroup Coordinator="RINCON_0001" ID="group1">
+            <ZoneGroupMember UUID="RINCON_0001" Location="http://192.168.1.10:1400/xml/device_description.xml" ZoneName="Bed &amp; Breakfast" />
+            <ZoneGroupMember UUID="RINCON_0002" Location="http://192.168.1.11:1400/xml/device_description.xml" ZoneName="Kitchen" />
+          </ZoneGroup>
+        </ZoneGroups>
+        """
+        let groups = XMLResponseParser.parseZoneGroupState(xml)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].members.count, 2)
+        XCTAssertEqual(groups[0].members[0].zoneName, "Bed & Breakfast")
+        XCTAssertEqual(groups[0].members[1].zoneName, "Kitchen")
+    }
+
+    /// Defensive: genuinely-bare `&` from malformed firmware output must not
+    /// zero the topology either.
+    func testParseZoneGroupStateWithBareAmpersand() {
+        let xml = """
+        <ZoneGroups>
+          <ZoneGroup Coordinator="RINCON_0001" ID="group1">
+            <ZoneGroupMember UUID="RINCON_0001" Location="http://192.168.1.10:1400/xml/device_description.xml" ZoneName="Bed & Breakfast" />
+          </ZoneGroup>
+        </ZoneGroups>
+        """
+        let groups = XMLResponseParser.parseZoneGroupState(xml)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].members.first?.zoneName, "Bed & Breakfast")
+    }
+
     func testParseDIDLMetadata() {
         let didl = """
         <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
@@ -344,5 +379,153 @@ final class EventSubscriptionTests: XCTestCase {
             subscribedAt: Date().addingTimeInterval(-10)
         )
         XCTAssertTrue(sub.isExpired)
+    }
+}
+
+@MainActor
+final class QueueHistoryStoreTests: XCTestCase {
+    private func makeStore() -> QueueHistoryStore {
+        let defaults = UserDefaults(suiteName: "QueueHistoryTests-\(UUID().uuidString)")!
+        return QueueHistoryStore(defaults: defaults)
+    }
+
+    private func snap(_ id: String, _ count: Int = 1) -> QueueSnapshot {
+        QueueSnapshot(objectID: id, savedAt: Date(timeIntervalSince1970: TimeInterval(count)),
+                      trackCount: count, summary: "\(count) tracks")
+    }
+
+    func testRegisterNewestFirst() {
+        let store = makeStore()
+        _ = store.register(snap("SQ:1"), for: "C1")
+        _ = store.register(snap("SQ:2"), for: "C1")
+        XCTAssertEqual(store.snapshots(for: "C1").map(\.objectID), ["SQ:2", "SQ:1"])
+    }
+
+    func testRetentionPrunesOldestAndReportsOverflow() {
+        let store = makeStore()
+        var overflow: [String] = []
+        for i in 1...(QueueHistoryStore.maxDepth + 2) {
+            overflow = store.register(snap("SQ:\(i)"), for: "C1")
+        }
+        XCTAssertEqual(store.snapshots(for: "C1").count, QueueHistoryStore.maxDepth)
+        // The final register pushed SQ:7, evicting the oldest (SQ:1 then SQ:2).
+        XCTAssertEqual(overflow, ["SQ:2"])
+        XCTAssertEqual(store.snapshots(for: "C1").first?.objectID, "SQ:7")
+        XCTAssertFalse(store.snapshots(for: "C1").contains { $0.objectID == "SQ:1" })
+    }
+
+    func testPerCoordinatorIsolation() {
+        let store = makeStore()
+        _ = store.register(snap("SQ:1"), for: "C1")
+        _ = store.register(snap("SQ:2"), for: "C2")
+        XCTAssertEqual(store.snapshots(for: "C1").map(\.objectID), ["SQ:1"])
+        XCTAssertEqual(store.snapshots(for: "C2").map(\.objectID), ["SQ:2"])
+    }
+
+    func testReregisterDeduplicates() {
+        let store = makeStore()
+        _ = store.register(snap("SQ:1"), for: "C1")
+        _ = store.register(snap("SQ:2"), for: "C1")
+        _ = store.register(snap("SQ:1"), for: "C1")
+        XCTAssertEqual(store.snapshots(for: "C1").map(\.objectID), ["SQ:1", "SQ:2"])
+    }
+
+    func testRemove() {
+        let store = makeStore()
+        _ = store.register(snap("SQ:1"), for: "C1")
+        store.remove(objectID: "SQ:1", for: "C1")
+        XCTAssertTrue(store.snapshots(for: "C1").isEmpty)
+    }
+
+    func testPersistenceRoundTrip() {
+        let suite = "QueueHistoryTests-persist-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = QueueHistoryStore(defaults: defaults)
+        _ = store.register(snap("SQ:9", 42), for: "C1")
+        let reloaded = QueueHistoryStore(defaults: defaults)
+        XCTAssertEqual(reloaded.snapshots(for: "C1").first?.objectID, "SQ:9")
+        XCTAssertEqual(reloaded.snapshots(for: "C1").first?.trackCount, 42)
+    }
+
+    /// Regression: restoring the OLDEST snapshot with a full ring must not
+    /// let the pre-restore snapshot evict (and destroy) the restore target.
+    /// SonosManager touches the target to the head first; this verifies the
+    /// store-level contract that a touched entry can't land in overflow.
+    func testTouchedSnapshotSurvivesEviction() {
+        let store = makeStore()
+        for i in 1...QueueHistoryStore.maxDepth {
+            _ = store.register(snap("SQ:\(i)"), for: "C1")
+        }
+        // SQ:1 is the oldest (tail). Touch it, then register a new snapshot.
+        _ = store.register(snap("SQ:1"), for: "C1")
+        let overflow = store.register(snap("SQ:99"), for: "C1")
+        XCTAssertFalse(overflow.contains("SQ:1"))
+        XCTAssertTrue(store.snapshots(for: "C1").contains { $0.objectID == "SQ:1" })
+        XCTAssertEqual(overflow, ["SQ:2"]) // true oldest after the touch
+    }
+
+    func testHistoryTitleDetection() {
+        XCTAssertTrue(QueueHistoryStore.isHistoryTitle(QueueHistoryStore.snapshotTitle(at: Date())))
+        XCTAssertFalse(QueueHistoryStore.isHistoryTitle("My Playlist"))
+    }
+}
+
+@MainActor
+final class SavedQueueRepositoryTests: XCTestCase {
+    private func makeRepo() -> SavedQueueRepository {
+        let path = NSTemporaryDirectory() + "savedq-\(UUID().uuidString).sqlite"
+        return SavedQueueRepository(dbPath: path)
+    }
+
+    private func track(_ pos: Int, _ title: String, uri: String? = nil, metadata: String? = nil) -> QueueItem {
+        QueueItem(id: pos, title: title, artist: "Artist", album: "Album",
+                  albumArtURI: nil, duration: "0:03:00", uri: uri ?? "x-test://\(pos)",
+                  metadata: metadata)
+    }
+
+    func testMetadataRoundTrip() {
+        let repo = makeRepo()
+        let didl = "<DIDL-Lite><item id=\"x\"><dc:title>T</dc:title></item></DIDL-Lite>"
+        let id = repo.save(name: "AM", tracks: [track(1, "T", metadata: didl)])!
+        XCTAssertEqual(repo.tracks(for: id).first?.metadata, didl)
+    }
+
+    func testSaveListTracksRoundTrip() {
+        let repo = makeRepo()
+        let id = repo.save(name: "Road Trip", tracks: [track(1, "One"), track(2, "Two")])
+        XCTAssertNotNil(id)
+        let list = repo.list()
+        XCTAssertEqual(list.count, 1)
+        XCTAssertEqual(list.first?.name, "Road Trip")
+        XCTAssertEqual(list.first?.trackCount, 2)
+        let tracks = repo.tracks(for: id!)
+        XCTAssertEqual(tracks.map(\.title), ["One", "Two"])
+        XCTAssertEqual(tracks.map(\.uri), ["x-test://1", "x-test://2"])
+    }
+
+    func testSaveEmptyReturnsNil() {
+        XCTAssertNil(makeRepo().save(name: "Empty", tracks: []))
+    }
+
+    func testRename() {
+        let repo = makeRepo()
+        let id = repo.save(name: "Old", tracks: [track(1, "T")])!
+        repo.rename(id: id, to: "New")
+        XCTAssertEqual(repo.list().first?.name, "New")
+    }
+
+    func testDeleteCascadesTracks() {
+        let repo = makeRepo()
+        let id = repo.save(name: "Gone", tracks: [track(1, "T")])!
+        repo.delete(id: id)
+        XCTAssertTrue(repo.list().isEmpty)
+        XCTAssertTrue(repo.tracks(for: id).isEmpty)
+    }
+
+    func testTitlesWithQuotesAndUnicode() {
+        let repo = makeRepo()
+        let id = repo.save(name: "K\u{00FC}che's \"Mix\"", tracks: [track(1, "Bj\u{00F6}rk — J\u{00F3}ga")])!
+        XCTAssertEqual(repo.list().first?.name, "K\u{00FC}che's \"Mix\"")
+        XCTAssertEqual(repo.tracks(for: id).first?.title, "Bj\u{00F6}rk — J\u{00F3}ga")
     }
 }

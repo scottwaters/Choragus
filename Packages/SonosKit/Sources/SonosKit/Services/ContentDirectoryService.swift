@@ -6,7 +6,7 @@
 /// UPnP spec here.
 import Foundation
 
-public struct QueueItem: Identifiable, Equatable {
+public struct QueueItem: Identifiable, Equatable, Codable {
     public let id: Int // 1-based position in queue
     public var title: String
     public var artist: String
@@ -17,9 +17,14 @@ public struct QueueItem: Identifiable, Equatable {
     /// the play-time cache when the speaker returns a filename (e.g. Suno's
     /// `<uuid>.mp3`) instead of the song name.
     public var uri: String?
+    /// The track's `<r:resMD>` DIDL envelope when the speaker supplied one.
+    /// Apple Music / SMAPI tracks fault UPnP 800 if re-enqueued without it,
+    /// so it must be preserved when a queue is saved for later restore.
+    public var metadata: String?
 
     public init(id: Int, title: String = "", artist: String = "", album: String = "",
-                albumArtURI: String? = nil, duration: String = "", uri: String? = nil) {
+                albumArtURI: String? = nil, duration: String = "", uri: String? = nil,
+                metadata: String? = nil) {
         self.id = id
         self.title = title
         self.artist = artist
@@ -27,6 +32,7 @@ public struct QueueItem: Identifiable, Equatable {
         self.albumArtURI = albumArtURI
         self.duration = duration
         self.uri = uri
+        self.metadata = metadata
     }
 }
 
@@ -39,7 +45,16 @@ public final class ContentDirectoryService {
         self.soap = soap
     }
 
-    public func browseQueue(device: SonosDevice, start: Int = 0, count: Int = PageSize.queue) async throws -> (items: [QueueItem], total: Int) {
+    /// `includeMetadata` adds `r:resMD` to the filter so each row carries its
+    /// full DIDL envelope — needed only by the save-for-restore path (Apple
+    /// Music / SMAPI tracks fault UPnP 800 when re-enqueued without it). The
+    /// live queue panel omits it: it doesn't use the envelope, and requesting
+    /// it makes the speaker return heavier per-item metadata for no benefit.
+    public func browseQueue(device: SonosDevice, start: Int = 0, count: Int = PageSize.queue,
+                            includeMetadata: Bool = false) async throws -> (items: [QueueItem], total: Int) {
+        let filter = includeMetadata
+            ? "dc:title,res,dc:creator,upnp:artist,upnp:album,upnp:albumArtURI,r:resMD"
+            : "dc:title,res,dc:creator,upnp:artist,upnp:album,upnp:albumArtURI"
         let result = try await soap.send(
             to: device.baseURL,
             path: Self.path,
@@ -48,7 +63,7 @@ public final class ContentDirectoryService {
             arguments: [
                 ("ObjectID", "Q:0"),
                 ("BrowseFlag", "BrowseDirectChildren"),
-                ("Filter", "dc:title,res,dc:creator,upnp:artist,upnp:album,upnp:albumArtURI"),
+                ("Filter", filter),
                 ("StartingIndex", "\(start)"),
                 ("RequestedCount", "\(count)"),
                 ("SortCriteria", "")
@@ -345,8 +360,21 @@ public final class ContentDirectoryService {
         )
     }
 
-    /// Renames a Sonos playlist via UpdateObject
+    /// Renames a Sonos playlist via UpdateObject.
+    ///
+    /// Titles need their own entity-escape INSIDE the fragment: SOAPClient
+    /// escapes the whole argument once at envelope level, and the speaker
+    /// unescapes once before parsing the fragment — so a raw "R&B Mix"
+    /// would arrive as invalid inner XML (UPnP fault), and a title
+    /// containing `</dc:title>` would rewrite the tag value.
     public func renameSavedQueue(device: SonosDevice, objectID: String, oldTitle: String, newTitle: String) async throws {
+        func escaped(_ s: String) -> String {
+            s.replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+                .replacingOccurrences(of: "\"", with: "&quot;")
+                .replacingOccurrences(of: "'", with: "&apos;")
+        }
         _ = try await soap.send(
             to: device.baseURL,
             path: Self.path,
@@ -354,8 +382,8 @@ public final class ContentDirectoryService {
             action: "UpdateObject",
             arguments: [
                 ("ObjectID", objectID),
-                ("CurrentTagValue", "<dc:title>\(oldTitle)</dc:title>"),
-                ("NewTagValue", "<dc:title>\(newTitle)</dc:title>")
+                ("CurrentTagValue", "<dc:title>\(escaped(oldTitle))</dc:title>"),
+                ("NewTagValue", "<dc:title>\(escaped(newTitle))</dc:title>")
             ]
         )
     }
@@ -404,7 +432,10 @@ private class QueueXMLParser: NSObject, XMLParserDelegate {
     private var currentArtURI = ""
     private var currentResURI = ""
     private var currentDuration = ""
+    private var currentResMD = ""
     private var inItem = false
+    private var inResMD = false
+    private var resMDHadChildElements = false
     private var itemIndex: Int
     private let deviceIP: String
     private let devicePort: Int
@@ -432,6 +463,21 @@ private class QueueXMLParser: NSObject, XMLParserDelegate {
         currentElement = name
         currentValue = ""
 
+        // `<r:resMD>` holds a nested DIDL. Normally it arrives XML-escaped, so
+        // the SAX layer delivers it as character data and no child-element
+        // events fire. Some firmware returns it as real nested elements,
+        // though — guard against that so a nested `<item>`/`<res>`/
+        // `<albumArtURI>` can't reset or clobber the OUTER queue row's fields
+        // (the cause of queue artwork vanishing when resMD was requested).
+        if inResMD {
+            resMDHadChildElements = true
+            return
+        }
+        if name == "resMD" {
+            inResMD = true
+            return
+        }
+
         if name == "item" {
             inItem = true
             currentTitle = ""
@@ -440,6 +486,8 @@ private class QueueXMLParser: NSObject, XMLParserDelegate {
             currentArtURI = ""
             currentResURI = ""
             currentDuration = ""
+            currentResMD = ""
+            resMDHadChildElements = false
         }
 
         if name == "res", let dur = attributes["duration"] {
@@ -455,6 +503,16 @@ private class QueueXMLParser: NSObject, XMLParserDelegate {
                 namespaceURI: String?, qualifiedName: String?) {
         let name = elementName.components(separatedBy: ":").last ?? elementName
         let trimmed = currentValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Close of the resMD element — capture the (escaped-text) envelope.
+        // If the firmware nested real child elements, `currentValue` is
+        // unreliable, so skip capture rather than store a fragment.
+        if name == "resMD" {
+            inResMD = false
+            if !resMDHadChildElements, !trimmed.isEmpty { currentResMD = trimmed }
+            return
+        }
+        if inResMD { return }   // ignore nested element ends inside resMD
 
         if inItem {
             switch name {
@@ -485,7 +543,8 @@ private class QueueXMLParser: NSObject, XMLParserDelegate {
                     album: currentAlbum,
                     albumArtURI: artURI.isEmpty ? nil : artURI,
                     duration: currentDuration,
-                    uri: currentResURI.isEmpty ? nil : currentResURI
+                    uri: currentResURI.isEmpty ? nil : currentResURI,
+                    metadata: currentResMD.isEmpty ? nil : currentResMD
                 ))
                 inItem = false
             default: break

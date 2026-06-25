@@ -231,4 +231,4 @@ Bug reports and feature requests welcome at [github.com/scottwaters/Choragus/iss
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+PolyForm Noncommercial 1.0.0 — see [LICENSE](LICENSE). Free for personal, hobbyist, educational, charitable, and other noncommercial use; commercial use requires a separate agreement. Applies retroactively to every prior release under any name, including all releases distributed as SonosController.

@@ -265,6 +265,7 @@ struct SunoWebView: NSViewRepresentable {
         return false;
       }
       function post(m){try{window.webkit.messageHandlers.sunoAct.postMessage(m);}catch(e){}}
+      function dbg(m){post({type:'debug',msg:m});}   // TEMP: left-click divert diagnostics
       // Suno may start its own player on pointerdown before our click handler
       // runs. Rather than fight the events (which breaks the click), let it
       // start, then pause its <audio>/<video> repeatedly for ~2s so only Sonos
@@ -276,6 +277,10 @@ struct SunoWebView: NSViewRepresentable {
         },150);
       }
       var collectionUntil=0;
+      // Set when a single-track click was handled via the public DOM /song/
+      // URL; suppresses the audio-hook divert during that window so it doesn't
+      // also post the NON-PUBLIC blob clip id (which fails to resolve).
+      var clickHandledUntil=0;
       function uuidFromAny(s){var m=(s||'').match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);return m?m[0].toLowerCase():null;}
       // Audio-layer catch: fires whenever Suno actually starts a track, no
       // matter which button/page triggered it. If the clip id is in the audio
@@ -285,17 +290,20 @@ struct SunoWebView: NSViewRepresentable {
       document.addEventListener('play',function(e){
         var el=e.target; if(!el||(el.tagName!=='AUDIO'&&el.tagName!=='VIDEO'))return;
         // Muted elements are the autoplaying card-art videos — never divert.
-        if(el.muted)return;
+        if(el.muted){dbg('play: muted '+el.tagName+', ignore');return;}
         var src=el.currentSrc||el.src||'';
-        if(Date.now()<collectionUntil){try{el.pause();}catch(_){}return;}
+        if(Date.now()<collectionUntil||Date.now()<clickHandledUntil){dbg('play: click/collection handled, silence only');try{el.pause();}catch(_){}return;}
+        var ua=(navigator.userActivation?(navigator.userActivation.isActive?'active':'inactive'):'none');
         // Only divert playback the USER started — Suno autoplays a featured
         // track on load with no transient user activation; ignore that so it
         // doesn't silently replace the Sonos queue. Missing userActivation
         // (older WebKit) is treated as "not active" so autoplay can't slip
         // through the gate.
-        if(!navigator.userActivation || navigator.userActivation.isActive===false){try{el.pause();}catch(_){}return;}
+        if(!navigator.userActivation || navigator.userActivation.isActive===false){dbg('play: GATED userActivation='+ua+' src='+src.slice(0,80));try{el.pause();}catch(_){}return;}
         var uuid=uuidFromAny(src);
+        dbg('play: ua='+ua+' uuid='+(uuid||'NONE')+' src='+src.slice(0,90));
         if(uuid){try{el.pause();}catch(_){}post({type:'play',href:'https://suno.com/song/'+uuid});}
+        else{dbg('play: no uuid in audio src — cannot divert');}
       },true);
       // Climb from the click to the smallest container that unambiguously
       // identifies ONE item: a single /song/ link, else a single artwork image
@@ -356,17 +364,20 @@ struct SunoWebView: NSViewRepresentable {
         return null;
       }
       document.addEventListener('click',function(e){
-        if(!clickedPlay(e.target))return;     // only override a play affordance
-        if(inFixedFooter(e.target))return;    // leave the global player bar alone
+        if(!clickedPlay(e.target)){return;}     // only override a play affordance
+        dbg('click: play affordance hit');
+        if(inFixedFooter(e.target)){dbg('click: in fixed footer, leaving to Suno');return;}    // leave the global player bar alone
         var r=resolveFromClick(e.target);
+        dbg('click: resolve kind='+(r?r.kind:'null'));
         // Collections have no single audio element to catch, so resolve + play
         // them here.
         if(r&&r.kind==='playlist'){e.preventDefault();e.stopImmediatePropagation();post({type:'playlist',href:r.url});collectionUntil=Date.now()+6000;silenceSuno();return;}
         if(r&&r.kind==='playall'){var all=allSongHrefs();if(all.length){e.preventDefault();e.stopImmediatePropagation();post({type:'playAll',hrefs:all});collectionUntil=Date.now()+6000;silenceSuno();}return;}
-        // Single track: do NOT intercept — let Suno start the audio so the
-        // audio-layer hook diverts the ACTUAL playing track. DOM resolution
-        // mis-identifies the song on profile/hero pages (picks the featured
-        // track), whereas the audio src is always the real one.
+        // Single track: play the PUBLIC DOM /song/ URL (the same id the
+        // working right-click path uses). The audio-layer blob carries Suno's
+        // internal NON-PUBLIC clip id, which fails to resolve (notPublic), so
+        // we must not divert off it. Suppress that divert for a short window.
+        if(r&&r.kind==='song'){e.preventDefault();e.stopImmediatePropagation();post({type:'play',href:r.url});clickHandledUntil=Date.now()+6000;silenceSuno();return;}
       },true);
       document.addEventListener('contextmenu',function(e){
         if(inFixedFooter(e.target))return;

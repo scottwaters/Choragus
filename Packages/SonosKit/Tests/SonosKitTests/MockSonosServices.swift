@@ -100,6 +100,8 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
         return nil
     }
 
+    func resolveLocalAlbumArt(artist: String, album: String) async -> String? { nil }
+
     var albumArtSearch: AlbumArtSearchProtocol = AlbumArtSearchService.shared
 
     func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata, source: TrackMetadataSource) {
@@ -177,6 +179,17 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
     func addBrowseItemToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool, atPosition: Int) async throws -> Int { 1 }
     @discardableResult
     func addBrowseItemsToQueue(_ items: [BrowseItem], in group: SonosGroup, playNext: Bool) async throws -> Int { items.count }
+    var stubbedSnapshots: [QueueSnapshot] = []
+    func queueSnapshots(group: SonosGroup) -> [QueueSnapshot] { stubbedSnapshots }
+    func restoreQueueSnapshot(group: SonosGroup, objectID: String) async throws {}
+    var stubbedLocalSavedQueues: [LocalSavedQueue] = []
+    func saveQueueToChoragus(group: SonosGroup, name: String) async throws -> Int { stubbedQueue.count }
+    func localSavedQueues() -> [LocalSavedQueue] { stubbedLocalSavedQueues }
+    func loadLocalSavedQueue(id: Int64, group: SonosGroup, append: Bool) async throws {}
+    func renameLocalSavedQueue(id: Int64, to newName: String) {}
+    func deleteLocalSavedQueue(id: Int64) {}
+    @discardableResult
+    func dedupeQueue(group: SonosGroup) async throws -> Int { 0 }
 
     // MARK: - BrowsingServiceProtocol
 

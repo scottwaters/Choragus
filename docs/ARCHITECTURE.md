@@ -11,7 +11,7 @@ Choragus/
 ├── technical_readme.md              # Developer overview (entry point to docs/)
 ├── Setupguide.md                    # Plain-language onboarding for non-technical users
 ├── CHANGELOG.md                     # Per-release history
-├── LICENSE                          # MIT License
+├── LICENSE                          # PolyForm Noncommercial 1.0.0
 ├── .gitignore
 ├── docs/
 │   ├── ARCHITECTURE.md              # This file — module-by-module breakdown

@@ -382,20 +382,12 @@ struct MenuBarPlayerView: View {
 
                 // Show main window
                 Button {
-                    NSApp.activate(ignoringOtherApps: true)
-                    // Find existing main window or create new one
-                    if let window = NSApp.windows.first(where: {
-                        // Title is "Choragus" (post-rename) — also accept the old
-                        // "SonosController" title for users running mid-upgrade
-                        // builds with cached window state.
-                        ($0.title.contains("Choragus") || $0.title.contains("SonosController"))
-                            && $0.contentView != nil
-                    }) {
-                        window.makeKeyAndOrderFront(nil)
-                    } else {
-                        // No window exists — trigger SwiftUI to create a new one
-                        NSApp.sendAction(Selector(("newWindowForTab:")), to: nil, from: nil)
-                    }
+                    // Bring the captured main window forward, re-showing it
+                    // if it was closed. The previous title-substring search
+                    // matched auxiliary windows ("Choragus Help / Diagnostics",
+                    // Settings) and did nothing when the main window was
+                    // closed (issue #60).
+                    MainWindowHolder.shared.show()
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "macwindow")

@@ -523,6 +523,14 @@ public final class PlexAuthManager: ObservableObject {
     private var pathMonitor: NWPathMonitor?
     private var lastPathSignature: String = ""
     private let pathQueue = DispatchQueue(label: "com.choragus.plex.pathmonitor")
+    /// Trailing timestamps of recent path-signature changes, for flap
+    /// detection. A dual-interface Mac can oscillate Wi-Fi ⇄ Ethernet every
+    /// ~minute; without throttling that floods the diagnostics bundle with a
+    /// path-change line per flip (observed on issue #46).
+    private var pathChangeTimes: [Date] = []
+    /// Set once when flapping is detected, so the per-flip log is emitted only
+    /// once until the link settles.
+    private var flapLogged = false
 
     private init() {
         // Default the "prefer direct" toggle to true on first launch —
@@ -567,10 +575,27 @@ public final class PlexAuthManager: ObservableObject {
                     return
                 }
                 if sig != self.lastPathSignature {
-                    sonosDiagLog(.info, tag: "PLEX",
-                                 "Network path changed — invalidating cached baseURI",
-                                 context: ["previous": self.lastPathSignature, "current": sig])
+                    let now = Date()
+                    self.pathChangeTimes.append(now)
+                    self.pathChangeTimes.removeAll { now.timeIntervalSince($0) > 120 }
+                    let flapping = self.pathChangeTimes.count >= 3
+                    if !flapping {
+                        self.flapLogged = false
+                        sonosDiagLog(.info, tag: "PLEX",
+                                     "Network path changed — invalidating cached baseURI",
+                                     context: ["previous": self.lastPathSignature, "current": sig])
+                    } else if !self.flapLogged {
+                        // One summarizing line, then suppress the per-flip spam
+                        // until the link settles below the flap threshold.
+                        self.flapLogged = true
+                        sonosDiagLog(.warning, tag: "PLEX",
+                                     "Network path flapping between interfaces — suppressing repeat invalidation logs",
+                                     context: ["current": sig,
+                                               "changesInWindow": String(self.pathChangeTimes.count)])
+                    }
                     self.lastPathSignature = sig
+                    // Invalidation is lazy (next call re-discovers), so doing it
+                    // on every flip is harmless — only the logging is throttled.
                     self.invalidateBaseURI()
                 }
             }

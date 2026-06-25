@@ -168,6 +168,19 @@ public protocol QueueServiceProtocol {
     func addBrowseItemToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool, atPosition: Int) async throws -> Int
     @discardableResult
     func addBrowseItemsToQueue(_ items: [BrowseItem], in group: SonosGroup, playNext: Bool) async throws -> Int
+    /// Recoverable queue snapshots, newest first, taken before destructive
+    /// mutations (replace-all / clear). Restoring one re-enqueues it.
+    func queueSnapshots(group: SonosGroup) -> [QueueSnapshot]
+    func restoreQueueSnapshot(group: SonosGroup, objectID: String) async throws
+    /// Choragus-side saved queues (local SQLite, independent of the household).
+    func saveQueueToChoragus(group: SonosGroup, name: String) async throws -> Int
+    func localSavedQueues() -> [LocalSavedQueue]
+    func loadLocalSavedQueue(id: Int64, group: SonosGroup, append: Bool) async throws
+    func renameLocalSavedQueue(id: Int64, to newName: String)
+    func deleteLocalSavedQueue(id: Int64)
+    /// Removes duplicate tracks (same URI), keeping first occurrences.
+    @discardableResult
+    func dedupeQueue(group: SonosGroup) async throws -> Int
 }
 
 // MARK: - Browsing Service (SRP: content browsing only)
@@ -279,6 +292,15 @@ public protocol ArtCacheProtocol {
     var discoveredArtURLs: [String: String] { get }
     func cacheArtURL(_ artURL: String, forURI uri: String, title: String, itemID: String)
     func lookupCachedArt(uri: String?, title: String) -> String?
+    /// Disk-persisted cache-or-search for a local album's iTunes art. Reused
+    /// by local-library browse rows so each album resolves once and survives
+    /// relaunches (issue #64). Only `SonosManager` implements it; the simple
+    /// `ArtCacheService` uses the default no-op.
+    func resolveLocalAlbumArt(artist: String, album: String) async -> String?
+}
+
+public extension ArtCacheProtocol {
+    func resolveLocalAlbumArt(artist: String, album: String) async -> String? { nil }
 }
 
 // MARK: - Composite Protocol Typealiases

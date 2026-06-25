@@ -21,6 +21,24 @@ public final class EventListener: @unchecked Sendable {
 
     public init() {}
 
+    /// Preferred fixed callback port. A STABLE port lets users on segmented
+    /// networks (speakers in an IoT VLAN) write a tight firewall rule —
+    /// `Sonos devices → <Mac IP>:3401 TCP` — instead of having to allow any
+    /// port because the OS picked a fresh ephemeral one each launch. Falls
+    /// back to an ephemeral port if the port is taken (second app instance,
+    /// another process); the SUBSCRIBE callback URL always carries the
+    /// actual bound port, so eventing works either way.
+    public static let defaultPort: UInt16 = 3401
+
+    /// User-configurable via Settings → System → Network (applied at next
+    /// launch — live rebinding would invalidate every active subscription's
+    /// callback). Values outside the unprivileged range fall back to default.
+    public static var preferredPort: UInt16 {
+        let stored = UserDefaults.standard.integer(forKey: UDKey.eventListenerPort)
+        guard stored >= 1024, stored <= 65535 else { return defaultPort }
+        return UInt16(stored)
+    }
+
     public func start() throws {
         // Resolve local IP first, before starting the listener
         localAddress = Self.getLocalIPAddress() ?? "127.0.0.1"
@@ -28,7 +46,14 @@ public final class EventListener: @unchecked Sendable {
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
 
-        let nwListener = try NWListener(using: params)
+        let nwListener: NWListener
+        if let fixed = NWEndpoint.Port(rawValue: Self.preferredPort),
+           let bound = try? NWListener(using: params, on: fixed) {
+            nwListener = bound
+        } else {
+            sonosDebugLog("[EVENTS] Port \(Self.preferredPort) unavailable — falling back to an ephemeral port (firewall rules scoped to \(Self.preferredPort) will not see this session's events)")
+            nwListener = try NWListener(using: params)
+        }
 
         let readySemaphore = DispatchSemaphore(value: 0)
 

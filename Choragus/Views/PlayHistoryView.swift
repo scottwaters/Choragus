@@ -390,7 +390,7 @@ struct PlayHistoryView: View {
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(.primary)
-            + Text(" tracks")
+            + Text(" " + L10n.tracksLowercase)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }

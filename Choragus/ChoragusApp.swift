@@ -36,12 +36,40 @@ extension Notification.Name {
     static let menuToggleBrowse = Notification.Name("menuToggleBrowse")
     static let menuToggleQueue = Notification.Name("menuToggleQueue")
     static let menuShowStats = Notification.Name("menuShowStats")
-    static let menuShowForFun = Notification.Name("menuShowForFun")
     static let menuOpenKaraoke = Notification.Name("menuOpenKaraoke")
+}
+
+/// Keeps the app running when the main window is closed so it stays available
+/// in the menu bar / dock and can be reopened (Window > Open Choragus, ⌘0, or
+/// the menu-bar control). Without this, closing the single-instance `Window`
+/// scene terminated the whole app.
+final class ChoragusAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    /// Best-effort GENA unsubscribe on quit. Orphaned subscriptions make the
+    /// speaker burn a connect-timeout per dead callback before delivering to
+    /// live subscribers (measured 6–14 s NOTIFY latency). ⌘Q now cleans up;
+    /// hard kills still orphan, bounded by the 10-minute lease.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let manager = SonosManager.current else { return .terminateNow }
+        Task { @MainActor in
+            await manager.unsubscribeAllForShutdown()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        // Watchdog: never hang quit on a wedged speaker.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
 }
 
 @main
 struct ChoragusApp: App {
+
+    @NSApplicationDelegateAdaptor(ChoragusAppDelegate.self) private var appDelegate
 
     /// Window title. In Debug builds appends the per-build tag
     /// injected into the custom `ChoragusBuildTag` Info.plist key
@@ -101,8 +129,9 @@ struct ChoragusApp: App {
     @StateObject private var sparkleObserver = SparkleUpdaterObserver.makeForApp()
 
     var body: some Scene {
-        WindowGroup {
+        Window("Choragus", id: "main") {
             ContentView()
+                .background(MainWindowOpenerCapture())
                 .environmentObject(sonosManager)
                 .environmentObject(sonosManager.positionTracker)
                 .environmentObject(sonosManager.anchorTracker)
@@ -125,33 +154,32 @@ struct ChoragusApp: App {
                     SonosManager.current = sonosManager
                     PresetManager.current = presetManager
                     // Wire Apple Music catalog as the preferred artwork source.
-                    // The closures consult a shared MusicKit provider on
-                    // every call; nil-return (not operational / no match)
-                    // falls through to the existing iTunes Search path,
-                    // so this is purely additive.
+                    // nil-return (not operational / no match) falls through to
+                    // the existing iTunes Search path, so this is purely
+                    // additive. The closures capture the provider STRONGLY —
+                    // `makeCurrent()` returns a fresh instance and nothing
+                    // else retains it; a weak capture deallocated it the
+                    // moment onAppear returned, permanently disabling every
+                    // Apple Music art/genre lookup.
                     let amProvider = AppleMusicProviderFactory.makeCurrent()
-                    AlbumArtSearchService.appleMusicAlbumArtLookup = { [weak amProvider = amProvider] artist, album in
-                        guard let amProvider, !album.isEmpty else { return nil }
+                    AlbumArtSearchService.appleMusicAlbumArtLookup = { [amProvider] artist, album in
+                        guard !album.isEmpty else { return nil }
                         guard let result = await amProvider.lookupAlbum(artist: artist, title: album) else { return nil }
                         return result.artworkURL?.absoluteString
                     }
-                    AlbumArtSearchService.appleMusicArtistArtLookup = { [weak amProvider = amProvider] artist in
-                        guard let amProvider else { return nil }
+                    AlbumArtSearchService.appleMusicArtistArtLookup = { [amProvider] artist in
                         guard let result = await amProvider.lookupArtist(name: artist) else { return nil }
                         return result.artworkURL?.absoluteString
                     }
-                    AlbumArtSearchService.appleMusicTrackArtLookup = { [weak amProvider = amProvider] artist, title in
-                        guard let amProvider else { return nil }
+                    AlbumArtSearchService.appleMusicTrackArtLookup = { [amProvider] artist, title in
                         guard let song = await amProvider.lookupSong(title: title, artist: artist) else { return nil }
                         return song.artworkURL?.absoluteString
                     }
-                    MusicMetadataService.appleMusicArtistEnrichment = { [weak amProvider = amProvider] artist in
-                        guard let amProvider else { return nil }
+                    MusicMetadataService.appleMusicArtistEnrichment = { [amProvider] artist in
                         guard let details = await amProvider.lookupArtist(name: artist) else { return nil }
                         return (details.artworkURL?.absoluteString, details.genreNames)
                     }
-                    MusicMetadataService.appleMusicAlbumEnrichment = { [weak amProvider = amProvider] artist, album in
-                        guard let amProvider else { return nil }
+                    MusicMetadataService.appleMusicAlbumEnrichment = { [amProvider] artist, album in
                         // Use song-level lookup with first track from the album
                         // to surface the album's catalog genres (the song
                         // detail carries genre tags; standalone album lookup
@@ -307,6 +335,17 @@ struct ChoragusApp: App {
             // used otherwise.
             CommandGroup(replacing: .newItem) {}
 
+            // Reopen / focus the main window from the standard Window menu.
+            // File > New is hidden (no document model), so when the main
+            // window is closed there was no standard-menu path back to it —
+            // only the menu-bar-extra popover (issue #60 follow-up).
+            CommandGroup(after: .windowList) {
+                Button(L10n.openChoragus) {
+                    MainWindowHolder.shared.show()
+                }
+                .keyboardShortcut("0", modifiers: .command)
+            }
+
             // Custom About panel — adds a clickable GitHub link to the credits.
             CommandGroup(replacing: .appInfo) {
                 Button(L10n.aboutChoragus) {
@@ -369,6 +408,11 @@ struct ChoragusApp: App {
                     NotificationCenter.default.post(name: .menuToggleQueue, object: nil)
                 }
                 .keyboardShortcut("u", modifiers: [.command, .option])
+
+                Button(L10n.queueLibrary) {
+                    WindowManager.shared.openQueueLibraryForActiveGroup()
+                }
+                .keyboardShortcut("l", modifiers: .command)
 
                 Button(L10n.listeningStats) {
                     NotificationCenter.default.post(name: .menuShowStats, object: nil)
@@ -901,5 +945,32 @@ private struct FlowingLinkRow: View {
             .font(.callout)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Captures SwiftUI's `openWindow` action so the menu-bar "Open Choragus"
+/// popover and the Window-menu command can reopen the single-instance main
+/// `Window` scene after it has been closed (issue #60). `openWindow(id:)` on a
+/// `Window` scene fronts the window if it is open and rebuilds it fresh if
+/// closed — unlike resurrecting the old `NSWindow`, which re-showed a stale
+/// SwiftUI view tree (queue / browse panels not redrawing on reopen).
+final class MainWindowHolder {
+    static let shared = MainWindowHolder()
+    var opener: OpenWindowAction?
+
+    /// Brings the main window forward, rebuilding it if it was closed.
+    func show() {
+        NSApp.activate(ignoringOtherApps: true)
+        opener?(id: "main")
+    }
+}
+
+/// Captures the `openWindow` environment action from the main scene into
+/// `MainWindowHolder`. The action is app-scoped, so it stays valid for reopen
+/// even after the window (and this view) are gone.
+private struct MainWindowOpenerCapture: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Color.clear.onAppear { MainWindowHolder.shared.opener = openWindow }
     }
 }

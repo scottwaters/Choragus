@@ -134,6 +134,49 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
         }
     }
 
+    // MARK: - Paged catalog search (per type)
+
+    // MusicCatalogSearchRequest caps `limit` at 25 per call; depth comes from
+    // `offset` paging. Each method returns (items, rawCount) — rawCount is the
+    // raw response size so the caller advances its offset and detects
+    // end-of-results independently of any mapping/filtering. Errors propagate.
+
+    public func searchTracksPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicTrack], rawCount: Int) {
+        guard await isOperational else { return ([], 0) }
+        var request = MusicCatalogSearchRequest(term: term, types: [Song.self])
+        request.limit = max(1, min(pageSize, 25))
+        request.offset = offset
+        let response = try await request.response()
+        return (response.songs.map(Self.mapTrack), response.songs.count)
+    }
+
+    public func searchAlbumsPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicAlbum], rawCount: Int) {
+        guard await isOperational else { return ([], 0) }
+        var request = MusicCatalogSearchRequest(term: term, types: [Album.self])
+        request.limit = max(1, min(pageSize, 25))
+        request.offset = offset
+        let response = try await request.response()
+        return (response.albums.map(Self.mapAlbum), response.albums.count)
+    }
+
+    public func searchArtistsPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicArtist], rawCount: Int) {
+        guard await isOperational else { return ([], 0) }
+        var request = MusicCatalogSearchRequest(term: term, types: [Artist.self])
+        request.limit = max(1, min(pageSize, 25))
+        request.offset = offset
+        let response = try await request.response()
+        return (response.artists.map(Self.mapArtist), response.artists.count)
+    }
+
+    public func searchPlaylistsPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicPlaylist], rawCount: Int) {
+        guard await isOperational else { return ([], 0) }
+        var request = MusicCatalogSearchRequest(term: term, types: [Playlist.self])
+        request.limit = max(1, min(pageSize, 25))
+        request.offset = offset
+        let response = try await request.response()
+        return (response.playlists.map(Self.mapPlaylist), response.playlists.count)
+    }
+
     private func catalogSuggestionTopResults(term: String, limit: Int) async -> AppleMusicSearchResults {
         do {
             var req = MusicCatalogSearchSuggestionsRequest(
@@ -615,10 +658,18 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
     }
 
     private static func mapArtist(_ artist: Artist) -> AppleMusicArtist {
-        AppleMusicArtist(
+        // Library artists carry a synthesized transient artwork
+        // (`musicKit://artwork/transient`, maximumWidth == 0) that
+        // ArtworkImage cannot load outside Music.app — registering it pins
+        // the row to a permanently-blank image. Pass through only artwork
+        // with real dimensions (catalog artists); rows without it resolve a
+        // catalog image lazily via AppleMusicArtistRowArt.
+        let art = artist.artwork
+        let usable = (art?.maximumWidth ?? 0) > 0
+        return AppleMusicArtist(
             id: artist.id.rawValue,
             name: artist.name,
-            artworkURL: Self.registerArtwork(artist.artwork)
+            artworkURL: usable ? Self.registerArtwork(art) : nil
         )
     }
 
@@ -648,9 +699,13 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
             // Strip user-uploads / DRM-locked items — see
             // `isPlayableLibrarySong`. Sonos can't play these and
             // showing them would surface "tracks" that silently no-op.
-            return response.items
+            // Return the RAW count alongside so pagination keys off the
+            // source size, not the post-filter size (issue: library
+            // truncated when a page contained filtered-out items).
+            let mapped = response.items
                 .filter(Self.isPlayableLibrarySong)
                 .map(Self.mapLibrarySong)
+            return (mapped, response.items.count)
         }
     }
 
@@ -658,10 +713,14 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
         guard await isOperational else { return [] }
         return await paginateLibrary(limit: limit) { offset, pageSize in
             var request = MusicLibraryRequest<Album>()
+            // A sort is required or library albums come back with empty
+            // title/artist (see libraryAlbumsPage / isPlayableLibraryAlbum).
+            request.sort(by: \.libraryAddedDate, ascending: false)
             request.limit = pageSize
             request.offset = offset
             let response = try await request.response()
-            return response.items.filter { Self.isPlayableLibraryAlbum($0) }.map(Self.mapLibraryAlbum)
+            let mapped = response.items.filter { Self.isPlayableLibraryAlbum($0) }.map(Self.mapLibraryAlbum)
+            return (mapped, response.items.count)
         }
     }
 
@@ -670,10 +729,15 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
     /// content-presence signals that ARE reliable: non-empty title +
     /// artist + at least one track.
     private static func isPlayableLibraryAlbum(_ album: Album) -> Bool {
+        // `trackCount` is NOT reliably populated by `MusicLibraryRequest<Album>`
+        // (it reports 0 for many genuinely-saved albums), so it can't be a
+        // gate — doing so dropped most of the library. playParameters present
+        // plus a non-empty title/artist is enough to prove a real, playable
+        // album. (Title/artist require the request to carry a sort — see the
+        // `.sort(by:)` on the album requests — otherwise they come back empty.)
         guard album.playParameters != nil else { return false }
         if album.title.isEmpty { return false }
         if album.artistName.isEmpty { return false }
-        if album.trackCount <= 0 { return false }
         return true
     }
 
@@ -681,10 +745,13 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
         guard await isOperational else { return [] }
         return await paginateLibrary(limit: limit) { offset, pageSize in
             var request = MusicLibraryRequest<Artist>()
+            // Sort required or artwork comes back unmaterialised — see
+            // libraryArtistsPage.
+            request.sort(by: \.name, ascending: true)
             request.limit = pageSize
             request.offset = offset
             let response = try await request.response()
-            return response.items.map(Self.mapArtist)
+            return (response.items.map(Self.mapArtist), response.items.count)
         }
     }
 
@@ -695,32 +762,85 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
             request.limit = pageSize
             request.offset = offset
             let response = try await request.response()
-            return response.items.map(Self.mapPlaylist)
+            return (response.items.map(Self.mapPlaylist), response.items.count)
         }
     }
 
+    // Single-page library fetches for progressive loading. Each returns the
+    // mapped/filtered items plus the RAW response count so the caller can
+    // advance its offset and detect the end of the source independently of
+    // how many items survived filtering. Fetch errors PROPAGATE — the caller
+    // must distinguish "page failed" (retryable) from "library exhausted";
+    // swallowing the error here silently truncated the list.
+
+    public func librarySongsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicTrack], rawCount: Int) {
+        guard await isOperational else { return ([], 0) }
+        var request = MusicLibraryRequest<Song>()
+        request.limit = pageSize
+        request.offset = offset
+        let response = try await request.response()
+        let mapped = response.items.filter(Self.isPlayableLibrarySong).map(Self.mapLibrarySong)
+        return (mapped, response.items.count)
+    }
+
+    public func libraryAlbumsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicAlbum], rawCount: Int) {
+        guard await isOperational else { return ([], 0) }
+        var request = MusicLibraryRequest<Album>()
+        request.sort(by: \.libraryAddedDate, ascending: false)
+        request.limit = pageSize
+        request.offset = offset
+        let response = try await request.response()
+        let mapped = response.items.filter { Self.isPlayableLibraryAlbum($0) }.map(Self.mapLibraryAlbum)
+        return (mapped, response.items.count)
+    }
+
+    public func libraryArtistsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicArtist], rawCount: Int) {
+        guard await isOperational else { return ([], 0) }
+        var request = MusicLibraryRequest<Artist>()
+        // Same OS quirk as albums: library requests return stub items with
+        // unmaterialised fields unless the request carries a sort.
+        request.sort(by: \.name, ascending: true)
+        request.limit = pageSize
+        request.offset = offset
+        let response = try await request.response()
+        return (response.items.map(Self.mapArtist), response.items.count)
+    }
+
+    public func libraryPlaylistsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicPlaylist], rawCount: Int) {
+        guard await isOperational else { return ([], 0) }
+        var request = MusicLibraryRequest<Playlist>()
+        request.limit = pageSize
+        request.offset = offset
+        let response = try await request.response()
+        return (response.items.map(Self.mapPlaylist), response.items.count)
+    }
+
     /// Drives an offset-based page loop against MusicLibraryRequest.
-    /// Walks pages of up to 100 items each until either the target
-    /// `limit` is reached or the source runs out of items.
-    private func paginateLibrary<T>(limit: Int, page: (Int, Int) async throws -> [T]) async -> [T] {
+    /// Walks full pages of 100 items each until the target `limit` of
+    /// usable items is reached or the source runs out. The page closure
+    /// returns its mapped/filtered items plus the RAW response count;
+    /// pagination advances `offset` and decides "source exhausted" on the
+    /// raw count, so a page that filters items (user-uploads / DRM-locked)
+    /// never looks "short" and stops the walk prematurely.
+    private func paginateLibrary<T>(
+        limit: Int,
+        page: (_ offset: Int, _ pageSize: Int) async throws -> (items: [T], rawCount: Int)
+    ) async -> [T] {
         var collected: [T] = []
         let pageSize = 100
         var offset = 0
         let cap = max(1, min(limit, 5000))
         while collected.count < cap {
-            let remaining = cap - collected.count
-            let thisPage = min(pageSize, remaining)
             do {
-                let items = try await page(offset, thisPage)
-                if items.isEmpty { break }
+                let (items, rawCount) = try await page(offset, pageSize)
                 collected.append(contentsOf: items)
-                if items.count < thisPage { break }
-                offset += items.count
+                if rawCount < pageSize { break }   // source exhausted
+                offset += rawCount
             } catch {
                 break
             }
         }
-        return collected
+        return collected.count > cap ? Array(collected.prefix(cap)) : collected
     }
 
     // MARK: - Recently played / recommendations
@@ -929,8 +1049,16 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
             var request = MusicCatalogResourceRequest<Artist>(matching: \.id, equalTo: MusicItemID(artistID))
             request.properties = [.albums]
             let response = try await request.response()
-            guard let artist = response.items.first, let albums = artist.albums else { return [] }
-            return albums.map(Self.mapAlbum)
+            guard let artist = response.items.first, var albums = artist.albums else { return [] }
+            // The relationship arrives as the first batch only (~25);
+            // drain nextBatch so prolific artists show their whole catalogue.
+            var out = albums.map(Self.mapAlbum)
+            while albums.hasNextBatch, out.count < 400,
+                  let next = try await albums.nextBatch() {
+                out.append(contentsOf: next.map(Self.mapAlbum))
+                albums = next
+            }
+            return out
         } catch { return [] }
     }
 
@@ -942,8 +1070,14 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
             let response = try await req.response()
             guard let artist = response.items.first else { return [] }
             let loaded = try await artist.with([.albums])
-            guard let albums = loaded.albums else { return [] }
-            return albums.map(Self.mapLibraryAlbum)
+            guard var albums = loaded.albums else { return [] }
+            var out = albums.map(Self.mapLibraryAlbum)
+            while albums.hasNextBatch, out.count < 400,
+                  let next = try await albums.nextBatch() {
+                out.append(contentsOf: next.map(Self.mapLibraryAlbum))
+                albums = next
+            }
+            return out
         } catch { return [] }
     }
 
@@ -991,9 +1125,10 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
             songReq.limit = pageSize
             songReq.offset = offset
             let songResponse = try await songReq.response()
-            return songResponse.items
+            let mapped = songResponse.items
                 .filter(Self.isPlayableLibrarySong)
                 .map(Self.mapLibrarySong)
+            return (mapped, songResponse.items.count)
         }
     }
 

@@ -1,6 +1,55 @@
 
 # Changelog
 
+## v4.12 — 2026-06-21 — Queue Library (beta), Audible, Apple Music library, A–Z browse, discovery & reliability fixes
+
+A feature release. A new Queue Library window for organising saved queues, Audible audiobook playback, a native Apple Music "Your Library" surface, an A–Z fast-scroll for long browse lists, a fix for households whose speakers stopped discovering when a room name contained "&", reduced speaker drop-outs, album right-click track-order and menu-bar window-lifecycle fixes, and a wide localization pass. Build 31.
+
+### Queue Library (beta)
+
+New `QueueLibraryWindow` (opens from the toolbar and the Window menu) for saving and organising play queues independently of Sonos's saved-queue caps. Saved queues persist locally (`SavedQueueRepository`, with `QueueHistory`) and can be grouped into folders, filtered by room, shown as an icon grid or a sortable table, reordered, duplicated, and exported to M3U or CSV. Tracks drag between queues to copy. Ships as **beta** — layout and feature set are subject to change in later releases.
+
+### Audible audiobook playback (#61)
+
+Audible search results are playable but non-enumerable `mediaCollection`s (`itemType=audiobook`, `canPlay=true`, `canEnumerate=false`). The `reftitle:` id is rejected by `getMediaURI` ("unsupported Sonos entity tag reftitle") and the synthesised track-form `x-sonos-http:` URI faults UPnP 800 on `AddURIToQueue`. They now play as a container via `x-rincon-cpcontainer:<1004206c><id>?…&flags=8300` + an `object.container.playlistContainer` DIDL — the same path albums use. Single-track play now routes through `resolveSMAPIPlayback` before enqueue (a no-op for Spotify, so the #42 single-track fix is preserved).
+
+### Apple Music — Your Library
+
+Native "Your Library" browsing (Songs / Albums / Artists / Playlists) backed by `MusicLibraryRequest`, with infinite scroll. Pagination keys off the raw response count so filtered items no longer truncate the walk, and album fetches carry a `libraryAddedDate` sort because `MusicLibraryRequest<Album>` otherwise returns empty-titled stub items; `isPlayableLibraryAlbum` no longer gates on the unreliable `trackCount`.
+
+### Album track order on right-click (#59)
+
+Right-clicking an album for Add to Queue / Play Next now keeps leaf tracks in the album's own browse-returned (disc) order; only container children are sorted alphabetically (`BrowseViewModel.collectLeaves`).
+
+### Menu bar / window lifecycle (#60)
+
+Closing the main window no longer quits the app — it stays available in the menu bar and dock (`applicationShouldTerminateAfterLastWindowClosed = false`). The main scene is now a keyed `Window("Choragus", id: "main")`; the menu-bar "Open Choragus" button and a new Window-menu **Open Choragus** (⌘0) reopen it.
+
+### Speaker discovery — rooms with "&" in the name (#63)
+
+A household with a room whose name contains `&` (e.g. "Bar & Grill") stopped discovering **any** speakers on v4.11. `GetZoneGroupState` returned the name as `ZoneName="Foo &amp; Bar"`; a redundant second unescape turned it into a bare `&`, which made the XML parser reject the entire document, so the whole topology came back empty. Fixed by removing the double-unescape and adding `XMLResponseParser.escapingBareAmpersands`, which repairs any genuinely-bare `&` (one not part of a valid entity) before parsing. Covered by a new regression test.
+
+### Browse — A–Z fast-scroll for long lists (#58)
+
+Long browse lists (local-library artists / albums / tracks) gain an A–Z index button beside the search field. Tapping a letter jumps the list to the first entry in that bucket (`scrollToLetter`, first-letter bucketed with "#" for digits/symbols). Shown only for lists long enough to warrant it.
+
+### Reliability — fewer disappearing speakers (#46), quieter diagnostics (#64)
+
+- **Missing speakers (#46).** A speaker dropping out of a group mid-playback is reduced: rapid UPnP-subscription flapping is detected and the rebind is throttled, network path-change handling is debounced to one rebind per change, and a device is no longer rebound on every topology flip.
+- **Diagnostic-log flooding (#64).** Browsing a large library no longer floods the bug bundle with iTunes art rate-limit warnings. Art lookups wait for the limiter's budget instead of piling on, high-volume limiter messages drop to debug level, and the limiter's state persists across relaunches so a fresh launch doesn't re-flood it.
+
+### Music services — Spotify connect on a non-default sid (#57)
+
+A service a household exposes under a non-default SMAPI sid — Spotify was observed at sid 9 rather than 12 — could sit in **Settings → Music Services** never turning active no matter how many favourites were added. The connect/status path now resolves the service by its runtime sid (the per-household catalog work from issue #19) so it reflects the connected state correctly.
+
+### Localization
+
+A large pass routing previously-English UI strings through `L10n` across all 13 languages — the Queue Library window, the Suno explore window, Plex-direct error and status messages, the Now Playing history-tab headers, preset save/apply status toasts, and assorted labels — plus completion of three Plex strings (`plexPlaylists`, `plexSmartPlaylist`, `plexTracksCountFormat`) that previously shipped English-only.
+
+### Internal
+
+In-progress visualisation experiments (the play-history "For Fun" and "Listening Galaxy" surfaces) are pulled from the Visualisation menu while they are reworked; the shipping Karaoke and Back of the Club visualisations are unchanged.
+
 ## v4.11 — 2026-06-06 — TIDAL, Suno, SomaFM, save-queue-to-playlist, metadata fixes
 
 A feature release. Three new services connect (TIDAL, Suno, SomaFM), the queue can be saved to a Sonos or Apple Music playlist, history gains play actions, and a batch of playback / metadata correctness fixes land. Build 30.

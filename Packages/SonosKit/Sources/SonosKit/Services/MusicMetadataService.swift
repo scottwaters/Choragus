@@ -32,10 +32,16 @@ public struct ArtistInfo: Codable, Equatable, Sendable {
     /// Public URL for the artist's Wikipedia page when one was found.
     /// Used by the About card to render an "Open on Wikipedia" link.
     public let wikipediaURL: String?
+    /// Ordered photo gallery for the About card (primary photo first, then
+    /// extra images from the Wikipedia article's media list). Optional so
+    /// cached pre-gallery entries still decode; the Apple Music photo is
+    /// prepended by the panel, not stored here.
+    public let imageURLs: [String]?
 
     public init(name: String, bio: String?, tags: [String],
                 similarArtists: [String], listeners: Int?,
-                imageURL: String?, wikipediaURL: String? = nil) {
+                imageURL: String?, wikipediaURL: String? = nil,
+                imageURLs: [String]? = nil) {
         self.name = name
         self.bio = bio
         self.tags = tags
@@ -43,6 +49,7 @@ public struct ArtistInfo: Codable, Equatable, Sendable {
         self.listeners = listeners
         self.imageURL = imageURL
         self.wikipediaURL = wikipediaURL
+        self.imageURLs = imageURLs
     }
 }
 
@@ -219,9 +226,13 @@ public final class MusicMetadataService: ArtistInfoProvider {
             for tag in current.tags where !newTags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
                 newTags.append(tag)
             }
+            // FALLBACK only: the About panel shows the Apple Music photo in
+            // its own slot — overwriting `imageURL` here made both slots
+            // render the identical Apple image. Keep the Wikipedia/Last.fm
+            // photo when one exists so the two slots show distinct sources.
             let newImage: String?
-            if let amImage = amDetails.imageURL, !amImage.isEmpty {
-                newImage = amImage
+            if current.imageURL?.isEmpty ?? true {
+                newImage = amDetails.imageURL
             } else {
                 newImage = current.imageURL
             }
@@ -233,6 +244,31 @@ public final class MusicMetadataService: ArtistInfoProvider {
                 listeners: current.listeners,
                 imageURL: newImage,
                 wikipediaURL: current.wikipediaURL
+            )
+        }
+
+        // Photo gallery: primary photo first, then extra images from the
+        // Wikipedia article's media list (capped — the Apple Music photo is
+        // prepended at display time, keeping the panel's max at 5).
+        if let current = merged {
+            var gallery: [String] = []
+            var seenKeys = Set<String>()
+            if let primary = current.imageURL, !primary.isEmpty {
+                gallery.append(primary)
+                seenKeys.insert(Self.imageIdentityKey(primary))
+            }
+            if let wiki = current.wikipediaURL {
+                for extra in await fetchWikipediaGalleryImages(wikipediaURL: wiki, limit: 6)
+                where seenKeys.insert(Self.imageIdentityKey(extra)).inserted {
+                    gallery.append(extra)
+                    if gallery.count >= 4 { break }
+                }
+            }
+            merged = ArtistInfo(
+                name: current.name, bio: current.bio, tags: current.tags,
+                similarArtists: current.similarArtists, listeners: current.listeners,
+                imageURL: current.imageURL, wikipediaURL: current.wikipediaURL,
+                imageURLs: gallery.isEmpty ? nil : gallery
             )
         }
 
@@ -453,6 +489,55 @@ public final class MusicMetadataService: ArtistInfoProvider {
     }
 
     // MARK: - Wikipedia
+
+    /// Identity key for gallery dedupe. Wikipedia serves the SAME image at
+    /// many thumbnail sizes (`…/thumb/a/ab/Name.jpg/640px-Name.jpg` vs the
+    /// summary endpoint's `330px-Name.jpg`) — distinct URL strings, one
+    /// picture. The key is the original filename with the `NNNpx-` size
+    /// prefix stripped; non-Wikipedia URLs key as themselves.
+    public static func imageIdentityKey(_ urlString: String) -> String {
+        guard urlString.contains("wikimedia.org") || urlString.contains("wikipedia.org"),
+              let last = urlString.split(separator: "/").last else {
+            return urlString
+        }
+        var name = String(last)
+        if let r = name.range(of: #"^\d+px-"#, options: .regularExpression) {
+            name.removeSubrange(r)
+        }
+        return name.removingPercentEncoding?.lowercased() ?? name.lowercased()
+    }
+
+    /// Extra photos from the Wikipedia article's media list
+    /// (`/api/rest_v1/page/media-list/{title}`) for the About gallery.
+    /// Filters to raster images (the list mixes in SVG logos, maps,
+    /// signatures) and returns at most `limit`. Result is persisted
+    /// inside the cached `ArtistInfo`, so this fetch runs once per
+    /// artist+language per cache TTL.
+    private func fetchWikipediaGalleryImages(wikipediaURL: String, limit: Int) async -> [String] {
+        guard let pageURL = URL(string: wikipediaURL),
+              let host = pageURL.host,
+              pageURL.path.hasPrefix("/wiki/") else { return [] }
+        let title = String(pageURL.path.dropFirst("/wiki/".count))
+        guard let api = URL(string: "https://\(host)/api/rest_v1/page/media-list/\(title)") else { return [] }
+        guard let (data, response) = try? await URLSession.shared.data(from: api),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = json["items"] as? [[String: Any]] else { return [] }
+        var out: [String] = []
+        for item in items where (item["type"] as? String) == "image" {
+            guard let srcset = item["srcset"] as? [[String: Any]],
+                  var src = srcset.first?["src"] as? String else { continue }
+            let lower = src.lowercased()
+            // Raster photos only — skip vector logos/maps/signatures and icons.
+            guard lower.contains(".jpg") || lower.contains(".jpeg") || lower.contains(".png"),
+                  !lower.contains("logo"), !lower.contains("icon"),
+                  !lower.contains("signature"), !lower.contains("map") else { continue }
+            if src.hasPrefix("//") { src = "https:" + src }
+            if !out.contains(src) { out.append(src) }
+            if out.count >= limit { break }
+        }
+        return out
+    }
 
     /// Wikipedia REST summary endpoint. Free, no key, low latency,
     /// curated prose. Two-step lookup: OpenSearch finds the best

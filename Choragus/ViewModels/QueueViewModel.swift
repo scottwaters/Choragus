@@ -315,4 +315,90 @@ final class QueueViewModel: ObservableObject {
             ErrorHandler.shared.handle(error, context: "QUEUE")
         }
     }
+
+    // MARK: - Queue History
+
+    /// Recoverable snapshots for the current group, newest first.
+    var queueSnapshots: [QueueSnapshot] {
+        sonosManager.queueSnapshots(group: group)
+    }
+
+    func restoreSnapshot(_ snapshot: QueueSnapshot) async {
+        do {
+            try await sonosManager.restoreQueueSnapshot(group: group, objectID: snapshot.objectID)
+            // Do NOT loadQueue() here. The replace path is audio-first: the
+            // first track lands now, the rest fill in the background, and each
+            // step posts `.queueChanged`, which the panel observer reloads on.
+            // An immediate loadQueue() reads the partial 1-track queue and
+            // races to last-writer, leaving the panel stuck on one track — the
+            // exact "doesn't reload" symptom. The Queue Manager path works
+            // precisely because it lets the observer drive the reload.
+            showSaveMessage("Restored \(snapshot.summary)")
+        } catch {
+            ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
+        }
+    }
+
+    // MARK: - Choragus-side saved queues
+
+    /// Local saved-queue index. Refreshed on demand (cheap SQLite read);
+    /// @Published so the menu re-renders after save / rename / delete.
+    @Published var localSavedQueues: [LocalSavedQueue] = []
+
+    func refreshLocalSavedQueues() {
+        localSavedQueues = sonosManager.localSavedQueues()
+    }
+
+    func saveToChoragus(name: String) async {
+        do {
+            let count = try await sonosManager.saveQueueToChoragus(group: group, name: name)
+            refreshLocalSavedQueues()
+            showSaveMessage("Saved \(count) tracks to Choragus as \"\(name)\"")
+        } catch {
+            ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
+        }
+    }
+
+    func loadLocalSavedQueue(_ saved: LocalSavedQueue, append: Bool) async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            try await sonosManager.loadLocalSavedQueue(id: saved.id, group: group, append: append)
+            await loadQueue()
+        } catch {
+            ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
+        }
+    }
+
+    func deleteLocalSavedQueue(_ saved: LocalSavedQueue) {
+        sonosManager.deleteLocalSavedQueue(id: saved.id)
+        refreshLocalSavedQueues()
+    }
+
+    // MARK: - Queue tools
+
+    /// Display-only filter over the loaded queue rows.
+    @Published var filterText: String = ""
+
+    var displayedItems: [QueueItem] {
+        let needle = filterText.trimmingCharacters(in: .whitespaces)
+        guard !needle.isEmpty else { return queueItems }
+        return queueItems.filter {
+            $0.title.localizedCaseInsensitiveContains(needle)
+                || $0.artist.localizedCaseInsensitiveContains(needle)
+                || $0.album.localizedCaseInsensitiveContains(needle)
+        }
+    }
+
+    func removeDuplicates() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let removed = try await sonosManager.dedupeQueue(group: group)
+            await loadQueue()
+            showSaveMessage(removed == 0 ? "No duplicates found" : "Removed \(removed) duplicates")
+        } catch {
+            ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
+        }
+    }
 }

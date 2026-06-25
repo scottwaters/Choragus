@@ -377,19 +377,38 @@ struct NowPlayingContextPanel: View {
     private func artistSection(_ info: ArtistInfo) -> some View {
         aboutCard {
             VStack(alignment: .leading, spacing: 10) {
+                // Photo gallery: Apple Music photo first, then the
+                // Wikipedia/Last.fm gallery, deduplicated, capped at 5.
+                // (Cached pre-gallery entries fall back to the single
+                // `imageURL`; old entries that had the Apple photo written
+                // into `imageURL` dedupe down to one.)
+                let gallery: [URL] = {
+                    var candidates: [String] = []
+                    if let apple = appleArtistArtURL { candidates.append(apple.absoluteString) }
+                    if let list = info.imageURLs, !list.isEmpty {
+                        candidates.append(contentsOf: list)
+                    } else if let single = info.imageURL {
+                        candidates.append(single)
+                    }
+                    // Dedupe by underlying FILE identity, not URL string —
+                    // Wikipedia serves the same photo at multiple thumbnail
+                    // sizes, and 30-day-cached galleries may hold such dupes.
+                    var seen = Set<String>()
+                    var out: [URL] = []
+                    for s in candidates
+                    where seen.insert(MusicMetadataService.imageIdentityKey(s)).inserted {
+                        if let u = URL(string: s) {
+                            out.append(u)
+                            if out.count == 5 { break }
+                        }
+                    }
+                    return out
+                }()
                 sectionHeader(
                     icon: "person.fill", title: info.name,
                     subtitle: artistSubtitle(info),
-                    imageURL: info.imageURL,
-                    onImageTap: {
-                        if let s = info.imageURL, let url = URL(string: s) {
-                            expandedArtistPhotoURL = url
-                        }
-                    },
-                    appleImageURL: appleArtistArtURL,
-                    onAppleImageTap: {
-                        if let url = appleArtistArtURL { expandedArtistPhotoURL = url }
-                    }
+                    galleryURLs: gallery,
+                    onGalleryTap: { url in expandedArtistPhotoURL = url }
                 )
                 if !info.tags.isEmpty {
                     tagRow(info.tags)
@@ -518,7 +537,9 @@ struct NowPlayingContextPanel: View {
                                imageURL: String? = nil,
                                onImageTap: (() -> Void)? = nil,
                                appleImageURL: URL? = nil,
-                               onAppleImageTap: (() -> Void)? = nil) -> some View {
+                               onAppleImageTap: (() -> Void)? = nil,
+                               galleryURLs: [URL] = [],
+                               onGalleryTap: ((URL) -> Void)? = nil) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
                 .font(.callout)
@@ -536,9 +557,27 @@ struct NowPlayingContextPanel: View {
                 }
             }
             Spacer(minLength: 8)
-            // Apple Music artwork on the LEFT of the Wikipedia/Last.fm
-            // artwork when MusicKit is enabled. Tappable like the
-            // existing one — both pipe to the same expand sheet.
+            // Gallery mode (artist card): up to 5 thumbnails, Apple Music
+            // photo first, then Wikipedia/Last.fm. Each expands on tap.
+            if !galleryURLs.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(galleryURLs, id: \.absoluteString) { url in
+                        CachedAsyncImage(url: url, cornerRadius: 8, priority: .interactive)
+                            .frame(width: 64, height: 64)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(.tint.opacity(0.25), lineWidth: 0.5)
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture { onGalleryTap?(url) }
+                            .help(L10n.clickToEnlarge)
+                            .accessibilityLabel("\(title) photo")
+                    }
+                }
+            }
+            // Legacy two-slot mode (album card and any caller not using the
+            // gallery): Apple Music artwork on the LEFT of the
+            // Wikipedia/Last.fm artwork. Tappable; both expand.
             if let appleImageURL {
                 CachedAsyncImage(url: appleImageURL, cornerRadius: 8, priority: .interactive)
                     .frame(width: 64, height: 64)
@@ -668,7 +707,7 @@ struct NowPlayingContextPanel: View {
     private var trackHistoryColumn: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("This Track")
+                Text(L10n.thisTrack)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
@@ -701,7 +740,7 @@ struct NowPlayingContextPanel: View {
     private var artistHistoryColumn: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("By This Artist")
+                Text(L10n.byThisArtist)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
@@ -816,7 +855,7 @@ struct NowPlayingContextPanel: View {
         return VStack(alignment: .leading, spacing: 4) {
             Text(L10n.playsCountFormat(entries.count))
                 .font(.title3.weight(.semibold))
-            Text("\(uniqueTracks) unique track\(uniqueTracks == 1 ? "" : "s")")
+            Text(L10n.uniqueTracksCountFormat(uniqueTracks))
                 .font(.callout)
                 .foregroundStyle(.secondary)
             if let last = entries.first {

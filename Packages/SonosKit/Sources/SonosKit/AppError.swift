@@ -17,7 +17,7 @@ public enum AppError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .networkUnavailable:
-            return "The network is unavailable. Check your Wi-Fi connection."
+            return "The network is unavailable. Check your Wi-Fi connection. Usually transient — only report if it happens often."
         case .speakerNotFound(let name):
             return "Speaker \"\(name)\" was not found on the network."
         case .soapFault(let code, _):
@@ -29,7 +29,7 @@ public enum AppError: Error, LocalizedError {
         case .cacheFailed(let detail):
             return "Cache error: \(detail)"
         case .timeout:
-            return "The request timed out. The speaker may be unresponsive."
+            return "The request timed out. The speaker may be unresponsive. Usually transient — only report if it happens often."
         case .unknown:
             return "An unexpected error occurred."
         }

@@ -9,11 +9,29 @@ public final class DiagnosticsService: @unchecked Sendable {
 
     private var repository: DiagnosticsRepository?
 
+    /// Whether an error-level entry exists (persisted from a prior session
+    /// or logged this run). Guards the toolbar diagnostics badge so the red
+    /// indicator appears only on an actual error — not on warnings, info, or
+    /// nothing. Read off the hot path: `log` consults the cached flag rather
+    /// than querying SQLite per line.
+    private let errorLock = NSLock()
+    private var _hasErrors = false
+
+    public var hasErrors: Bool {
+        errorLock.lock(); defer { errorLock.unlock() }
+        return _hasErrors
+    }
+
     private init() {}
 
     public func attach(repository: DiagnosticsRepository) {
         self.repository = repository
         repository.purgeStale()
+        // Seed the badge from persisted errors (runs after purgeStale on the
+        // repo's serial queue, so it reflects the trimmed store).
+        let seeded = repository.errorCount() > 0
+        errorLock.lock(); _hasErrors = seeded; errorLock.unlock()
+        if seeded { NotificationCenter.default.post(name: .diagnosticsErrorStateChanged, object: nil) }
     }
 
     public func log(level: DiagnosticLevel,
@@ -46,6 +64,16 @@ public final class DiagnosticsService: @unchecked Sendable {
             return String(data: data, encoding: .utf8)
         }
         repository?.insert(level: level, tag: tag, message: persisted, contextJSON: json)
+
+        // Flip the badge on the first error of the session and notify once;
+        // subsequent errors don't re-post, so a storm can't flood observers.
+        if level == .error {
+            errorLock.lock()
+            let wasSet = _hasErrors
+            _hasErrors = true
+            errorLock.unlock()
+            if !wasSet { NotificationCenter.default.post(name: .diagnosticsErrorStateChanged, object: nil) }
+        }
     }
 
     public func recent(limit: Int = 1000) -> [DiagnosticEntry] {
@@ -54,6 +82,8 @@ public final class DiagnosticsService: @unchecked Sendable {
 
     public func clearAll() {
         repository?.clearAll()
+        errorLock.lock(); _hasErrors = false; errorLock.unlock()
+        NotificationCenter.default.post(name: .diagnosticsErrorStateChanged, object: nil)
     }
 }
 

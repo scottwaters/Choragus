@@ -407,7 +407,7 @@ struct PlayHistoryDashboard: View {
                     Spacer()
                     if let hDay = hoveredDay,
                        let match = data.first(where: { Calendar.current.isDate($0.0, inSameDayAs: hDay) }) {
-                        Text("\(match.1) plays")
+                        Text(L10n.playsCountFormat(match.1))
                             .font(.system(size: 12, weight: .semibold))
                         Text("·")
                             .foregroundStyle(.tertiary)
@@ -466,7 +466,7 @@ struct PlayHistoryDashboard: View {
                         .font(.headline)
                     Spacer()
                     if let hHour = hoveredHour, let match = data.first(where: { $0.0 == hHour }) {
-                        Text("\(match.1) plays")
+                        Text(L10n.playsCountFormat(match.1))
                             .font(.system(size: 12, weight: .semibold))
                         Text("·")
                             .foregroundStyle(.tertiary)
@@ -726,7 +726,7 @@ struct PlayHistoryDashboard: View {
                         .font(.headline)
                     Spacer()
                     if let hDay = hoveredWeekday, let match = data.first(where: { $0.0 == hDay }) {
-                        Text("\(match.1) plays")
+                        Text(L10n.playsCountFormat(match.1))
                             .font(.system(size: 12, weight: .semibold))
                         Text("·")
                             .foregroundStyle(.tertiary)

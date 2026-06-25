@@ -515,7 +515,17 @@ public final class SMAPIClient {
         }
         let httpResponse = response as? HTTPURLResponse
         let responseStr = String(data: data, encoding: .utf8) ?? ""
-        if httpResponse?.statusCode == 500 && !responseStr.contains("TokenRefreshRequired") && !responseStr.contains("NOT_LINKED_RETRY") {
+        if let code = httpResponse?.statusCode, !(200...299).contains(code) {
+            // 500 carrying a token-refresh / link-retry fault is part of the
+            // SMAPI auth protocol — return the body so callers parse and
+            // retry. Every OTHER non-2xx (401/403/404/503, often an HTML
+            // body) previously flowed into the XML parsers, which silently
+            // returned empty lists — surfaced to the user as "no results"
+            // instead of an actionable failure.
+            if code == 500,
+               responseStr.contains("TokenRefreshRequired") || responseStr.contains("NOT_LINKED_RETRY") {
+                return responseStr
+            }
             throw SMAPIError.soapFault(responseStr)
         }
         return responseStr

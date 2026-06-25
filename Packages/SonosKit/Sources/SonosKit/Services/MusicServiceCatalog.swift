@@ -245,6 +245,16 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
     /// (catalog descriptor or `(sid << 8) + 7` fallback), then delegates
     /// to the static rule's cdudn template.
     public func cdudn(forSid sid: Int, authToken: String? = nil) -> String {
+        // Apple Music: the local-device descriptor, NOT the service-account
+        // form. With the SA_RINCON service descriptor the speaker validates
+        // the account against Apple PER TRACK at enqueue (measured 1.16 s vs
+        // 0.15 s per AddURIToQueue, 2026-06-11); the official Sonos app's
+        // queue entries carry no service descriptor at all — the `sn=` in
+        // the hls-static URI binds the account at play time. Verified to
+        // enqueue fast AND play.
+        if rules(forSid: sid)?.canonicalName == ServiceName.appleMusic {
+            return "RINCON_AssociatedZPUDN"
+        }
         let type = rinconServiceType(forSid: sid)
         if let rule = rules(forSid: sid) {
             return rule.cdudn(rinconServiceType: type, authToken: authToken)
@@ -370,8 +380,11 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
             ),
             ServiceRules(
                 canonicalName: ServiceName.appleMusic,
-                trackURIScheme: URIPrefix.sonosHTTP,
-                trackURIExtension: ".mp4",
+                // HLS-static matches the official app's enqueue form; the
+                // legacy `x-sonos-http:…mp4` form forced a per-track Apple
+                // validation at enqueue time (slow bulk adds).
+                trackURIScheme: URIPrefix.sonosApiHLSStatic,
+                trackURIExtension: "",
                 trackPlaybackFlags: 8232,
                 supportsAppLink: false,
                 defaultSerialNumber: 1

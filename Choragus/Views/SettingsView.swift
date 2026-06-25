@@ -80,6 +80,9 @@ private struct TabContentView: View {
     // observes UserDefaults changes. Manual `Binding(get:set:)` against
     // UserDefaults doesn't, which made the checkboxes feel stuck.
     @AppStorage(UDKey.menuBarEnabled) private var menuBarEnabled = false
+    /// Event-listener callback port (applied at next launch — see
+    /// EventListener.preferredPort). Clamped to the unprivileged range.
+    @AppStorage(UDKey.eventListenerPort) private var eventListenerPort = 3401
     @AppStorage(UDKey.hideDiagnosticsIcon) private var hideDiagnosticsIcon = false
     @AppStorage(UDKey.scrollVolumeEnabled) private var scrollVolumeEnabled = false
     @AppStorage(UDKey.middleClickMuteEnabled) private var middleClickMuteEnabled = true
@@ -543,6 +546,18 @@ private struct TabContentView: View {
 
                 Divider()
 
+                settingsRow(L10n.eventListenerPort) {
+                    TextField("", value: $eventListenerPort, format: .number.grouping(.never))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 90)
+                        .onSubmit { clampEventListenerPort() }
+                }
+                Text(L10n.eventListenerPortHint)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                Divider()
+
                 ITunesThrottleStatusRow()
 
                 infoToggle(isExpanded: $showNetworkInfo, label: L10n.aboutNetwork,
@@ -797,6 +812,15 @@ private struct TabContentView: View {
         case .auto:    return L10n.autoDiscovery
         case .bonjour: return L10n.bonjourDiscovery
         case .ssdp:    return L10n.legacyMulticast
+        }
+    }
+
+    /// Keep the event-listener port inside the unprivileged range —
+    /// EventListener falls back to the default for out-of-range values, so
+    /// the clamp keeps the field honest about what will actually bind.
+    private func clampEventListenerPort() {
+        if eventListenerPort < 1024 || eventListenerPort > 65535 {
+            eventListenerPort = 3401
         }
     }
 }

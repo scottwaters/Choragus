@@ -172,6 +172,11 @@ public class SonosManager: ObservableObject {
     @Published public var cacheAge: String = ""
     @Published public var isRefreshing = false
     @Published public var staleMessage: String?
+    /// Non-fatal advisory shown when the network path is flapping between
+    /// interfaces (a dual-interface Mac oscillating Wi-Fi ⇄ Ethernet). Set by
+    /// the transport path monitor; user-dismissable. Distinct from
+    /// `staleMessage` so it doesn't pre-empt a real stale-data banner.
+    @Published public var networkAdvisory: String?
 
     // MARK: - Transport State (centralized, updated by transport strategy)
 
@@ -487,6 +492,14 @@ public class SonosManager: ObservableObject {
 
     /// Last-fetched queue items per group — used for track info recovery
     private var lastQueueItems: [String: [QueueItem]] = [:]
+
+    /// Recoverable queue snapshots taken before destructive mutations
+    /// (replace-all, clear, bulk remove). See `QueueHistoryStore`.
+    public let queueHistory = QueueHistoryStore()
+
+    /// Choragus-side saved queues — independent of the Sonos household.
+    public lazy var savedQueueRepo = SavedQueueRepository(
+        dbPath: AppPaths.appSupportDirectory.appendingPathComponent("saved_queues.sqlite").path)
     private var refreshTimer: Timer?
     private var refreshingHouseholds: Set<String> = []  // serializes topology refreshes per household (S1/S2 coexist)
     /// Last successful topology refresh per household. Used to throttle —
@@ -515,6 +528,15 @@ public class SonosManager: ObservableObject {
     private let transportPathQueue = DispatchQueue(label: "com.choragus.sonos.transport-path")
     private var lastTransportPathSignature: String = ""
     private var pendingTransportRestart: Task<Void, Never>?
+    /// Trailing timestamps of genuine interface-class swaps, in a rolling
+    /// window. A Mac with both Wi-Fi and Ethernet active can oscillate the
+    /// primary path every ~minute; each swap is real, so the signature
+    /// changes every time and would otherwise rebind subscriptions per flip
+    /// (issue #46). Used to detect that flapping and throttle the rebind.
+    private var transportPathChangeTimes: [Date] = []
+    /// When the last actual subscription rebind ran. Gates the rebind rate so
+    /// sustained flapping collapses to one rebind per flap interval.
+    private var lastTransportRebind: Date = .distantPast
 
     // Debug logging is in the sonosDebugLog free function below
 
@@ -704,6 +726,15 @@ public class SonosManager: ObservableObject {
         }
     }
 
+    /// Best-effort GENA cleanup for app quit — unsubscribes every event
+    /// subscription so the speakers don't spend the next lease period
+    /// timing out against a dead callback before serving live subscribers.
+    public func unsubscribeAllForShutdown() async {
+        await transportStrategy?.stop()
+        transportStrategy = nil
+        strategyStarted = false
+    }
+
     public func rescan() {
         sonosDebugLog("[DISCOVERY] Manual rescan triggered — clearing \(discoveredLocations.count) cached locations, pinging \(discoveryTransports.count) transport(s)")
         discoveredLocations.removeAll()
@@ -739,22 +770,94 @@ public class SonosManager: ObservableObject {
             let sig = "\(path.status)|\(iface)"
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                // Speaker-subnet affinity: the only thing that actually
+                // invalidates our UPnP event-callback URL is a change in the
+                // LOCAL address speakers reach us on. Prefer that as the change
+                // signal so a path event that doesn't move our speaker-facing
+                // IP (VPN toggle, signal blip, same-class roam) doesn't churn
+                // subscriptions. Fall back to the interface-class signature
+                // until a speaker is known (issue #46).
+                let effectiveSig = self.localAddressFacingSpeakers().map { "ip:\($0)" } ?? sig
                 if self.lastTransportPathSignature.isEmpty {
-                    self.lastTransportPathSignature = sig
+                    self.lastTransportPathSignature = effectiveSig
                     return
                 }
-                guard sig != self.lastTransportPathSignature else { return }
-                self.lastTransportPathSignature = sig
+                guard effectiveSig != self.lastTransportPathSignature else { return }
+                self.lastTransportPathSignature = effectiveSig
+
+                // Flap detection: count genuine speaker-facing changes in a
+                // rolling 2-minute window. ≥3 means the link is oscillating,
+                // not a one-off transition.
+                let now = Date()
+                self.transportPathChangeTimes.append(now)
+                self.transportPathChangeTimes.removeAll { now.timeIntervalSince($0) > 120 }
+                let flapping = self.transportPathChangeTimes.count >= 3
+                if flapping { self.networkAdvisory = L10n.networkUnstableAdvisory }
+
                 self.pendingTransportRestart?.cancel()
                 self.pendingTransportRestart = Task { @MainActor [weak self] in
+                    // Trailing-edge debounce coalesces the flurry of one
+                    // transition.
                     try? await Task.sleep(nanoseconds: 800_000_000)
                     guard !Task.isCancelled, let self else { return }
+                    // Under flapping, throttle hard: collapse all swaps into at
+                    // most one rebind per flap interval rather than one per
+                    // flip. The periodic rescan reconciles speakers meanwhile,
+                    // so rebinding on every flip is futile churn (issue #46).
+                    if flapping {
+                        let wait = self.lastTransportRebind.addingTimeInterval(180).timeIntervalSinceNow
+                        if wait > 0 {
+                            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+                            guard !Task.isCancelled else { return }
+                        }
+                    }
+                    self.lastTransportRebind = Date()
                     await self.transportStrategy?.restartForNetworkChange()
+                    // Clear the advisory once the link has settled below the
+                    // flap threshold.
+                    let settled = Date()
+                    self.transportPathChangeTimes.removeAll { settled.timeIntervalSince($0) > 120 }
+                    if self.transportPathChangeTimes.count < 3 { self.networkAdvisory = nil }
                 }
             }
         }
         monitor.start(queue: transportPathQueue)
         transportPathMonitor = monitor
+    }
+
+    /// The local IPv4 address the OS would use to reach the speakers, or nil
+    /// if no speaker is known yet. A connected UDP socket sends no packets —
+    /// the kernel just resolves the source address for that destination, which
+    /// is exactly the address our UPnP event-callback URL must advertise. A
+    /// change in it is the true trigger for re-subscribing; a path event that
+    /// leaves it unchanged is cosmetic and can be ignored (issue #46).
+    private func localAddressFacingSpeakers() -> String? {
+        guard let host = groups.first?.coordinator?.ip ?? devices.values.first?.ip,
+              !host.isEmpty else { return nil }
+        let fd = socket(AF_INET, SOCK_DGRAM, 0)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        var dest = sockaddr_in()
+        dest.sin_family = sa_family_t(AF_INET)
+        dest.sin_port = in_port_t(UInt16(1400).bigEndian)   // any port; route only
+        guard inet_pton(AF_INET, host, &dest.sin_addr) == 1 else { return nil }
+        let connected = withUnsafePointer(to: &dest) { p in
+            p.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard connected == 0 else { return nil }
+        var local = sockaddr_in()
+        var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let got = withUnsafeMutablePointer(to: &local) { p in
+            p.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                getsockname(fd, $0, &len)
+            }
+        }
+        guard got == 0 else { return nil }
+        var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+        inet_ntop(AF_INET, &local.sin_addr, &buf, socklen_t(INET_ADDRSTRLEN))
+        return String(cString: buf)
     }
 
     /// Builds the active transport list from `discoveryMode` and wires the
@@ -797,12 +900,22 @@ public class SonosManager: ObservableObject {
         }
     }
 
+    /// Locations whose description fetch failed, with exponential backoff.
+    /// After a VLAN / subnet move the topology cache and the Mac's stale
+    /// mDNS answers keep re-surfacing the speakers' OLD addresses on every
+    /// 30 s rescan; without backoff each dead address burns a full fetch
+    /// timeout per cycle and the real (reflected) locations queue behind
+    /// them — observed as live speakers "slowly appearing" after launch.
+    private var failedLocationBackoff: [String: (failures: Int, until: Date)] = [:]
+
     private func handleDiscoveredDevice(location: String, ip: String, port: Int) async {
         guard !discoveredLocations.contains(location) else { return }
+        if let backoff = failedLocationBackoff[location], backoff.until > Date() { return }
         discoveredLocations.insert(location)
 
         do {
             guard let desc = try await DeviceDescriptionParser.fetch(from: location) else { return }
+            failedLocationBackoff[location] = nil
 
             var device = SonosDevice(
                 id: desc.uuid,
@@ -862,7 +975,11 @@ public class SonosManager: ObservableObject {
                 await refreshTopology(from: device)
             }
         } catch {
-            sonosDebugLog("[DISCOVERY] Device description fetch failed: \(error)")
+            let failures = (failedLocationBackoff[location]?.failures ?? 0) + 1
+            // 1 min → 2 → 4 → … capped at 15 min between retries.
+            let delay = min(900.0, 60.0 * pow(2.0, Double(failures - 1)))
+            failedLocationBackoff[location] = (failures, Date().addingTimeInterval(delay))
+            sonosDebugLog("[DISCOVERY] Device description fetch failed (attempt \(failures), retry in \(Int(delay))s): \(location)")
         }
     }
 
@@ -1293,6 +1410,10 @@ public class SonosManager: ObservableObject {
         return uri.hasPrefix("x-sonos-spotify:")
             || uri.hasPrefix("x-sonos-http:")
             || uri.hasPrefix("x-sonos-hls:")
+            // Apple Music tracks now enqueue in the official app's
+            // hls-static form; direct SetAVTransportURI rejects service
+            // tracks, so they keep the queue-replace routing.
+            || uri.hasPrefix(URIPrefix.sonosApiHLSStatic)
     }
 
     /// Pure classification of a SOAP fault into a `StaleDataError`.
@@ -1360,6 +1481,10 @@ public class SonosManager: ObservableObject {
 
     public func dismissStaleMessage() {
         staleMessage = nil
+    }
+
+    public func dismissNetworkAdvisory() {
+        networkAdvisory = nil
     }
 
     // MARK: - Playback Control
@@ -1791,6 +1916,216 @@ public class SonosManager: ObservableObject {
         }
     }
 
+    // MARK: - Apple Music queue metadata repair (fast add, then named)
+
+    /// Serial background repair chain per coordinator.
+    private var queueRepairTasks: [String: Task<Void, Never>] = [:]
+    /// Count of repairs in flight per coordinator — Q:0 GENA events are
+    /// suppressed while non-zero so the swap churn doesn't blink the queue
+    /// panel; one reload fires when the last chained repair finishes.
+    private var queueRepairDepth: [String: Int] = [:]
+    private var queueRepairActiveGroups: Set<String> {
+        Set(queueRepairDepth.filter { $0.value > 0 }.map(\.key))
+    }
+
+    /// Apple Music rows enqueue descriptor-free for speed (~0.15 s/track vs
+    /// ~1.1 s — the slow form makes the speaker fetch metadata from Apple
+    /// per track at enqueue), but the speaker then stores NO title, so other
+    /// controllers (incl. the official app) show unnamed rows. This walker
+    /// repairs each row in the background: insert a service-descriptor copy
+    /// at the same position (speaker fetches the canonical name, ~1.1 s) and
+    /// remove the bare row — net-zero position shift, names appear
+    /// progressively in every controller while playback already runs.
+    ///
+    /// Each swap re-verifies the row (same URI, still bare) so user
+    /// reorders/removals make it skip rather than corrupt, and rows at or
+    /// adjacent to the playing position are left alone (removing the playing
+    /// row would skip playback; +1 covers an advance mid-swap).
+    func scheduleAppleMusicQueueRepair(group: SonosGroup, rows: [(position: Int, uri: String)]) {
+        guard let coordinator = group.coordinator else { return }
+        let amRows = rows.filter { URIPrefix.appleMusicSongID(from: $0.uri) != nil }
+        guard !amRows.isEmpty else { return }
+        let previous = queueRepairTasks[coordinator.id]
+        queueRepairDepth[coordinator.id, default: 0] += 1
+        queueRepairTasks[coordinator.id] = Task { [weak self] in
+            await previous?.value      // serialise with any in-flight repair
+            guard let self else { return }
+            defer {
+                self.queueRepairDepth[coordinator.id, default: 1] -= 1
+                if self.queueRepairDepth[coordinator.id, default: 0] <= 0 {
+                    self.queueRepairDepth[coordinator.id] = nil
+                    self.postQueueChanged(optimisticItems: [])
+                }
+            }
+            let type = MusicServiceCatalog.shared.rinconServiceType(forSid: ServiceID.appleMusic)
+            let desc = "SA_RINCON\(type)_X_#Svc\(type)-0-Token"
+            for (pos, uri) in amRows {
+                if Task.isCancelled { return }
+                let playing = self.groupTrackMetadata[coordinator.id]?.trackNumber ?? -1
+                if pos == playing || pos == playing + 1 { continue }
+                guard let row = try? await self.contentDirectory.browseQueue(
+                        device: coordinator, start: pos - 1, count: 1).items.first,
+                      row.uri == uri,
+                      row.title.isEmpty || TrackMetadata.isTechnicalName(row.title)
+                else { continue }
+                let songID = URIPrefix.appleMusicSongID(from: uri) ?? ""
+                let didl = """
+                <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="10032020song%3a\(songID)" parentID="-1" restricted="true"><upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(desc)</desc></item></DIDL-Lite>
+                """
+                do {
+                    _ = try await self.contentDirectory.addURIToQueue(
+                        device: coordinator, uri: uri, metadata: didl,
+                        desiredFirstTrackNumberEnqueued: pos, enqueueAsNext: true)
+                    try await self.contentDirectory.removeTrackFromQueue(
+                        device: coordinator, objectID: "Q:0/\(pos + 1)")
+                } catch {
+                    sonosDiagLog(.warning, tag: "QUEUE",
+                                 "AM metadata repair failed at position \(pos)",
+                                 context: ["uri": uri, "error": String(describing: error)])
+                    continue
+                }
+                try? await Task.sleep(nanoseconds: 120_000_000)
+            }
+            // Final reload is posted by the defer above when the last
+            // chained repair for this coordinator completes.
+        }
+    }
+
+    /// One iTunes `lookup?id=` per catalog song per session — self-heals
+    /// Apple Music queue rows whose speaker-side metadata is bare (the
+    /// descriptor-free fast enqueue stores none, and the session cache
+    /// doesn't survive a relaunch). Same pattern as `ensureSunoTitle`.
+    private var amQueueMetaFetches = Set<String>()
+
+    /// Resolved iTunes art for local-library albums, keyed by album+artist.
+    /// The speaker's `getaa` art proxy 404s for some NAS files (no embedded
+    /// cover, or the speaker can't extract it), leaving queue rows blank even
+    /// though Now Playing shows art — because Now Playing already resolves
+    /// local art through this same iTunes path. One lookup per album paints
+    /// every row of that album.
+    private var localAlbumArt: [String: String] = [:]
+    private var localAlbumArtFetches = Set<String>()
+    private var localAlbumArtLoaded = false
+    private let localAlbumArtURL = AppPaths.appSupportDirectory.appendingPathComponent("local_album_art.json")
+
+    /// Loads the persisted album→art map once. Persisting the resolved iTunes
+    /// URLs (not just the image bytes, which `ImageCache` already keeps) means
+    /// a relaunch paints covers instantly instead of re-hitting iTunes for
+    /// every album.
+    private func loadLocalAlbumArtIfNeeded() {
+        guard !localAlbumArtLoaded else { return }
+        localAlbumArtLoaded = true
+        if let data = try? Data(contentsOf: localAlbumArtURL),
+           let map = try? JSONDecoder().decode([String: String].self, from: data) {
+            localAlbumArt = map
+        }
+    }
+
+    private func persistLocalAlbumArt() {
+        guard let data = try? JSONEncoder().encode(localAlbumArt) else { return }
+        try? data.write(to: localAlbumArtURL, options: .atomic)
+    }
+
+    static func localAlbumKey(artist: String, album: String) -> String {
+        "\(album.lowercased())\u{1F}\(artist.lowercased())"
+    }
+
+    func ensureLocalQueueArt(artist: String, album: String) {
+        guard !artist.isEmpty, !album.isEmpty else { return }
+        Task { [weak self] in
+            if (await self?.resolveLocalAlbumArt(artist: artist, album: album)) != nil {
+                self?.postQueueChanged(optimisticItems: [])
+            }
+        }
+    }
+
+    /// Awaitable cache-or-search for a local album's iTunes art, persisted to
+    /// disk so each album resolves once across launches. A cache hit returns
+    /// regardless of limiter state; a miss only hits iTunes when the limiter
+    /// has budget (issue #64 — browsing a large library must not pile on
+    /// during a cooldown), and a failed lookup stays retryable. Shared by the
+    /// live-queue resolver, the Queue Library, and local-library browse art.
+    public func resolveLocalAlbumArt(artist: String, album: String) async -> String? {
+        guard !artist.isEmpty, !album.isEmpty else { return nil }
+        loadLocalAlbumArtIfNeeded()
+        let key = Self.localAlbumKey(artist: artist, album: album)
+        if let cached = localAlbumArt[key] { return cached }
+        // Don't attempt while iTunes is cooling down — defer so the row
+        // retries once budget returns instead of staying blank.
+        guard await ITunesRateLimiter.shared.snapshot().isAvailable else { return nil }
+        // Dedupe concurrent lookups for the same album.
+        guard localAlbumArtFetches.insert(key).inserted else { return localAlbumArt[key] }
+        let art = await albumArtSearch.searchArtwork(artist: artist, album: album)
+        if let art, !art.isEmpty {
+            localAlbumArt[key] = art
+            persistLocalAlbumArt()
+            return art
+        }
+        // Allow a later retry (e.g. after a transient cooldown clears).
+        localAlbumArtFetches.remove(key)
+        return nil
+    }
+
+    /// Whether a stored/parsed art URL won't render in this household — the
+    /// speaker's getaa proxy 404s for some local NAS files.
+    private static func isUnreliableLocalArt(uri: String?, art: String?) -> Bool {
+        (uri.map(URIPrefix.isLocal) == true) && (art == nil || art!.isEmpty || art!.contains("/getaa"))
+    }
+
+    /// Mosaic cover art for a Choragus-local saved queue, with local-library
+    /// rows resolved through iTunes (the stored getaa URLs 404). Async so the
+    /// resolution can await; capped at `limit` distinct albums.
+    public func choragusCoverArtResolved(localID: Int64, limit: Int = 4) async -> [String] {
+        var rows: [(album: String, artist: String, art: String?)] = []
+        for track in savedQueueRepo.tracks(for: localID) {
+            var art = track.albumArtURI
+            if Self.isUnreliableLocalArt(uri: track.uri, art: art) {
+                art = await resolveLocalAlbumArt(artist: track.artist, album: track.album)
+            }
+            rows.append((track.album, track.artist, art))
+            // Stop once we likely have enough distinct albums to fill the mosaic.
+            if Self.distinctAlbumArt(rows, limit: limit).count >= limit { break }
+        }
+        return Self.distinctAlbumArt(rows, limit: limit)
+    }
+
+    /// Resolves local-library art for an arbitrary track list (Queue Library
+    /// detail / smart-queue tracks) so their rows render iTunes art instead
+    /// of dead getaa URLs.
+    public func resolveLocalArt(in tracks: [QueueItem]) async -> [QueueItem] {
+        var out: [QueueItem] = []
+        for var t in tracks {
+            if Self.isUnreliableLocalArt(uri: t.uri, art: t.albumArtURI),
+               let art = await resolveLocalAlbumArt(artist: t.artist, album: t.album) {
+                t.albumArtURI = art
+            }
+            out.append(t)
+        }
+        return out
+    }
+
+    func ensureAppleMusicQueueMetadata(songID: String, uri: String) {
+        guard amQueueMetaFetches.insert(songID).inserted else { return }
+        Task { [weak self] in
+            guard let url = URL(string: "https://itunes.apple.com/lookup?id=\(songID)") else { return }
+            guard let (data, _) = await ITunesRateLimiter.shared.perform(
+                url: url, session: URLSession.shared, maxWait: 8
+            ), let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let first = (json["results"] as? [[String: Any]])?.first,
+               let title = first["trackName"] as? String, !title.isEmpty,
+               let self else { return }
+            let art = (first["artworkUrl100"] as? String)?
+                .replacingOccurrences(of: "100x100", with: "600x600")
+            let cached = CachedTrack(title: title,
+                                     artist: first["artistName"] as? String ?? "",
+                                     album: first["collectionName"] as? String ?? "",
+                                     artURL: art)
+            self.cachedTrackInfo[uri] = cached
+            if let d = uri.removingPercentEncoding, d != uri { self.cachedTrackInfo[d] = cached }
+            self.postQueueChanged(optimisticItems: [])
+        }
+    }
+
     private func enrichQueueItemFromCache(_ item: QueueItem) -> QueueItem {
         var copy = item
 
@@ -1818,10 +2153,38 @@ public class SonosManager: ObservableObject {
             return copy
         }
 
+        // Local-library art: the speaker's getaa proxy 404s for some NAS
+        // files, so prefer iTunes-resolved album art (the same source Now
+        // Playing uses for these tracks) and kick off a lookup on miss.
+        if let uri = item.uri, URIPrefix.isLocal(uri),
+           !copy.artist.isEmpty, !copy.album.isEmpty {
+            loadLocalAlbumArtIfNeeded()
+            let key = Self.localAlbumKey(artist: copy.artist, album: copy.album)
+            if let resolved = localAlbumArt[key] {
+                copy.albumArtURI = resolved
+            } else {
+                ensureLocalQueueArt(artist: copy.artist, album: copy.album)
+            }
+        }
+
         guard let uri = item.uri,
               let cached = cachedTrackInfo[uri]
                 ?? (uri.removingPercentEncoding.flatMap { cachedTrackInfo[$0] })
-        else { return item }
+        else {
+            // Bare Apple Music row with no session cache (post-relaunch):
+            // self-heal from iTunes by the URI's authoritative catalog ID,
+            // then refresh the queue.
+            if let uri = item.uri,
+               item.title.isEmpty || TrackMetadata.isTechnicalName(item.title),
+               let songID = URIPrefix.appleMusicSongID(from: uri) {
+                ensureAppleMusicQueueMetadata(songID: songID, uri: uri)
+            }
+            // Return `copy`, not `item` — local-library rows have no session
+            // cache entry, so they reach this branch, and `copy` carries the
+            // iTunes-resolved album art assigned above (returning `item` here
+            // discarded it, leaving local queue rows blank).
+            return copy
+        }
         // Title only when the speaker gave a filename/empty; artwork whenever
         // missing (direct-URL tracks often report a title but no art).
         if (copy.title.isEmpty || TrackMetadata.isTechnicalName(copy.title)), !cached.title.isEmpty {
@@ -1851,6 +2214,9 @@ public class SonosManager: ObservableObject {
         // the UI matches the new empty state immediately.
         let wasPlayingFromQueue = groupTrackMetadata[group.coordinatorID]?.isQueueSource == true
 
+        // Snapshot before clearing so the user can undo a clear.
+        await snapshotQueueForHistory(group: group)
+
         try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
         lastQueueItems[group.coordinatorID] = nil
         cachedTrackByPosition[group.coordinatorID] = nil
@@ -1862,6 +2228,578 @@ public class SonosManager: ObservableObject {
             groupPositions[coordinator.id] = 0
             awaitingPlayback[coordinator.id] = false
         }
+    }
+
+    // MARK: - Queue History (recoverable snapshots)
+
+    /// Captures the current queue as a hidden Sonos saved queue and registers
+    /// it in `queueHistory`, pruning anything past the retention depth. Call
+    /// this immediately BEFORE a destructive mutation (replace-all / clear /
+    /// bulk remove) so the prior state can be restored.
+    ///
+    /// Best-effort by contract: a failure here must never block the
+    /// destructive op the user actually asked for, so it swallows errors
+    /// (logged) rather than throwing. No-op on an empty queue — there's
+    /// nothing to recover, and `SaveQueue` on an empty queue yields a
+    /// useless empty saved queue.
+    /// One-shot per launch. Destroys `__cghist__*` saved queues the index
+    /// no longer tracks — drift sources: app reinstall (index lost),
+    /// regrouping (coordinator ID changed), a failed eviction destroy.
+    /// Without this they accumulate forever and show up as playlists in
+    /// other controllers (the official app doesn't know our prefix).
+    private var sweptHistoryOrphans = false
+    private func sweepQueueHistoryOrphans(device: SonosDevice) async {
+        guard !sweptHistoryOrphans else { return }
+        sweptHistoryOrphans = true
+        do {
+            let (items, _) = try await browse(objectID: BrowseID.playlists, start: 0, count: PageSize.browse)
+            let known = Set(queueHistory.snapshotsByCoordinator.values.flatMap { $0.map(\.objectID) })
+            for item in items
+            where QueueHistoryStore.isHistoryTitle(item.title) && !known.contains(item.objectID) {
+                try? await contentDirectory.destroyObject(device: device, objectID: item.objectID)
+                sonosDiagLog(.info, tag: "QUEUE",
+                             "Destroyed orphaned queue-history snapshot \(item.objectID)")
+            }
+        } catch {
+            sweptHistoryOrphans = false // retry on the next snapshot
+        }
+    }
+
+    public func snapshotQueueForHistory(group: SonosGroup) async {
+        guard let coordinator = group.coordinator else { return }
+        await sweepQueueHistoryOrphans(device: coordinator)
+        do {
+            let (items, total) = try await getQueue(group: group, start: 0, count: 1)
+            guard total > 0 else { return }
+            let now = Date()
+            let title = QueueHistoryStore.snapshotTitle(at: now)
+            let objectID = try await contentDirectory.saveQueue(device: coordinator, title: title)
+            guard !objectID.isEmpty else { return }
+            let firstTitle = items.first?.title ?? ""
+            let summary = firstTitle.isEmpty ? "\(total) tracks" : "\(total) tracks · \(firstTitle)"
+            let snapshot = QueueSnapshot(objectID: objectID, savedAt: now,
+                                         trackCount: total, summary: summary)
+            let overflow = queueHistory.register(snapshot, for: group.coordinatorID)
+            for staleID in overflow {
+                try? await contentDirectory.destroyObject(device: coordinator, objectID: staleID)
+            }
+        } catch {
+            sonosDiagLog(.warning, tag: "QUEUE",
+                         "snapshotQueueForHistory failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Snapshots available to restore for a group, newest first.
+    public func queueSnapshots(group: SonosGroup) -> [QueueSnapshot] {
+        queueHistory.snapshots(for: group.coordinatorID)
+    }
+
+    /// Best-effort display room name for a coordinator ID. Handles the
+    /// coordinator having since been regrouped as a non-coordinator member.
+    public func roomName(forCoordinator coordinatorID: String) -> String {
+        if let g = groups.first(where: { $0.coordinatorID == coordinatorID }) { return g.name }
+        for g in groups {
+            if let m = g.members.first(where: { $0.id == coordinatorID }) { return m.roomName }
+        }
+        return coordinatorID
+    }
+
+    /// All queue-history snapshots across every room, each tagged with its
+    /// resolved room name. Used by the Queue Library History view.
+    public func allQueueSnapshots() -> [(coordinatorID: String, room: String, snapshots: [QueueSnapshot])] {
+        queueHistory.snapshotsByCoordinator
+            .filter { !$0.value.isEmpty }
+            .map { (coordinatorID: $0.key, room: roomName(forCoordinator: $0.key), snapshots: $0.value) }
+            .sorted { $0.room.localizedCaseInsensitiveCompare($1.room) == .orderedAscending }
+    }
+
+    /// Restores a previously-snapshotted queue. The current queue is itself
+    /// snapshotted first, so a restore is undoable. The snapshot's saved
+    /// queue is left intact on the speaker (it stays in the history list)
+    /// so the same restore point can be reused.
+    public func restoreQueueSnapshot(group: SonosGroup, objectID: String) async throws {
+        guard group.coordinator != nil else { return }
+        // Touch the restore target to the head of the ring BEFORE the
+        // replace path takes its pre-restore snapshot. With the ring at
+        // depth, restoring the oldest entry would otherwise evict — and
+        // destroy speaker-side — the very saved queue we're reading from.
+        if let target = queueHistory.snapshots(for: group.coordinatorID)
+            .first(where: { $0.objectID == objectID }) {
+            _ = queueHistory.register(target, for: group.coordinatorID)
+        }
+        // Read the snapshot's tracks as browse items and re-enqueue them
+        // through the normal replace path. Enqueuing the `.rsq` container
+        // directly makes the speaker replay stored Apple Music / SMAPI
+        // rows verbatim, which faults UPnP 800 (service auth) because the
+        // per-track resolution that `playItemsReplacingQueue` applies is
+        // skipped. Paging the container and re-enqueuing each row routes
+        // every track back through that resolution gate.
+        var items: [BrowseItem] = []
+        var index = 0
+        while true {
+            let (page, total) = try await browse(objectID: objectID, start: index, count: 500)
+            items.append(contentsOf: page)
+            if page.isEmpty || items.count >= total || index >= 40_000 { break }
+            index += page.count
+        }
+        let playable = items.filter { !($0.resourceURI ?? "").isEmpty }
+        guard !playable.isEmpty else { return }
+        // playItemsReplacingQueue snapshots the current queue first, so the
+        // restore is itself undoable.
+        try await playItemsReplacingQueue(playable, in: group)
+    }
+
+    // MARK: - Choragus-side saved queues
+
+    /// Pages the entire live queue WITH per-track DIDL and stores it locally
+    /// under `name`. The metadata is what lets an Apple Music / SMAPI track
+    /// re-enqueue later without faulting UPnP 800. Returns the count saved.
+    public func saveQueueToChoragus(group: SonosGroup, name: String) async throws -> Int {
+        guard let coordinator = group.coordinator else { return 0 }
+        var collected: [QueueItem] = []
+        var index = 0
+        while true {
+            let (page, total) = try await contentDirectory.browseQueue(
+                device: coordinator, start: index, count: 500, includeMetadata: true)
+            collected.append(contentsOf: page.map { enrichQueueItemFromCache($0) })
+            if page.isEmpty || collected.count >= total || index >= 40_000 { break }
+            index += page.count
+        }
+        guard !collected.isEmpty else { return 0 }
+        _ = savedQueueRepo.save(name: name, tracks: collected)
+        notifyChoragusQueuesChanged()
+        return collected.count
+    }
+
+    public func localSavedQueues() -> [LocalSavedQueue] {
+        savedQueueRepo.list()
+    }
+
+    public func savedQueueTracks(localID: Int64) -> [QueueItem] {
+        savedQueueRepo.tracks(for: localID)
+    }
+
+    private func notifyChoragusQueuesChanged() {
+        NotificationCenter.default.post(name: .choragusSavedQueuesChanged, object: nil)
+    }
+
+    /// Expands a browse item into queue tracks: a container (album / playlist)
+    /// is paged into its tracks; a single track maps to one. Carries each
+    /// row's DIDL so Apple Music / SMAPI tracks re-enqueue without faulting.
+    public func choragusQueueTracks(from item: BrowseItem) async -> [QueueItem] {
+        var items: [BrowseItem] = []
+        if item.isContainer {
+            var idx = 0
+            while true {
+                guard let (page, total) = try? await browse(objectID: item.objectID, start: idx, count: 500) else { break }
+                items.append(contentsOf: page)
+                if page.isEmpty || items.count >= total || idx >= 40_000 { break }
+                idx += page.count
+            }
+        } else {
+            items = [item]
+        }
+        return items.enumerated().compactMap { offset, it in
+            guard let uri = it.resourceURI, !uri.isEmpty else { return nil }
+            return QueueItem(id: offset + 1, title: it.title, artist: it.artist, album: it.album,
+                             albumArtURI: it.albumArtURI, duration: "", uri: uri, metadata: it.resourceMetadata)
+        }
+    }
+
+    /// Appends a browse item (album/track) to an existing Choragus-local queue.
+    @discardableResult
+    public func addToChoragusQueue(item: BrowseItem, queueID: Int64) async -> Int {
+        let tracks = await choragusQueueTracks(from: item)
+        guard !tracks.isEmpty else { return 0 }
+        let n = savedQueueRepo.appendTracks(queueID: queueID, tracks: tracks)
+        notifyChoragusQueuesChanged()
+        return n
+    }
+
+    /// Creates a new Choragus-local queue seeded from a browse item.
+    @discardableResult
+    public func createChoragusQueue(item: BrowseItem, name: String) async -> Int64? {
+        let tracks = await choragusQueueTracks(from: item)
+        guard !tracks.isEmpty else { return nil }
+        let id = savedQueueRepo.save(name: name, tracks: tracks)
+        notifyChoragusQueuesChanged()
+        return id
+    }
+
+    /// Converts already-expanded browse items (e.g. Apple Music tracks the
+    /// caller resolved) into queue tracks.
+    private func choragusQueueTracks(fromItems items: [BrowseItem]) -> [QueueItem] {
+        items.enumerated().compactMap { offset, it in
+            guard let uri = it.resourceURI, !uri.isEmpty else { return nil }
+            return QueueItem(id: offset + 1, title: it.title, artist: it.artist, album: it.album,
+                             albumArtURI: it.albumArtURI, duration: "", uri: uri, metadata: it.resourceMetadata)
+        }
+    }
+
+    @discardableResult
+    public func addToChoragusQueue(items: [BrowseItem], queueID: Int64) -> Int {
+        let tracks = choragusQueueTracks(fromItems: items)
+        guard !tracks.isEmpty else { return 0 }
+        let n = savedQueueRepo.appendTracks(queueID: queueID, tracks: tracks)
+        notifyChoragusQueuesChanged()
+        return n
+    }
+
+    @discardableResult
+    public func createChoragusQueue(items: [BrowseItem], name: String) -> Int64? {
+        let tracks = choragusQueueTracks(fromItems: items)
+        guard !tracks.isEmpty else { return nil }
+        let id = savedQueueRepo.save(name: name, tracks: tracks)
+        notifyChoragusQueuesChanged()
+        return id
+    }
+
+    /// Loads a Choragus-side saved queue onto the speaker. `append: false`
+    /// replaces the queue (history snapshot taken by the replace path) and
+    /// starts playback; `append: true` adds to the end. Rows are rebuilt as
+    /// `BrowseItem`s so the normal enqueue machinery handles service DIDL
+    /// reconstruction, track-info caching, and Apple Music row repair.
+    public func loadLocalSavedQueue(id: Int64, group: SonosGroup, append: Bool) async throws {
+        let tracks = savedQueueRepo.tracks(for: id)
+        let items = tracks.compactMap { track -> BrowseItem? in
+            guard let uri = track.uri, !uri.isEmpty else { return nil }
+            // resourceMetadata carries the preserved `<r:resMD>` DIDL —
+            // Apple Music / SMAPI tracks fault UPnP 800 without it.
+            return BrowseItem(id: "LOCALQ:\(id)/\(track.id)",
+                              title: track.title, artist: track.artist, album: track.album,
+                              albumArtURI: track.albumArtURI, itemClass: .musicTrack,
+                              resourceURI: uri, resourceMetadata: track.metadata)
+        }
+        guard !items.isEmpty else { return }
+        if append {
+            _ = try await addBrowseItemsToQueue(items, in: group, playNext: false)
+        } else {
+            try await playItemsReplacingQueue(items, in: group)
+        }
+    }
+
+    /// Up to `limit` DISTINCT-ALBUM art URLs for a mosaic cover. Dedupes by
+    /// album identity (album+artist, falling back to the art URL) so a queue
+    /// of tracks from one album contributes a single tile rather than four
+    /// repeats. The image bytes themselves are memory/disk cached by the
+    /// view layer (`CachedAsyncImage` → `ImageCache`), fetched on miss.
+    private static func distinctAlbumArt(_ rows: [(album: String, artist: String, art: String?)],
+                                         limit: Int) -> [String] {
+        var seenAlbum = Set<String>()
+        var seenArt = Set<String>()
+        var out: [String] = []
+        for row in rows {
+            guard let art = row.art, !art.isEmpty else { continue }
+            // Dedupe by album NAME alone, not album+artist: a various-artists
+            // compilation shares one cover across many artists, and four tiles
+            // of the same album art read as a bug. Fall back to the art URL
+            // only when the album is untagged.
+            let key = row.album.isEmpty ? art : row.album.lowercased()
+            guard seenArt.insert(art).inserted, seenAlbum.insert(key).inserted else { continue }
+            out.append(art)
+            if out.count >= limit { break }
+        }
+        return out
+    }
+
+    public func choragusCoverArt(localID: Int64, limit: Int = 4) -> [String] {
+        loadLocalAlbumArtIfNeeded()
+        let rows = savedQueueRepo.tracks(for: localID).map { t -> (album: String, artist: String, art: String?) in
+            var art = t.albumArtURI
+            // Substitute the persisted iTunes art for local rows whose stored
+            // getaa URL won't render — no web call, just a dict hit.
+            if Self.isUnreliableLocalArt(uri: t.uri, art: art) {
+                art = localAlbumArt[Self.localAlbumKey(artist: t.artist, album: t.album)]
+            }
+            return (t.album, t.artist, art)
+        }
+        return Self.distinctAlbumArt(rows, limit: limit)
+    }
+
+    /// Up to `limit` distinct-album art URLs for a Sonos saved queue (`SQ:`),
+    /// browsed lazily. Local-library rows resolve through iTunes (their getaa
+    /// art 404s). Used for the Queue Library mosaic cover.
+    public func savedQueueCoverArt(objectID: String, limit: Int = 4) async -> [String] {
+        guard let (items, _) = try? await browse(objectID: objectID, start: 0, count: 60) else { return [] }
+        var rows: [(album: String, artist: String, art: String?)] = []
+        for item in items {
+            var art = item.albumArtURI
+            if Self.isUnreliableLocalArt(uri: item.resourceURI, art: art) {
+                art = await resolveLocalAlbumArt(artist: item.artist, album: item.album)
+            }
+            rows.append((item.album, item.artist, art))
+            if Self.distinctAlbumArt(rows, limit: limit).count >= limit { break }
+        }
+        return Self.distinctAlbumArt(rows, limit: limit)
+    }
+
+    // MARK: - Saved-queue folders
+
+    public func savedQueueFolders() -> [SavedQueueFolder] { savedQueueRepo.listFolders() }
+    @discardableResult
+    public func createSavedQueueFolder(name: String, parent: Int64? = nil) -> Int64? { let id = savedQueueRepo.createFolder(name: name, parentID: parent); notifyChoragusQueuesChanged(); return id }
+    public func renameSavedQueueFolder(id: Int64, to newName: String) { savedQueueRepo.renameFolder(id: id, to: newName); notifyChoragusQueuesChanged() }
+    public func deleteSavedQueueFolder(id: Int64) { savedQueueRepo.deleteFolder(id: id); notifyChoragusQueuesChanged() }
+    public func moveSavedQueue(id: Int64, toFolder folderID: Int64?) { savedQueueRepo.moveQueue(id: id, toFolder: folderID); notifyChoragusQueuesChanged() }
+    /// Duplicates a queue into a folder (drag with Option held).
+    @discardableResult
+    public func copySavedQueue(id: Int64, toFolder folderID: Int64?) -> Int64? { let newID = savedQueueRepo.copyQueue(id: id, toFolder: folderID); notifyChoragusQueuesChanged(); return newID }
+    /// Adds a queue to a folder without removing it from others (many-to-many).
+    public func addSavedQueueToFolder(id: Int64, folderID: Int64) { savedQueueRepo.addToFolder(queueID: id, folderID: folderID); notifyChoragusQueuesChanged() }
+    public func removeSavedQueueFromFolder(id: Int64, folderID: Int64) { savedQueueRepo.removeFromFolder(queueID: id, folderID: folderID); notifyChoragusQueuesChanged() }
+    public func setSavedQueueFolders(id: Int64, folderIDs: [Int64]) { savedQueueRepo.setFolders(queueID: id, folderIDs: folderIDs); notifyChoragusQueuesChanged() }
+    /// Re-parents a folder for sub-folder nesting (nil = top level).
+    public func moveSavedQueueFolder(id: Int64, under parent: Int64?) { savedQueueRepo.moveFolder(id: id, parentID: parent); notifyChoragusQueuesChanged() }
+    /// Deep-duplicates a folder (its queues and sub-folders).
+    @discardableResult
+    public func copySavedQueueFolder(id: Int64) -> Int64? { let newID = savedQueueRepo.copyFolder(id: id); notifyChoragusQueuesChanged(); return newID }
+
+    // MARK: - Smart queues (play-history rules)
+
+    public enum SmartQueueKind: String, CaseIterable {
+        case mostPlayed       // last 30 days, ranked by play count
+        case recentlyPlayed   // most recent distinct tracks
+        case starred          // favourited tracks
+
+        public var title: String {
+            switch self {
+            case .mostPlayed:     return "Most played"
+            case .recentlyPlayed: return "Recently played"
+            case .starred:        return "Starred"
+            }
+        }
+        public var icon: String {
+            switch self {
+            case .mostPlayed:     return "flame.fill"
+            case .recentlyPlayed: return "clock.fill"
+            case .starred:        return "star.fill"
+            }
+        }
+    }
+
+    /// Token-membership room match, matching `PlayHistoryView`: an entry's
+    /// grouping ("Office + Float") matches the selected room ("Office") when
+    /// every token of the selection is a member of the entry's grouping.
+    /// nil room matches everything.
+    private static func entryMatchesRoom(_ entry: PlayHistoryEntry, _ room: String?) -> Bool {
+        guard let room, !room.isEmpty else { return true }
+        let tokens = room.components(separatedBy: " + ")
+        let members = entry.groupName.components(separatedBy: " + ")
+        return tokens.allSatisfy { members.contains($0) }
+    }
+
+    /// Rooms available for the smart-queue filter, mirroring history.
+    public func smartQueueRoomOptions() -> [String] {
+        playHistoryManager?.roomFilterOptions ?? []
+    }
+
+    /// Builds a smart queue's tracks from play history. Caveat: history rows
+    /// carry the playable URI but no DIDL, so Apple Music / SMAPI tracks may
+    /// fault UPnP 800 on re-enqueue — local-library and radio replay cleanly.
+    /// Capped at `limit` distinct (title+artist) tracks. `room` scopes the
+    /// source entries by token-membership match (nil = all rooms).
+    public func smartQueueTracks(kind: SmartQueueKind, room: String? = nil, limit: Int = 100) -> [QueueItem] {
+        guard let history = playHistoryManager else { return [] }
+        let entries = history.entries.filter { Self.entryMatchesRoom($0, room) }
+        func distinct(_ source: [PlayHistoryEntry]) -> [QueueItem] {
+            var seen = Set<String>()
+            var out: [QueueItem] = []
+            for e in source {
+                guard let uri = e.sourceURI, !uri.isEmpty, !e.title.isEmpty else { continue }
+                let key = "\(e.title.lowercased())\u{1F}\(e.artist.lowercased())"
+                guard seen.insert(key).inserted else { continue }
+                out.append(QueueItem(id: out.count + 1, title: e.title, artist: e.artist,
+                                     album: e.album, albumArtURI: e.albumArtURI,
+                                     duration: "", uri: uri, metadata: nil))
+                if out.count >= limit { break }
+            }
+            return out
+        }
+        switch kind {
+        case .starred:
+            return distinct(entries.filter(\.starred).reversed())
+        case .recentlyPlayed:
+            return distinct(entries.reversed())
+        case .mostPlayed:
+            let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
+            let recent = entries.filter { $0.timestamp >= cutoff }
+            var counts: [String: Int] = [:]
+            var rep: [String: PlayHistoryEntry] = [:]
+            for e in recent where !e.title.isEmpty {
+                let key = "\(e.title.lowercased())\u{1F}\(e.artist.lowercased())"
+                counts[key, default: 0] += 1
+                if rep[key] == nil { rep[key] = e }
+            }
+            let ranked = counts.sorted { $0.value > $1.value }.compactMap { rep[$0.key] }
+            return distinct(ranked)
+        }
+    }
+
+    public func smartQueueCoverArt(kind: SmartQueueKind, room: String? = nil, limit: Int = 4) -> [String] {
+        Self.distinctAlbumArt(
+            smartQueueTracks(kind: kind, room: room, limit: 60).map { ($0.album, $0.artist, $0.albumArtURI) },
+            limit: limit)
+    }
+
+    /// Plays a smart queue's tracks to a room (replace or append).
+    public func playSmartQueue(kind: SmartQueueKind, room: String? = nil, group: SonosGroup, append: Bool) async throws {
+        let tracks = smartQueueTracks(kind: kind, room: room)
+        let items = tracks.compactMap { t -> BrowseItem? in
+            guard let uri = t.uri, !uri.isEmpty else { return nil }
+            return BrowseItem(id: "SMART:\(kind.rawValue)/\(t.id)", title: t.title,
+                              artist: t.artist, album: t.album, albumArtURI: t.albumArtURI,
+                              itemClass: .musicTrack, resourceURI: uri, resourceMetadata: t.metadata)
+        }
+        guard !items.isEmpty else { return }
+        if append {
+            _ = try await addBrowseItemsToQueue(items, in: group, playNext: false)
+        } else {
+            try await playItemsReplacingQueue(items, in: group)
+        }
+    }
+
+    /// Saves a smart queue as a Choragus-local queue (snapshot in time).
+    @discardableResult
+    public func freezeSmartQueueToChoragus(kind: SmartQueueKind, room: String? = nil, name: String) -> Int {
+        let tracks = smartQueueTracks(kind: kind, room: room)
+        guard !tracks.isEmpty else { return 0 }
+        _ = savedQueueRepo.save(name: name, tracks: tracks)
+        notifyChoragusQueuesChanged()
+        return tracks.count
+    }
+
+    // MARK: - Export
+
+    /// Serialises a track list to an extended-M3U or CSV string for export.
+    public static func exportTracks(_ tracks: [QueueItem], asCSV: Bool) -> String {
+        if asCSV {
+            var lines = ["Title,Artist,Album,URI"]
+            for t in tracks {
+                func q(_ s: String) -> String { "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\"" }
+                lines.append([q(t.title), q(t.artist), q(t.album), q(t.uri ?? "")].joined(separator: ","))
+            }
+            return lines.joined(separator: "\n")
+        }
+        var lines = ["#EXTM3U"]
+        for t in tracks {
+            lines.append("#EXTINF:-1,\(t.artist) - \(t.title)")
+            lines.append(t.uri ?? "")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Copies a Sonos saved queue (`SQ:`) into the Choragus-local store,
+    /// preserving each track's DIDL so it re-enqueues without faulting.
+    /// Returns the track count saved.
+    @discardableResult
+    public func cloneSonosPlaylistToChoragus(objectID: String, name: String) async throws -> Int {
+        var items: [BrowseItem] = []
+        var index = 0
+        while true {
+            let (page, total) = try await browse(objectID: objectID, start: index, count: 500)
+            items.append(contentsOf: page)
+            if page.isEmpty || items.count >= total || index >= 40_000 { break }
+            index += page.count
+        }
+        let tracks = items.enumerated().compactMap { offset, item -> QueueItem? in
+            guard let uri = item.resourceURI, !uri.isEmpty else { return nil }
+            return QueueItem(id: offset + 1, title: item.title, artist: item.artist,
+                             album: item.album, albumArtURI: item.albumArtURI,
+                             duration: "", uri: uri, metadata: item.resourceMetadata)
+        }
+        guard !tracks.isEmpty else { return 0 }
+        _ = savedQueueRepo.save(name: name, tracks: tracks)
+        return tracks.count
+    }
+
+    /// Duplicates an existing Choragus-local saved queue under a new name.
+    @discardableResult
+    public func cloneLocalSavedQueue(id: Int64, name: String) -> Int {
+        let tracks = savedQueueRepo.tracks(for: id)
+        guard !tracks.isEmpty else { return 0 }
+        _ = savedQueueRepo.save(name: name, tracks: tracks)
+        notifyChoragusQueuesChanged()
+        return tracks.count
+    }
+
+    /// Loads a Sonos saved queue (`SQ:`) to a room. Pages the container to
+    /// individual tracks first (carrying each track's DIDL) so Apple Music /
+    /// SMAPI rows don't fault UPnP 800 — the same reason history restore
+    /// pages rather than enqueuing the `.rsq` container directly.
+    public func playSavedQueueToRoom(objectID: String, group: SonosGroup, append: Bool) async throws {
+        var items: [BrowseItem] = []
+        var index = 0
+        while true {
+            let (page, total) = try await browse(objectID: objectID, start: index, count: 500)
+            items.append(contentsOf: page)
+            if page.isEmpty || items.count >= total || index >= 40_000 { break }
+            index += page.count
+        }
+        let playable = items.filter { !($0.resourceURI ?? "").isEmpty }
+        guard !playable.isEmpty else { return }
+        if append {
+            _ = try await addBrowseItemsToQueue(playable, in: group, playNext: false)
+        } else {
+            try await playItemsReplacingQueue(playable, in: group)
+        }
+    }
+
+    /// Persists an edited/reordered track list for a Choragus-local queue.
+    public func replaceChoragusQueueTracks(id: Int64, tracks: [QueueItem]) {
+        savedQueueRepo.replaceTracks(queueID: id, tracks: tracks)
+        notifyChoragusQueuesChanged()
+    }
+
+    /// Appends tracks to an existing Choragus-local queue (drag-to-copy in the
+    /// Queue Library). Returns the number appended.
+    @discardableResult
+    public func appendTracksToChoragusQueue(id: Int64, tracks: [QueueItem]) -> Int {
+        let n = savedQueueRepo.appendTracks(queueID: id, tracks: tracks)
+        notifyChoragusQueuesChanged()
+        return n
+    }
+
+    public func renameLocalSavedQueue(id: Int64, to newName: String) {
+        savedQueueRepo.rename(id: id, to: newName)
+        notifyChoragusQueuesChanged()
+    }
+
+    public func deleteLocalSavedQueue(id: Int64) {
+        savedQueueRepo.delete(id: id)
+        notifyChoragusQueuesChanged()
+    }
+
+    /// Removes duplicate tracks (same resource URI) from the queue, keeping
+    /// the first occurrence. Snapshots the queue first so it's undoable.
+    /// Returns the number of rows removed.
+    public func dedupeQueue(group: SonosGroup) async throws -> Int {
+        guard let coordinator = group.coordinator else { return 0 }
+        var collected: [QueueItem] = []
+        var index = 0
+        while true {
+            let (page, total) = try await getQueue(group: group, start: index, count: 500)
+            collected.append(contentsOf: page)
+            if page.isEmpty || collected.count >= total || index >= 40_000 { break }
+            index += page.count
+        }
+        var seen = Set<String>()
+        var duplicatePositions: [Int] = []
+        for item in collected {
+            guard let uri = item.uri, !uri.isEmpty else { continue }
+            if seen.contains(uri) {
+                duplicatePositions.append(item.id)
+            } else {
+                seen.insert(uri)
+            }
+        }
+        guard !duplicatePositions.isEmpty else { return 0 }
+        await snapshotQueueForHistory(group: group)
+        // Remove bottom-up so earlier removals don't shift later positions.
+        for position in duplicatePositions.sorted(by: >) {
+            try await contentDirectory.removeTrackFromQueue(device: coordinator, objectID: "Q:0/\(position)")
+        }
+        postQueueChanged(optimisticItems: [])
+        return duplicatePositions.count
     }
 
     /// "Play All" / "Replace Queue" semantics with audio-first sequencing.
@@ -1879,6 +2817,10 @@ public class SonosManager: ObservableObject {
 
         let playable = items.filter { ($0.resourceURI ?? "").isEmpty == false }
         guard let first = playable.first else { return }
+
+        // Snapshot the queue we're about to wipe so an accidental "play
+        // this now" is recoverable from the queue history.
+        await snapshotQueueForHistory(group: group)
 
         // Cache every track's title + art by URI up front so the queue panel
         // can recover them for ALL rows (the speaker returns a filename / no
@@ -2026,6 +2968,7 @@ public class SonosManager: ObservableObject {
         guard !uris.isEmpty else { return }
 
         let chunkSize = 16
+        var repairRows: [(position: Int, uri: String)] = []
         for chunkStart in stride(from: 0, to: uris.count, by: chunkSize) {
             let end = min(chunkStart + chunkSize, uris.count)
             let uriChunk = Array(uris[chunkStart..<end])
@@ -2042,6 +2985,11 @@ public class SonosManager: ObservableObject {
                     enqueueAsNext: false
                 )
                 sonosDebugLog("[QUEUE] Background fill chunk \(chunkStart)-\(end-1): firstTrack=\(result.firstTrackNumber) numAdded=\(result.numAdded)")
+                if result.firstTrackNumber > 0 {
+                    for (offset, u) in uriChunk.prefix(result.numAdded).enumerated() {
+                        repairRows.append((position: result.firstTrackNumber + offset, uri: u))
+                    }
+                }
                 bulkSucceeded = result.numAdded > 0
             } catch {
                 sonosDebugLog("[QUEUE] Background fill chunk \(chunkStart)-\(end-1) bulk failed: \(error). Falling back.")
@@ -2081,6 +3029,7 @@ public class SonosManager: ObservableObject {
             // 1 track → N tracks at the very end.
             postQueueChanged(optimisticItems: [])
         }
+        scheduleAppleMusicQueueRepair(group: group, rows: repairRows)
     }
 
     public func playTrackFromQueue(group: SonosGroup, trackNumber: Int) async throws {
@@ -2372,6 +3321,13 @@ public class SonosManager: ObservableObject {
     public func playBrowseItem(_ item: BrowseItem, in group: SonosGroup) async throws {
         guard let coordinator = group.coordinator else { return }
 
+        // "Play Now" replaces the queue — snapshot the outgoing queue first so
+        // an accidental tap is recoverable from history. This is the canonical
+        // "played something by accident" path; it previously had no snapshot,
+        // so a built-up queue vanished without a history entry. Self-guards on
+        // a non-empty queue, so a play with no current queue costs one getQueue.
+        await snapshotQueueForHistory(group: group)
+
         // Remember which favorite was played so art can be mapped back
         lastPlayedFavoriteID = item.objectID
 
@@ -2508,10 +3464,25 @@ public class SonosManager: ObservableObject {
                 // the ORIGINAL `uri` + `meta`, bypassing the strategy
                 // switch entirely. Issue #42.
                 if Self.isSMAPIServiceTrackURI(uri) {
+                    // Controller-authenticated SMAPI services (Audible
+                    // sid=239, TIDAL) fault UPnP 800 on AddURIToQueue
+                    // with the raw `x-sonos-http:…?sid=…&sn=…` URI — they
+                    // have no speaker-side account binding and must be
+                    // resolved to a direct stream URL via getMediaURI
+                    // first. resolveSMAPIPlayback is a no-op for
+                    // speaker-account-bound services: Spotify keeps its
+                    // raw `x-sonos-spotify:…?sid=12` + DIDL because its
+                    // getMediaURI returns an `x-spotify://` URI the
+                    // http-guard rejects, so issue #42 is preserved.
+                    // This applies the same resolution the enqueue path
+                    // (addBrowseItemToQueue) already does — play and
+                    // enqueue now resolve identically.
+                    let (queueURI, queueMeta) = await resolveSMAPIPlayback(item, uri: uri, meta: meta)
                     sonosDiagLog(.info, tag: "PLAYBACK",
                                  "SMAPI single track via queue: \(item.title.isEmpty ? "<no title>" : item.title)",
                                  context: [
-                                    "uri": uri,
+                                    "uri": queueURI,
+                                    "resolved": String(queueURI != uri),
                                     "objectID": item.objectID,
                                     "service": serviceLabel(for: item) ?? "unknown"
                                  ])
@@ -2532,7 +3503,7 @@ public class SonosManager: ObservableObject {
                             try? await avTransport.stop(device: coordinator)
                             try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
                             _ = try await contentDirectory.addURIToQueue(
-                                device: coordinator, uri: uri, metadata: meta
+                                device: coordinator, uri: queueURI, metadata: queueMeta
                             )
                             try await avTransport.setAVTransportURI(
                                 device: coordinator,
@@ -2546,7 +3517,8 @@ public class SonosManager: ObservableObject {
                         sonosDiagLog(.error, tag: "PLAYBACK",
                                      "SMAPI single track via queue failed for \(item.title.isEmpty ? "<no title>" : item.title)",
                                      context: [
-                                        "uri": uri,
+                                        "uri": queueURI,
+                                        "resolved": String(queueURI != uri),
                                         "error": String(describing: error),
                                         "service": serviceLabel(for: item) ?? "unknown"
                                      ])
@@ -2827,6 +3799,19 @@ public class SonosManager: ObservableObject {
             }
             metas.append(meta)
             optimisticSource.append(item)
+            // Cache track info for queue-row recovery: Apple Music enqueues
+            // are descriptor-free (fast path), so the SPEAKER stores no
+            // title/artist for them — the queue panel recovers from this
+            // cache. The Play All path already did this; Add All / Play
+            // Next didn't, which left freshly-added rows blank.
+            if !item.title.isEmpty {
+                let cached = CachedTrack(title: item.title, artist: item.artist,
+                                         album: item.album, artURL: item.albumArtURI)
+                cachedTrackInfo[uri] = cached
+                if let decoded = uri.removingPercentEncoding, decoded != uri {
+                    cachedTrackInfo[decoded] = cached
+                }
+            }
         }
         guard !uris.isEmpty else { return 0 }
 
@@ -2854,6 +3839,7 @@ public class SonosManager: ObservableObject {
         var numAdded = 0
         let chunkSize = 16
         var nextInsertAt = insertAt
+        var repairRows: [(position: Int, uri: String)] = []
         var failedChunks: [(start: Int, end: Int)] = []
         var chunkIndex = 0
         let queueRefreshInterval = 10  // refresh every ~160 tracks
@@ -2878,6 +3864,11 @@ public class SonosManager: ObservableObject {
                 )
                 sonosDebugLog("[QUEUE] Batch chunk \(chunkStart)-\(end-1): firstTrack=\(result.firstTrackNumber) numAdded=\(result.numAdded)")
                 if firstTrack == 0 && result.firstTrackNumber > 0 { firstTrack = result.firstTrackNumber }
+                if result.firstTrackNumber > 0 {
+                    for (offset, u) in uriChunk.prefix(result.numAdded).enumerated() {
+                        repairRows.append((position: result.firstTrackNumber + offset, uri: u))
+                    }
+                }
                 numAdded += result.numAdded
                 if nextInsertAt > 0 { nextInsertAt += result.numAdded }
                 addingToQueueProgress = numAdded
@@ -2958,6 +3949,9 @@ public class SonosManager: ObservableObject {
         // and a real reload guarantees the queue panel matches the speaker's
         // actual state — including any tracks that failed mid-loop.
         postQueueChanged(optimisticItems: [])
+        // Background-name the freshly-added Apple Music rows for other
+        // controllers (fast add stores no speaker-side metadata).
+        scheduleAppleMusicQueueRepair(group: group, rows: repairRows)
         return firstTrack
     }
 
@@ -3091,6 +4085,9 @@ public class SonosManager: ObservableObject {
                 duration: ""
             )] : []
             postQueueChanged(optimisticItems: optimistic)
+            if result > 0 {
+                scheduleAppleMusicQueueRepair(group: group, rows: [(position: result, uri: uri)])
+            }
             return result
         } else if item.isContainer {
             let containerURI = makeContainerURI(item)
@@ -3291,6 +4288,13 @@ extension SonosManager: TransportStrategyDelegate {
     /// is the cause, not Choragus.
     private func detectTuneInAdLoop(groupID: String, metadata: TrackMetadata) {
         let adURI: String? = {
+            // Only an actively-playing group can be "in" an ad pre-roll. A
+            // stopped/paused speaker still reports its last-loaded URI as the
+            // current track, so without this gate a relaunch (which clears
+            // `groupTuneInAdLoopURI`) re-detects a days-old loaded station and
+            // logs a false "ad is playing" warning (observed: stopped station,
+            // no playback for days).
+            guard groupTransportStates[groupID]?.isActive == true else { return nil }
             guard let uri = metadata.trackURI, !uri.isEmpty else { return nil }
             // Sonos Radio container station 31971 is the ad pre-roll
             // wrapper; the cdnstream1.com host is its content origin;
@@ -4312,6 +5316,13 @@ extension SonosManager: TransportStrategyDelegate {
     }
 
     public func transportDidObserveQueueChange(_ groupID: String) {
+        // The Apple Music metadata repair walker generates two Q:0 events
+        // per row (insert + remove) with a NET-ZERO visible result in this
+        // app (titles already shown from the session cache). Reloading on
+        // each made the queue panel blink for the whole repair; suppress
+        // reloads while the walker runs — it posts one final reload when
+        // it finishes.
+        if queueRepairActiveGroups.contains(groupID) { return }
         // ContentDirectory `Q:0` event fired. Hand off to the same
         // notification path the optimistic-update sites use so
         // QueueView's existing `onReceive(.queueChanged)` does the

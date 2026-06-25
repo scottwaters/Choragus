@@ -13,6 +13,7 @@ public enum L10n {
 
     // MARK: - Content View
     public static var usingCachedData: String { tr("usingCachedData") }
+    public static var networkUnstableAdvisory: String { tr("networkUnstableAdvisory") }
     public static var refreshing: String { tr("refreshing") }
     public static var searchingForSpeakers: String { tr("searchingForSpeakers") }
     public static var loadingCachedSpeakers: String { tr("loadingCachedSpeakers") }
@@ -518,6 +519,19 @@ public enum L10n {
     public static var saveAsPlaylist: String { tr("saveAsPlaylist") }
     public static var saveToAppleMusic: String { tr("saveToAppleMusic") }
     public static var saveToPlaylist: String { tr("saveToPlaylist") }
+    public static var queueHistory: String { tr("queueHistory") }
+    public static var restoreQueue: String { tr("restoreQueue") }
+    public static var noQueueHistory: String { tr("noQueueHistory") }
+    public static var savedQueues: String { tr("savedQueues") }
+    public static var queueLibrary: String { tr("queueLibrary") }
+    public static var queueLibraryWindowTitle: String { tr("queueLibraryWindowTitle") }
+    public static var cloneToChoragus: String { tr("cloneToChoragus") }
+    public static var emptyQueueLibrary: String { tr("emptyQueueLibrary") }
+    public static var queueAppend: String { tr("queueAppend") }
+    public static var queueReplace: String { tr("queueReplace") }
+    public static var removeDuplicates: String { tr("removeDuplicates") }
+    public static var filterQueuePlaceholder: String { tr("filterQueuePlaceholder") }
+    public static var noSavedQueues: String { tr("noSavedQueues") }
     public static var saveQueueTitle: String { tr("saveQueueTitle") }
     public static var saveDestination: String { tr("saveDestination") }
     public static var sonosDestination: String { tr("sonosDestination") }
@@ -1197,6 +1211,16 @@ public enum L10n {
     // Club Vis popout (tiled poster wall, v3.x)
     public static var clubVis: String { tr("clubVis") }
     public static var clubVisWindowTitle: String { tr("clubVisWindowTitle") }
+    public static var eventListenerPort: String { tr("eventListenerPort") }
+    public static var eventListenerPortHint: String { tr("eventListenerPortHint") }
+    public static var galaxyVis: String { tr("galaxyVis") }
+    public static var galaxyVisWindowTitle: String { tr("galaxyVisWindowTitle") }
+    public static var galaxyLegend: String { tr("galaxyLegend") }
+    public static var galaxyLegendDataField: String { tr("galaxyLegendDataField") }
+    public static var galaxyLegendMarquee: String { tr("galaxyLegendMarquee") }
+    public static var galaxyLegendMurmuration: String { tr("galaxyLegendMurmuration") }
+    public static var galaxyLegendMycelium: String { tr("galaxyLegendMycelium") }
+    public static var galaxyLegendTides: String { tr("galaxyLegendTides") }
     public static func clubVisWindowTitleFormat(_ groupName: String) -> String {
         String(format: tr("clubVisWindowTitleFormat"), groupName)
     }
@@ -1210,6 +1234,92 @@ public enum L10n {
         String(format: tr("lastCheckedFormat"), date)
     }
 
+    // MARK: - Queue Library window (v4.x)
+    public static var duplicate: String { tr("duplicate") }
+    public static var newSubfolder: String { tr("newSubfolder") }
+    public static var moveToMenu: String { tr("moveToMenu") }
+    public static var topLevel: String { tr("topLevel") }
+    public static var folders: String { tr("folders") }
+    public static var removeFromAllFolders: String { tr("removeFromAllFolders") }
+    public static var removeFromThisFolder: String { tr("removeFromThisFolder") }
+    public static var newQueueEllipsis: String { tr("newQueueEllipsis") }
+    public static var moveToTop: String { tr("moveToTop") }
+    public static var moveToBottom: String { tr("moveToBottom") }
+    public static var filterByRoomLabel: String { tr("filterByRoom") }
+    public static var iconOrTableView: String { tr("iconOrTableView") }
+    public static var listOrTableView: String { tr("listOrTableView") }
+    public static var renameFolder: String { tr("renameFolder") }
+    public static var folderName: String { tr("folderName") }
+    public static var newFolder: String { tr("newFolder") }
+    public static var exportM3U: String { tr("exportM3U") }
+    public static var exportCSV: String { tr("exportCSV") }
+    public static var dragToReorderQueueHint: String { tr("dragToReorderQueueHint") }
+    public static var tapToAnimateArtwork: String { tr("tapToAnimateArtwork") }
+    public static var animateArtworkRandomly: String { tr("animateArtworkRandomly") }
+
+    // MARK: - Suno explore window (v4.11)
+    public static var backToExplore: String { tr("backToExplore") }
+    public static var noSpeakerSelected: String { tr("noSpeakerSelected") }
+    public static var couldNotPlaySong: String { tr("couldNotPlaySong") }
+    public static var loadingPlaylistEllipsis: String { tr("loadingPlaylistEllipsis") }
+    public static var couldNotReadPlaylist: String { tr("couldNotReadPlaylist") }
+    public static var openASongToPlay: String { tr("openASongToPlay") }
+    public static var searchingAppleMusic: String { tr("searchingAppleMusic") }
+    public static var pasteSunoLinkHint: String { tr("pasteSunoLinkHint") }
+    public static func loadingSongsFormat(_ count: Int) -> String {
+        String(format: tr("loadingSongsFormat"), count)
+    }
+    public static func playingSongsFormat(_ count: Int) -> String {
+        String(format: tr("playingSongsFormat"), count)
+    }
+    public static var couldNotPlayList: String { tr("couldNotPlayList") }
+
+    // MARK: - Plex direct browse errors
+    public static func nothingToPlayInFormat(_ title: String) -> String {
+        String(format: tr("nothingToPlayInFormat"), title)
+    }
+    public static func couldNotPlayAllFormat(_ reason: String) -> String {
+        String(format: tr("couldNotPlayAllFormat"), reason)
+    }
+    public static func plexDiscoveryFailedFormat(_ reason: String) -> String {
+        String(format: tr("plexDiscoveryFailedFormat"), reason)
+    }
+    public static var directBrowseUnavailable: String { tr("directBrowseUnavailable") }
+    public static var noSpeakerGroupSelected: String { tr("noSpeakerGroupSelected") }
+    public static var trackNoPlayableMedia: String { tr("trackNoPlayableMedia") }
+    public static func couldNotStartPlaybackFormat(_ reason: String) -> String {
+        String(format: tr("couldNotStartPlaybackFormat"), reason)
+    }
+    public static func nothingToQueueFormat(_ title: String) -> String {
+        String(format: tr("nothingToQueueFormat"), title)
+    }
+    public static func couldNotAddToQueueFormat(_ reason: String) -> String {
+        String(format: tr("couldNotAddToQueueFormat"), reason)
+    }
+    public static var nothingToPlayInThisList: String { tr("nothingToPlayInThisList") }
+    public static var nothingToAdd: String { tr("nothingToAdd") }
+    public static func couldNotAddAllFormat(_ reason: String) -> String {
+        String(format: tr("couldNotAddAllFormat"), reason)
+    }
+
+    // MARK: - Now Playing context panel history (v4.11)
+    public static var thisTrack: String { tr("thisTrack") }
+    public static var byThisArtist: String { tr("byThisArtist") }
+    public static func uniqueTracksCountFormat(_ count: Int) -> String {
+        String(format: tr("uniqueTracksCountFormat"), count)
+    }
+
+    // MARK: - Preset manager status
+    public static func appliedPresetFormat(_ name: String) -> String {
+        String(format: tr("appliedPresetFormat"), name)
+    }
+    public static func savedPresetWithEQFormat(_ name: String, _ group: String) -> String {
+        String(format: tr("savedPresetWithEQFormat"), name, group)
+    }
+    public static func savedPresetFormat(_ name: String, _ group: String) -> String {
+        String(format: tr("savedPresetFormat"), name, group)
+    }
+
     // MARK: - Translation Lookup
 
     private static func tr(_ key: String) -> String {
@@ -1221,6 +1331,381 @@ public enum L10n {
 
     // swiftlint:disable function_body_length
     private static let translations: [String: [String: String]] = [
+
+        // ========================
+        // MARK: Queue Library window / Suno / Plex-direct / context-panel history / preset status (l10n backfill)
+        // ========================
+        "duplicate": [
+            "en": "Duplicate", "de": "Duplizieren", "fr": "Dupliquer", "nl": "Dupliceren",
+            "es": "Duplicar", "it": "Duplica", "sv": "Duplicera", "nb": "Dupliser",
+            "da": "Duplikér", "ja": "複製", "pt": "Duplicar", "pl": "Duplikuj", "zh-Hans": "复制",
+        ],
+        "newSubfolder": [
+            "en": "New subfolder", "de": "Neuer Unterordner", "fr": "Nouveau sous-dossier",
+            "nl": "Nieuwe submap", "es": "Nueva subcarpeta", "it": "Nuova sottocartella",
+            "sv": "Ny undermapp", "nb": "Ny undermappe", "da": "Ny undermappe",
+            "ja": "新規サブフォルダ", "pt": "Nova subpasta", "pl": "Nowy podfolder", "zh-Hans": "新建子文件夹",
+        ],
+        "moveToMenu": [
+            "en": "Move to", "de": "Verschieben nach", "fr": "Déplacer vers", "nl": "Verplaatsen naar",
+            "es": "Mover a", "it": "Sposta in", "sv": "Flytta till", "nb": "Flytt til",
+            "da": "Flyt til", "ja": "移動先", "pt": "Mover para", "pl": "Przenieś do", "zh-Hans": "移动到",
+        ],
+        "topLevel": [
+            "en": "Top level", "de": "Oberste Ebene", "fr": "Niveau supérieur", "nl": "Hoogste niveau",
+            "es": "Nivel superior", "it": "Livello principale", "sv": "Toppnivå", "nb": "Øverste nivå",
+            "da": "Øverste niveau", "ja": "トップレベル", "pt": "Nível superior", "pl": "Poziom główny", "zh-Hans": "顶层",
+        ],
+        "folders": [
+            "en": "Folders", "de": "Ordner", "fr": "Dossiers", "nl": "Mappen",
+            "es": "Carpetas", "it": "Cartelle", "sv": "Mappar", "nb": "Mapper",
+            "da": "Mapper", "ja": "フォルダ", "pt": "Pastas", "pl": "Foldery", "zh-Hans": "文件夹",
+        ],
+        "removeFromAllFolders": [
+            "en": "Remove from all folders", "de": "Aus allen Ordnern entfernen",
+            "fr": "Retirer de tous les dossiers", "nl": "Uit alle mappen verwijderen",
+            "es": "Quitar de todas las carpetas", "it": "Rimuovi da tutte le cartelle",
+            "sv": "Ta bort från alla mappar", "nb": "Fjern fra alle mapper", "da": "Fjern fra alle mapper",
+            "ja": "すべてのフォルダから削除", "pt": "Remover de todas as pastas",
+            "pl": "Usuń ze wszystkich folderów", "zh-Hans": "从所有文件夹中移除",
+        ],
+        "removeFromThisFolder": [
+            "en": "Remove from this folder", "de": "Aus diesem Ordner entfernen",
+            "fr": "Retirer de ce dossier", "nl": "Uit deze map verwijderen",
+            "es": "Quitar de esta carpeta", "it": "Rimuovi da questa cartella",
+            "sv": "Ta bort från den här mappen", "nb": "Fjern fra denne mappen", "da": "Fjern fra denne mappe",
+            "ja": "このフォルダから削除", "pt": "Remover desta pasta",
+            "pl": "Usuń z tego folderu", "zh-Hans": "从此文件夹中移除",
+        ],
+        "newQueueEllipsis": [
+            "en": "New Queue…", "de": "Neue Warteschlange…", "fr": "Nouvelle file…", "nl": "Nieuwe wachtrij…",
+            "es": "Nueva cola…", "it": "Nuova coda…", "sv": "Ny kö…", "nb": "Ny kø…",
+            "da": "Ny kø…", "ja": "新規キュー…", "pt": "Nova fila…", "pl": "Nowa kolejka…", "zh-Hans": "新建队列…",
+        ],
+        "moveToTop": [
+            "en": "Move to Top", "de": "Ganz nach oben", "fr": "Déplacer tout en haut",
+            "nl": "Naar boven verplaatsen", "es": "Mover al principio", "it": "Sposta in cima",
+            "sv": "Flytta överst", "nb": "Flytt øverst", "da": "Flyt øverst",
+            "ja": "最上部へ移動", "pt": "Mover para o topo", "pl": "Przenieś na górę", "zh-Hans": "移到顶部",
+        ],
+        "moveToBottom": [
+            "en": "Move to Bottom", "de": "Ganz nach unten", "fr": "Déplacer tout en bas",
+            "nl": "Naar onderen verplaatsen", "es": "Mover al final", "it": "Sposta in fondo",
+            "sv": "Flytta nederst", "nb": "Flytt nederst", "da": "Flyt nederst",
+            "ja": "最下部へ移動", "pt": "Mover para o fim", "pl": "Przenieś na dół", "zh-Hans": "移到底部",
+        ],
+        "filterByRoom": [
+            "en": "Filter by room", "de": "Nach Raum filtern", "fr": "Filtrer par pièce",
+            "nl": "Filteren op kamer", "es": "Filtrar por sala", "it": "Filtra per stanza",
+            "sv": "Filtrera efter rum", "nb": "Filtrer etter rom", "da": "Filtrér efter rum",
+            "ja": "ルームで絞り込み", "pt": "Filtrar por sala", "pl": "Filtruj według pokoju", "zh-Hans": "按房间筛选",
+        ],
+        "iconOrTableView": [
+            "en": "Icon or table view", "de": "Symbol- oder Tabellenansicht", "fr": "Vue icônes ou tableau",
+            "nl": "Pictogram- of tabelweergave", "es": "Vista de iconos o tabla", "it": "Vista a icone o tabella",
+            "sv": "Ikon- eller tabellvy", "nb": "Ikon- eller tabellvisning", "da": "Ikon- eller tabelvisning",
+            "ja": "アイコン表示またはテーブル表示", "pt": "Vista de ícones ou tabela",
+            "pl": "Widok ikon lub tabeli", "zh-Hans": "图标或表格视图",
+        ],
+        "listOrTableView": [
+            "en": "List or table view", "de": "Listen- oder Tabellenansicht", "fr": "Vue liste ou tableau",
+            "nl": "Lijst- of tabelweergave", "es": "Vista de lista o tabla", "it": "Vista a elenco o tabella",
+            "sv": "List- eller tabellvy", "nb": "Liste- eller tabellvisning", "da": "Liste- eller tabelvisning",
+            "ja": "リスト表示またはテーブル表示", "pt": "Vista de lista ou tabela",
+            "pl": "Widok listy lub tabeli", "zh-Hans": "列表或表格视图",
+        ],
+        "renameFolder": [
+            "en": "Rename folder", "de": "Ordner umbenennen", "fr": "Renommer le dossier",
+            "nl": "Map hernoemen", "es": "Renombrar carpeta", "it": "Rinomina cartella",
+            "sv": "Byt namn på mapp", "nb": "Gi nytt navn til mappe", "da": "Omdøb mappe",
+            "ja": "フォルダ名を変更", "pt": "Renomear pasta", "pl": "Zmień nazwę folderu", "zh-Hans": "重命名文件夹",
+        ],
+        "folderName": [
+            "en": "Folder name", "de": "Ordnername", "fr": "Nom du dossier", "nl": "Mapnaam",
+            "es": "Nombre de la carpeta", "it": "Nome cartella", "sv": "Mappnamn", "nb": "Mappenavn",
+            "da": "Mappenavn", "ja": "フォルダ名", "pt": "Nome da pasta", "pl": "Nazwa folderu", "zh-Hans": "文件夹名称",
+        ],
+        "newFolder": [
+            "en": "New folder", "de": "Neuer Ordner", "fr": "Nouveau dossier", "nl": "Nieuwe map",
+            "es": "Nueva carpeta", "it": "Nuova cartella", "sv": "Ny mapp", "nb": "Ny mappe",
+            "da": "Ny mappe", "ja": "新規フォルダ", "pt": "Nova pasta", "pl": "Nowy folder", "zh-Hans": "新建文件夹",
+        ],
+        "exportM3U": [
+            "en": "Export M3U…", "de": "M3U exportieren…", "fr": "Exporter en M3U…", "nl": "M3U exporteren…",
+            "es": "Exportar M3U…", "it": "Esporta M3U…", "sv": "Exportera M3U…", "nb": "Eksporter M3U…",
+            "da": "Eksportér M3U…", "ja": "M3U を書き出す…", "pt": "Exportar M3U…", "pl": "Eksportuj M3U…", "zh-Hans": "导出 M3U…",
+        ],
+        "exportCSV": [
+            "en": "Export CSV…", "de": "CSV exportieren…", "fr": "Exporter en CSV…", "nl": "CSV exporteren…",
+            "es": "Exportar CSV…", "it": "Esporta CSV…", "sv": "Exportera CSV…", "nb": "Eksporter CSV…",
+            "da": "Eksportér CSV…", "ja": "CSV を書き出す…", "pt": "Exportar CSV…", "pl": "Eksportuj CSV…", "zh-Hans": "导出 CSV…",
+        ],
+        "dragToReorderQueueHint": [
+            "en": "Drag to reorder · drag a track onto another queue to copy",
+            "de": "Zum Neuordnen ziehen · einen Titel auf eine andere Warteschlange ziehen, um ihn zu kopieren",
+            "fr": "Glisser pour réorganiser · faire glisser un titre sur une autre file pour le copier",
+            "nl": "Sleep om te herordenen · sleep een nummer naar een andere wachtrij om te kopiëren",
+            "es": "Arrastra para reordenar · arrastra una pista a otra cola para copiarla",
+            "it": "Trascina per riordinare · trascina un brano su un'altra coda per copiarlo",
+            "sv": "Dra för att ändra ordning · dra ett spår till en annan kö för att kopiera",
+            "nb": "Dra for å endre rekkefølge · dra et spor til en annen kø for å kopiere",
+            "da": "Træk for at ændre rækkefølge · træk et nummer til en anden kø for at kopiere",
+            "ja": "ドラッグして並べ替え · 別のキューにトラックをドラッグするとコピーされます",
+            "pt": "Arraste para reordenar · arraste uma faixa para outra fila para copiar",
+            "pl": "Przeciągnij, aby zmienić kolejność · przeciągnij utwór na inną kolejkę, aby skopiować",
+            "zh-Hans": "拖动以重新排序 · 将曲目拖到另一个队列以复制",
+        ],
+        "tapToAnimateArtwork": [
+            "en": "Tap to animate artwork", "de": "Tippen, um das Cover zu animieren",
+            "fr": "Toucher pour animer la pochette", "nl": "Tik om hoesje te animeren",
+            "es": "Toca para animar la carátula", "it": "Tocca per animare la copertina",
+            "sv": "Tryck för att animera omslaget", "nb": "Trykk for å animere coveret",
+            "da": "Tryk for at animere omslaget", "ja": "タップしてアートワークをアニメーション",
+            "pt": "Toque para animar a capa", "pl": "Dotknij, aby animować okładkę", "zh-Hans": "点按以使封面动起来",
+        ],
+        "animateArtworkRandomly": [
+            "en": "Animate artwork randomly", "de": "Cover zufällig animieren",
+            "fr": "Animer la pochette aléatoirement", "nl": "Hoesje willekeurig animeren",
+            "es": "Animar la carátula aleatoriamente", "it": "Anima la copertina in modo casuale",
+            "sv": "Animera omslaget slumpmässigt", "nb": "Animer coveret tilfeldig",
+            "da": "Animér omslaget tilfældigt", "ja": "アートワークをランダムにアニメーション",
+            "pt": "Animar a capa aleatoriamente", "pl": "Animuj okładkę losowo", "zh-Hans": "随机播放封面动画",
+        ],
+        "backToExplore": [
+            "en": "Back to Explore", "de": "Zurück zu Entdecken", "fr": "Retour à Explorer",
+            "nl": "Terug naar Verkennen", "es": "Volver a Explorar", "it": "Torna a Esplora",
+            "sv": "Tillbaka till Utforska", "nb": "Tilbake til Utforsk", "da": "Tilbage til Udforsk",
+            "ja": "見つけるに戻る", "pt": "Voltar a Explorar", "pl": "Powrót do Odkrywaj", "zh-Hans": "返回探索",
+        ],
+        "noSpeakerSelected": [
+            "en": "No speaker selected", "de": "Kein Lautsprecher ausgewählt", "fr": "Aucune enceinte sélectionnée",
+            "nl": "Geen speaker geselecteerd", "es": "Ningún altavoz seleccionado", "it": "Nessun diffusore selezionato",
+            "sv": "Ingen högtalare vald", "nb": "Ingen høyttaler valgt", "da": "Ingen højttaler valgt",
+            "ja": "スピーカーが選択されていません", "pt": "Nenhuma coluna selecionada",
+            "pl": "Nie wybrano głośnika", "zh-Hans": "未选择扬声器",
+        ],
+        "couldNotPlaySong": [
+            "en": "Couldn't play that song", "de": "Dieser Titel konnte nicht abgespielt werden",
+            "fr": "Impossible de lire ce morceau", "nl": "Kon dat nummer niet afspelen",
+            "es": "No se pudo reproducir esa canción", "it": "Impossibile riprodurre quel brano",
+            "sv": "Kunde inte spela upp låten", "nb": "Kunne ikke spille av den sangen",
+            "da": "Kunne ikke afspille den sang", "ja": "その曲を再生できませんでした",
+            "pt": "Não foi possível reproduzir essa música", "pl": "Nie można odtworzyć tego utworu", "zh-Hans": "无法播放该歌曲",
+        ],
+        "loadingPlaylistEllipsis": [
+            "en": "Loading playlist…", "de": "Wiedergabeliste wird geladen…", "fr": "Chargement de la liste de lecture…",
+            "nl": "Afspeellijst laden…", "es": "Cargando lista de reproducción…", "it": "Caricamento playlist…",
+            "sv": "Läser in spellista…", "nb": "Laster inn spilleliste…", "da": "Indlæser afspilningsliste…",
+            "ja": "プレイリストを読み込み中…", "pt": "A carregar lista de reprodução…",
+            "pl": "Ładowanie listy odtwarzania…", "zh-Hans": "正在加载播放列表…",
+        ],
+        "openASongToPlay": [
+            "en": "Open a song to play it", "de": "Öffnen Sie einen Titel zum Abspielen",
+            "fr": "Ouvrez un morceau pour le lire", "nl": "Open een nummer om het af te spelen",
+            "es": "Abre una canción para reproducirla", "it": "Apri un brano per riprodurlo",
+            "sv": "Öppna en låt för att spela upp den", "nb": "Åpne en sang for å spille den av",
+            "da": "Åbn en sang for at afspille den", "ja": "曲を開いて再生します",
+            "pt": "Abra uma música para a reproduzir", "pl": "Otwórz utwór, aby go odtworzyć", "zh-Hans": "打开一首歌曲以播放",
+        ],
+        "searchingAppleMusic": [
+            "en": "Searching Apple Music…", "de": "Apple Music wird durchsucht…", "fr": "Recherche dans Apple Music…",
+            "nl": "Apple Music doorzoeken…", "es": "Buscando en Apple Music…", "it": "Ricerca in Apple Music…",
+            "sv": "Söker i Apple Music…", "nb": "Søker i Apple Music…", "da": "Søger i Apple Music…",
+            "ja": "Apple Music を検索中…", "pt": "A pesquisar no Apple Music…", "pl": "Przeszukiwanie Apple Music…", "zh-Hans": "正在搜索 Apple Music…",
+        ],
+        "pasteSunoLinkHint": [
+            "en": "Paste a public Suno song link to play it here.",
+            "de": "Fügen Sie einen öffentlichen Suno-Songlink ein, um ihn hier abzuspielen.",
+            "fr": "Collez le lien d'un morceau Suno public pour le lire ici.",
+            "nl": "Plak een openbare Suno-songlink om deze hier af te spelen.",
+            "es": "Pega el enlace de una canción pública de Suno para reproducirla aquí.",
+            "it": "Incolla il link di un brano Suno pubblico per riprodurlo qui.",
+            "sv": "Klistra in en länk till en offentlig Suno-låt för att spela upp den här.",
+            "nb": "Lim inn en lenke til en offentlig Suno-sang for å spille den av her.",
+            "da": "Indsæt et link til en offentlig Suno-sang for at afspille den her.",
+            "ja": "公開されている Suno の曲のリンクを貼り付けてここで再生します。",
+            "pt": "Cole o link de uma música pública do Suno para a reproduzir aqui.",
+            "pl": "Wklej link do publicznego utworu Suno, aby odtworzyć go tutaj.",
+            "zh-Hans": "粘贴公开的 Suno 歌曲链接即可在此播放。",
+        ],
+        "couldNotReadPlaylist": [
+            "en": "Couldn't read that playlist", "de": "Diese Wiedergabeliste konnte nicht gelesen werden",
+            "fr": "Impossible de lire cette liste de lecture", "nl": "Kon die afspeellijst niet lezen",
+            "es": "No se pudo leer esa lista de reproducción", "it": "Impossibile leggere quella playlist",
+            "sv": "Kunde inte läsa spellistan", "nb": "Kunne ikke lese den spillelisten",
+            "da": "Kunne ikke læse den afspilningsliste", "ja": "そのプレイリストを読み込めませんでした",
+            "pt": "Não foi possível ler essa lista de reprodução", "pl": "Nie można odczytać tej listy odtwarzania", "zh-Hans": "无法读取该播放列表",
+        ],
+        "loadingSongsFormat": [
+            "en": "Loading %d songs…", "de": "%d Titel werden geladen…", "fr": "Chargement de %d morceaux…",
+            "nl": "%d nummers laden…", "es": "Cargando %d canciones…", "it": "Caricamento di %d brani…",
+            "sv": "Läser in %d låtar…", "nb": "Laster inn %d sanger…", "da": "Indlæser %d sange…",
+            "ja": "%d 曲を読み込み中…", "pt": "A carregar %d músicas…", "pl": "Ładowanie %d utworów…", "zh-Hans": "正在加载 %d 首歌曲…",
+        ],
+        "playingSongsFormat": [
+            "en": "Playing %d songs", "de": "%d Titel werden abgespielt", "fr": "Lecture de %d morceaux",
+            "nl": "%d nummers afspelen", "es": "Reproduciendo %d canciones", "it": "Riproduzione di %d brani",
+            "sv": "Spelar upp %d låtar", "nb": "Spiller av %d sanger", "da": "Afspiller %d sange",
+            "ja": "%d 曲を再生中", "pt": "A reproduzir %d músicas", "pl": "Odtwarzanie %d utworów", "zh-Hans": "正在播放 %d 首歌曲",
+        ],
+        "couldNotPlayList": [
+            "en": "Couldn't play that list", "de": "Diese Liste konnte nicht abgespielt werden",
+            "fr": "Impossible de lire cette liste", "nl": "Kon die lijst niet afspelen",
+            "es": "No se pudo reproducir esa lista", "it": "Impossibile riprodurre quella lista",
+            "sv": "Kunde inte spela upp listan", "nb": "Kunne ikke spille av den listen",
+            "da": "Kunne ikke afspille den liste", "ja": "そのリストを再生できませんでした",
+            "pt": "Não foi possível reproduzir essa lista", "pl": "Nie można odtworzyć tej listy", "zh-Hans": "无法播放该列表",
+        ],
+        "nothingToPlayInFormat": [
+            "en": "Nothing to play in %@.", "de": "In %@ gibt es nichts zum Abspielen.",
+            "fr": "Rien à lire dans %@.", "nl": "Niets om af te spelen in %@.",
+            "es": "No hay nada que reproducir en %@.", "it": "Niente da riprodurre in %@.",
+            "sv": "Inget att spela upp i %@.", "nb": "Ingenting å spille av i %@.",
+            "da": "Intet at afspille i %@.", "ja": "%@ に再生できるものがありません。",
+            "pt": "Nada para reproduzir em %@.", "pl": "Brak elementów do odtworzenia w %@.", "zh-Hans": "%@ 中没有可播放的内容。",
+        ],
+        "couldNotPlayAllFormat": [
+            "en": "Couldn't play all: %@", "de": "Konnte nicht alles abspielen: %@",
+            "fr": "Impossible de tout lire : %@", "nl": "Kon niet alles afspelen: %@",
+            "es": "No se pudo reproducir todo: %@", "it": "Impossibile riprodurre tutto: %@",
+            "sv": "Kunde inte spela upp allt: %@", "nb": "Kunne ikke spille av alt: %@",
+            "da": "Kunne ikke afspille alt: %@", "ja": "すべてを再生できませんでした：%@",
+            "pt": "Não foi possível reproduzir tudo: %@", "pl": "Nie można odtworzyć wszystkiego: %@", "zh-Hans": "无法全部播放：%@",
+        ],
+        "plexDiscoveryFailedFormat": [
+            "en": "Plex server discovery failed: %@", "de": "Plex-Server-Erkennung fehlgeschlagen: %@",
+            "fr": "Échec de la détection du serveur Plex : %@", "nl": "Plex-serverdetectie mislukt: %@",
+            "es": "Error al detectar el servidor Plex: %@", "it": "Rilevamento del server Plex non riuscito: %@",
+            "sv": "Identifiering av Plex-servern misslyckades: %@", "nb": "Oppdaging av Plex-server mislyktes: %@",
+            "da": "Registrering af Plex-server mislykkedes: %@", "ja": "Plex サーバーの検出に失敗しました：%@",
+            "pt": "Falha na deteção do servidor Plex: %@", "pl": "Nie wykryto serwera Plex: %@", "zh-Hans": "Plex 服务器发现失败：%@",
+        ],
+        "directBrowseUnavailable": [
+            "en": "Direct browse unavailable. Use the Music Services SMAPI Plex entry from the sidebar to browse via Sonos's relay.",
+            "de": "Direktes Durchsuchen nicht verfügbar. Verwenden Sie den SMAPI-Plex-Eintrag unter Musikdienste in der Seitenleiste, um über das Sonos-Relay zu browsen.",
+            "fr": "Navigation directe indisponible. Utilisez l'entrée Plex SMAPI des Services musicaux dans la barre latérale pour naviguer via le relais Sonos.",
+            "nl": "Direct bladeren niet beschikbaar. Gebruik de SMAPI Plex-vermelding bij Muziekdiensten in de zijbalk om via de Sonos-relay te bladeren.",
+            "es": "Exploración directa no disponible. Usa la entrada Plex de SMAPI en Servicios de música de la barra lateral para explorar mediante el relé de Sonos.",
+            "it": "Esplorazione diretta non disponibile. Usa la voce Plex SMAPI in Servizi musicali nella barra laterale per sfogliare tramite il relay Sonos.",
+            "sv": "Direkt bläddring är inte tillgänglig. Använd SMAPI Plex-posten under Musiktjänster i sidofältet för att bläddra via Sonos-reläet.",
+            "nb": "Direkte bla er ikke tilgjengelig. Bruk SMAPI Plex-oppføringen under Musikktjenester i sidefeltet for å bla via Sonos-reléet.",
+            "da": "Direkte gennemsyn er ikke tilgængeligt. Brug SMAPI Plex-posten under Musiktjenester i sidepanelet for at gennemse via Sonos-relæet.",
+            "ja": "直接ブラウズは利用できません。サイドバーのミュージックサービスにある SMAPI Plex の項目を使って Sonos リレー経由でブラウズしてください。",
+            "pt": "Navegação direta indisponível. Use a entrada Plex SMAPI em Serviços de música na barra lateral para navegar através do relé Sonos.",
+            "pl": "Bezpośrednie przeglądanie niedostępne. Użyj pozycji Plex SMAPI w Usługach muzycznych na pasku bocznym, aby przeglądać przez przekaźnik Sonos.",
+            "zh-Hans": "无法直接浏览。请使用边栏中“音乐服务”下的 SMAPI Plex 条目，通过 Sonos 中继进行浏览。",
+        ],
+        "noSpeakerGroupSelected": [
+            "en": "No speaker group selected to play to.", "de": "Keine Lautsprechergruppe für die Wiedergabe ausgewählt.",
+            "fr": "Aucun groupe d'enceintes sélectionné pour la lecture.", "nl": "Geen speakergroep geselecteerd om naar af te spelen.",
+            "es": "No se ha seleccionado ningún grupo de altavoces para reproducir.", "it": "Nessun gruppo di diffusori selezionato per la riproduzione.",
+            "sv": "Ingen högtalargrupp vald att spela upp på.", "nb": "Ingen høyttalergruppe valgt for avspilling.",
+            "da": "Ingen højttalergruppe valgt til afspilning.", "ja": "再生先のスピーカーグループが選択されていません。",
+            "pt": "Nenhum grupo de colunas selecionado para reprodução.", "pl": "Nie wybrano grupy głośników do odtwarzania.", "zh-Hans": "未选择要播放到的扬声器群组。",
+        ],
+        "trackNoPlayableMedia": [
+            "en": "This track has no playable media — Plex may still be importing it.",
+            "de": "Dieser Titel hat keine abspielbaren Medien — Plex importiert ihn möglicherweise noch.",
+            "fr": "Ce morceau n'a aucun média lisible — Plex est peut-être encore en train de l'importer.",
+            "nl": "Dit nummer heeft geen afspeelbare media — Plex importeert het mogelijk nog.",
+            "es": "Esta pista no tiene contenido reproducible: puede que Plex aún la esté importando.",
+            "it": "Questo brano non ha contenuti riproducibili — Plex potrebbe ancora importarlo.",
+            "sv": "Det här spåret har inga spelbara media — Plex kanske fortfarande importerar det.",
+            "nb": "Dette sporet har ingen avspillbare medier — Plex importerer det kanskje fortsatt.",
+            "da": "Dette nummer har ingen medier, der kan afspilles — Plex importerer det måske stadig.",
+            "ja": "このトラックには再生可能なメディアがありません。Plex がまだ取り込み中の可能性があります。",
+            "pt": "Esta faixa não tem conteúdo reproduzível — o Plex pode ainda estar a importá-la.",
+            "pl": "Ten utwór nie ma odtwarzalnych multimediów — Plex może go jeszcze importować.",
+            "zh-Hans": "此曲目没有可播放的媒体——Plex 可能仍在导入它。",
+        ],
+        "couldNotStartPlaybackFormat": [
+            "en": "Couldn't start playback: %@", "de": "Wiedergabe konnte nicht gestartet werden: %@",
+            "fr": "Impossible de démarrer la lecture : %@", "nl": "Kon afspelen niet starten: %@",
+            "es": "No se pudo iniciar la reproducción: %@", "it": "Impossibile avviare la riproduzione: %@",
+            "sv": "Kunde inte starta uppspelningen: %@", "nb": "Kunne ikke starte avspillingen: %@",
+            "da": "Kunne ikke starte afspilningen: %@", "ja": "再生を開始できませんでした：%@",
+            "pt": "Não foi possível iniciar a reprodução: %@", "pl": "Nie można rozpocząć odtwarzania: %@", "zh-Hans": "无法开始播放：%@",
+        ],
+        "nothingToQueueFormat": [
+            "en": "Nothing to queue — %@ has no playable tracks.",
+            "de": "Nichts zur Warteschlange hinzuzufügen — %@ hat keine abspielbaren Titel.",
+            "fr": "Rien à mettre en file — %@ n'a aucun titre lisible.",
+            "nl": "Niets om in de wachtrij te zetten — %@ heeft geen afspeelbare nummers.",
+            "es": "No hay nada que añadir a la cola: %@ no tiene pistas reproducibles.",
+            "it": "Niente da mettere in coda — %@ non ha brani riproducibili.",
+            "sv": "Inget att köa — %@ har inga spelbara spår.",
+            "nb": "Ingenting å legge i kø — %@ har ingen avspillbare spor.",
+            "da": "Intet at sætte i kø — %@ har ingen numre, der kan afspilles.",
+            "ja": "キューに追加するものがありません。%@ には再生可能なトラックがありません。",
+            "pt": "Nada para adicionar à fila — %@ não tem faixas reproduzíveis.",
+            "pl": "Brak elementów do kolejki — %@ nie ma odtwarzalnych utworów.",
+            "zh-Hans": "没有可加入队列的内容——%@ 没有可播放的曲目。",
+        ],
+        "couldNotAddToQueueFormat": [
+            "en": "Couldn't add to queue: %@", "de": "Konnte nicht zur Warteschlange hinzufügen: %@",
+            "fr": "Impossible d'ajouter à la file : %@", "nl": "Kon niet aan wachtrij toevoegen: %@",
+            "es": "No se pudo añadir a la cola: %@", "it": "Impossibile aggiungere alla coda: %@",
+            "sv": "Kunde inte lägga till i kön: %@", "nb": "Kunne ikke legge til i køen: %@",
+            "da": "Kunne ikke føje til køen: %@", "ja": "キューに追加できませんでした：%@",
+            "pt": "Não foi possível adicionar à fila: %@", "pl": "Nie można dodać do kolejki: %@", "zh-Hans": "无法加入队列：%@",
+        ],
+        "nothingToPlayInThisList": [
+            "en": "Nothing to play in this list.", "de": "In dieser Liste gibt es nichts zum Abspielen.",
+            "fr": "Rien à lire dans cette liste.", "nl": "Niets om af te spelen in deze lijst.",
+            "es": "No hay nada que reproducir en esta lista.", "it": "Niente da riprodurre in questa lista.",
+            "sv": "Inget att spela upp i den här listan.", "nb": "Ingenting å spille av i denne listen.",
+            "da": "Intet at afspille i denne liste.", "ja": "このリストに再生できるものがありません。",
+            "pt": "Nada para reproduzir nesta lista.", "pl": "Brak elementów do odtworzenia na tej liście.", "zh-Hans": "此列表中没有可播放的内容。",
+        ],
+        "nothingToAdd": [
+            "en": "Nothing to add.", "de": "Nichts hinzuzufügen.", "fr": "Rien à ajouter.", "nl": "Niets om toe te voegen.",
+            "es": "No hay nada que añadir.", "it": "Niente da aggiungere.", "sv": "Inget att lägga till.", "nb": "Ingenting å legge til.",
+            "da": "Intet at tilføje.", "ja": "追加するものがありません。", "pt": "Nada para adicionar.", "pl": "Brak elementów do dodania.", "zh-Hans": "没有可添加的内容。",
+        ],
+        "couldNotAddAllFormat": [
+            "en": "Couldn't add all: %@", "de": "Konnte nicht alles hinzufügen: %@",
+            "fr": "Impossible de tout ajouter : %@", "nl": "Kon niet alles toevoegen: %@",
+            "es": "No se pudo añadir todo: %@", "it": "Impossibile aggiungere tutto: %@",
+            "sv": "Kunde inte lägga till allt: %@", "nb": "Kunne ikke legge til alt: %@",
+            "da": "Kunne ikke tilføje alt: %@", "ja": "すべてを追加できませんでした：%@",
+            "pt": "Não foi possível adicionar tudo: %@", "pl": "Nie można dodać wszystkiego: %@", "zh-Hans": "无法全部添加：%@",
+        ],
+        "thisTrack": [
+            "en": "This Track", "de": "Dieser Titel", "fr": "Ce titre", "nl": "Dit nummer",
+            "es": "Esta pista", "it": "Questo brano", "sv": "Det här spåret", "nb": "Dette sporet",
+            "da": "Dette nummer", "ja": "このトラック", "pt": "Esta faixa", "pl": "Ten utwór", "zh-Hans": "此曲目",
+        ],
+        "byThisArtist": [
+            "en": "By This Artist", "de": "Von diesem Künstler", "fr": "De cet artiste", "nl": "Van deze artiest",
+            "es": "De este artista", "it": "Di questo artista", "sv": "Av den här artisten", "nb": "Av denne artisten",
+            "da": "Af denne kunstner", "ja": "このアーティスト", "pt": "Deste artista", "pl": "Tego wykonawcy", "zh-Hans": "此艺人",
+        ],
+        "uniqueTracksCountFormat": [
+            "en": "%d unique tracks", "de": "%d eindeutige Titel", "fr": "%d titres uniques", "nl": "%d unieke nummers",
+            "es": "%d pistas únicas", "it": "%d brani unici", "sv": "%d unika spår", "nb": "%d unike spor",
+            "da": "%d unikke numre", "ja": "ユニークなトラック %d 曲", "pt": "%d faixas únicas", "pl": "Unikalne utwory: %d", "zh-Hans": "%d 首独立曲目",
+        ],
+        "appliedPresetFormat": [
+            "en": "Applied \"%@\"", "de": "\"%@\" angewendet", "fr": "\"%@\" appliqué", "nl": "\"%@\" toegepast",
+            "es": "\"%@\" aplicado", "it": "\"%@\" applicato", "sv": "\"%@\" tillämpad", "nb": "\"%@\" brukt",
+            "da": "\"%@\" anvendt", "ja": "\"%@\" を適用しました", "pt": "\"%@\" aplicado", "pl": "Zastosowano \"%@\"", "zh-Hans": "已应用“%@”",
+        ],
+        "savedPresetWithEQFormat": [
+            "en": "Saved \"%1$@\" with EQ (%2$@)", "de": "\"%1$@\" mit EQ gespeichert (%2$@)",
+            "fr": "\"%1$@\" enregistré avec EQ (%2$@)", "nl": "\"%1$@\" opgeslagen met EQ (%2$@)",
+            "es": "\"%1$@\" guardado con EQ (%2$@)", "it": "\"%1$@\" salvato con EQ (%2$@)",
+            "sv": "\"%1$@\" sparad med EQ (%2$@)", "nb": "\"%1$@\" lagret med EQ (%2$@)",
+            "da": "\"%1$@\" gemt med EQ (%2$@)", "ja": "\"%1$@\" を EQ 付きで保存しました（%2$@）",
+            "pt": "\"%1$@\" guardado com EQ (%2$@)", "pl": "Zapisano \"%1$@\" z EQ (%2$@)", "zh-Hans": "已保存“%1$@”（含 EQ）（%2$@）",
+        ],
+        "savedPresetFormat": [
+            "en": "Saved \"%1$@\" (%2$@)", "de": "\"%1$@\" gespeichert (%2$@)",
+            "fr": "\"%1$@\" enregistré (%2$@)", "nl": "\"%1$@\" opgeslagen (%2$@)",
+            "es": "\"%1$@\" guardado (%2$@)", "it": "\"%1$@\" salvato (%2$@)",
+            "sv": "\"%1$@\" sparad (%2$@)", "nb": "\"%1$@\" lagret (%2$@)",
+            "da": "\"%1$@\" gemt (%2$@)", "ja": "\"%1$@\" を保存しました（%2$@）",
+            "pt": "\"%1$@\" guardado (%2$@)", "pl": "Zapisano \"%1$@\" (%2$@)", "zh-Hans": "已保存“%1$@”（%2$@）",
+        ],
 
         // ========================
         // MARK: Local Music Library / fixed-volume / room-match / Apple Music save
@@ -2916,6 +3401,216 @@ public enum L10n {
             "pt": "faixas",
             "pl": "utwor\u{00F3}w",
             "zh-Hans": "\u{66F2}\u{76EE}",
+        ],
+        "networkUnstableAdvisory": [
+            "en": "Network connection is switching repeatedly — speakers may drop. Use a single connection (Wi-Fi or Ethernet).",
+            "de": "Die Netzwerkverbindung wechselt wiederholt — Lautsprecher können ausfallen. Verwende eine einzige Verbindung (WLAN oder Ethernet).",
+            "fr": "La connexion réseau change sans cesse — des enceintes peuvent disparaître. Utilisez une seule connexion (Wi-Fi ou Ethernet).",
+            "nl": "De netwerkverbinding wisselt herhaaldelijk — speakers kunnen wegvallen. Gebruik één verbinding (wifi of ethernet).",
+            "es": "La conexión de red cambia repetidamente: los altavoces pueden desaparecer. Usa una sola conexión (wifi o Ethernet).",
+            "it": "La connessione di rete cambia di continuo: gli altoparlanti possono sparire. Usa una sola connessione (Wi-Fi o Ethernet).",
+            "sv": "Nätverksanslutningen växlar upprepade gånger – högtalare kan försvinna. Använd en enda anslutning (Wi-Fi eller Ethernet).",
+            "nb": "Nettverkstilkoblingen veksler gjentatte ganger – høyttalere kan forsvinne. Bruk én tilkobling (Wi-Fi eller Ethernet).",
+            "da": "Netværksforbindelsen skifter gentagne gange – højttalere kan forsvinde. Brug én forbindelse (Wi-Fi eller Ethernet).",
+            "ja": "ネットワーク接続が繰り返し切り替わっています。スピーカーが消えることがあります。単一の接続（Wi-Fi またはイーサネット）を使用してください。",
+            "pt": "A ligação de rede muda repetidamente — as colunas podem desaparecer. Use uma única ligação (Wi-Fi ou Ethernet).",
+            "pl": "Połączenie sieciowe wielokrotnie się przełącza — głośniki mogą znikać. Użyj jednego połączenia (Wi-Fi lub Ethernet).",
+            "zh-Hans": "网络连接反复切换，扬声器可能消失。请使用单一连接（Wi-Fi 或以太网）。",
+        ],
+        "queueLibrary": [
+            "en": "Queue Library (beta)",
+            "de": "Warteschlangen-Bibliothek (beta)",
+            "fr": "Biblioth\u{00E8}que de files (beta)",
+            "nl": "Wachtrijbibliotheek (beta)",
+            "es": "Biblioteca de colas (beta)",
+            "it": "Libreria delle code (beta)",
+            "sv": "K\u{00F6}bibliotek (beta)",
+            "nb": "K\u{00F8}bibliotek (beta)",
+            "da": "K\u{00F8}bibliotek (beta)",
+            "ja": "\u{30AD}\u{30E5}\u{30FC}\u{30E9}\u{30A4}\u{30D6}\u{30E9}\u{30EA} (beta)",
+            "pt": "Biblioteca de filas (beta)",
+            "pl": "Biblioteka kolejek (beta)",
+            "zh-Hans": "\u{961F}\u{5217}\u{5E93} (beta)",
+        ],
+        "queueLibraryWindowTitle": [
+            "en": "Queue Library (beta)",
+            "de": "Warteschlangen-Bibliothek (beta)",
+            "fr": "Biblioth\u{00E8}que de files (beta)",
+            "nl": "Wachtrijbibliotheek (beta)",
+            "es": "Biblioteca de colas (beta)",
+            "it": "Libreria delle code (beta)",
+            "sv": "K\u{00F6}bibliotek (beta)",
+            "nb": "K\u{00F8}bibliotek (beta)",
+            "da": "K\u{00F8}bibliotek (beta)",
+            "ja": "\u{30AD}\u{30E5}\u{30FC}\u{30E9}\u{30A4}\u{30D6}\u{30E9}\u{30EA} (beta)",
+            "pt": "Biblioteca de filas (beta)",
+            "pl": "Biblioteka kolejek (beta)",
+            "zh-Hans": "\u{961F}\u{5217}\u{5E93} (beta)",
+        ],
+        "cloneToChoragus": [
+            "en": "Clone to Choragus",
+            "de": "Nach Choragus kopieren",
+            "fr": "Cloner vers Choragus",
+            "nl": "Naar Choragus klonen",
+            "es": "Clonar a Choragus",
+            "it": "Clona in Choragus",
+            "sv": "Klona till Choragus",
+            "nb": "Klon til Choragus",
+            "da": "Klon til Choragus",
+            "ja": "Choragus\u{306B}\u{8907}\u{88FD}",
+            "pt": "Clonar para o Choragus",
+            "pl": "Klonuj do Choragus",
+            "zh-Hans": "\u{514B}\u{9686}\u{5230} Choragus",
+        ],
+        "emptyQueueLibrary": [
+            "en": "No saved queues or playlists yet",
+            "de": "Noch keine gespeicherten Warteschlangen oder Playlists",
+            "fr": "Aucune file ou playlist enregistr\u{00E9}e",
+            "nl": "Nog geen opgeslagen wachtrijen of afspeellijsten",
+            "es": "A\u{00FA}n no hay colas ni listas guardadas",
+            "it": "Nessuna coda o playlist salvata",
+            "sv": "Inga sparade k\u{00F6}er eller spellistor \u{00E4}nnu",
+            "nb": "Ingen lagrede k\u{00F8}er eller spillelister enn\u{00E5}",
+            "da": "Ingen gemte k\u{00F8}er eller afspilningslister endnu",
+            "ja": "\u{4FDD}\u{5B58}\u{3055}\u{308C}\u{305F}\u{30AD}\u{30E5}\u{30FC}\u{307E}\u{305F}\u{306F}\u{30D7}\u{30EC}\u{30A4}\u{30EA}\u{30B9}\u{30C8}\u{306F}\u{307E}\u{3060}\u{3042}\u{308A}\u{307E}\u{305B}\u{3093}",
+            "pt": "Ainda n\u{00E3}o h\u{00E1} filas ou playlists salvas",
+            "pl": "Brak zapisanych kolejek lub playlist",
+            "zh-Hans": "\u{5C1A}\u{65E0}\u{5DF2}\u{4FDD}\u{5B58}\u{7684}\u{961F}\u{5217}\u{6216}\u{64AD}\u{653E}\u{5217}\u{8868}",
+        ],
+        "savedQueues": [
+            "en": "Saved queues",
+            "de": "Gespeicherte Warteschlangen",
+            "fr": "Files enregistr\u{00E9}es",
+            "nl": "Opgeslagen wachtrijen",
+            "es": "Colas guardadas",
+            "it": "Code salvate",
+            "sv": "Sparade k\u{00F6}er",
+            "nb": "Lagrede k\u{00F8}er",
+            "da": "Gemte k\u{00F8}er",
+            "ja": "\u{4FDD}\u{5B58}\u{6E08}\u{307F}\u{30AD}\u{30E5}\u{30FC}",
+            "pt": "Filas salvas",
+            "pl": "Zapisane kolejki",
+            "zh-Hans": "\u{5DF2}\u{4FDD}\u{5B58}\u{7684}\u{961F}\u{5217}",
+        ],
+        "noSavedQueues": [
+            "en": "No saved queues",
+            "de": "Keine gespeicherten Warteschlangen",
+            "fr": "Aucune file enregistr\u{00E9}e",
+            "nl": "Geen opgeslagen wachtrijen",
+            "es": "No hay colas guardadas",
+            "it": "Nessuna coda salvata",
+            "sv": "Inga sparade k\u{00F6}er",
+            "nb": "Ingen lagrede k\u{00F8}er",
+            "da": "Ingen gemte k\u{00F8}er",
+            "ja": "\u{4FDD}\u{5B58}\u{6E08}\u{307F}\u{30AD}\u{30E5}\u{30FC}\u{306F}\u{3042}\u{308A}\u{307E}\u{305B}\u{3093}",
+            "pt": "Nenhuma fila salva",
+            "pl": "Brak zapisanych kolejek",
+            "zh-Hans": "\u{6CA1}\u{6709}\u{5DF2}\u{4FDD}\u{5B58}\u{7684}\u{961F}\u{5217}",
+        ],
+        "queueAppend": [
+            "en": "Append",
+            "de": "Anh\u{00E4}ngen",
+            "fr": "Ajouter \u{00E0} la suite",
+            "nl": "Toevoegen",
+            "es": "A\u{00F1}adir al final",
+            "it": "Aggiungi in coda",
+            "sv": "L\u{00E4}gg till sist",
+            "nb": "Legg til sist",
+            "da": "Tilf\u{00F8}j til sidst",
+            "ja": "\u{672B}\u{5C3E}\u{306B}\u{8FFD}\u{52A0}",
+            "pt": "Acrescentar",
+            "pl": "Dodaj na ko\u{0144}cu",
+            "zh-Hans": "\u{8FFD}\u{52A0}",
+        ],
+        "queueReplace": [
+            "en": "Replace queue",
+            "de": "Warteschlange ersetzen",
+            "fr": "Remplacer la file",
+            "nl": "Wachtrij vervangen",
+            "es": "Reemplazar la cola",
+            "it": "Sostituisci la coda",
+            "sv": "Ers\u{00E4}tt k\u{00F6}n",
+            "nb": "Erstatt k\u{00F8}en",
+            "da": "Erstat k\u{00F8}en",
+            "ja": "\u{30AD}\u{30E5}\u{30FC}\u{3092}\u{7F6E}\u{63DB}",
+            "pt": "Substituir fila",
+            "pl": "Zast\u{0105}p kolejk\u{0119}",
+            "zh-Hans": "\u{66FF}\u{6362}\u{961F}\u{5217}",
+        ],
+        "removeDuplicates": [
+            "en": "Remove duplicates",
+            "de": "Duplikate entfernen",
+            "fr": "Supprimer les doublons",
+            "nl": "Duplicaten verwijderen",
+            "es": "Eliminar duplicados",
+            "it": "Rimuovi duplicati",
+            "sv": "Ta bort dubbletter",
+            "nb": "Fjern duplikater",
+            "da": "Fjern dubletter",
+            "ja": "\u{91CD}\u{8907}\u{3092}\u{524A}\u{9664}",
+            "pt": "Remover duplicatas",
+            "pl": "Usu\u{0144} duplikaty",
+            "zh-Hans": "\u{5220}\u{9664}\u{91CD}\u{590D}\u{9879}",
+        ],
+        "filterQueuePlaceholder": [
+            "en": "Filter queue",
+            "de": "Warteschlange filtern",
+            "fr": "Filtrer la file",
+            "nl": "Wachtrij filteren",
+            "es": "Filtrar la cola",
+            "it": "Filtra la coda",
+            "sv": "Filtrera k\u{00F6}n",
+            "nb": "Filtrer k\u{00F8}en",
+            "da": "Filtrer k\u{00F8}en",
+            "ja": "\u{30AD}\u{30E5}\u{30FC}\u{3092}\u{7D5E}\u{308A}\u{8FBC}\u{307F}",
+            "pt": "Filtrar fila",
+            "pl": "Filtruj kolejk\u{0119}",
+            "zh-Hans": "\u{7B5B}\u{9009}\u{961F}\u{5217}",
+        ],
+        "queueHistory": [
+            "en": "Queue history",
+            "de": "Warteschlangen-Verlauf",
+            "fr": "Historique de la file",
+            "nl": "Wachtrijgeschiedenis",
+            "es": "Historial de la cola",
+            "it": "Cronologia della coda",
+            "sv": "K\u{00F6}historik",
+            "nb": "K\u{00F8}historikk",
+            "da": "K\u{00F8}historik",
+            "ja": "\u{30AD}\u{30E5}\u{30FC}\u{5C65}\u{6B74}",
+            "pt": "Hist\u{00F3}rico da fila",
+            "pl": "Historia kolejki",
+            "zh-Hans": "\u{961F}\u{5217}\u{5386}\u{53F2}",
+        ],
+        "restoreQueue": [
+            "en": "Restore",
+            "de": "Wiederherstellen",
+            "fr": "Restaurer",
+            "nl": "Herstellen",
+            "es": "Restaurar",
+            "it": "Ripristina",
+            "sv": "\u{00C5}terst\u{00E4}ll",
+            "nb": "Gjenopprett",
+            "da": "Gendan",
+            "ja": "\u{5FA9}\u{5143}",
+            "pt": "Restaurar",
+            "pl": "Przywr\u{00F3}\u{0107}",
+            "zh-Hans": "\u{6062}\u{590D}",
+        ],
+        "noQueueHistory": [
+            "en": "No saved queue states",
+            "de": "Keine gespeicherten Warteschlangen",
+            "fr": "Aucun \u{00E9}tat de file enregistr\u{00E9}",
+            "nl": "Geen opgeslagen wachtrijen",
+            "es": "No hay colas guardadas",
+            "it": "Nessuno stato della coda salvato",
+            "sv": "Inga sparade k\u{00F6}tillst\u{00E5}nd",
+            "nb": "Ingen lagrede k\u{00F8}tilstander",
+            "da": "Ingen gemte k\u{00F8}tilstande",
+            "ja": "\u{4FDD}\u{5B58}\u{3055}\u{308C}\u{305F}\u{30AD}\u{30E5}\u{30FC}\u{306F}\u{3042}\u{308A}\u{307E}\u{305B}\u{3093}",
+            "pt": "Nenhum estado de fila salvo",
+            "pl": "Brak zapisanych stan\u{00F3}w kolejki",
+            "zh-Hans": "\u{6CA1}\u{6709}\u{5DF2}\u{4FDD}\u{5B58}\u{7684}\u{961F}\u{5217}",
         ],
         "clearQueue": [
             "en": "Clear queue",
@@ -11405,13 +12100,31 @@ public enum L10n {
             "zh-Hans": "\u{8FD9}\u{91CC}\u{4EC0}\u{4E48}\u{4E5F}\u{6CA1}\u{6709}\u{3002}",
         ],
         "plexPlaylists": [
-            "en": "Playlists",
+            "en": "Playlists", "de": "Wiedergabelisten",
+            "fr": "Listes de lecture", "nl": "Afspeellijsten",
+            "es": "Listas de reproducci\u{00F3}n", "it": "Playlist",
+            "sv": "Spellistor", "nb": "Spillelister",
+            "da": "Afspilningslister", "ja": "\u{30D7}\u{30EC}\u{30A4}\u{30EA}\u{30B9}\u{30C8}",
+            "pt": "Listas de reprodu\u{00E7}\u{00E3}o", "pl": "Listy odtwarzania",
+            "zh-Hans": "\u{64AD}\u{653E}\u{5217}\u{8868}",
         ],
         "plexSmartPlaylist": [
-            "en": "Smart",
+            "en": "Smart", "de": "Intelligent",
+            "fr": "Intelligente", "nl": "Slim",
+            "es": "Inteligente", "it": "Smart",
+            "sv": "Smart", "nb": "Smart",
+            "da": "Smart", "ja": "\u{30B9}\u{30DE}\u{30FC}\u{30C8}",
+            "pt": "Inteligente", "pl": "Inteligentna",
+            "zh-Hans": "\u{667A}\u{80FD}",
         ],
         "plexTracksCountFormat": [
-            "en": "%d tracks",
+            "en": "%d tracks", "de": "%d Titel",
+            "fr": "%d titres", "nl": "%d nummers",
+            "es": "%d pistas", "it": "%d brani",
+            "sv": "%d sp\u{00E5}r", "nb": "%d spor",
+            "da": "%d numre", "ja": "%d \u{66F2}",
+            "pt": "%d faixas", "pl": "Utwory: %d",
+            "zh-Hans": "%d \u{9996}\u{66F2}\u{76EE}",
         ],
         "couldNotReachPlexServer": [
             "en": "Couldn't reach your Plex server",
@@ -13128,6 +13841,158 @@ public enum L10n {
             "pt": "Back of the Club (beta)",
             "pl": "Back of the Club (beta)",
             "zh-Hans": "Back of the Club (beta)",
+        ],
+        "eventListenerPort": [
+            "en": "Event listener port",
+            "de": "Ereignis-Listener-Port",
+            "fr": "Port d\u{2019}\u{00E9}coute des \u{00E9}v\u{00E9}nements",
+            "nl": "Poort voor gebeurtenis-listener",
+            "es": "Puerto de escucha de eventos",
+            "it": "Porta di ascolto eventi",
+            "sv": "Port f\u{00F6}r h\u{00E4}ndelselyssnare",
+            "nb": "Port for hendelseslytter",
+            "da": "Port til h\u{00E6}ndelseslytter",
+            "ja": "\u{30A4}\u{30D9}\u{30F3}\u{30C8}\u{30EA}\u{30B9}\u{30CA}\u{30FC}\u{30DD}\u{30FC}\u{30C8}",
+            "pt": "Porta de escuta de eventos",
+            "pl": "Port nas\u{0142}uchu zdarze\u{0144}",
+            "zh-Hans": "\u{4E8B}\u{4EF6}\u{76D1}\u{542C}\u{7AEF}\u{53E3}",
+        ],
+        "eventListenerPortHint": [
+            "en": "Speakers push state updates to this TCP port. Match any firewall rule to it. Takes effect after relaunch.",
+            "de": "Lautsprecher senden Statusaktualisierungen an diesen TCP-Port. Firewall-Regeln entsprechend anpassen. Wirksam nach Neustart.",
+            "fr": "Les enceintes envoient leurs mises \u{00E0} jour d\u{2019}\u{00E9}tat vers ce port TCP. Adaptez vos r\u{00E8}gles de pare-feu en cons\u{00E9}quence. Prend effet apr\u{00E8}s red\u{00E9}marrage.",
+            "nl": "Speakers sturen statusupdates naar deze TCP-poort. Stem firewallregels hierop af. Wordt actief na herstart.",
+            "es": "Los altavoces env\u{00ED}an actualizaciones de estado a este puerto TCP. Ajuste las reglas del cortafuegos en consecuencia. Surte efecto tras reiniciar.",
+            "it": "I diffusori inviano gli aggiornamenti di stato a questa porta TCP. Allineare le regole del firewall. Ha effetto dopo il riavvio.",
+            "sv": "H\u{00F6}gtalarna skickar statusuppdateringar till denna TCP-port. Anpassa brandv\u{00E4}ggsregler d\u{00E4}refter. Tr\u{00E4}der i kraft efter omstart.",
+            "nb": "H\u{00F8}yttalerne sender statusoppdateringer til denne TCP-porten. Tilpass brannmurregler deretter. Tr\u{00E5}r i kraft etter omstart.",
+            "da": "H\u{00F8}jttalerne sender statusopdateringer til denne TCP-port. Tilpas firewallregler derefter. Tr\u{00E6}der i kraft efter genstart.",
+            "ja": "\u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}\u{306F}\u{3053}\u{306E}TCP\u{30DD}\u{30FC}\u{30C8}\u{306B}\u{72B6}\u{614B}\u{66F4}\u{65B0}\u{3092}\u{9001}\u{4FE1}\u{3057}\u{307E}\u{3059}\u{3002}\u{30D5}\u{30A1}\u{30A4}\u{30A2}\u{30A6}\u{30A9}\u{30FC}\u{30EB}\u{898F}\u{5247}\u{3092}\u{5408}\u{308F}\u{305B}\u{3066}\u{304F}\u{3060}\u{3055}\u{3044}\u{3002}\u{518D}\u{8D77}\u{52D5}\u{5F8C}\u{306B}\u{6709}\u{52B9}\u{3002}",
+            "pt": "As colunas enviam atualiza\u{00E7}\u{00F5}es de estado para esta porta TCP. Ajuste as regras de firewall em conformidade. Tem efeito ap\u{00F3}s reiniciar.",
+            "pl": "G\u{0142}o\u{015B}niki wysy\u{0142}aj\u{0105} aktualizacje stanu na ten port TCP. Dostosuj regu\u{0142}y zapory. Dzia\u{0142}a po ponownym uruchomieniu.",
+            "zh-Hans": "\u{97F3}\u{7BB1}\u{5C06}\u{72B6}\u{6001}\u{66F4}\u{65B0}\u{63A8}\u{9001}\u{5230}\u{6B64}TCP\u{7AEF}\u{53E3}\u{3002}\u{8BF7}\u{76F8}\u{5E94}\u{8C03}\u{6574}\u{9632}\u{706B}\u{5899}\u{89C4}\u{5219}\u{3002}\u{91CD}\u{542F}\u{540E}\u{751F}\u{6548}\u{3002}",
+        ],
+        // Listening Galaxy — the vis name stays untranslated as a brand
+        // term, matching the Back of the Club convention above.
+        "galaxyVis": [
+            "en": "Listening Galaxy (beta)",
+            "de": "Listening Galaxy (beta)",
+            "fr": "Listening Galaxy (beta)",
+            "nl": "Listening Galaxy (beta)",
+            "es": "Listening Galaxy (beta)",
+            "it": "Listening Galaxy (beta)",
+            "sv": "Listening Galaxy (beta)",
+            "nb": "Listening Galaxy (beta)",
+            "da": "Listening Galaxy (beta)",
+            "ja": "Listening Galaxy (beta)",
+            "pt": "Listening Galaxy (beta)",
+            "pl": "Listening Galaxy (beta)",
+            "zh-Hans": "Listening Galaxy (beta)",
+        ],
+        "galaxyVisWindowTitle": [
+            "en": "Listening Galaxy (beta)",
+            "de": "Listening Galaxy (beta)",
+            "fr": "Listening Galaxy (beta)",
+            "nl": "Listening Galaxy (beta)",
+            "es": "Listening Galaxy (beta)",
+            "it": "Listening Galaxy (beta)",
+            "sv": "Listening Galaxy (beta)",
+            "nb": "Listening Galaxy (beta)",
+            "da": "Listening Galaxy (beta)",
+            "ja": "Listening Galaxy (beta)",
+            "pt": "Listening Galaxy (beta)",
+            "pl": "Listening Galaxy (beta)",
+            "zh-Hans": "Listening Galaxy (beta)",
+        ],
+        "galaxyLegend": [
+            "en": "Star = artist \u{00B7} size = plays \u{00B7} colour = genre \u{00B7} glow = recency \u{00B7} lines = your listening transitions",
+            "de": "Stern = Interpret \u{00B7} Gr\u{00F6}\u{00DF}e = Wiedergaben \u{00B7} Farbe = Genre \u{00B7} Leuchten = Aktualit\u{00E4}t \u{00B7} Linien = Ihre H\u{00F6}r\u{00FC}berg\u{00E4}nge",
+            "fr": "\u{00C9}toile = artiste \u{00B7} taille = lectures \u{00B7} couleur = genre \u{00B7} halo = r\u{00E9}cence \u{00B7} lignes = vos transitions d\u{2019}\u{00E9}coute",
+            "nl": "Ster = artiest \u{00B7} grootte = afspeelbeurten \u{00B7} kleur = genre \u{00B7} gloed = recentheid \u{00B7} lijnen = uw luisterovergangen",
+            "es": "Estrella = artista \u{00B7} tama\u{00F1}o = reproducciones \u{00B7} color = g\u{00E9}nero \u{00B7} brillo = recencia \u{00B7} l\u{00ED}neas = sus transiciones de escucha",
+            "it": "Stella = artista \u{00B7} dimensione = riproduzioni \u{00B7} colore = genere \u{00B7} bagliore = recenza \u{00B7} linee = le tue transizioni di ascolto",
+            "sv": "Stj\u{00E4}rna = artist \u{00B7} storlek = uppspelningar \u{00B7} f\u{00E4}rg = genre \u{00B7} gl\u{00F6}d = nyligen spelat \u{00B7} linjer = dina lyssnings\u{00F6}verg\u{00E5}ngar",
+            "nb": "Stjerne = artist \u{00B7} st\u{00F8}rrelse = avspillinger \u{00B7} farge = sjanger \u{00B7} gl\u{00F8}d = nylig spilt \u{00B7} linjer = lytteovergangene dine",
+            "da": "Stjerne = kunstner \u{00B7} st\u{00F8}rrelse = afspilninger \u{00B7} farve = genre \u{00B7} gl\u{00F8}d = nyligt afspillet \u{00B7} linjer = dine lytteovergange",
+            "ja": "\u{661F} = \u{30A2}\u{30FC}\u{30C6}\u{30A3}\u{30B9}\u{30C8} \u{00B7} \u{5927}\u{304D}\u{3055} = \u{518D}\u{751F}\u{56DE}\u{6570} \u{00B7} \u{8272} = \u{30B8}\u{30E3}\u{30F3}\u{30EB} \u{00B7} \u{8F1D}\u{304D} = \u{6700}\u{8FD1}\u{306E}\u{518D}\u{751F} \u{00B7} \u{7DDA} = \u{518D}\u{751F}\u{306E}\u{9077}\u{79FB}",
+            "pt": "Estrela = artista \u{00B7} tamanho = reprodu\u{00E7}\u{00F5}es \u{00B7} cor = g\u{00E9}nero \u{00B7} brilho = rec\u{00EA}ncia \u{00B7} linhas = as suas transi\u{00E7}\u{00F5}es de audi\u{00E7}\u{00E3}o",
+            "pl": "Gwiazda = wykonawca \u{00B7} rozmiar = odtworzenia \u{00B7} kolor = gatunek \u{00B7} po\u{015B}wiata = niedawne odtwarzanie \u{00B7} linie = przej\u{015B}cia s\u{0142}uchania",
+            "zh-Hans": "\u{661F} = \u{827A}\u{4EBA} \u{00B7} \u{5927}\u{5C0F} = \u{64AD}\u{653E}\u{6B21}\u{6570} \u{00B7} \u{989C}\u{8272} = \u{6D41}\u{6D3E} \u{00B7} \u{5149}\u{6655} = \u{6700}\u{8FD1}\u{64AD}\u{653E} \u{00B7} \u{8FDE}\u{7EBF} = \u{6536}\u{542C}\u{8F68}\u{8FF9}",
+        ],
+        "galaxyLegendDataField": [
+            "en": "Each glyph = one play, replayed in time order \u{00B7} column = hour of day \u{00B7} red = starred \u{00B7} counters = artist play totals",
+            "de": "Jedes Zeichen = eine Wiedergabe in zeitlicher Abfolge \u{00B7} Spalte = Tagesstunde \u{00B7} Rot = markiert \u{00B7} Z\u{00E4}hler = Wiedergaben pro Interpret",
+            "fr": "Chaque glyphe = une lecture, rejou\u{00E9}e dans l\u{2019}ordre \u{00B7} colonne = heure du jour \u{00B7} rouge = favori \u{00B7} compteurs = lectures par artiste",
+            "nl": "Elk teken = \u{00E9}\u{00E9}n afspeelbeurt, in tijdsvolgorde \u{00B7} kolom = uur van de dag \u{00B7} rood = met ster \u{00B7} tellers = totalen per artiest",
+            "es": "Cada glifo = una reproducci\u{00F3}n, en orden temporal \u{00B7} columna = hora del d\u{00ED}a \u{00B7} rojo = destacada \u{00B7} contadores = totales por artista",
+            "it": "Ogni glifo = una riproduzione, in ordine temporale \u{00B7} colonna = ora del giorno \u{00B7} rosso = preferita \u{00B7} contatori = totali per artista",
+            "sv": "Varje tecken = en uppspelning i tidsordning \u{00B7} kolumn = timme p\u{00E5} dygnet \u{00B7} r\u{00F6}d = stj\u{00E4}rnm\u{00E4}rkt \u{00B7} r\u{00E4}knare = totalsummor per artist",
+            "nb": "Hvert tegn = \u{00E9}n avspilling i tidsrekkef\u{00F8}lge \u{00B7} kolonne = time p\u{00E5} d\u{00F8}gnet \u{00B7} r\u{00F8}d = stjernemerket \u{00B7} tellere = totaler per artist",
+            "da": "Hvert tegn = \u{00E9}n afspilning i tidsorden \u{00B7} kolonne = time p\u{00E5} d\u{00F8}gnet \u{00B7} r\u{00F8}d = stjernemarkeret \u{00B7} t\u{00E6}llere = totaler pr. kunstner",
+            "ja": "\u{5404}\u{30B0}\u{30EA}\u{30D5} = 1\u{56DE}\u{306E}\u{518D}\u{751F}\u{3092}\u{6642}\u{7CFB}\u{5217}\u{3067}\u{518D}\u{73FE} \u{00B7} \u{5217} = \u{6642}\u{523B} \u{00B7} \u{8D64} = \u{30B9}\u{30BF}\u{30FC}\u{4ED8}\u{304D} \u{00B7} \u{30AB}\u{30A6}\u{30F3}\u{30BF}\u{30FC} = \u{30A2}\u{30FC}\u{30C6}\u{30A3}\u{30B9}\u{30C8}\u{5225}\u{518D}\u{751F}\u{6570}",
+            "pt": "Cada glifo = uma reprodu\u{00E7}\u{00E3}o, em ordem temporal \u{00B7} coluna = hora do dia \u{00B7} vermelho = com estrela \u{00B7} contadores = totais por artista",
+            "pl": "Ka\u{017C}dy glif = jedno odtworzenie w kolejno\u{015B}ci czasu \u{00B7} kolumna = godzina dnia \u{00B7} czerwony = oznaczone gwiazdk\u{0105} \u{00B7} liczniki = sumy wed\u{0142}ug wykonawcy",
+            "zh-Hans": "\u{6BCF}\u{4E2A}\u{7B26}\u{53F7} = \u{4E00}\u{6B21}\u{64AD}\u{653E}\u{FF0C}\u{6309}\u{65F6}\u{95F4}\u{987A}\u{5E8F}\u{91CD}\u{653E} \u{00B7} \u{5217} = \u{4E00}\u{5929}\u{4E2D}\u{7684}\u{65F6}\u{523B} \u{00B7} \u{7EA2}\u{8272} = \u{6536}\u{85CF} \u{00B7} \u{8BA1}\u{6570}\u{5668} = \u{827A}\u{4EBA}\u{64AD}\u{653E}\u{603B}\u{6570}",
+        ],
+        "galaxyLegendMarquee": [
+            "en": "Name size = plays \u{00B7} colour = genre \u{00B7} brightness = recency \u{00B7} the stage follows what's playing now",
+            "de": "Namensgr\u{00F6}\u{00DF}e = Wiedergaben \u{00B7} Farbe = Genre \u{00B7} Helligkeit = Aktualit\u{00E4}t \u{00B7} die B\u{00FC}hne folgt der aktuellen Wiedergabe",
+            "fr": "Taille du nom = lectures \u{00B7} couleur = genre \u{00B7} luminosit\u{00E9} = r\u{00E9}cence \u{00B7} la sc\u{00E8}ne suit la lecture en cours",
+            "nl": "Naamgrootte = afspeelbeurten \u{00B7} kleur = genre \u{00B7} helderheid = recentheid \u{00B7} het podium volgt wat nu speelt",
+            "es": "Tama\u{00F1}o del nombre = reproducciones \u{00B7} color = g\u{00E9}nero \u{00B7} brillo = recencia \u{00B7} el escenario sigue lo que suena ahora",
+            "it": "Dimensione del nome = riproduzioni \u{00B7} colore = genere \u{00B7} luminosit\u{00E0} = recenza \u{00B7} il palco segue ci\u{00F2} che \u{00E8} in riproduzione",
+            "sv": "Namnstorlek = uppspelningar \u{00B7} f\u{00E4}rg = genre \u{00B7} ljusstyrka = nyligen spelat \u{00B7} scenen f\u{00F6}ljer det som spelas nu",
+            "nb": "Navnest\u{00F8}rrelse = avspillinger \u{00B7} farge = sjanger \u{00B7} lysstyrke = nylig spilt \u{00B7} scenen f\u{00F8}lger det som spilles n\u{00E5}",
+            "da": "Navnest\u{00F8}rrelse = afspilninger \u{00B7} farve = genre \u{00B7} lysstyrke = nyligt afspillet \u{00B7} scenen f\u{00F8}lger det, der spiller nu",
+            "ja": "\u{540D}\u{524D}\u{306E}\u{5927}\u{304D}\u{3055} = \u{518D}\u{751F}\u{56DE}\u{6570} \u{00B7} \u{8272} = \u{30B8}\u{30E3}\u{30F3}\u{30EB} \u{00B7} \u{660E}\u{308B}\u{3055} = \u{6700}\u{8FD1}\u{306E}\u{518D}\u{751F} \u{00B7} \u{30B9}\u{30C6}\u{30FC}\u{30B8}\u{306F}\u{518D}\u{751F}\u{4E2D}\u{306E}\u{66F2}\u{306B}\u{8FFD}\u{5F93}",
+            "pt": "Tamanho do nome = reprodu\u{00E7}\u{00F5}es \u{00B7} cor = g\u{00E9}nero \u{00B7} brilho = rec\u{00EA}ncia \u{00B7} o palco segue o que est\u{00E1} a tocar",
+            "pl": "Rozmiar nazwy = odtworzenia \u{00B7} kolor = gatunek \u{00B7} jasno\u{015B}\u{0107} = niedawne odtwarzanie \u{00B7} scena pod\u{0105}\u{017C}a za tym, co gra teraz",
+            "zh-Hans": "\u{540D}\u{79F0}\u{5927}\u{5C0F} = \u{64AD}\u{653E}\u{6B21}\u{6570} \u{00B7} \u{989C}\u{8272} = \u{6D41}\u{6D3E} \u{00B7} \u{4EAE}\u{5EA6} = \u{6700}\u{8FD1}\u{64AD}\u{653E} \u{00B7} \u{821E}\u{53F0}\u{8DDF}\u{968F}\u{5F53}\u{524D}\u{64AD}\u{653E}",
+        ],
+        "galaxyLegendMurmuration": [
+            "en": "Each bird = one artist \u{00B7} flocks = genre \u{00B7} speed = recency \u{00B7} size = plays \u{00B7} they gather around what's playing now",
+            "de": "Jeder Vogel = ein Interpret \u{00B7} Schw\u{00E4}rme = Genre \u{00B7} Tempo = Aktualit\u{00E4}t \u{00B7} Gr\u{00F6}\u{00DF}e = Wiedergaben \u{00B7} sie sammeln sich um die aktuelle Wiedergabe",
+            "fr": "Chaque oiseau = un artiste \u{00B7} vol\u{00E9}es = genre \u{00B7} vitesse = r\u{00E9}cence \u{00B7} taille = lectures \u{00B7} ils se rassemblent autour de la lecture en cours",
+            "nl": "Elke vogel = \u{00E9}\u{00E9}n artiest \u{00B7} zwermen = genre \u{00B7} snelheid = recentheid \u{00B7} grootte = afspeelbeurten \u{00B7} ze verzamelen zich rond wat nu speelt",
+            "es": "Cada ave = un artista \u{00B7} bandadas = g\u{00E9}nero \u{00B7} velocidad = recencia \u{00B7} tama\u{00F1}o = reproducciones \u{00B7} se re\u{00FA}nen en torno a lo que suena ahora",
+            "it": "Ogni uccello = un artista \u{00B7} stormi = genere \u{00B7} velocit\u{00E0} = recenza \u{00B7} dimensione = riproduzioni \u{00B7} si radunano attorno a ci\u{00F2} che \u{00E8} in riproduzione",
+            "sv": "Varje f\u{00E5}gel = en artist \u{00B7} flockar = genre \u{00B7} hastighet = nyligen spelat \u{00B7} storlek = uppspelningar \u{00B7} de samlas kring det som spelas nu",
+            "nb": "Hver fugl = \u{00E9}n artist \u{00B7} flokker = sjanger \u{00B7} fart = nylig spilt \u{00B7} st\u{00F8}rrelse = avspillinger \u{00B7} de samles rundt det som spilles n\u{00E5}",
+            "da": "Hver fugl = \u{00E9}n kunstner \u{00B7} flokke = genre \u{00B7} fart = nyligt afspillet \u{00B7} st\u{00F8}rrelse = afspilninger \u{00B7} de samles om det, der spiller nu",
+            "ja": "\u{5404}\u{9CE5} = 1\u{30A2}\u{30FC}\u{30C6}\u{30A3}\u{30B9}\u{30C8} \u{00B7} \u{7FA4}\u{308C} = \u{30B8}\u{30E3}\u{30F3}\u{30EB} \u{00B7} \u{901F}\u{5EA6} = \u{6700}\u{8FD1}\u{306E}\u{518D}\u{751F} \u{00B7} \u{5927}\u{304D}\u{3055} = \u{518D}\u{751F}\u{56DE}\u{6570} \u{00B7} \u{518D}\u{751F}\u{4E2D}\u{306E}\u{66F2}\u{306E}\u{5468}\u{308A}\u{306B}\u{96C6}\u{307E}\u{308B}",
+            "pt": "Cada ave = um artista \u{00B7} bandos = g\u{00E9}nero \u{00B7} velocidade = rec\u{00EA}ncia \u{00B7} tamanho = reprodu\u{00E7}\u{00F5}es \u{00B7} re\u{00FA}nem-se em torno do que est\u{00E1} a tocar",
+            "pl": "Ka\u{017C}dy ptak = jeden wykonawca \u{00B7} stada = gatunek \u{00B7} pr\u{0119}dko\u{015B}\u{0107} = niedawne odtwarzanie \u{00B7} rozmiar = odtworzenia \u{00B7} gromadz\u{0105} si\u{0119} wok\u{00F3}\u{0142} tego, co gra teraz",
+            "zh-Hans": "\u{6BCF}\u{53EA}\u{9E1F} = \u{4E00}\u{4F4D}\u{827A}\u{4EBA} \u{00B7} \u{9E1F}\u{7FA4} = \u{6D41}\u{6D3E} \u{00B7} \u{901F}\u{5EA6} = \u{6700}\u{8FD1}\u{64AD}\u{653E} \u{00B7} \u{5927}\u{5C0F} = \u{64AD}\u{653E}\u{6B21}\u{6570} \u{00B7} \u{5B83}\u{4EEC}\u{805A}\u{96C6}\u{5728}\u{5F53}\u{524D}\u{64AD}\u{653E}\u{5468}\u{56F4}",
+        ],
+        "galaxyLegendMycelium": [
+            "en": "Filaments trace your real artist-to-artist transitions \u{00B7} glow = recency \u{00B7} node size = plays",
+            "de": "F\u{00E4}den folgen Ihren echten Interpreten-\u{00DC}berg\u{00E4}ngen \u{00B7} Leuchten = Aktualit\u{00E4}t \u{00B7} Knotengr\u{00F6}\u{00DF}e = Wiedergaben",
+            "fr": "Les filaments tracent vos vraies transitions entre artistes \u{00B7} halo = r\u{00E9}cence \u{00B7} taille des n\u{0153}uds = lectures",
+            "nl": "Draden volgen uw echte overgangen tussen artiesten \u{00B7} gloed = recentheid \u{00B7} knoopgrootte = afspeelbeurten",
+            "es": "Los filamentos trazan sus transiciones reales entre artistas \u{00B7} brillo = recencia \u{00B7} tama\u{00F1}o del nodo = reproducciones",
+            "it": "I filamenti tracciano le tue vere transizioni tra artisti \u{00B7} bagliore = recenza \u{00B7} dimensione dei nodi = riproduzioni",
+            "sv": "Tr\u{00E5}darna f\u{00F6}ljer dina verkliga \u{00F6}verg\u{00E5}ngar mellan artister \u{00B7} gl\u{00F6}d = nyligen spelat \u{00B7} nodstorlek = uppspelningar",
+            "nb": "Tr\u{00E5}dene f\u{00F8}lger dine virkelige overganger mellom artister \u{00B7} gl\u{00F8}d = nylig spilt \u{00B7} nodest\u{00F8}rrelse = avspillinger",
+            "da": "Tr\u{00E5}dene f\u{00F8}lger dine virkelige overgange mellem kunstnere \u{00B7} gl\u{00F8}d = nyligt afspillet \u{00B7} knudest\u{00F8}rrelse = afspilninger",
+            "ja": "\u{7CF8}\u{306F}\u{5B9F}\u{969B}\u{306E}\u{30A2}\u{30FC}\u{30C6}\u{30A3}\u{30B9}\u{30C8}\u{9593}\u{306E}\u{9077}\u{79FB}\u{3092}\u{305F}\u{3069}\u{308B} \u{00B7} \u{8F1D}\u{304D} = \u{6700}\u{8FD1}\u{306E}\u{518D}\u{751F} \u{00B7} \u{30CE}\u{30FC}\u{30C9}\u{306E}\u{5927}\u{304D}\u{3055} = \u{518D}\u{751F}\u{56DE}\u{6570}",
+            "pt": "Os filamentos tra\u{00E7}am as suas transi\u{00E7}\u{00F5}es reais entre artistas \u{00B7} brilho = rec\u{00EA}ncia \u{00B7} tamanho do n\u{00F3} = reprodu\u{00E7}\u{00F5}es",
+            "pl": "W\u{0142}\u{00F3}kna \u{015B}ledz\u{0105} prawdziwe przej\u{015B}cia mi\u{0119}dzy wykonawcami \u{00B7} po\u{015B}wiata = niedawne odtwarzanie \u{00B7} rozmiar w\u{0119}z\u{0142}a = odtworzenia",
+            "zh-Hans": "\u{83CC}\u{4E1D}\u{52FE}\u{52D2}\u{60A8}\u{771F}\u{5B9E}\u{7684}\u{827A}\u{4EBA}\u{95F4}\u{8F6C}\u{6362} \u{00B7} \u{5149}\u{6655} = \u{6700}\u{8FD1}\u{64AD}\u{653E} \u{00B7} \u{8282}\u{70B9}\u{5927}\u{5C0F} = \u{64AD}\u{653E}\u{6B21}\u{6570}",
+        ],
+        "galaxyLegendTides": [
+            "en": "Each stream = one artist's weekly plays \u{00B7} hue = when you first played them \u{00B7} the river flows through your years",
+            "de": "Jeder Strom = w\u{00F6}chentliche Wiedergaben eines Interpreten \u{00B7} Farbton = Zeitpunkt der ersten Wiedergabe \u{00B7} der Fluss zieht durch Ihre Jahre",
+            "fr": "Chaque flux = les lectures hebdomadaires d\u{2019}un artiste \u{00B7} teinte = premi\u{00E8}re \u{00E9}coute \u{00B7} la rivi\u{00E8}re traverse vos ann\u{00E9}es",
+            "nl": "Elke stroom = wekelijkse afspeelbeurten van \u{00E9}\u{00E9}n artiest \u{00B7} tint = eerste keer afgespeeld \u{00B7} de rivier stroomt door uw jaren",
+            "es": "Cada corriente = reproducciones semanales de un artista \u{00B7} tono = primera reproducci\u{00F3}n \u{00B7} el r\u{00ED}o fluye por sus a\u{00F1}os",
+            "it": "Ogni flusso = le riproduzioni settimanali di un artista \u{00B7} tinta = primo ascolto \u{00B7} il fiume scorre attraverso i tuoi anni",
+            "sv": "Varje str\u{00F6}m = en artists veckovisa uppspelningar \u{00B7} nyans = n\u{00E4}r du f\u{00F6}rst spelade dem \u{00B7} floden flyter genom dina \u{00E5}r",
+            "nb": "Hver str\u{00F8}m = \u{00E9}n artists ukentlige avspillinger \u{00B7} fargetone = f\u{00F8}rste avspilling \u{00B7} elven renner gjennom \u{00E5}rene dine",
+            "da": "Hver str\u{00F8}m = \u{00E9}n kunstners ugentlige afspilninger \u{00B7} farvetone = f\u{00F8}rste afspilning \u{00B7} floden l\u{00F8}ber gennem dine \u{00E5}r",
+            "ja": "\u{5404}\u{6D41}\u{308C} = \u{30A2}\u{30FC}\u{30C6}\u{30A3}\u{30B9}\u{30C8}\u{306E}\u{9031}\u{3054}\u{3068}\u{306E}\u{518D}\u{751F} \u{00B7} \u{8272}\u{5408}\u{3044} = \u{521D}\u{518D}\u{751F}\u{306E}\u{6642}\u{671F} \u{00B7} \u{5DDD}\u{306F}\u{3042}\u{306A}\u{305F}\u{306E}\u{6B73}\u{6708}\u{3092}\u{6D41}\u{308C}\u{308B}",
+            "pt": "Cada corrente = as reprodu\u{00E7}\u{00F5}es semanais de um artista \u{00B7} tom = primeira reprodu\u{00E7}\u{00E3}o \u{00B7} o rio corre pelos seus anos",
+            "pl": "Ka\u{017C}dy strumie\u{0144} = cotygodniowe odtworzenia wykonawcy \u{00B7} odcie\u{0144} = pierwsze odtworzenie \u{00B7} rzeka p\u{0142}ynie przez twoje lata",
+            "zh-Hans": "\u{6BCF}\u{6761}\u{6D41} = \u{4E00}\u{4F4D}\u{827A}\u{4EBA}\u{7684}\u{6BCF}\u{5468}\u{64AD}\u{653E} \u{00B7} \u{8272}\u{8C03} = \u{9996}\u{6B21}\u{64AD}\u{653E}\u{65F6}\u{95F4} \u{00B7} \u{6CB3}\u{6D41}\u{6D41}\u{7ECF}\u{60A8}\u{7684}\u{5C81}\u{6708}",
         ],
         "clubVisWindowTitleFormat": [
             "en": "Back of the Club \u{2014} %@",

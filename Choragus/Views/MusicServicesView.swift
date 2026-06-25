@@ -280,23 +280,24 @@ struct MusicServicesSettingsSection: View {
             break
         }
         let serviceID = service.serviceID
+        let classIDs = classificationIDs(for: service)
         if smapiManager.tokenStore.authenticatedServices[serviceID] != nil {
-            let needsFavorite = !Self.servicesNotNeedingSN.contains(serviceID)
+            let needsFavorite = Self.servicesNotNeedingSN.isDisjoint(with: classIDs)
                 && smapiManager.serviceSerialNumbers[serviceID] == nil
             return .authenticated(needsFavorite: needsFavorite)
         }
         // Search-only services use public APIs (Apple Music, TuneIn, etc.)
         // — they don't need to be in the household to work, so always offer
         // the toggle regardless of descriptor state.
-        if Self.searchOnlyServices.contains(serviceID) { return .searchOnlyAvailable }
+        if !Self.searchOnlyServices.isDisjoint(with: classIDs) { return .searchOnlyAvailable }
         // Provider-gated services render red ("Unavailable") regardless
         // of household. The provider has decided third-party clients
         // can't authenticate to it, so showing the user a Connect
         // button would be misleading.
-        if Self.blockedServices.contains(serviceID) { return .blocked }
+        if !Self.blockedServices.isDisjoint(with: classIDs) { return .blocked }
         // Tested AppLink services (Spotify, Plex) — known to work,
         // confidence-blue.
-        if Self.testedAppLinkServices.contains(serviceID) { return .connectableTested }
+        if !Self.testedAppLinkServices.isDisjoint(with: classIDs) { return .connectableTested }
         // Everything else: we genuinely don't know. The previous code
         // returned .notInHousehold (gray) here based on a serial-number
         // check, but absence of an sn doesn't mean absence from the
@@ -307,6 +308,23 @@ struct MusicServicesSettingsSection: View {
         // .connectableUntested so the user gets a "try it and report"
         // affordance instead of a misleading "not connected" gray.
         return .connectableUntested
+    }
+
+    /// All IDs a row can be classified under. Sonos assigns per-household
+    /// sids (issue #19; issue #57 observed Spotify at sid 9), so the static
+    /// classification sets above — keyed by the canonical constants — must
+    /// be tested against the canonical sid as well as the household sid.
+    /// Reverse name lookup recovers the canonical sid for rows built from
+    /// household state (authenticated / serial-number / catalog layers);
+    /// `alternativeIDs` covers pinned rows the catalog promotion remapped.
+    private func classificationIDs(for service: CanonicalService) -> Set<Int> {
+        var ids: Set<Int> = [service.serviceID]
+        ids.formUnion(service.alternativeIDs)
+        let lowered = service.name.lowercased()
+        for (sid, name) in ServiceID.knownNames where name.lowercased() == lowered {
+            ids.insert(sid)
+        }
+        return ids
     }
 
     /// Sort priority for state ordering: authenticated → available → others.
@@ -325,7 +343,10 @@ struct MusicServicesSettingsSection: View {
         Group {
             bodyContent
         }
-        .onAppear { loadDescriptorsIfNeeded() }
+        .onAppear {
+            loadDescriptorsIfNeeded()
+            refreshSerialNumbers()
+        }
         .sheet(isPresented: $showPlexPinSheet) {
             PlexPinAuthSheet(plexAuth: plexAuth, onClose: { showPlexPinSheet = false })
         }
@@ -620,7 +641,7 @@ struct MusicServicesSettingsSection: View {
                 .controlSize(.small)
                 .foregroundStyle(.red)
         case .searchOnlyAvailable:
-            Toggle("", isOn: searchOnlyBinding(for: service.serviceID))
+            Toggle("", isOn: searchOnlyBinding(for: service))
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -648,16 +669,18 @@ struct MusicServicesSettingsSection: View {
         }
     }
 
-    private func searchOnlyBinding(for serviceID: Int) -> Binding<Bool> {
-        switch serviceID {
-        case ServiceID.tuneIn, ServiceID.tuneInNew: return $tuneInEnabled
-        case ServiceID.calmRadio:                    return $calmRadioEnabled
-        case ServiceID.somaFM:                       return $somaFMEnabled
-        case ServiceID.sunoPseudo:                   return $sunoEnabled
-        case ServiceID.appleMusic:                   return $appleMusicEnabled
-        case ServiceID.sonosRadio:                   return $sonosRadioEnabled
-        default:                                      return .constant(false)
-        }
+    private func searchOnlyBinding(for service: CanonicalService) -> Binding<Bool> {
+        // Classified by canonical sid, not the row's household sid — a
+        // promoted pinned row (household catalog assigned a different sid)
+        // must keep its toggle wired to the same setting.
+        let ids = classificationIDs(for: service)
+        if ids.contains(ServiceID.tuneIn) || ids.contains(ServiceID.tuneInNew) { return $tuneInEnabled }
+        if ids.contains(ServiceID.calmRadio)  { return $calmRadioEnabled }
+        if ids.contains(ServiceID.somaFM)     { return $somaFMEnabled }
+        if ids.contains(ServiceID.sunoPseudo) { return $sunoEnabled }
+        if ids.contains(ServiceID.appleMusic) { return $appleMusicEnabled }
+        if ids.contains(ServiceID.sonosRadio) { return $sonosRadioEnabled }
+        return .constant(false)
     }
 
     private func rowHint(service: CanonicalService, state: ServiceRowState) -> String? {
@@ -716,6 +739,15 @@ struct MusicServicesSettingsSection: View {
             )
             isLoadingDescriptors = false
         }
+    }
+
+    /// Re-scans favorites for `sid=…&sn=…` account bindings each time the
+    /// pane appears. Discovery otherwise only runs from Browse, so the
+    /// guide's favorite-a-song step never updated the dot for a user who
+    /// stayed in Settings (issue #57: favorited repeatedly, no change).
+    private func refreshSerialNumbers() {
+        guard smapiManager.isEnabled, !sonosManager.groups.isEmpty else { return }
+        Task { await smapiManager.discoverSerialNumbers(using: sonosManager) }
     }
 
     /// Resolves the descriptor for the given service and starts auth.

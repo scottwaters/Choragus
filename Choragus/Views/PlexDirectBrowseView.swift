@@ -289,6 +289,31 @@ struct PlexDirectBrowseView: View {
                 Task { await addToQueue(item, playNext: false) }
             }
         }
+        Divider()
+        Menu {
+            Button(L10n.newQueueEllipsis) {
+                Task {
+                    guard let auth = try? await authParams(),
+                          let bi = makeBrowseItem(item, baseURI: auth.base, token: auth.token) else { return }
+                    _ = await sonosManager.createChoragusQueue(item: bi, name: item.title.isEmpty ? "New Queue" : item.title)
+                }
+            }
+            let queues = sonosManager.localSavedQueues()
+            if !queues.isEmpty {
+                Divider()
+                ForEach(queues) { q in
+                    Button(q.name) {
+                        Task {
+                            guard let auth = try? await authParams(),
+                                  let bi = makeBrowseItem(item, baseURI: auth.base, token: auth.token) else { return }
+                            _ = await sonosManager.addToChoragusQueue(item: bi, queueID: q.id)
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label("Add to Choragus Queue", systemImage: "internaldrive.fill")
+        }
         #if DEBUG
         AddToTestFixturesMenuItem(service: "plex") {
             guard let auth = try? await authParams() else { return nil }
@@ -305,13 +330,13 @@ struct PlexDirectBrowseView: View {
             let (base, token) = try await authParams()
             let bulk = (try? await expandTracks(from: item, baseURI: base, token: token)) ?? []
             guard !bulk.isEmpty else {
-                loadError = "Nothing to play in \(item.title)."
+                loadError = L10n.nothingToPlayInFormat(item.title)
                 return
             }
             try await sonosManager.playItemsReplacingQueue(bulk, in: group)
         } catch {
             sonosDebugLog("[PLEX] playAllChildren failed: \(error)")
-            loadError = "Couldn't play all: \(error.localizedDescription)"
+            loadError = L10n.couldNotPlayAllFormat(error.localizedDescription)
         }
     }
 
@@ -389,7 +414,7 @@ struct PlexDirectBrowseView: View {
         do {
             base = try await plexAuth.ensureBaseURI()
         } catch {
-            loadError = "Plex server discovery failed: \(error.localizedDescription)"
+            loadError = L10n.plexDiscoveryFailedFormat(error.localizedDescription)
             sonosDebugLog("[PLEX] discovery failed at level=\(level.path): \(error)")
             return
         }
@@ -536,7 +561,7 @@ struct PlexDirectBrowseView: View {
         // The simplest "fallback" is to just open the SMAPI search
         // entry programmatically. Instead of routing through the
         // sidebar, surface a banner pointing the user there for now.
-        loadError = "Direct browse unavailable. Use the Music Services SMAPI Plex entry from the sidebar to browse via Sonos's relay."
+        loadError = L10n.directBrowseUnavailable
     }
 
     // MARK: - Tap handling
@@ -640,39 +665,39 @@ struct PlexDirectBrowseView: View {
 
     private func play(track: PlexMediaItem) async {
         guard let group = group else {
-            loadError = "No speaker group selected to play to."
+            loadError = L10n.noSpeakerGroupSelected
             return
         }
         do {
             let (base, token) = try await authParams()
             guard let item = makeBrowseItem(track, baseURI: base, token: token) else {
-                loadError = "This track has no playable media — Plex may still be importing it."
+                loadError = L10n.trackNoPlayableMedia
                 return
             }
             sonosDebugLog("[PLEX] Playing \(track.title)")
             try await sonosManager.playBrowseItem(item, in: group)
         } catch {
             sonosDebugLog("[PLEX] play failed: \(error)")
-            loadError = "Couldn't start playback: \(error.localizedDescription)"
+            loadError = L10n.couldNotStartPlaybackFormat(error.localizedDescription)
         }
     }
 
     private func addToQueue(_ item: PlexMediaItem, playNext: Bool) async {
         guard let group = group else {
-            loadError = "No speaker group selected to play to."
+            loadError = L10n.noSpeakerGroupSelected
             return
         }
         do {
             let (base, token) = try await authParams()
             let items = try await expandTracks(from: item, baseURI: base, token: token)
             guard !items.isEmpty else {
-                loadError = "Nothing to queue — \(item.title) has no playable tracks."
+                loadError = L10n.nothingToQueueFormat(item.title)
                 return
             }
             _ = try await sonosManager.addBrowseItemsToQueue(items, in: group, playNext: playNext)
         } catch {
             sonosDebugLog("[PLEX] addToQueue failed: \(error)")
-            loadError = "Couldn't add to queue: \(error.localizedDescription)"
+            loadError = L10n.couldNotAddToQueueFormat(error.localizedDescription)
         }
     }
 
@@ -691,7 +716,7 @@ struct PlexDirectBrowseView: View {
                 bulk.append(contentsOf: (try? await expandTracks(from: it, baseURI: base, token: token)) ?? [])
             }
             guard !bulk.isEmpty else {
-                loadError = "Nothing to play in this list."
+                loadError = L10n.nothingToPlayInThisList
                 return
             }
             // Audio-first replace-and-play: first track plays in one
@@ -699,7 +724,7 @@ struct PlexDirectBrowseView: View {
             try await sonosManager.playItemsReplacingQueue(bulk, in: group)
         } catch {
             sonosDebugLog("[PLEX] playAllNow failed: \(error)")
-            loadError = "Couldn't play all: \(error.localizedDescription)"
+            loadError = L10n.couldNotPlayAllFormat(error.localizedDescription)
         }
     }
 
@@ -712,13 +737,13 @@ struct PlexDirectBrowseView: View {
                 bulk.append(contentsOf: (try? await expandTracks(from: it, baseURI: base, token: token)) ?? [])
             }
             guard !bulk.isEmpty else {
-                loadError = "Nothing to add."
+                loadError = L10n.nothingToAdd
                 return
             }
             _ = try await sonosManager.addBrowseItemsToQueue(bulk, in: group, playNext: playNext)
         } catch {
             sonosDebugLog("[PLEX] addAllToQueue failed: \(error)")
-            loadError = "Couldn't add all: \(error.localizedDescription)"
+            loadError = L10n.couldNotAddAllFormat(error.localizedDescription)
         }
     }
 

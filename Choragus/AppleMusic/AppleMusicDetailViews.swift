@@ -83,11 +83,25 @@ struct AppleMusicArtistDetailView: View {
     @State private var topSongs: [AppleMusicTrack] = []
     @State private var albums: [AppleMusicAlbum] = []
     @State private var isLoading = true
+    // Library artists navigate in with a nil artworkURL (their transient
+    // library artwork is unloadable — see mapArtist); resolve a catalog
+    // image for the header the same way the list rows do.
+    @State private var resolvedArtwork: URL?
 
     var body: some View {
         VStack(spacing: 0) {
-            detailHeader(title: name, subtitle: nil, artwork: artworkURL,
+            detailHeader(title: name, subtitle: nil, artwork: artworkURL ?? resolvedArtwork,
                          circular: true, badge: "Artist")
+                .task(id: name) {
+                    guard artworkURL == nil else { return }
+                    if let cached = AppleMusicArtistArtCache.shared.lookup(name) {
+                        resolvedArtwork = cached
+                        return
+                    }
+                    let url = await provider.lookupArtist(name: name)?.artworkURL
+                    AppleMusicArtistArtCache.shared.store(url, for: name)
+                    resolvedArtwork = url
+                }
             Divider()
             if isLoading {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -139,11 +153,9 @@ struct AppleMusicArtistDetailView: View {
                         .background(Color.secondary.opacity(0.12))
                         .cornerRadius(4)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.body).foregroundStyle(.primary)
-                    Text(L10n.amItemsCount(count))
-                        .font(.callout).foregroundStyle(.secondary)
-                }
+                // No item count: the fetches behind these rows are capped /
+                // batched, so a number here would mislead.
+                Text(title).font(.body).foregroundStyle(.primary)
                 Spacer()
                 Image(systemName: "chevron.right").foregroundStyle(.tertiary)
             }
@@ -219,10 +231,24 @@ struct AppleMusicLibraryListView: View {
     @State private var artists: [AppleMusicArtist] = []
     @State private var playlists: [AppleMusicPlaylist] = []
     @State private var isLoading = true
-    @State private var trackSort: AppleMusicTrackSort = .title
-    @State private var albumSort: AppleMusicAlbumSort = .releaseOldest
+    @State private var trackSort: AppleMusicTrackSort = .original
+    @State private var albumSort: AppleMusicAlbumSort = .original
     @State private var artistSort: AppleMusicArtistSort = .name
     @State private var playlistSort: AppleMusicPlaylistSort = .name
+
+    // Progressive page loading. The first page renders immediately; the rest
+    // stream in from a background loop (no scroll-position trigger — a page
+    // whose items are all filtered out would otherwise render no rows, fire
+    // no onAppear, and stall the walk). `rawOffset` tracks the source
+    // position (raw items consumed, not the post-filter array count) so
+    // filtered-out items don't cause re-fetches or skips. `seenIDs` guards
+    // against page overlap when the library mutates between fetches —
+    // duplicate IDs would break ForEach identity.
+    @State private var rawOffset = 0
+    @State private var reachedEnd = false
+    @State private var loadFailed = false
+    @State private var seenIDs: Set<String> = []
+    private static let pageSize = 100
 
     private var sortedSongs: [AppleMusicTrack] { trackSort.sort(songs) }
     private var sortedAlbums: [AppleMusicAlbum] { albumSort.sort(albums) }
@@ -232,7 +258,10 @@ struct AppleMusicLibraryListView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                if kind == .songs {
+                // Bulk actions mean "all" — only offer them once the whole
+                // library is loaded, or Play All would silently act on the
+                // pages fetched so far.
+                if kind == .songs && reachedEnd {
                     AppleMusicBulkActionBar(tracks: sortedSongs, helper: helper)
                 } else {
                     Spacer().frame(height: 28)
@@ -282,20 +311,63 @@ struct AppleMusicLibraryListView: View {
                                 .contextMenu { playlistContextMenu(playlist: playlist, helper: helper) }
                             }
                         }
+                        if !reachedEnd {
+                            if loadFailed {
+                                // A page fetch threw — distinguish from
+                                // end-of-library and let the user resume
+                                // instead of silently truncating the list.
+                                Button(L10n.retry) {
+                                    loadFailed = false
+                                    Task { await loadRemainingPages() }
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                            } else {
+                                ProgressView().frame(maxWidth: .infinity).padding(.vertical, 12)
+                            }
+                        }
                     }
                     .padding(.vertical, 8)
                 }
             }
         }
-        .task {
-            switch kind {
-            case .songs: songs = await provider.librarySongs(limit: 2000)
-            case .albums: albums = await provider.libraryAlbums(limit: 2000)
-            case .artists: artists = await provider.libraryArtists(limit: 2000)
-            case .playlists: playlists = await provider.libraryPlaylists(limit: 2000)
+        .task { await loadRemainingPages() }
+    }
+
+    /// Streams library pages until the source is exhausted or a fetch fails.
+    /// The first page lifts the full-screen spinner; subsequent pages append
+    /// while the user is already browsing.
+    private func loadRemainingPages() async {
+        while !reachedEnd && !Task.isCancelled {
+            do {
+                let rawCount: Int
+                switch kind {
+                case .songs:
+                    let page = try await provider.librarySongsPage(offset: rawOffset, pageSize: Self.pageSize)
+                    songs.append(contentsOf: page.items.filter { seenIDs.insert($0.id).inserted })
+                    rawCount = page.rawCount
+                case .albums:
+                    let page = try await provider.libraryAlbumsPage(offset: rawOffset, pageSize: Self.pageSize)
+                    albums.append(contentsOf: page.items.filter { seenIDs.insert($0.id).inserted })
+                    rawCount = page.rawCount
+                case .artists:
+                    let page = try await provider.libraryArtistsPage(offset: rawOffset, pageSize: Self.pageSize)
+                    artists.append(contentsOf: page.items.filter { seenIDs.insert($0.id).inserted })
+                    rawCount = page.rawCount
+                case .playlists:
+                    let page = try await provider.libraryPlaylistsPage(offset: rawOffset, pageSize: Self.pageSize)
+                    playlists.append(contentsOf: page.items.filter { seenIDs.insert($0.id).inserted })
+                    rawCount = page.rawCount
+                }
+                rawOffset += rawCount
+                if rawCount < Self.pageSize { reachedEnd = true }
+            } catch {
+                loadFailed = true
+                break
             }
             isLoading = false
         }
+        isLoading = false
     }
 
     @ViewBuilder
@@ -329,7 +401,7 @@ struct AppleMusicLibraryListView: View {
     @ViewBuilder
     private func artistLikeRow(name: String, artwork: URL?) -> some View {
         HStack(spacing: 10) {
-            AppleMusicArtworkCircle(url: artwork)
+            AppleMusicArtistRowArt(name: name, initialURL: artwork, provider: provider)
             Text(name).font(.body).lineLimit(1)
             Spacer()
             Image(systemName: "chevron.right").foregroundStyle(.tertiary)
@@ -960,6 +1032,45 @@ struct AppleMusicArtworkSquare: View {
     }
 }
 
+/// In-memory cache of catalog artist-image lookups keyed by artist name —
+/// negative results included, so scrolling back over a no-match artist
+/// doesn't repeat the catalog search.
+@MainActor
+final class AppleMusicArtistArtCache {
+    static let shared = AppleMusicArtistArtCache()
+    private var map: [String: URL?] = [:]
+    func lookup(_ name: String) -> URL?? { map[name] }
+    func store(_ url: URL?, for name: String) { map[name] = url }
+}
+
+/// Artist-row artwork. Library artists expose only a synthesized transient
+/// `Artwork` (maximumWidth == 0) that ArtworkImage cannot load outside
+/// Music.app, so when no usable URL is supplied the row lazily resolves a
+/// catalog artist image instead — the same source the About panel renders.
+struct AppleMusicArtistRowArt: View {
+    let name: String
+    let initialURL: URL?
+    let provider: AppleMusicProvider
+    var size: CGFloat = 38
+    @State private var resolved: URL??
+
+    private var displayURL: URL? { initialURL ?? (resolved ?? nil) }
+
+    var body: some View {
+        AppleMusicArtworkCircle(url: displayURL, size: size)
+            .task(id: name) {
+                guard initialURL == nil else { return }
+                if let cached = AppleMusicArtistArtCache.shared.lookup(name) {
+                    resolved = cached
+                    return
+                }
+                let url = await provider.lookupArtist(name: name)?.artworkURL
+                AppleMusicArtistArtCache.shared.store(url, for: name)
+                resolved = url
+            }
+    }
+}
+
 struct AppleMusicArtworkCircle: View {
     let url: URL?
     var size: CGFloat = 38
@@ -978,5 +1089,116 @@ struct AppleMusicArtworkCircle: View {
         CachedAsyncImage(url: url, cornerRadius: size / 2)
             .frame(width: size, height: size)
         #endif
+    }
+}
+
+// MARK: - Paged catalog search list
+
+enum AppleMusicSearchListKind: Hashable { case tracks, albums, artists, playlists }
+
+/// Catalog-search drill-down with progressive paging. MusicKit caps each
+/// search response at 25 items; this view drains offset pages (25 at a
+/// time) in the background until the catalog runs out or the depth cap is
+/// reached, feeding the growing arrays into the existing list views. No
+/// total is ever claimed — the list simply keeps growing while the footer
+/// spinner shows.
+struct AppleMusicSearchListView: View {
+    let provider: AppleMusicProvider
+    let helper: AppleMusicPlayHelper
+    let kind: AppleMusicSearchListKind
+    let term: String
+    let onNavigate: (AppleMusicDestination) -> Void
+
+    @State private var tracks: [AppleMusicTrack] = []
+    @State private var albums: [AppleMusicAlbum] = []
+    @State private var artists: [AppleMusicArtist] = []
+    @State private var playlists: [AppleMusicPlaylist] = []
+    @State private var rawOffset = 0
+    @State private var reachedEnd = false
+    @State private var loadFailed = false
+    @State private var isLoading = true
+    @State private var seenIDs: Set<String> = []
+    private static let pageSize = 25
+    /// Apple's search relevance degrades deep into the result set; cap the
+    /// background drain so an open tab doesn't hammer the catalog API.
+    private static let depthCap = 300
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            content
+            if !reachedEnd {
+                Group {
+                    if loadFailed {
+                        Button(L10n.retry) {
+                            loadFailed = false
+                            Task { await loadRemainingPages() }
+                        }
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                .padding(8)
+                .background(.black.opacity(0.35), in: Capsule())
+                .padding(.bottom, 10)
+            }
+        }
+        .task(id: term) { await loadRemainingPages() }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if isLoading {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            switch kind {
+            case .tracks: AppleMusicTrackListView(tracks: tracks, helper: helper)
+            case .albums: AppleMusicAlbumListView(albums: albums, helper: helper, onNavigate: onNavigate)
+            case .artists: AppleMusicArtistListView(artists: artists, onNavigate: onNavigate)
+            case .playlists: AppleMusicPlaylistListView(playlists: playlists, helper: helper, onNavigate: onNavigate)
+            }
+        }
+    }
+
+    private var loadedCount: Int {
+        switch kind {
+        case .tracks: return tracks.count
+        case .albums: return albums.count
+        case .artists: return artists.count
+        case .playlists: return playlists.count
+        }
+    }
+
+    private func loadRemainingPages() async {
+        while !reachedEnd && !Task.isCancelled && loadedCount < Self.depthCap {
+            do {
+                let rawCount: Int
+                switch kind {
+                case .tracks:
+                    let page = try await provider.searchTracksPage(term: term, offset: rawOffset, pageSize: Self.pageSize)
+                    tracks.append(contentsOf: page.items.filter { seenIDs.insert($0.id).inserted })
+                    rawCount = page.rawCount
+                case .albums:
+                    let page = try await provider.searchAlbumsPage(term: term, offset: rawOffset, pageSize: Self.pageSize)
+                    albums.append(contentsOf: page.items.filter { seenIDs.insert($0.id).inserted })
+                    rawCount = page.rawCount
+                case .artists:
+                    let page = try await provider.searchArtistsPage(term: term, offset: rawOffset, pageSize: Self.pageSize)
+                    artists.append(contentsOf: page.items.filter { seenIDs.insert($0.id).inserted })
+                    rawCount = page.rawCount
+                case .playlists:
+                    let page = try await provider.searchPlaylistsPage(term: term, offset: rawOffset, pageSize: Self.pageSize)
+                    playlists.append(contentsOf: page.items.filter { seenIDs.insert($0.id).inserted })
+                    rawCount = page.rawCount
+                }
+                rawOffset += rawCount
+                if rawCount < Self.pageSize { reachedEnd = true }
+            } catch {
+                loadFailed = true
+                break
+            }
+            isLoading = false
+        }
+        if loadedCount >= Self.depthCap { reachedEnd = true }
+        isLoading = false
     }
 }

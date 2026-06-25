@@ -42,6 +42,13 @@ public struct ScrobbleLogEntry {
 
 @MainActor
 public final class PlayHistoryRepository {
+
+    /// SQLite must COPY the bound buffer: `(s as NSString).utf8String` is
+    /// autorelease-pool-scoped, so the no-copy `nil` destructor promised a
+    /// lifetime the buffer does not have (dangling-pointer UB). Mirrors
+    /// DiagnosticsRepository.
+    private static let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
     private var db: OpaquePointer?
     private let dbPath: String
 
@@ -67,6 +74,10 @@ public final class PlayHistoryRepository {
         }
 
         exec("PRAGMA journal_mode=WAL")
+        // OFF by default in SQLite, per-connection. Without it the
+        // scrobble_log's `ON DELETE CASCADE` (declared below) is inert and
+        // history deletions orphan their log rows.
+        exec("PRAGMA foreign_keys=ON")
 
         exec("""
             CREATE TABLE IF NOT EXISTS history (
@@ -130,6 +141,11 @@ public final class PlayHistoryRepository {
             )
         """)
         exec("CREATE INDEX IF NOT EXISTS idx_scrobble_service_state ON scrobble_log(service, state)")
+
+        // One-time sweep: rows orphaned while the cascade was inert (the
+        // pragma above only landed after scrobble_log shipped). Cheap no-op
+        // once clean.
+        exec("DELETE FROM scrobble_log WHERE history_id NOT IN (SELECT id FROM history)")
     }
 
     // MARK: - CRUD
@@ -143,25 +159,25 @@ public final class PlayHistoryRepository {
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
 
-        sqlite3_bind_text(stmt, 1, (entry.id.uuidString as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (entry.id.uuidString as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         sqlite3_bind_double(stmt, 2, entry.timestamp.timeIntervalSince1970)
-        sqlite3_bind_text(stmt, 3, (entry.title as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 4, (entry.artist as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 5, (entry.album as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 6, (entry.stationName as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 3, (entry.title as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 4, (entry.artist as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 5, (entry.album as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 6, (entry.stationName as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         if let uri = entry.sourceURI {
-            sqlite3_bind_text(stmt, 7, (uri as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 7, (uri as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         } else {
             sqlite3_bind_null(stmt, 7)
         }
-        sqlite3_bind_text(stmt, 8, (entry.groupName as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 8, (entry.groupName as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         sqlite3_bind_double(stmt, 9, entry.duration)
         if let art = entry.albumArtURI {
-            sqlite3_bind_text(stmt, 10, (art as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 10, (art as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         } else {
             sqlite3_bind_null(stmt, 10)
         }
-        sqlite3_bind_text(stmt, 11, (entry.genre as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 11, (entry.genre as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
 
         if sqlite3_step(stmt) != SQLITE_DONE {
             sonosDiagLog(.error, tag: "HISTORY",
@@ -242,7 +258,7 @@ public final class PlayHistoryRepository {
             if let d = value as? Double {
                 sqlite3_bind_double(stmt, Int32(idx), d)
             } else if let s = value as? String {
-                sqlite3_bind_text(stmt, Int32(idx), (s as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, Int32(idx), (s as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
             }
         }
 
@@ -309,7 +325,7 @@ public final class PlayHistoryRepository {
             if let d = value as? Double {
                 sqlite3_bind_double(stmt, Int32(idx), d)
             } else if let s = value as? String {
-                sqlite3_bind_text(stmt, Int32(idx), (s as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, Int32(idx), (s as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
             }
         }
 
@@ -322,7 +338,7 @@ public final class PlayHistoryRepository {
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_int(stmt, 1, starred ? 1 : 0)
-        sqlite3_bind_text(stmt, 2, (id.uuidString as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 2, (id.uuidString as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         sqlite3_step(stmt)
     }
 
@@ -331,7 +347,7 @@ public final class PlayHistoryRepository {
         for id in ids {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { continue }
-            sqlite3_bind_text(stmt, 1, (id.uuidString as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 1, (id.uuidString as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
             sqlite3_step(stmt)
             sqlite3_finalize(stmt)
         }
@@ -353,7 +369,7 @@ public final class PlayHistoryRepository {
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { continue }
             defer { sqlite3_finalize(stmt) }
             for (i, id) in batch.enumerated() {
-                sqlite3_bind_text(stmt, Int32(i + 1), (id.uuidString as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, Int32(i + 1), (id.uuidString as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
             }
             sqlite3_step(stmt)
         }
@@ -364,8 +380,8 @@ public final class PlayHistoryRepository {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, (artURL as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 2, (id.uuidString as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (artURL as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, (id.uuidString as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         if sqlite3_step(stmt) != SQLITE_DONE {
             sonosDiagLog(.error, tag: "HISTORY",
                          "Update art failed: \(String(cString: sqlite3_errmsg(db)))")
@@ -377,8 +393,8 @@ public final class PlayHistoryRepository {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, (genre as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 2, (id.uuidString as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (genre as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, (id.uuidString as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         if sqlite3_step(stmt) != SQLITE_DONE {
             sonosDiagLog(.error, tag: "HISTORY",
                          "Update genre failed: \(String(cString: sqlite3_errmsg(db)))")
@@ -390,9 +406,9 @@ public final class PlayHistoryRepository {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
         defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, (title as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 2, (artist as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 3, (groupName as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (title as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, (artist as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 3, (groupName as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         sqlite3_bind_double(stmt, 4, since)
         return sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_int(stmt, 0) > 0
     }
@@ -453,9 +469,9 @@ public final class PlayHistoryRepository {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, (date as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 2, (date as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 3, (date as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (date as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, (date as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 3, (date as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         sqlite3_step(stmt)
     }
 
@@ -542,7 +558,7 @@ public final class PlayHistoryRepository {
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
 
-        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         sqlite3_bind_int(stmt, 2, Int32(maxRetries))
         sqlite3_bind_int(stmt, 3, Int32(limit))
 
@@ -597,12 +613,12 @@ public final class PlayHistoryRepository {
         }
         defer { sqlite3_finalize(stmt) }
 
-        sqlite3_bind_text(stmt, 1, (historyID.uuidString as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 2, (service as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (historyID.uuidString as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, (service as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         sqlite3_bind_int64(stmt, 3, Int64(Date().timeIntervalSince1970))
         sqlite3_bind_int(stmt, 4, Int32(state.rawValue))
         if let error {
-            sqlite3_bind_text(stmt, 5, (error as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 5, (error as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         } else {
             sqlite3_bind_null(stmt, 5)
         }
@@ -626,7 +642,7 @@ public final class PlayHistoryRepository {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
         defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         sqlite3_bind_int(stmt, 2, Int32(maxRetries))
         return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
     }
@@ -641,7 +657,7 @@ public final class PlayHistoryRepository {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return (0, 0, 0) }
         defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
 
         var sent = 0, ignored = 0, failed = 0
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -672,7 +688,7 @@ public final class PlayHistoryRepository {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
         defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         guard sqlite3_step(stmt) == SQLITE_DONE else { return 0 }
         return Int(sqlite3_changes(db))
     }
@@ -709,7 +725,7 @@ public final class PlayHistoryRepository {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (service as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
         sqlite3_bind_int(stmt, 2, Int32(limit))
 
         var rows: [ScrobbleDiagnosticRow] = []

@@ -76,7 +76,11 @@ public final class EventSubscriptionManager: @unchecked Sendable {
         request.httpMethod = "SUBSCRIBE"
         request.setValue("<\(callbackURL.absoluteString)>", forHTTPHeaderField: "CALLBACK")
         request.setValue("upnp:event", forHTTPHeaderField: "NT")
-        request.setValue("Second-1800", forHTTPHeaderField: "TIMEOUT")
+        // 10-minute lease (renewed at 80%) — see subscribe(). Short leases
+        // bound the damage from orphaned subscriptions: the speaker burns a
+        // connect-timeout on every dead callback before reaching live ones
+        // (measured 6–14 s NOTIFY latency while 30-minute orphans lingered).
+        request.setValue("Second-600", forHTTPHeaderField: "TIMEOUT")
 
         let (_, response) = try await session.data(for: request)
 
@@ -127,7 +131,11 @@ public final class EventSubscriptionManager: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = "SUBSCRIBE"
         request.setValue(subscription.sid, forHTTPHeaderField: "SID")
-        request.setValue("Second-1800", forHTTPHeaderField: "TIMEOUT")
+        // 10-minute lease (renewed at 80%) — see subscribe(). Short leases
+        // bound the damage from orphaned subscriptions: the speaker burns a
+        // connect-timeout on every dead callback before reaching live ones
+        // (measured 6–14 s NOTIFY latency while 30-minute orphans lingered).
+        request.setValue("Second-600", forHTTPHeaderField: "TIMEOUT")
 
         let (_, response) = try await session.data(for: request)
 

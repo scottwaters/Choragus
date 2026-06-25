@@ -45,12 +45,31 @@ public enum XMLResponseParser {
 
     // MARK: - Zone Group Topology Parsing
 
-    /// The ZoneGroupState is double-encoded: XML-escaped content inside a SOAP XML element.
-    /// We must unescape the outer layer to get valid inner XML for the SAX parser.
+    /// Parses the inner ZoneGroupState XML. Do NOT xmlUnescape here — the
+    /// SOAP SAX parser already unescaped the outer layer, so this input is
+    /// valid XML where a room named "Foo & Bar" appears as
+    /// `ZoneName="Foo &amp; Bar"`. A second unescape turned that into a
+    /// bare `&`, the XML parser rejected the whole document, and EVERY
+    /// speaker in the household vanished (issue #63). Same rule as
+    /// `parseDIDLMetadata` below.
+    ///
+    /// `escapingBareAmpersands` additionally repairs any genuinely-bare `&`
+    /// (defensive — malformed firmware output) so one bad byte can't zero
+    /// the topology.
     public static func parseZoneGroupState(_ xml: String) -> [ZoneGroupData] {
-        let unescaped = xmlUnescape(xml)
         let parser = ZoneGroupParser()
-        return parser.parse(unescaped)
+        return parser.parse(escapingBareAmpersands(xml))
+    }
+
+    /// Replaces bare `&` (not part of a valid entity) with `&amp;` so the
+    /// SAX parser survives malformed input.
+    static func escapingBareAmpersands(_ xml: String) -> String {
+        guard xml.contains("&") else { return xml }
+        return xml.replacingOccurrences(
+            of: #"&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)"#,
+            with: "&amp;",
+            options: .regularExpression
+        )
     }
 
     // MARK: - DIDL-Lite Metadata Parsing

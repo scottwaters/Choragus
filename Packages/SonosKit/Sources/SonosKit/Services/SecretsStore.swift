@@ -80,14 +80,36 @@ public final class SecretsStore {
 
     private func ensureLoaded() {
         guard !loaded else { return }
-        loaded = true
-        if let data = readKeychain(service: service, account: account),
-           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
-            cache = decoded
+        let (data, status) = readKeychain(service: service, account: account)
+        switch status {
+        case errSecSuccess:
+            if let data, let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+                cache = decoded
+            }
+            loaded = true
+        case errSecItemNotFound:
+            // Normal first run / nothing stored yet — safe to treat the
+            // empty cache as authoritative.
+            loaded = true
+        default:
+            // Keychain locked (errSecInteractionNotAllowed), entitlement
+            // mismatch, or any other transient failure: the item may still
+            // exist with all the user's tokens in it. `loaded` stays false
+            // so `persist()` refuses to overwrite the real item with this
+            // near-empty cache, and the next access retries the read.
+            break
         }
     }
 
     private func persist() {
+        // Never write unless a load actually succeeded (or the item is
+        // confirmed absent) — persisting after a failed read would replace
+        // the single unified keychain item with a near-empty cache,
+        // destroying every stored credential.
+        guard loaded else {
+            sonosDebugLog("[SECRETS] persist skipped — keychain not readable, refusing to overwrite stored secrets")
+            return
+        }
         guard let data = try? JSONEncoder().encode(cache) else {
             sonosDebugLog("[SECRETS] Failed to encode cache")
             return
@@ -97,7 +119,9 @@ public final class SecretsStore {
 
     // MARK: - Keychain primitives
 
-    private func readKeychain(service: String, account: String) -> Data? {
+    /// Returns the item data plus the raw status — callers must distinguish
+    /// "item absent" (write-safe) from "read failed" (write would clobber).
+    private func readKeychain(service: String, account: String) -> (data: Data?, status: OSStatus) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -114,9 +138,9 @@ public final class SecretsStore {
             if status != errSecItemNotFound {
                 sonosDebugLog("[SECRETS] Keychain read failed: service=\(service) account=\(account) OSStatus=\(status)")
             }
-            return nil
+            return (nil, status)
         }
-        return result as? Data
+        return (result as? Data, status)
     }
 
     private func writeKeychain(service: String, account: String, data: Data) {

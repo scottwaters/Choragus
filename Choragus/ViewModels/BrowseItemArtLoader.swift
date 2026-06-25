@@ -48,7 +48,13 @@ final class BrowseItemArtLoader {
         // Local library items get special handling
         if isLocalLibraryItem(item) {
             if let url = await loadLocalLibraryArt(item: item) { return url }
-            Self.negativeArt.insert(item.objectID)
+            // Only remember the miss when iTunes actually answered. While a
+            // large library is browsed the limiter goes into cooldown — a
+            // skip then is deferred, not a real miss, so it retries once
+            // budget returns rather than staying blank forever (issue #64).
+            if await ITunesRateLimiter.shared.snapshot().isAvailable {
+                Self.negativeArt.insert(item.objectID)
+            }
             return nil
         }
 
@@ -72,9 +78,12 @@ final class BrowseItemArtLoader {
         // 4. Try first track in container
         if let url = await tryContainerFirstTrack(item: item) { return url }
 
-        // 5. Fallback: iTunes search (not for radio)
+        // 5. Fallback: iTunes search (not for radio). Skip while the limiter
+        // is cooling down so a big browse doesn't pile on (issue #64); a
+        // deferred skip isn't negative-cached so it retries later.
         let isRadio = item.resourceURI.map { URIPrefix.isRadio($0) } ?? false
         if !isRadio {
+            guard await ITunesRateLimiter.shared.snapshot().isAvailable else { return nil }
             let artist = item.artist.isEmpty ? "" : item.artist
             if let artURL = await sonosManager.albumArtSearch.searchArtwork(artist: artist, album: item.title) {
                 return URL(string: artURL)
@@ -177,15 +186,19 @@ final class BrowseItemArtLoader {
             artist = item.artist.isEmpty ? "" : item.artist; album = item.title
         }
 
-        if let artURL = await sonosManager.albumArtSearch.searchArtwork(artist: artist, album: album) {
+        // Route through the disk-persisted resolver: a cache hit returns
+        // instantly (even mid-cooldown), and a miss only hits iTunes when the
+        // limiter has budget — so each album resolves once and survives
+        // relaunches instead of re-flooding the limiter every browse (#64).
+        if let artURL = await sonosManager.resolveLocalAlbumArt(artist: artist, album: album) {
             sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title, itemID: "")
             return URL(string: artURL)
         }
 
-        // For generic containers, try guessing artist/album from path
+        // For generic containers, try guessing artist/album from path.
         if !isArtist && !isAlbum {
             if let (guessedArtist, guessedAlbum) = guessArtistAlbum(from: item.objectID, title: item.title) {
-                if let artURL = await sonosManager.albumArtSearch.searchArtwork(artist: guessedArtist, album: guessedAlbum) {
+                if let artURL = await sonosManager.resolveLocalAlbumArt(artist: guessedArtist, album: guessedAlbum) {
                     sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title, itemID: "")
                     return URL(string: artURL)
                 }

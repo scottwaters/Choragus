@@ -121,5 +121,28 @@
 
 	<key>LSBundleCompatibilityToken</key>
 	<string>cabba517-c931-4abd-90ad-155d14009196</string>
+
+	<!--
+	  Exported type for in-app drag and drop in the Queue Library. A custom
+	  UTType used with .draggable / .dropDestination(for:) MUST be declared
+	  here, conforming to public.data, or macOS silently fails to match the
+	  dragged item to the drop destination (no highlight, no accept). The
+	  identifier must match UTType(exportedAs:) in QueueLibraryWindow.swift.
+	-->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.choragus.queue-drag</string>
+			<key>UTTypeDescription</key>
+			<string>Choragus Queue Library item</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict/>
+		</dict>
+	</array>
 </dict>
 </plist>

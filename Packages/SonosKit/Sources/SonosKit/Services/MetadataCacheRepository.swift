@@ -16,6 +16,13 @@ import Foundation
 import SQLite3
 
 public final class MetadataCacheRepository {
+
+    /// SQLite must COPY the bound buffer: `(s as NSString).utf8String` is
+    /// autorelease-pool-scoped, so the no-copy `nil` destructor promised a
+    /// lifetime the buffer does not have (dangling-pointer UB). Mirrors
+    /// DiagnosticsRepository.
+    private static let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
     private var db: OpaquePointer?
     private let dbQueue = DispatchQueue(label: "metadata-cache-repo", qos: .utility)
 
@@ -127,7 +134,7 @@ public final class MetadataCacheRepository {
             defer { sqlite3_finalize(stmt) }
             let sql = "SELECT payload, expires_at FROM metadata_cache WHERE key = ?"
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
-            sqlite3_bind_text(stmt, 1, (key as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 1, (key as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
             guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
             let payload = String(cString: sqlite3_column_text(stmt, 0))
             // expires_at NULL = never expire.
@@ -158,8 +165,8 @@ public final class MetadataCacheRepository {
                 expires_at = excluded.expires_at;
             """
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
-            sqlite3_bind_text(stmt, 1, (key as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(stmt, 2, (payload as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 1, (key as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
+            sqlite3_bind_text(stmt, 2, (payload as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
             sqlite3_bind_int64(stmt, 3, Int64(now))
             if expires > 0 {
                 sqlite3_bind_int64(stmt, 4, expires)
@@ -178,7 +185,7 @@ public final class MetadataCacheRepository {
             var stmt: OpaquePointer?
             defer { sqlite3_finalize(stmt) }
             sqlite3_prepare_v2(db, "DELETE FROM metadata_cache WHERE key = ?", -1, &stmt, nil)
-            sqlite3_bind_text(stmt, 1, (key as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 1, (key as NSString).utf8String, -1, Self.SQLITE_TRANSIENT)
             sqlite3_step(stmt)
         }
     }

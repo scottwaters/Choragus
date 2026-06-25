@@ -30,6 +30,10 @@ struct ContentView: View {
     // Alarms: Sonos S2 app uses cloud API for alarms, not local UPnP AlarmClock.
     // UPnP returns 0 alarms. Feature removed until cloud API access is available.
     @State private var showPresetManager = false
+    /// Drives the diagnostics-button red badge. True only when an error-level
+    /// diagnostic exists (seeded from the store at launch, flipped live via
+    /// `.diagnosticsErrorStateChanged`). Warnings / info / empty leave it false.
+    @State private var hasDiagnosticError = false
 
     /// Opens the proper macOS Preferences window — the standalone
     /// non-modal Settings scene wired up at App level. Replaces the
@@ -257,6 +261,27 @@ struct ContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
                 .background(.blue.opacity(0.05))
+            }
+
+            // Network-flapping advisory (separate from stale-data so it can
+            // coexist and is independently dismissable).
+            if let advisory = sonosManager.networkAdvisory {
+                HStack(spacing: 8) {
+                    Image(systemName: "wifi.exclamationmark")
+                        .foregroundStyle(.orange)
+                    Text(advisory)
+                        .font(.caption)
+                    Spacer()
+                    Button(L10n.dismiss) {
+                        sonosManager.dismissNetworkAdvisory()
+                    }
+                    .font(.caption)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.orange.opacity(0.1))
             }
 
             // Wrap the visibility binding so toggling the sidebar
@@ -493,6 +518,13 @@ struct ContentView: View {
                     }
 
                     Button {
+                        WindowManager.shared.openQueueLibraryForActiveGroup()
+                    } label: {
+                        Image(systemName: "rectangle.stack")
+                    }
+                    .help(L10n.queueLibrary)
+
+                    Button {
                         WindowManager.shared.togglePlayHistory()
                     } label: {
                         Image(systemName: "chart.bar.xaxis")
@@ -529,11 +561,13 @@ struct ContentView: View {
                             } else {
                                 ZStack(alignment: .topTrailing) {
                                     Image(systemName: "ant.fill")
-                                    Image(systemName: "exclamationmark.circle.fill")
-                                        .font(.system(size: 8))
-                                        .foregroundStyle(.white, .red)
-                                        .symbolRenderingMode(.palette)
-                                        .offset(x: 5, y: -3)
+                                    if hasDiagnosticError {
+                                        Image(systemName: "exclamationmark.circle.fill")
+                                            .font(.system(size: 8))
+                                            .foregroundStyle(.white, .red)
+                                            .symbolRenderingMode(.palette)
+                                            .offset(x: 5, y: -3)
+                                    }
                                 }
                             }
                         }
@@ -559,8 +593,11 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .menuShowStats)) { _ in
                 WindowManager.shared.togglePlayHistory()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .menuShowForFun)) { _ in
-                WindowManager.shared.openForFun()
+            .onReceive(NotificationCenter.default.publisher(for: .diagnosticsErrorStateChanged)) { _ in
+                hasDiagnosticError = DiagnosticsService.shared.hasErrors
+            }
+            .onAppear {
+                hasDiagnosticError = DiagnosticsService.shared.hasErrors
             }
             .onReceive(NotificationCenter.default.publisher(for: .menuPlayPause)) { _ in
                 handlePlayPause()

@@ -52,12 +52,16 @@ final class MusicServiceCatalogTests: XCTestCase {
         XCTAssertEqual(spotify?.trackPlaybackFlags, 8224)
     }
 
-    func testStaticRulesIncludeAppleMusicWithMP4ExtensionAndFlag8232() {
+    func testStaticRulesIncludeAppleMusicWithHLSStaticSchemeAndFlag8232() {
+        // hls-static, no extension — byte-identical to the official Sonos
+        // app's enqueue form (verified against a live queue 2026-06-11).
+        // The legacy `x-sonos-http:…mp4` form made the speaker validate
+        // every track against Apple at enqueue time (~0.85 s/track).
         let table = MusicServiceCatalog.buildStaticRulesTable()
         let am = table["apple music"]
         XCTAssertNotNil(am)
-        XCTAssertEqual(am?.trackURIScheme, URIPrefix.sonosHTTP)
-        XCTAssertEqual(am?.trackURIExtension, ".mp4")
+        XCTAssertEqual(am?.trackURIScheme, URIPrefix.sonosApiHLSStatic)
+        XCTAssertEqual(am?.trackURIExtension, "")
         XCTAssertEqual(am?.trackPlaybackFlags, 8232)
     }
 
@@ -106,8 +110,8 @@ final class MusicServiceCatalogTests: XCTestCase {
             makeDescriptor(id: 204, name: "Apple Music"),
         ]))
         await catalog.refresh(speakerIP: "10.0.0.1")
-        XCTAssertEqual(catalog.trackURIScheme(forSid: 204), URIPrefix.sonosHTTP)
-        XCTAssertEqual(catalog.trackURIExtension(forSid: 204), ".mp4")
+        XCTAssertEqual(catalog.trackURIScheme(forSid: 204), URIPrefix.sonosApiHLSStatic)
+        XCTAssertEqual(catalog.trackURIExtension(forSid: 204), "")
         XCTAssertEqual(catalog.trackPlaybackFlags(forSid: 204), 8232)
     }
 

@@ -15,6 +15,7 @@ struct QueueView: View {
 
     @StateObject private var vm: QueueViewModel
     @State private var dropTargetIndex: Int?
+    @State private var showFilterBar = false
     /// Single "Save to Playlist…" entry point. Opens a sheet that lets the
     /// user pick a destination system (Sonos always; Apple Music only when
     /// the whole queue is Apple Music catalog) and name the playlist.
@@ -75,7 +76,7 @@ struct QueueView: View {
     /// saved Sonos queue accepts any mix of sources). Service-specific
     /// destinations appear only when every track belongs to that service.
     private var validDestinations: [SaveQueueDestination] {
-        var out: [SaveQueueDestination] = [.sonos]
+        var out: [SaveQueueDestination] = [.sonos, .choragus]
         if canSaveToAppleMusic { out.append(.appleMusic) }
         return out
     }
@@ -106,12 +107,17 @@ struct QueueView: View {
             guard !ids.isEmpty else { return }
             let ok = await appleMusicProvider.createLibraryPlaylist(name: name, catalogSongIDs: ids)
             vm.showSaveMessage(ok ? L10n.savedToAppleMusic(ids.count) : L10n.appleMusicSaveFailed)
+        case .choragus:
+            await vm.saveToChoragus(name: name)
         }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             headerBar
+            if showFilterBar {
+                filterBar
+            }
             Divider()
             content
         }
@@ -129,7 +135,10 @@ struct QueueView: View {
                 queueBusyOverlay
             }
         }
-        .onAppear { Task { await vm.loadQueue() } }
+        .onAppear {
+            vm.refreshLocalSavedQueues()
+            Task { await vm.loadQueue() }
+        }
         .onChange(of: group.id) { _, newID in
             // Propagate the speaker-selection change into the view model,
             // then refresh the queue from the newly-selected coordinator.
@@ -244,6 +253,19 @@ struct QueueView: View {
             .fixedSize()
             .layoutPriority(3)
 
+            Button {
+                showFilterBar.toggle()
+                if !showFilterBar { vm.filterText = "" }
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease.circle").font(.caption)
+                    .foregroundStyle(showFilterBar ? Color.accentColor : Color.primary)
+            }
+            .buttonStyle(.plain)
+            .tooltip(L10n.filterQueuePlaceholder)
+            .disabled(vm.queueItems.isEmpty && !showFilterBar)
+            .fixedSize()
+            .layoutPriority(3)
+
             Button { Task { await vm.shuffleQueue() } } label: {
                 Image(systemName: "shuffle").font(.caption)
             }
@@ -253,6 +275,8 @@ struct QueueView: View {
             .fixedSize()
             .layoutPriority(3)
 
+            savedQueuesMenu
+
             Button { showSaveSheet = true } label: {
                 Image(systemName: "text.badge.plus").font(.caption)
             }
@@ -261,6 +285,8 @@ struct QueueView: View {
             .disabled(vm.queueItems.isEmpty)
             .fixedSize()
             .layoutPriority(3)
+
+            queueHistoryMenu
 
             Button { Task { await vm.clearQueue() } } label: {
                 if vm.isClearing {
@@ -277,6 +303,92 @@ struct QueueView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    /// Display-only filter over the queue rows. Drag-reorder is disabled
+    /// while active (filtered indices don't map to queue positions).
+    private var filterBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField(L10n.filterQueuePlaceholder, text: $vm.filterText)
+                .textFieldStyle(.plain)
+                .font(.callout)
+            if !vm.filterText.isEmpty {
+                Button {
+                    vm.filterText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    /// Choragus-side saved queues — load (replace or append) and manage.
+    /// Saving happens through the existing save sheet ("Choragus"
+    /// destination); this menu is the read side.
+    private var savedQueuesMenu: some View {
+        Menu {
+            if vm.localSavedQueues.isEmpty {
+                Text(L10n.noSavedQueues)
+            } else {
+                ForEach(vm.localSavedQueues) { saved in
+                    Menu("\(saved.name) (\(saved.trackCount))") {
+                        Button(L10n.queueReplace) {
+                            Task { await vm.loadLocalSavedQueue(saved, append: false) }
+                        }
+                        Button(L10n.queueAppend) {
+                            Task { await vm.loadLocalSavedQueue(saved, append: true) }
+                        }
+                        Divider()
+                        Button(L10n.delete, role: .destructive) {
+                            vm.deleteLocalSavedQueue(saved)
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "tray.full").font(.caption)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .tooltip(L10n.savedQueues)
+        .fixedSize()
+        .layoutPriority(3)
+    }
+
+    /// Undo buffer for destructive queue changes. Each entry restores the
+    /// queue to a state captured before a replace-all or clear. Restoring
+    /// snapshots the current queue first, so a restore is itself undoable.
+    private var queueHistoryMenu: some View {
+        Menu {
+            let snapshots = vm.queueSnapshots
+            if snapshots.isEmpty {
+                Text(L10n.noQueueHistory)
+            } else {
+                ForEach(snapshots) { snap in
+                    Button {
+                        Task { await vm.restoreSnapshot(snap) }
+                    } label: {
+                        Text("\(snap.savedAt, style: .time) · \(snap.summary)")
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "clock.arrow.circlepath").font(.caption)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .tooltip(L10n.queueHistory)
+        .disabled(vm.queueSnapshots.isEmpty)
+        .fixedSize()
+        .layoutPriority(3)
     }
 
     /// Translucent full-window overlay shown while a batch add-to-queue
@@ -362,7 +474,10 @@ struct QueueView: View {
         ScrollViewReader { proxy in
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(Array(vm.queueItems.enumerated()), id: \.element.id) { index, item in
+                // While the filter is active, rows are a display-only subset:
+                // enumerated indices no longer map to queue positions, so
+                // drag-reorder is disabled (see `.onDrop` gating below).
+                ForEach(Array(vm.displayedItems.enumerated()), id: \.element.id) { index, item in
                     VStack(spacing: 0) {
                         if dropTargetIndex == index {
                             Rectangle()
@@ -478,12 +593,23 @@ struct QueueDropDelegate: DropDelegate {
     let vm: QueueViewModel
     @Binding var dropTargetIndex: Int?
 
-    func dropEntered(info: DropInfo) { dropTargetIndex = targetIndex }
+    /// Drops are disabled while the display filter is active — the row
+    /// indices the delegate receives are positions in the FILTERED list
+    /// and would resolve to the wrong absolute queue position.
+    private var filterActive: Bool { !vm.filterText.isEmpty }
+
+    func dropEntered(info: DropInfo) {
+        guard !filterActive else { return }
+        dropTargetIndex = targetIndex
+    }
     func dropExited(info: DropInfo) { if dropTargetIndex == targetIndex { dropTargetIndex = nil } }
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: filterActive ? .forbidden : .move)
+    }
 
     func performDrop(info: DropInfo) -> Bool {
         dropTargetIndex = nil
+        guard !filterActive else { return false }
 
         // Browse item drag (cross-view)
         if let browseItem = vm.sonosManager.draggedBrowseItem {
@@ -622,6 +748,9 @@ struct QueueItemRow: View {
 enum SaveQueueDestination: String, Identifiable, CaseIterable {
     case sonos
     case appleMusic
+    /// Local SQLite store — survives speaker resets, invisible to other
+    /// controllers, no household saved-queue budget consumed.
+    case choragus
 
     var id: String { rawValue }
 
@@ -629,6 +758,7 @@ enum SaveQueueDestination: String, Identifiable, CaseIterable {
         switch self {
         case .sonos:      return L10n.sonosDestination
         case .appleMusic: return ServiceName.appleMusic
+        case .choragus:   return "Choragus"
         }
     }
 
@@ -636,6 +766,7 @@ enum SaveQueueDestination: String, Identifiable, CaseIterable {
         switch self {
         case .sonos:      return "hifispeaker.2.fill"
         case .appleMusic: return "music.note"
+        case .choragus:   return "internaldrive.fill"
         }
     }
 }

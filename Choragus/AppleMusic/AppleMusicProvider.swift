@@ -468,6 +468,15 @@ public protocol AppleMusicProvider: AnyObject, Sendable {
     func libraryArtists(limit: Int) async -> [AppleMusicArtist]
     func libraryPlaylists(limit: Int) async -> [AppleMusicPlaylist]
 
+    // Single-page fetches for progressive loading. Return mapped items + the
+    // RAW response count (so the caller advances its offset past filtered
+    // items). Throw on fetch failure — callers must distinguish a retryable
+    // page error from end-of-library.
+    func librarySongsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicTrack], rawCount: Int)
+    func libraryAlbumsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicAlbum], rawCount: Int)
+    func libraryArtistsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicArtist], rawCount: Int)
+    func libraryPlaylistsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicPlaylist], rawCount: Int)
+
     // MARK: - Personalised / recent
 
     /// User's recently played albums + playlists.
@@ -486,6 +495,13 @@ public protocol AppleMusicProvider: AnyObject, Sendable {
 
     /// Albums attributed to an artist (full albums, not singles).
     func artistAlbums(artistID: String) async -> [AppleMusicAlbum]
+
+    // Paged catalog search (25/page via offset). rawCount = raw response
+    // size for offset advancement + end detection; errors propagate.
+    func searchTracksPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicTrack], rawCount: Int)
+    func searchAlbumsPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicAlbum], rawCount: Int)
+    func searchArtistsPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicArtist], rawCount: Int)
+    func searchPlaylistsPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicPlaylist], rawCount: Int)
 
     /// Artist's top songs in the catalog.
     func artistTopSongs(artistID: String, limit: Int) async -> [AppleMusicTrack]
@@ -536,11 +552,19 @@ public final class DisabledAppleMusicProvider: AppleMusicProvider, @unchecked Se
     public func libraryAlbums(limit: Int) async -> [AppleMusicAlbum] { [] }
     public func libraryArtists(limit: Int) async -> [AppleMusicArtist] { [] }
     public func libraryPlaylists(limit: Int) async -> [AppleMusicPlaylist] { [] }
+    public func librarySongsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicTrack], rawCount: Int) { ([], 0) }
+    public func libraryAlbumsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicAlbum], rawCount: Int) { ([], 0) }
+    public func libraryArtistsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicArtist], rawCount: Int) { ([], 0) }
+    public func libraryPlaylistsPage(offset: Int, pageSize: Int) async throws -> (items: [AppleMusicPlaylist], rawCount: Int) { ([], 0) }
     public func recentlyPlayed(limit: Int) async -> AppleMusicRecentlyPlayed { .empty }
     public func recommendations() async -> [AppleMusicRecommendation] { [] }
     public func albumTracks(albumID: String) async -> [AppleMusicTrack] { [] }
     public func playlistTracks(playlistID: String) async -> [AppleMusicTrack] { [] }
     public func artistAlbums(artistID: String) async -> [AppleMusicAlbum] { [] }
+    public func searchTracksPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicTrack], rawCount: Int) { ([], 0) }
+    public func searchAlbumsPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicAlbum], rawCount: Int) { ([], 0) }
+    public func searchArtistsPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicArtist], rawCount: Int) { ([], 0) }
+    public func searchPlaylistsPage(term: String, offset: Int, pageSize: Int) async throws -> (items: [AppleMusicPlaylist], rawCount: Int) { ([], 0) }
     public func artistTopSongs(artistID: String, limit: Int) async -> [AppleMusicTrack] { [] }
     public func searchStations(query: String, limit: Int) async -> [AppleMusicStation] { [] }
     public func userStations(limit: Int) async -> [AppleMusicStation] { [] }

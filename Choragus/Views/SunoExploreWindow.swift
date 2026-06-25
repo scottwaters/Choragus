@@ -60,7 +60,7 @@ struct SunoExploreWindow: View {
                 .disabled(!web.canGoForward)
             Button { web.reload() } label: { Image(systemName: "arrow.clockwise") }
             Button { web.load(Self.exploreURL) } label: { Image(systemName: "house") }
-                .help("Back to Explore")
+                .help(L10n.backToExplore)
 
             Divider().frame(height: 16)
 
@@ -71,14 +71,14 @@ struct SunoExploreWindow: View {
                     .lineLimit(1)
                 Button {
                     act(url) { try await sonosManager.playBrowseItem($0, in: $1) }
-                } label: { Label("Play", systemImage: "play.fill") }
+                } label: { Label(L10n.play, systemImage: "play.fill") }
                     .disabled(isWorking)
                 Button {
                     act(url) { _ = try await sonosManager.addBrowseItemToQueue($0, in: $1) }
-                } label: { Label("Add to Queue", systemImage: "plus") }
+                } label: { Label(L10n.addToQueue, systemImage: "plus") }
                     .disabled(isWorking)
             } else {
-                Text(selectedGroup == nil ? "No speaker selected" : "Open a song to play it")
+                Text(selectedGroup == nil ? L10n.noSpeakerSelected : L10n.openASongToPlay)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -108,7 +108,7 @@ struct SunoExploreWindow: View {
         lastPlayAt = Date()
         guard !isWorking else { return }
         guard let group = selectedGroup else {
-            status = "No speaker selected"
+            status = L10n.noSpeakerSelected
             return
         }
         isWorking = true
@@ -127,7 +127,7 @@ struct SunoExploreWindow: View {
             } catch {
                 sonosDebugLog("[SUNO] action FAILED: \(error)")
                 await MainActor.run {
-                    status = "Couldn't play that song"
+                    status = L10n.couldNotPlaySong
                     isWorking = false
                 }
             }
@@ -138,13 +138,13 @@ struct SunoExploreWindow: View {
     private func playPlaylist(_ url: URL) {
         guard !isWorking else { return }
         isWorking = true
-        status = "Loading playlist…"
+        status = L10n.loadingPlaylistEllipsis
         Task {
             let urls = await SunoResolver.playlistSongURLs(url.absoluteString).compactMap { URL(string: $0) }
             await MainActor.run {
                 isWorking = false
                 if urls.isEmpty {
-                    status = "Couldn't read that playlist"
+                    status = L10n.couldNotReadPlaylist
                 } else {
                     actAll(urls)
                 }
@@ -156,11 +156,11 @@ struct SunoExploreWindow: View {
     private func actAll(_ urls: [URL]) {
         guard !isWorking, !urls.isEmpty else { return }
         guard let group = selectedGroup else {
-            status = "No speaker selected"
+            status = L10n.noSpeakerSelected
             return
         }
         isWorking = true
-        status = "Loading \(urls.count) songs…"
+        status = L10n.loadingSongsFormat(urls.count)
         sonosDebugLog("[SUNO] play all \(urls.count) songs group=\(group.name)")
         Task {
             // Resolve concurrently but preserve the page's list order.
@@ -182,13 +182,13 @@ struct SunoExploreWindow: View {
             do {
                 try await sonosManager.playItemsReplacingQueue(items, in: group)
                 await MainActor.run {
-                    status = "Playing \(items.count) songs"
+                    status = L10n.playingSongsFormat(items.count)
                     isWorking = false
                 }
             } catch {
                 sonosDebugLog("[SUNO] play all FAILED: \(error)")
                 await MainActor.run {
-                    status = "Couldn't play that list"
+                    status = L10n.couldNotPlayList
                     isWorking = false
                 }
             }

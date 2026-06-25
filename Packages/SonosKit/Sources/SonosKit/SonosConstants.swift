@@ -272,6 +272,10 @@ public enum UDKey {
     public static let startupMode = "startupMode"
     public static let communicationMode = "communicationMode"
     public static let discoveryMode = "discoveryMode"
+    /// TCP port the UPnP event listener binds for speaker NOTIFY callbacks.
+    /// Default 3401; users on segmented networks scope a firewall rule to it
+    /// (speakers → controller). 0/unset = default. Applied at next launch.
+    public static let eventListenerPort = "eventListener.port"
     public static let appearanceMode = "appearanceMode"
     /// Independent appearance preference for the karaoke popout
     /// window. Defaults to `.dark` because the karaoke window is an
@@ -542,6 +546,15 @@ public extension Notification.Name {
     /// widget lags by however long it takes some unrelated state
     /// change to fire.
     static let selectedGroupChanged = Notification.Name("choragusSelectedGroupChanged")
+    /// Posted when the Choragus-local saved-queue store changes (create,
+    /// append, rename, delete, folder move). The Queue Library window reloads
+    /// on this so adds from a context menu appear without reopening.
+    static let choragusSavedQueuesChanged = Notification.Name("choragusSavedQueuesChanged")
+    /// Posted when the presence of error-level diagnostics changes: the
+    /// first error of the session is logged, or the store is cleared. The
+    /// toolbar diagnostics badge listens to this so the red indicator is
+    /// shown only when an actual error exists, not on every log line.
+    static let diagnosticsErrorStateChanged = Notification.Name("choragusDiagnosticsErrorStateChanged")
 }
 
 /// Keys used on `.queueChanged` notifications.

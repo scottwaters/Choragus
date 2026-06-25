@@ -111,6 +111,20 @@ public final class DiagnosticsRepository: @unchecked Sendable {
         }
     }
 
+    /// Count of error-level entries currently in the store. Used to seed
+    /// the toolbar diagnostics badge at launch so a persisted error from a
+    /// prior session still surfaces.
+    public func errorCount() -> Int {
+        queue.sync {
+            guard let db else { return 0 }
+            var stmt: OpaquePointer?
+            defer { if stmt != nil { sqlite3_finalize(stmt) } }
+            let sql = "SELECT COUNT(*) FROM diagnostics WHERE level = 'error'"
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+            return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
+        }
+    }
+
     public func clearAll() {
         queue.async { [weak self] in
             guard let self, let db = self.db else { return }

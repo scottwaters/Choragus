@@ -164,9 +164,13 @@ final class BrowseViewModel {
                 loadedCount = items.count
             } else {
                 let (result, total) = try await sonosManager.browse(objectID: objectID, start: 0, count: pageSize)
-                items = result
-                totalItems = total
-                loadedCount = result.count
+                // Hide internal queue-history snapshots when browsing the
+                // saved-queues container — they're an undo buffer, not
+                // user content.
+                let visible = result.filter { !QueueHistoryStore.isHistoryTitle($0.title) }
+                items = visible
+                totalItems = total - (result.count - visible.count)
+                loadedCount = visible.count
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -261,7 +265,9 @@ final class BrowseViewModel {
     func loadPlaylists() async {
         do {
             let (result, _) = try await sonosManager.browse(objectID: BrowseID.playlists, start: 0, count: PageSize.browse)
-            playlists = result.filter { $0.isContainer }
+            // Exclude internal queue-history snapshots — they're saved
+            // queues too, but they're an undo buffer, not user playlists.
+            playlists = result.filter { $0.isContainer && !QueueHistoryStore.isHistoryTitle($0.title) }
         } catch {
             ErrorHandler.shared.handle(error, context: "BROWSE")
         }
@@ -553,9 +559,14 @@ final class BrowseViewModel {
     /// artists and capped the queue at ~433 tracks. True multi-level
     /// recursion captures everything up to the 40 000-track queue cap.
     ///
-    /// Children at every level are sorted alphabetically by title so
-    /// the resulting queue lands in the order the user expects (Sonos's
-    /// empty-criteria browse returns catalogue-insertion order).
+    /// Ordering: container children are sorted alphabetically at every
+    /// level; leaf tracks are sorted alphabetically too EXCEPT inside an
+    /// album or playlist, where the browse-returned order IS the track /
+    /// playlist order and must be preserved (issue #59 — alphabetising
+    /// album tracks scrambled the album sequence on right-click
+    /// Add-to-Queue / Play-Next). Flat lists like `A:TRACKS` keep the
+    /// alphabetical order users expect, since Sonos's empty-criteria
+    /// browse returns catalogue-insertion order for those.
     private func expandLocalLibraryContainer(_ item: BrowseItem) async -> [BrowseItem] {
         let maxLeaves = Self.sonosQueueLimit
         var leaves: [BrowseItem] = []
@@ -563,7 +574,8 @@ final class BrowseViewModel {
                             from: item.objectID,
                             depth: 0,
                             maxLeaves: maxLeaves,
-                            rootObjectID: item.objectID)
+                            rootObjectID: item.objectID,
+                            preserveLeafOrder: Self.preservesLeafOrder(item))
         if leaves.count >= maxLeaves {
             sonosDiagLog(.warning, tag: "QUEUE",
                          "Container expansion truncated at Sonos queue maximum (\(maxLeaves))",
@@ -575,6 +587,12 @@ final class BrowseViewModel {
         return leaves
     }
 
+    /// True when the container's browse-returned child order is meaningful
+    /// and must survive expansion: album track order and playlist order.
+    private static func preservesLeafOrder(_ item: BrowseItem) -> Bool {
+        item.itemClass == .musicAlbum || item.itemClass == .playlist
+    }
+
     /// Depth-first recursion. Capped at 6 levels — far past anything
     /// Sonos's local-library hierarchies use (CDs/Artist/Album/Track =
     /// 3) but a safety against pathological / cyclic structures.
@@ -582,7 +600,8 @@ final class BrowseViewModel {
                                from objectID: String,
                                depth: Int,
                                maxLeaves: Int,
-                               rootObjectID: String) async {
+                               rootObjectID: String,
+                               preserveLeafOrder: Bool) async {
         if expansionCancelled { return }
         if leaves.count >= maxLeaves { return }
         if depth > 6 {
@@ -592,9 +611,18 @@ final class BrowseViewModel {
             return
         }
         let children = await pagedBrowse(objectID: objectID, ceiling: maxLeaves - leaves.count)
-        let sorted = children.sorted {
+        // Containers (artist→albums, folders) always sort alphabetically so
+        // walk order is predictable. Leaves sort alphabetically too, UNLESS
+        // this container is an album/playlist whose returned order is the
+        // track order (issue #59). Containers walk before loose leaves at
+        // the same level.
+        let byTitle: (BrowseItem, BrowseItem) -> Bool = {
             $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
         }
+        let containerChildren = children.filter { $0.isContainer }.sorted(by: byTitle)
+        var leafChildren = children.filter { !$0.isContainer }
+        if !preserveLeafOrder { leafChildren.sort(by: byTitle) }
+        let sorted = containerChildren + leafChildren
         for child in sorted {
             if expansionCancelled { return }
             if leaves.count >= maxLeaves { break }
@@ -604,7 +632,8 @@ final class BrowseViewModel {
                                     from: child.objectID,
                                     depth: depth + 1,
                                     maxLeaves: maxLeaves,
-                                    rootObjectID: rootObjectID)
+                                    rootObjectID: rootObjectID,
+                                    preserveLeafOrder: Self.preservesLeafOrder(child))
             } else if child.resourceURI?.isEmpty == false {
                 leaves.append(child)
                 // Publish the live count for the queue spinner and

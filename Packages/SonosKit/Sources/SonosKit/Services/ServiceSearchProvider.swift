@@ -766,7 +766,7 @@ public final class ServiceSearchProvider {
     /// "item no longer available" rejections during queue-advance.
     private func buildTrackDIDL(trackId: Int, collectionId: Int, title: String, artist: String, album: String, serviceType: Int) -> String {
         """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="00032020song%3a\(trackId)" parentID="0004206calbum%3a\(collectionId)" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:album>\(xmlEscape(album))</upnp:album><upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON\(serviceType)_X_#Svc\(serviceType)-0-Token</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="00032020song%3a\(trackId)" parentID="0004206calbum%3a\(collectionId)" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:album>\(xmlEscape(album))</upnp:album><upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">RINCON_AssociatedZPUDN</desc></item></DIDL-Lite>
         """
     }
 
@@ -897,14 +897,20 @@ public final class ServiceSearchProvider {
     /// Falls back to `x-sonos-http:` and logs a CATALOG diagnostic when
     /// the catalog has no rules for this sid (either it hasn't been
     /// refreshed yet or this is a service we don't know about).
+    /// Sonos item-id encoding shared by every URI and DIDL-id builder:
+    /// percent-encode, then force colons to LOWERCASE `%3a` (Sonos is
+    /// case-sensitive and rejects uppercase hex for Spotify URIs). The
+    /// cpcontainer URI's id and the DIDL item id must encode identically —
+    /// the speaker matches one against the other.
+    static func sonosEncodeItemID(_ itemID: String) -> String {
+        let encoded = (itemID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? itemID)
+            .replacingOccurrences(of: ":", with: "%3a")
+        return encoded.replacingOccurrences(of: "%3A", with: "%3a")
+    }
+
     private func buildPlayURI(itemID: String, itemType: String, serviceID: Int, sn: Int) -> String {
         let catalog = MusicServiceCatalog.shared
-        // Percent-encode first, then replace colons with lowercase %3a (Sonos is case-sensitive).
-        // Also lowercase any uppercase hex from addingPercentEncoding (e.g. %3A → %3a).
-        var encodedID = (itemID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? itemID)
-            .replacingOccurrences(of: ":", with: "%3a")
-        // Force lowercase hex — Sonos rejects uppercase percent-encoding for Spotify URIs
-        encodedID = encodedID.replacingOccurrences(of: "%3A", with: "%3a")
+        let encodedID = Self.sonosEncodeItemID(itemID)
         if itemType == "stream" || itemType == "program" {
             let streamScheme = catalog.rules(forSid: serviceID)?.streamURIScheme ?? URIPrefix.sonosApiStream
             let streamFlags = catalog.rules(forSid: serviceID)?.streamPlaybackFlags ?? 8224
@@ -919,6 +925,26 @@ public final class ServiceSearchProvider {
     /// Converts an SMAPIMediaItem to a BrowseItem with correct per-service URI and metadata.
     public func smapiItemToBrowseItem(_ smapi: SMAPIMediaItem, serviceID: Int, sn: Int) -> BrowseItem {
         let serviceType = rinconServiceType(for: serviceID)
+        // A playable but non-enumerable collection — e.g. an Audible
+        // audiobook (`itemType` "audiobook", canPlay=true,
+        // canEnumerate=false) — must play as a CONTAINER, not a track.
+        // Its `reftitle:…` id is rejected by getMediaURI ("unsupported
+        // Sonos entity tag"), and the track-form `x-sonos-http:` URI
+        // faults UPnP 800 on AddURIToQueue. It needs an
+        // `x-rincon-cpcontainer:` URI + container DIDL — the same path
+        // albums/playlists play through.
+        //
+        // Explicit type allowlist, NOT "anything non-leaf": `itemType`
+        // defaults to "container" and `canPlay` to true when the SMAPI
+        // response omits the tags, so a negative test would misroute
+        // plain leaf items onto the container path. Applies only when the
+        // server supplied no `<uri>` of its own — a server-supplied URI
+        // keeps the legacy resolve path so its scheme and the DIDL stay
+        // paired.
+        let playableCollectionTypes: Set<String> = ["audiobook", "album", "playlist", "show"]
+        let isPlayableCollection = smapi.canPlay && !smapi.canBrowse
+            && !smapi.id.isEmpty && smapi.uri.isEmpty
+            && playableCollectionTypes.contains(smapi.itemType)
         let playURI: String?
         // Server-supplied URI wins when present — Sonos's SMAPI returns
         // the canonical play URI in <uri> for services whose scheme
@@ -934,6 +960,8 @@ public final class ServiceSearchProvider {
                             "sid": String(serviceID),
                             "itemType": smapi.itemType
                          ])
+        } else if isPlayableCollection {
+            playURI = buildContainerPlayURI(itemID: smapi.id, serviceID: serviceID, sn: sn)
         } else if !smapi.canBrowse && !smapi.id.isEmpty {
             playURI = buildPlayURI(itemID: smapi.id, itemType: smapi.itemType, serviceID: serviceID, sn: sn)
         } else {
@@ -941,21 +969,30 @@ public final class ServiceSearchProvider {
         }
 
         let didlMeta: String?
-        if let uri = playURI, !smapi.canBrowse {
-            didlMeta = buildSMAPIDIDL(id: smapi.id, title: smapi.title, artist: smapi.artist,
-                                      album: smapi.album, itemType: smapi.itemType,
-                                      serviceID: serviceID, serviceType: serviceType)
+        if playURI != nil, !smapi.canBrowse {
+            didlMeta = isPlayableCollection
+                ? buildSMAPIContainerDIDL(id: smapi.id, title: smapi.title,
+                                          artist: smapi.artist, serviceID: serviceID)
+                : buildSMAPIDIDL(id: smapi.id, title: smapi.title, artist: smapi.artist,
+                                 album: smapi.album, itemType: smapi.itemType,
+                                 serviceID: serviceID, serviceType: serviceType)
         } else {
             didlMeta = nil
         }
 
+        // A playable collection stays a leaf (`.musicTrack`) so a tap
+        // PLAYS it via its cpcontainer URI rather than drilling in —
+        // `playBrowseItem` routes containers by URI prefix, not item class.
+        let itemClass: BrowseItemClass = smapi.canBrowse ? .container
+            : (isPlayableCollection ? .musicTrack
+               : (smapi.itemType == "album" ? .musicAlbum : .musicTrack))
         var item = BrowseItem(
             id: "smapi:\(serviceID):\(smapi.id)",
             title: smapi.title,
             artist: smapi.artist,
             album: smapi.album,
             albumArtURI: smapi.albumArtURI.isEmpty ? nil : smapi.albumArtURI,
-            itemClass: smapi.canBrowse ? .container : (smapi.itemType == "album" ? .musicAlbum : .musicTrack),
+            itemClass: itemClass,
             resourceURI: playURI,
             resourceMetadata: didlMeta
         )
@@ -968,12 +1005,45 @@ public final class ServiceSearchProvider {
         // `x-sonosapi-stream:` broadcast form directly. Resolving them to the
         // raw HLS/PLS URL and SetAVTransportURI'ing that faults UPnP 701 — the
         // speaker must resolve the broadcast itself.
+        //
+        // Playable collections (cpcontainer URI + container DIDL) play
+        // directly through the container queue path; no getMediaURI resolution.
         if serviceID == ServiceID.somaFM && smapi.itemType == "stream" {
+            item.playbackStrategy = .directURIWithDIDL
+        } else if isPlayableCollection {
             item.playbackStrategy = .directURIWithDIDL
         } else {
             item.playbackStrategy = .smapiResolveThenEmpty
         }
         return item
+    }
+
+    /// Container play URI for a playable, non-enumerable SMAPI collection
+    /// (e.g. an Audible audiobook). Mirrors the album cpcontainer form:
+    /// `x-rincon-cpcontainer:<containerIdPrefix><encoded-id>?sid=&flags=8300&sn=`.
+    /// `flags=8300` is the value Sonos uses for playable service containers.
+    private func buildContainerPlayURI(itemID: String, serviceID: Int, sn: Int) -> String {
+        let prefix = MusicServiceCatalog.shared.didlContainerIdPrefix(forSid: serviceID)
+        let encodedID = Self.sonosEncodeItemID(itemID)
+        return "\(URIPrefix.rinconContainer)\(prefix)\(encodedID)?sid=\(serviceID)&flags=8300&sn=\(sn)"
+    }
+
+    /// Container DIDL for a playable, non-enumerable SMAPI collection.
+    /// Item id matches the cpcontainer URI's `<containerIdPrefix><encoded-id>`;
+    /// uses the auth-aware service cdudn (a `-0-Token` anonymous form faults on
+    /// authenticated services like Audible).
+    private func buildSMAPIContainerDIDL(id: String, title: String, artist: String, serviceID: Int) -> String {
+        let catalog = MusicServiceCatalog.shared
+        let prefix = catalog.didlContainerIdPrefix(forSid: serviceID)
+        // Same encoder as buildContainerPlayURI — the speaker matches the
+        // DIDL item id against the cpcontainer URI's id; divergent encoding
+        // (e.g. colons-only) faults UPnP 800 for ids with reserved chars.
+        // xmlEscape on top because percent-encoding leaves `&` intact.
+        let encodedID = xmlEscape(Self.sonosEncodeItemID(id))
+        let cdudn = catalog.cdudn(forSid: serviceID, authToken: authToken(forSid: serviceID))
+        return """
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(prefix)\(encodedID)" parentID="-1" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:class>object.container.playlistContainer</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
+        """
     }
 
     // MARK: - Helpers

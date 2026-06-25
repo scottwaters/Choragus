@@ -14,6 +14,11 @@ struct BrowseView: View {
 
     @State private var searchText = ""
     @State private var breadcrumbs: [BrowseDestination] = []
+    /// A-Z fast-scroll (issue #58): the button lives in this header next to
+    /// the search field; `azLetter` signals the child list to jump, `azCount`
+    /// lets the header show the button only for long lists.
+    @State private var azLetter: String?
+    @State private var azCount: Int = 0
 
     /// True when drilled into a service view that has its own search
     private var isInServiceView: Bool {
@@ -67,6 +72,11 @@ struct BrowseView: View {
                 }
 
                 Spacer()
+
+                // A-Z fast-scroll — left of the search, only for long lists.
+                if !isInServiceView && azCount > 40 {
+                    AZIndexBar { azLetter = $0 }
+                }
 
                 // Local library search — hidden when inside a service view with its own search
                 if !isInServiceView {
@@ -143,6 +153,8 @@ struct BrowseView: View {
                         smapiServiceID: ServiceID.somaFM,
                         smapiServiceURI: smapiManager.availableServices.first(where: { $0.id == ServiceID.somaFM })?.secureUri,
                         smapiAuthType: "Anonymous",
+                        azLetter: $azLetter,
+                        azCount: $azCount,
                         onNavigate: { dest in breadcrumbs.append(dest) }
                     )
                     .id(current.objectID)
@@ -161,6 +173,8 @@ struct BrowseView: View {
                         smapiServiceID: current.smapiServiceID,
                         smapiServiceURI: current.smapiServiceURI,
                         smapiAuthType: current.smapiAuthType,
+                        azLetter: $azLetter,
+                        azCount: $azCount,
                         onNavigate: { dest in
                             breadcrumbs.append(dest)
                         }
@@ -565,15 +579,21 @@ struct BrowseListView: View {
     private let smapiServiceID: Int?
     private let smapiServiceURI: String?
     private let smapiAuthType: String?
+    /// A-Z fast-scroll bridge to the parent header's index button (issue #58).
+    @Binding private var azLetter: String?
+    @Binding private var azCount: Int
 
     init(title: String, objectID: String, group: SonosGroup?, sonosManager: SonosManager,
          smapiServiceID: Int? = nil, smapiServiceURI: String? = nil, smapiAuthType: String? = nil,
+         azLetter: Binding<String?> = .constant(nil), azCount: Binding<Int> = .constant(0),
          onNavigate: @escaping (BrowseDestination) -> Void) {
         self.onNavigate = onNavigate
         self.smapiServiceID = smapiServiceID
         self.smapiServiceURI = smapiServiceURI
         self.smapiAuthType = smapiAuthType
         self.parentGroup = group
+        _azLetter = azLetter
+        _azCount = azCount
         _vm = State(wrappedValue: BrowseViewModel(sonosManager: sonosManager, objectID: objectID, title: title, group: group))
     }
 
@@ -741,6 +761,7 @@ struct BrowseListView: View {
                         Divider()
                     }
 
+                    ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(Array(vm.filteredItems.enumerated()), id: \.element.id) { index, item in
@@ -807,6 +828,19 @@ struct BrowseListView: View {
                                 Task { await vm.loadMore() }
                             }
                         }
+                    }
+                    // A-Z fast-scroll (issue #58): the index button lives in
+                    // the parent header; it sets `azLetter`, observed here to
+                    // scroll. `azCount` lets the header show the button only
+                    // for long lists.
+                    .onChange(of: vm.filteredItems.count) { _, newCount in azCount = newCount }
+                    .onAppear { azCount = vm.filteredItems.count }
+                    .onDisappear { azCount = 0 }
+                    .onChange(of: azLetter) { _, letter in
+                        guard let letter else { return }
+                        scrollToLetter(letter, proxy: proxy)
+                        azLetter = nil
+                    }
                     }
                 }
                 }
@@ -888,6 +922,40 @@ struct BrowseListView: View {
         }
     }
 
+    /// First-letter bucket for a title: a letter A-Z, or "#" for digits/symbols.
+    private func initial(of title: String) -> String {
+        guard let c = title.trimmingCharacters(in: .whitespaces).uppercased().first else { return "#" }
+        return c.isLetter ? String(c) : "#"
+    }
+
+    /// Scrolls to the first item starting with `letter`, eagerly paging the
+    /// list in if that letter hasn't loaded yet (bounded so a missing letter
+    /// can't loop forever).
+    private func scrollToLetter(_ letter: String, proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            var guardCount = 0
+            while vm.filteredItems.first(where: { initial(of: $0.title) == letter }) == nil
+                    && !vm.reachedEnd && guardCount < 60 {
+                await vm.loadMore()
+                guardCount += 1
+            }
+            guard let id = vm.filteredItems.first(where: { initial(of: $0.title) == letter })?.id else { return }
+            // The first scrollTo right after the list appears (or right after
+            // paging) can no-op because the LazyVStack hasn't registered the
+            // target row's id yet — that's the "first click does nothing,
+            // second works" symptom. Retry across a few runloop ticks so the
+            // jump lands on the first interaction too.
+            for attempt in 0..<3 {
+                if attempt == 0 {
+                    proxy.scrollTo(id, anchor: .top)
+                } else {
+                    withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .top) }
+                }
+                try? await Task.sleep(nanoseconds: 60_000_000)
+            }
+        }
+    }
+
     @ViewBuilder
     private func contextMenuItems(for item: BrowseItem) -> some View {
         if let group = group {
@@ -917,6 +985,12 @@ struct BrowseListView: View {
                         }
                     }
                 }
+            }
+            // Add to Choragus Queue — for any addable item (a playable URI or
+            // a browsable container), across every service incl. radio.
+            if (item.resourceURI?.isEmpty == false) || item.isContainer {
+                Divider()
+                AddToChoragusQueueMenu(item: item, manager: sonosManager)
             }
             if item.isContainer {
                 Divider()
@@ -1331,7 +1405,7 @@ struct AppleMusicSearchView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if isLoading {
-                ProgressView(navStack.isEmpty ? "Searching Apple Music..." : "Loading...")
+                ProgressView(navStack.isEmpty ? L10n.searchingAppleMusic : L10n.loading)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if items.isEmpty && (hasSearched || !navStack.isEmpty) {
                 VStack(spacing: 8) {
@@ -2039,7 +2113,7 @@ struct SunoSearchView: View {
                     Image(systemName: "waveform")
                         .font(.title)
                         .foregroundStyle(.secondary)
-                    Text("Paste a public Suno song link to play it here.")
+                    Text(L10n.pasteSunoLinkHint)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -2769,6 +2843,49 @@ private struct LargeAddPromptSheet: View {
 /// rebuild was the source of the visible flicker when hovering over
 /// "Add to Playlist". Only this view's body re-runs when `playlists`
 /// or `item` changes, and neither changes during hover.
+/// Vertical A-Z fast-scroll index (issue #58). Tapping or dragging over a
+/// letter calls `onSelect`. Kept compact so it overlays the list edge like
+/// the native Sonos app's index.
+/// A-Z fast-scroll (issue #58): a compact button that opens a grid of index
+/// letters in a popover; picking one jumps to that section and dismisses.
+private struct AZIndexBar: View {
+    let onSelect: (String) -> Void
+    @State private var showGrid = false
+    private let letters: [String] = ["#"] + (65...90).map { String(UnicodeScalar($0)!) }
+    private let columns = Array(repeating: GridItem(.fixed(38), spacing: 6), count: 5)
+
+    var body: some View {
+        Button { showGrid = true } label: {
+            Text("A–Z")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 9).padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().stroke(.separator, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .help("Jump to letter")
+        .popover(isPresented: $showGrid, arrowEdge: .trailing) {
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(letters, id: \.self) { letter in
+                    Button {
+                        onSelect(letter)
+                        showGrid = false
+                    } label: {
+                        Text(letter)
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .frame(width: 38, height: 38)
+                            .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(14)
+        }
+    }
+}
+
 private struct AddToPlaylistMenu: View {
     let playlists: [BrowseItem]
     let item: BrowseItem

@@ -168,9 +168,15 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
             }
         }
         let snapshot = await ITunesRateLimiter.shared.snapshot()
-        sonosDiagLog(.warning, tag: "ART/ARTIST",
+        // Warn only when the limiter HAD budget and iTunes still found
+        // nothing (a genuine no-match worth surfacing). When the limiter
+        // denied (cooldown / soft-throttle while browsing a big library),
+        // it's expected and high-volume — keep it at debug (issue #64).
+        sonosDiagLog(snapshot.isAvailable ? .warning : .debug, tag: "ART/ARTIST",
                      "iTunes returned no artwork across musicArtist/album/song for \(trimmed) (cleaned: \(cleaned)) — limiter: available=\(snapshot.isAvailable), cooldownUntil=\(snapshot.cooldownUntil.map { String(describing: $0) } ?? "nil"), cooldownStatus=\(snapshot.cooldownStatus.map(String.init) ?? "nil"), requestsInWindow=\(snapshot.requestsInWindow)")
-        cacheSet(cacheKey, nil)
+        // Only remember the negative result when the limiter actually
+        // answered — a cooldown denial should retry once budget returns.
+        if snapshot.isAvailable { cacheSet(cacheKey, nil) }
         return nil
     }
 
@@ -464,8 +470,12 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
         }
         guard let (data, _) = result else {
             // Rate limiter swallowed the request (cooldown, throttle,
-            // network error, non-2xx). Its own log already captured why.
-            sonosDiagLog(.warning, tag: "ART",
+            // network error, non-2xx). This is high-volume and benign when
+            // a large local library is being browsed (every artist row that
+            // exceeds the soft limit lands here) — keep it at debug so it
+            // doesn't flood the bug bundle (issue #64). The limiter's own
+            // aggregate snapshot log captures the meaningful state.
+            sonosDiagLog(.debug, tag: "ART",
                          "iTunes \(entity) request returned nil for query=\(query) — rate limiter denied or HTTP failure")
             return nil
         }

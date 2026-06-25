@@ -224,12 +224,16 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
     }
 
     public func onGroupsChanged(_ groups: [SonosGroup], devices: [String: SonosDevice]) async {
+        // Snapshot the OLD membership before mutating `currentGroups` —
+        // computing it afterwards made `removedDevices` always empty, so
+        // subscriptions to departed devices (and their SID mappings) were
+        // never cleaned up and leaked across topology changes.
         let oldGroupIDs = Set(currentGroups.map(\.id))
+        let oldDeviceIDs = Set(currentGroups.flatMap(\.members).map(\.id))
         currentGroups = groups
         currentDevices = devices
 
         // Unsubscribe from devices no longer in any group
-        let oldDeviceIDs = Set(currentGroups.flatMap(\.members).map(\.id))
         let newDeviceIDs = Set(groups.flatMap(\.members).map(\.id))
         let removedDevices = oldDeviceIDs.subtracting(newDeviceIDs)
 

@@ -212,7 +212,7 @@ struct PresetManagerView: View {
                 Button {
                     Task {
                         await presetManager.applyPreset(preset, using: sonosManager)
-                        showStatus("Applied \"\(preset.name)\"")
+                        showStatus(L10n.appliedPresetFormat(preset.name))
                     }
                 } label: {
                     Text(L10n.apply)
@@ -303,12 +303,12 @@ struct PresetManagerView: View {
                 )
                 isSaving = false
                 newPresetName = ""
-                showStatus("Saved \"\(name)\" with EQ (\(group.name))")
+                showStatus(L10n.savedPresetWithEQFormat(name, group.name))
             }
         } else {
             presetManager.saveFromCurrent(name: name, group: group, deviceVolumes: sonosManager.deviceVolumes)
             newPresetName = ""
-            showStatus("Saved \"\(name)\" (\(group.name))")
+            showStatus(L10n.savedPresetFormat(name, group.name))
         }
     }
 
