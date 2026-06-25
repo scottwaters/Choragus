@@ -8,6 +8,30 @@
     <description>Auto-update feed for Choragus, the Sonos controller for macOS.</description>
     <language>en</language>
     <item>
+      <title>Version 4.12</title>
+      <pubDate>Thu, 25 Jun 2026 14:16:53 +1000</pubDate>
+      <sparkle:version>31</sparkle:version>
+      <sparkle:shortVersionString>4.12</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>:root{color-scheme:light dark}body{font:13px/1.45 -apple-system,Helvetica,Arial,sans-serif;margin:8px 10px;color:#1d1d1f}@media(prefers-color-scheme:dark){body{color:#f5f5f7}}ul{padding-left:20px;margin:8px 0}li{margin:6px 0}p{margin:8px 0}strong{font-weight:600}a{color:#0a84ff}</style>
+<p>A feature release — a new Queue Library, Audible audiobooks, your Apple Music library, an A–Z library index, and discovery/reliability fixes.</p>
+<ul>
+<li><strong>Queue Library (beta).</strong> Save and organise play queues into folders, filter by room, switch between an icon grid and a sortable table, and export to M3U or CSV — without running into Sonos's saved-queue limits.</li>
+<li><strong>Audible audiobooks play.</strong> Audiobooks opened from Audible search now start and play, with chapter navigation behaving like a queue.</li>
+<li><strong>Your Apple Music library.</strong> Browse your own Apple Music Songs, Albums, Artists, and Playlists with smooth infinite scroll.</li>
+<li><strong>A–Z jump for big libraries.</strong> Long lists get an A–Z index next to the search field so you can jump straight to a letter instead of scrolling.</li>
+<li><strong>Speakers with “&” in a room name are found again.</strong> A discovery regression that left some households seeing no speakers at all is fixed.</li>
+<li><strong>Albums play in track order, and Choragus stays in the menu bar.</strong> Right-click Add to Queue / Play Next keeps an album's running order, and closing the main window no longer quits the app — reopen it from the menu-bar player or Window → Open Choragus (⌘0).</li>
+<li><strong>Fewer speakers drop out, quieter in the background.</strong> Speakers are less likely to vanish from a group mid-playback, and browsing a large library no longer floods diagnostics with artwork-lookup warnings.</li>
+<li><strong>More of the app speaks your language.</strong> A wide sweep of previously-English labels and messages is now translated across all 13 languages.</li>
+</ul>]]></description>
+      <enclosure
+        url="https://github.com/scottwaters/Choragus/releases/download/v4.12/Choragus.dmg"
+        length="27026419"
+        type="application/x-apple-diskimage"
+        sparkle:edSignature="VEn8l+B+roeCVhrQMGzLXCHosvPEgJgRByta6y5ionNaCTjmMoWVd4QeFadWZ0XhMOb0KNhYFfPtuq59BV+oDw=="/>
+    </item>
+    <item>
       <title>Version 4.11</title>
       <pubDate>Sat, 06 Jun 2026 21:29:12 +1000</pubDate>
       <sparkle:version>30</sparkle:version>
