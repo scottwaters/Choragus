@@ -8,6 +8,27 @@
     <description>Auto-update feed for Choragus, the Sonos controller for macOS.</description>
     <language>en</language>
     <item>
+      <title>Version 4.13</title>
+      <pubDate>Fri, 17 Jul 2026 16:47:44 +1000</pubDate>
+      <sparkle:version>33</sparkle:version>
+      <sparkle:shortVersionString>4.13</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>:root{color-scheme:light dark}body{font:13px/1.45 -apple-system,Helvetica,Arial,sans-serif;margin:8px 10px;color:#1d1d1f}@media(prefers-color-scheme:dark){body{color:#f5f5f7}}ul{padding-left:20px;margin:8px 0}li{margin:6px 0}p{margin:8px 0}strong{font-weight:600}a{color:#0a84ff}</style>
+<p>A fix-focused release — YouTube Music metadata, mixed S1/S2 households, and a queue-history cleanup.</p>
+<ul>
+<li><strong>YouTube Music shows the right song.</strong> Titles and artists no longer lag a track behind on artist radio and albums, and the false "may require sign-in" warning on favourites that play fine is gone.</li>
+<li><strong>No more mystery "__cghist__" playlists.</strong> Queue-history snapshots are now stored inside Choragus instead of as Sonos playlists — and any left over from earlier versions are removed automatically.</li>
+<li><strong>Mixed S1/S2 households make sense.</strong> Browse shows which system has each music-library folder, and playing music a system doesn't have tells you which Sonos app to set it up in.</li>
+<li><strong>Services under an alternate id resolve correctly.</strong> A service like Spotify that a household reports under a different id now shows its proper name and status.</li>
+<li><strong>Browse polish.</strong> Moving services up or down in the list updates immediately, and a service's Search results no longer bleed into its Browse tab.</li>
+</ul>]]></description>
+      <enclosure
+        url="https://github.com/scottwaters/Choragus/releases/download/v4.13/Choragus.dmg"
+        length="27160494"
+        type="application/x-apple-diskimage"
+        sparkle:edSignature="RfGnGlaUmY6UZ6v6BD6W5lp7zSZonTovJMDWSpxuARGYO848XkdfpTkM9SElm0Grni/n+Z65EtO38Gyy5U85CQ=="/>
+    </item>
+    <item>
       <title>Version 4.12</title>
       <pubDate>Thu, 25 Jun 2026 14:16:53 +1000</pubDate>
       <sparkle:version>31</sparkle:version>
