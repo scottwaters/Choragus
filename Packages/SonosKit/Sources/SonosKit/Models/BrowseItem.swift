@@ -153,11 +153,35 @@ public struct BrowseSection: Identifiable {
     public let title: String
     public let objectID: String
     public let icon: String
+    /// Optional generation tag (e.g. "(S1)", "(S2)") shown only when the same
+    /// capability is asymmetric across detected S1/S2 systems. nil = no tag
+    /// (the common single-system case). Recomputed per session, not cached.
+    public var availabilityNote: String?
 
-    public init(id: String, title: String, objectID: String, icon: String) {
+    public init(id: String, title: String, objectID: String, icon: String, availabilityNote: String? = nil) {
         self.id = id
         self.title = title
         self.objectID = objectID
         self.icon = icon
+        self.availabilityNote = availabilityNote
+    }
+}
+
+/// Per-household local-library capability snapshot. One entry per distinct
+/// Sonos system (S1 / S2) on the LAN. `shareIDs` are the normalised (lower-cased)
+/// `S:`-child objectIDs — i.e. the mounted library root folders configured on
+/// that system — so availability can be reasoned per-share, not just per-system
+/// (an S1 system and an S2 system can share one folder while the S1 carries an
+/// extra one). Recomputed from a live `Browse("S:")` per system; not persisted.
+public struct HouseholdCapabilities: Equatable {
+    public let householdID: String
+    public let generation: SonosSystemVersion
+    public var shareIDs: Set<String>
+    public var hasLocalLibrary: Bool { !shareIDs.isEmpty }
+
+    public init(householdID: String, generation: SonosSystemVersion, shareIDs: Set<String>) {
+        self.householdID = householdID
+        self.generation = generation
+        self.shareIDs = shareIDs
     }
 }

@@ -297,6 +297,10 @@ struct BrowseSectionsView: View {
     let onNavigate: (BrowseDestination) -> Void
 
     @State private var isLoading = true
+    /// Bumped on reorder. The persisted service order lives in plain
+    /// UserDefaults (outside SwiftUI's observation), so the body must depend on
+    /// this to re-render — otherwise Move Up/Down saves but the list doesn't move.
+    @State private var orderRevision = 0
     @AppStorage("browse_serviceSearch_expanded") private var serviceSearchExpanded = true
     @AppStorage("browse_musicServices_expanded") private var musicServicesExpanded = true
     @AppStorage(UDKey.tuneInSearchEnabled) private var tuneInEnabled = false
@@ -436,6 +440,7 @@ struct BrowseSectionsView: View {
         guard dest >= 0, dest < entries.count else { return }
         entries.swapAt(index, dest)
         ServiceSearchOrder.save(entries.map(\.key))
+        orderRevision += 1
     }
 
     var body: some View {
@@ -444,6 +449,7 @@ struct BrowseSectionsView: View {
         // twice (`!isEmpty` + `ForEach`) so every re-render did the work
         // twice. Inside `orderedServiceEntries`, `smapiSearchableServices`
         // was *itself* called twice — same fix applied below.
+        let _ = orderRevision   // establish a body dependency on the saved order
         let serviceEntries = orderedServiceEntries
         return List {
             // Recently Played
@@ -515,7 +521,12 @@ struct BrowseSectionsView: View {
                                 Button {
                                     onNavigate(BrowseDestination(title: section.title, objectID: section.objectID))
                                 } label: {
-                                    Label(section.title, systemImage: section.icon)
+                                    HStack(spacing: 6) {
+                                        Label(section.title, systemImage: section.icon)
+                                        if let note = section.availabilityNote {
+                                            Text(note).font(.caption2).foregroundStyle(.secondary)
+                                        }
+                                    }
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -531,7 +542,12 @@ struct BrowseSectionsView: View {
                                 Button {
                                     onNavigate(BrowseDestination(title: section.title, objectID: section.objectID))
                                 } label: {
-                                    Label(section.title, systemImage: section.icon)
+                                    HStack(spacing: 6) {
+                                        Label(section.title, systemImage: section.icon)
+                                        if let note = section.availabilityNote {
+                                            Text(note).font(.caption2).foregroundStyle(.secondary)
+                                        }
+                                    }
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -1059,6 +1075,13 @@ struct BrowseItemRow: View {
         sonosManager.serviceLabel(for: item)
     }
 
+    /// "(S1)" / "(S2)" / "(S1/S2)" for a library share root, shown only when
+    /// more than one Sonos system is on the network. nil for everything else.
+    private var shareAvailabilityNote: String? {
+        guard item.objectID.hasPrefix("S:") else { return nil }
+        return sonosManager.availabilityNote(forShareObjectID: item.objectID)
+    }
+
     private var artURL: URL? {
         // Service search results (Apple Music, Spotify) have authoritative art — use it directly
         if let direct = item.albumArtURI.flatMap({ URL(string: $0) }) {
@@ -1077,9 +1100,16 @@ struct BrowseItemRow: View {
                 .frame(width: 40, height: 40)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(.body)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(item.title)
+                        .font(.body)
+                        .lineLimit(1)
+                    if let note = shareAvailabilityNote {
+                        Text(note)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 HStack(spacing: 6) {
                     if !item.artist.isEmpty || !item.album.isEmpty || item.releaseYear != nil {
@@ -2186,6 +2216,11 @@ struct SMAPIServiceSearchView: View {
     @State private var navStack: [SMAPISearchLevel] = []
     @State private var categoriesLoaded = false
     @State private var itemsCache: [Int: [BrowseItem]] = [:]
+    // Browse and search share navStack/itemsCache (search clears them), so the
+    // root content of each tab is kept separately — otherwise switching back to
+    // Browse after a search shows the stale search results.
+    @State private var browseRootItems: [BrowseItem] = []
+    @State private var searchRootItems: [BrowseItem] = []
     @State private var sortOrder: SearchSortOrder = .relevance
     /// Transient playback-failure banner. Clears itself after 4 s so the
     /// user sees the reason (e.g. Plex SMAPI rejection) without needing
@@ -2257,19 +2292,19 @@ struct SMAPIServiceSearchView: View {
                     .labelsHidden()
                     .controlSize(.small)
                     .onChange(of: tab) {
+                        // Each tab returns to its own root on switch; drill-down
+                        // is per-visit (browse & search share navStack/itemsCache).
+                        // The cache must go too: `onChange(of: navStack)` fires
+                        // AFTER this closure, and a surviving itemsCache[0] from
+                        // the other tab would be restored over the root set below.
+                        navStack.removeAll()
+                        itemsCache.removeAll()
                         switch tab {
                         case .browse:
-                            // Restore browse-tab items from cache (root
-                            // or deepest drill level), or load root if
-                            // we haven't yet.
-                            if let cached = itemsCache[navStack.count] {
-                                items = cached
-                            }
+                            items = browseRootItems
                             loadBrowseRootIfNeeded()
                         case .search:
-                            // Show cached search results, or empty until
-                            // the user hits Search.
-                            items = hasSearched ? items : []
+                            items = searchRootItems
                         }
                     }
 
@@ -2443,7 +2478,7 @@ struct SMAPIServiceSearchView: View {
     /// the Search tab uses — drill pushes onto `navStack`, back pops,
     /// and itemsCache[depth] restores from memory without a re-fetch.
     private func loadBrowseRootIfNeeded() {
-        guard tab == .browse, navStack.isEmpty, items.isEmpty, !isLoading else { return }
+        guard tab == .browse, navStack.isEmpty, browseRootItems.isEmpty, !isLoading else { return }
         isLoading = true
         Task {
             guard let (token, uri, sn) = serviceCredentials() else {
@@ -2453,8 +2488,13 @@ struct SMAPIServiceSearchView: View {
             let loaded = await ServiceSearchProvider.shared.browseSMAPI(
                 id: BrowseID.smapiRoot, serviceID: serviceID,
                 serviceURI: uri, token: token, sn: sn)
-            items = loaded
-            itemsCache[0] = loaded
+            browseRootItems = loaded
+            // Paint only if the Browse root is still on screen — the user may
+            // have switched tab or drilled down while the fetch ran.
+            if tab == .browse, navStack.isEmpty {
+                items = loaded
+                itemsCache[0] = loaded
+            }
             isLoading = false
         }
     }
@@ -2725,13 +2765,14 @@ struct SMAPIServiceSearchView: View {
                 isLoading = false
                 return
             }
+            let results: [BrowseItem]
             if searchID == "all" {
                 let realCategories = categories.filter { $0.id != "all" && $0.id != "playlist" }
                 let categoriesToSearch = realCategories.isEmpty
                     ? [("track", 20), ("album", 10), ("artist", 5)]
                     : realCategories.map { ($0.id, $0.id == "track" ? 20 : ($0.id == "album" ? 10 : 5)) }
 
-                items = await withTaskGroup(of: [BrowseItem].self) { group in
+                results = await withTaskGroup(of: [BrowseItem].self) { group in
                     for (catID, limit) in categoriesToSearch {
                         group.addTask {
                             await ServiceSearchProvider.shared.searchSMAPI(
@@ -2746,11 +2787,17 @@ struct SMAPIServiceSearchView: View {
                     return all
                 }
             } else {
-                items = await ServiceSearchProvider.shared.searchSMAPI(
+                results = await ServiceSearchProvider.shared.searchSMAPI(
                     term: query, searchID: searchID, serviceID: serviceID,
                     serviceURI: uri, token: token, sn: sn)
             }
-            itemsCache[0] = items
+            searchRootItems = results
+            // Paint only if the Search tab is still on screen — the user may
+            // have switched to Browse while the search ran.
+            if tab == .search, navStack.isEmpty {
+                items = results
+                itemsCache[0] = results
+            }
             isLoading = false
             // TODO: Enrich SMAPI results with release dates from iTunes
             // Commented out — only Apple Music has dates for now

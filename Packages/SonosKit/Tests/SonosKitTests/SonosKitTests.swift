@@ -389,79 +389,99 @@ final class QueueHistoryStoreTests: XCTestCase {
         return QueueHistoryStore(defaults: defaults)
     }
 
-    private func snap(_ id: String, _ count: Int = 1) -> QueueSnapshot {
-        QueueSnapshot(objectID: id, savedAt: Date(timeIntervalSince1970: TimeInterval(count)),
+    private func snap(_ id: Int64, _ count: Int = 1) -> QueueSnapshot {
+        QueueSnapshot(localID: id, savedAt: Date(timeIntervalSince1970: TimeInterval(count)),
                       trackCount: count, summary: "\(count) tracks")
     }
 
     func testRegisterNewestFirst() {
         let store = makeStore()
-        _ = store.register(snap("SQ:1"), for: "C1")
-        _ = store.register(snap("SQ:2"), for: "C1")
-        XCTAssertEqual(store.snapshots(for: "C1").map(\.objectID), ["SQ:2", "SQ:1"])
+        _ = store.register(snap(1), for: "C1")
+        _ = store.register(snap(2), for: "C1")
+        XCTAssertEqual(store.snapshots(for: "C1").map(\.localID), [2, 1])
     }
 
     func testRetentionPrunesOldestAndReportsOverflow() {
         let store = makeStore()
-        var overflow: [String] = []
+        var overflow: [Int64] = []
         for i in 1...(QueueHistoryStore.maxDepth + 2) {
-            overflow = store.register(snap("SQ:\(i)"), for: "C1")
+            overflow = store.register(snap(Int64(i)), for: "C1")
         }
         XCTAssertEqual(store.snapshots(for: "C1").count, QueueHistoryStore.maxDepth)
-        // The final register pushed SQ:7, evicting the oldest (SQ:1 then SQ:2).
-        XCTAssertEqual(overflow, ["SQ:2"])
-        XCTAssertEqual(store.snapshots(for: "C1").first?.objectID, "SQ:7")
-        XCTAssertFalse(store.snapshots(for: "C1").contains { $0.objectID == "SQ:1" })
+        // The final register pushed 7, evicting the oldest (1 then 2).
+        XCTAssertEqual(overflow, [2])
+        XCTAssertEqual(store.snapshots(for: "C1").first?.localID, 7)
+        XCTAssertFalse(store.snapshots(for: "C1").contains { $0.localID == 1 })
     }
 
     func testPerCoordinatorIsolation() {
         let store = makeStore()
-        _ = store.register(snap("SQ:1"), for: "C1")
-        _ = store.register(snap("SQ:2"), for: "C2")
-        XCTAssertEqual(store.snapshots(for: "C1").map(\.objectID), ["SQ:1"])
-        XCTAssertEqual(store.snapshots(for: "C2").map(\.objectID), ["SQ:2"])
+        _ = store.register(snap(1), for: "C1")
+        _ = store.register(snap(2), for: "C2")
+        XCTAssertEqual(store.snapshots(for: "C1").map(\.localID), [1])
+        XCTAssertEqual(store.snapshots(for: "C2").map(\.localID), [2])
     }
 
     func testReregisterDeduplicates() {
         let store = makeStore()
-        _ = store.register(snap("SQ:1"), for: "C1")
-        _ = store.register(snap("SQ:2"), for: "C1")
-        _ = store.register(snap("SQ:1"), for: "C1")
-        XCTAssertEqual(store.snapshots(for: "C1").map(\.objectID), ["SQ:1", "SQ:2"])
+        _ = store.register(snap(1), for: "C1")
+        _ = store.register(snap(2), for: "C1")
+        _ = store.register(snap(1), for: "C1")
+        XCTAssertEqual(store.snapshots(for: "C1").map(\.localID), [1, 2])
     }
 
     func testRemove() {
         let store = makeStore()
-        _ = store.register(snap("SQ:1"), for: "C1")
-        store.remove(objectID: "SQ:1", for: "C1")
+        _ = store.register(snap(1), for: "C1")
+        store.remove(localID: 1, for: "C1")
         XCTAssertTrue(store.snapshots(for: "C1").isEmpty)
+    }
+
+    func testAllTrackedLocalIDsSpansCoordinators() {
+        let store = makeStore()
+        _ = store.register(snap(1), for: "C1")
+        _ = store.register(snap(2), for: "C2")
+        XCTAssertEqual(store.allTrackedLocalIDs(), [1, 2])
     }
 
     func testPersistenceRoundTrip() {
         let suite = "QueueHistoryTests-persist-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         let store = QueueHistoryStore(defaults: defaults)
-        _ = store.register(snap("SQ:9", 42), for: "C1")
+        _ = store.register(snap(9, 42), for: "C1")
         let reloaded = QueueHistoryStore(defaults: defaults)
-        XCTAssertEqual(reloaded.snapshots(for: "C1").first?.objectID, "SQ:9")
+        XCTAssertEqual(reloaded.snapshots(for: "C1").first?.localID, 9)
         XCTAssertEqual(reloaded.snapshots(for: "C1").first?.trackCount, 42)
     }
 
+    /// The v1 index tracked speaker-side saved queues (`objectID`). A v2
+    /// store must discard it — the queues it points at are destroyed by the
+    /// legacy purge — and start empty rather than fail or mis-decode.
+    func testLegacyV1BlobIsDiscarded() {
+        let suite = "QueueHistoryTests-legacy-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let legacy = #"{"C1":[{"objectID":"SQ:9","savedAt":0,"trackCount":3,"summary":"3 tracks"}]}"#
+        defaults.set(Data(legacy.utf8), forKey: "choragus.queueHistory.v1")
+        let store = QueueHistoryStore(defaults: defaults)
+        XCTAssertTrue(store.snapshots(for: "C1").isEmpty)
+        XCTAssertNil(defaults.data(forKey: "choragus.queueHistory.v1"))
+    }
+
     /// Regression: restoring the OLDEST snapshot with a full ring must not
-    /// let the pre-restore snapshot evict (and destroy) the restore target.
+    /// let the pre-restore snapshot evict (and delete) the restore target.
     /// SonosManager touches the target to the head first; this verifies the
     /// store-level contract that a touched entry can't land in overflow.
     func testTouchedSnapshotSurvivesEviction() {
         let store = makeStore()
         for i in 1...QueueHistoryStore.maxDepth {
-            _ = store.register(snap("SQ:\(i)"), for: "C1")
+            _ = store.register(snap(Int64(i)), for: "C1")
         }
-        // SQ:1 is the oldest (tail). Touch it, then register a new snapshot.
-        _ = store.register(snap("SQ:1"), for: "C1")
-        let overflow = store.register(snap("SQ:99"), for: "C1")
-        XCTAssertFalse(overflow.contains("SQ:1"))
-        XCTAssertTrue(store.snapshots(for: "C1").contains { $0.objectID == "SQ:1" })
-        XCTAssertEqual(overflow, ["SQ:2"]) // true oldest after the touch
+        // 1 is the oldest (tail). Touch it, then register a new snapshot.
+        _ = store.register(snap(1), for: "C1")
+        let overflow = store.register(snap(99), for: "C1")
+        XCTAssertFalse(overflow.contains(1))
+        XCTAssertTrue(store.snapshots(for: "C1").contains { $0.localID == 1 })
+        XCTAssertEqual(overflow, [2]) // true oldest after the touch
     }
 
     func testHistoryTitleDetection() {
@@ -501,6 +521,21 @@ final class SavedQueueRepositoryTests: XCTestCase {
         let tracks = repo.tracks(for: id!)
         XCTAssertEqual(tracks.map(\.title), ["One", "Two"])
         XCTAssertEqual(tracks.map(\.uri), ["x-test://1", "x-test://2"])
+    }
+
+    /// Queue-history snapshot rows share the store but must stay out of the
+    /// Queue Library list; their tracks stay readable, and they enumerate
+    /// via `snapshotRowIDs()` for garbage collection.
+    func testSnapshotRowsHiddenFromListButReadable() {
+        let repo = makeRepo()
+        let visible = repo.save(name: "Road Trip", tracks: [track(1, "One")])!
+        let hidden = repo.save(name: "__cghist__123", tracks: [track(1, "Undo")], snapshot: true)!
+        XCTAssertEqual(repo.list().map(\.id), [visible])
+        XCTAssertEqual(repo.tracks(for: hidden).map(\.title), ["Undo"])
+        XCTAssertEqual(repo.snapshotRowIDs(), [hidden])
+        repo.delete(id: hidden)
+        XCTAssertTrue(repo.snapshotRowIDs().isEmpty)
+        XCTAssertTrue(repo.tracks(for: hidden).isEmpty)
     }
 
     func testSaveEmptyReturnsNil() {

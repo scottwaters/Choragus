@@ -78,12 +78,18 @@ public final class SavedQueueRepository {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 created_at REAL NOT NULL,
-                folder_id INTEGER REFERENCES saved_queue_folders(id) ON DELETE SET NULL
+                folder_id INTEGER REFERENCES saved_queue_folders(id) ON DELETE SET NULL,
+                is_snapshot INTEGER NOT NULL DEFAULT 0
             )
             """)
         // Defensive migration for stores created before folders (B1320).
         addColumnIfMissing(table: "saved_queues", column: "folder_id",
                            definition: "folder_id INTEGER REFERENCES saved_queue_folders(id) ON DELETE SET NULL")
+        // Queue-history snapshots share this store but stay out of the
+        // Queue Library UI (`list()` filters them). Migration for stores
+        // created before snapshots moved off the speaker (4.12.x).
+        addColumnIfMissing(table: "saved_queues", column: "is_snapshot",
+                           definition: "is_snapshot INTEGER NOT NULL DEFAULT 0")
         // Sub-folders: nest folders via parent_id. CASCADE so deleting a parent
         // removes its subtree; the queues inside those subfolders fall back to
         // top level via the saved_queues SET NULL above.
@@ -130,16 +136,19 @@ public final class SavedQueueRepository {
     // MARK: - Writes
 
     /// Stores a queue under `name`. Returns the new queue's row ID, or nil
-    /// on failure. Tracks keep their 1-based queue positions.
-    public func save(name: String, tracks: [QueueItem]) -> Int64? {
+    /// on failure. Tracks keep their 1-based queue positions. `snapshot`
+    /// rows are queue-history undo states: hidden from `list()`, enumerable
+    /// via `snapshotRowIDs()`.
+    public func save(name: String, tracks: [QueueItem], snapshot: Bool = false) -> Int64? {
         guard !tracks.isEmpty else { return nil }
         exec("BEGIN")
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
-        guard sqlite3_prepare_v2(db, "INSERT INTO saved_queues (name, created_at) VALUES (?, ?)",
+        guard sqlite3_prepare_v2(db, "INSERT INTO saved_queues (name, created_at, is_snapshot) VALUES (?, ?, ?)",
                                  -1, &stmt, nil) == SQLITE_OK else { exec("ROLLBACK"); return nil }
         sqlite3_bind_text(stmt, 1, name, -1, Self.SQLITE_TRANSIENT)
         sqlite3_bind_double(stmt, 2, Date().timeIntervalSince1970)
+        sqlite3_bind_int(stmt, 3, snapshot ? 1 : 0)
         guard sqlite3_step(stmt) == SQLITE_DONE else { exec("ROLLBACK"); return nil }
         let queueID = sqlite3_last_insert_rowid(db)
 
@@ -388,6 +397,8 @@ public final class SavedQueueRepository {
     // MARK: - Reads
 
     /// All saved queues, newest first, with their folder memberships attached.
+    /// Queue-history snapshot rows are excluded — they're an undo buffer,
+    /// not user content.
     public func list() -> [LocalSavedQueue] {
         let members = folderMemberships()
         var stmt: OpaquePointer?
@@ -396,6 +407,7 @@ public final class SavedQueueRepository {
             SELECT q.id, q.name, q.created_at, COUNT(t.position)
             FROM saved_queues q
             LEFT JOIN saved_queue_tracks t ON t.queue_id = q.id
+            WHERE q.is_snapshot = 0
             GROUP BY q.id ORDER BY q.created_at DESC
             """, -1, &stmt, nil) == SQLITE_OK else { return [] }
         var out: [LocalSavedQueue] = []
@@ -427,6 +439,19 @@ public final class SavedQueueRepository {
     }
 
     public func foldersForQueue(_ id: Int64) -> [Int64] { folderMemberships()[id] ?? [] }
+
+    /// Row IDs of every queue-history snapshot in the store. Lets the
+    /// manager garbage-collect rows the history index no longer tracks
+    /// (e.g. after the index's UserDefaults were cleared).
+    public func snapshotRowIDs() -> [Int64] {
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, "SELECT id FROM saved_queues WHERE is_snapshot = 1",
+                                 -1, &stmt, nil) == SQLITE_OK else { return [] }
+        var out: [Int64] = []
+        while sqlite3_step(stmt) == SQLITE_ROW { out.append(sqlite3_column_int64(stmt, 0)) }
+        return out
+    }
 
     /// Adds a queue to a folder (idempotent).
     public func addToFolder(queueID: Int64, folderID: Int64) {

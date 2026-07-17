@@ -18,6 +18,18 @@ public enum StaleDataError: Error, LocalizedError, Equatable {
     /// household, or a service is linked on one system but not the other).
     /// Surfaces UPnP 701 as a meaningful message instead of a topology error.
     case serviceUnavailable
+    /// Play/Pause sent to a transport with no source loaded (fresh boot,
+    /// cleared queue, no stream). The speaker faults UPnP 701 — the same code
+    /// stale topology produces — so this case exists to report the actual
+    /// situation instead of a rescan banner or a generic error (issue #72).
+    case nothingLoaded
+    /// Raised *before* the play SOAP is sent (fail-fast pre-flight) when the
+    /// selected speaker's system has no music library — or no copy of the
+    /// specific share — that the chosen local-library item lives on. Prevents
+    /// the UPnP 701 / "speaker layout changed" path entirely and tells the user
+    /// which Sonos app (S1/S2) to add the folders in. The associated value is
+    /// the selected system's generation. See per-household availability design.
+    case libraryNotConfigured(SonosSystemVersion)
 
     public var errorDescription: String? {
         switch self {
@@ -31,6 +43,13 @@ public enum StaleDataError: Error, LocalizedError, Equatable {
             return "Speaker rejected request. Please raise bug report."
         case .serviceUnavailable:
             return "This track's music service or library isn't available on this speaker's system."
+        case .nothingLoaded:
+            return "Nothing is loaded on this speaker. Choose something to play."
+        case .libraryNotConfigured(let generation):
+            let app = generation == .unknown
+                ? "the Sonos app for this system"
+                : "the Sonos \(generation.displayLabel) app"
+            return "This music isn't set up on the selected system. Add your music folders in \(app), then try again."
         }
     }
 }

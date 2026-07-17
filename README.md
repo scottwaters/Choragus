@@ -41,18 +41,16 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 
 ---
 
-## What's New in v4.12
+## What's New in v4.13
 
-A feature release — a new Queue Library, Audible audiobooks, your Apple Music library, an A–Z library index, and discovery/reliability fixes.
+A fix-focused release — YouTube Music metadata, mixed S1/S2 households, and a queue-history cleanup.
 
-- **Queue Library (beta).** Save and organise play queues into folders, filter by room, switch between an icon grid and a sortable table, and export to M3U or CSV — without running into Sonos's saved-queue limits.
-- **Audible audiobooks play.** Audiobooks opened from Audible search now start and play, with chapter navigation behaving like a queue.
-- **Your Apple Music library.** Browse your own Apple Music Songs, Albums, Artists, and Playlists with smooth infinite scroll.
-- **A–Z jump for big libraries.** Long lists get an A–Z index next to the search field so you can jump straight to a letter instead of scrolling.
-- **Speakers with “&” in a room name are found again.** A discovery regression that left some households seeing no speakers at all is fixed.
-- **Albums play in track order, and Choragus stays in the menu bar.** Right-click Add to Queue / Play Next keeps an album's running order, and closing the main window no longer quits the app — reopen it from the menu-bar player or Window → Open Choragus (⌘0).
-- **Fewer speakers drop out, quieter in the background.** Speakers are less likely to vanish from a group mid-playback, and browsing a large library no longer floods diagnostics with artwork-lookup warnings.
-- **More of the app speaks your language.** A wide sweep of previously-English labels and messages is now translated across all 13 languages.
+- **YouTube Music shows the right song.** Titles and artists no longer lag a track behind on artist radio and albums, and the false "may require sign-in" warning on favourites that play fine is gone.
+- **No more mystery "__cghist__" playlists.** Queue-history snapshots are now stored inside Choragus instead of as Sonos playlists — and any left over from earlier versions are removed automatically.
+- **Mixed S1/S2 households make sense.** Browse shows which system has each music-library folder, and playing music a system doesn't have tells you which Sonos app to set it up in.
+- **Services under an alternate id resolve correctly.** A service like Spotify that a household reports under a different id now shows its proper name and status.
+- **Clearer message on an idle speaker.** Pressing Play or Pause when nothing is loaded now says so, instead of showing an unexpected-error message.
+- **Browse polish.** Moving services up or down in the list updates immediately, and a service's Search results no longer bleed into its Browse tab.
 
 Full change list in [CHANGELOG.md](CHANGELOG.md).
 

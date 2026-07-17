@@ -26,6 +26,10 @@ final class BrowseViewModel {
     var totalItems = 0
     var isLoading = true
     var loadedCount = 0
+    /// Rows fetched but hidden (legacy queue-history snapshots). Keeps
+    /// `totalItems` aligned with what's shown while `loadedCount` stays the
+    /// raw speaker-side paging offset.
+    private var hiddenCount = 0
     /// True while a `loadMore` round-trip is in flight. Prevents the
     /// infinite-scroll trigger on the bottom sentinel from firing
     /// repeatedly while the previous page is still arriving — without
@@ -155,22 +159,26 @@ final class BrowseViewModel {
                 loadedCount = items.count
             } else if isSearch {
                 let query = String(objectID.dropFirst("SEARCH:".count))
-                async let artistResults = sonosManager.search(query: query, in: BrowseID.albumArtist, start: 0, count: PageSize.searchArtist)
-                async let albumResults = sonosManager.search(query: query, in: BrowseID.album, start: 0, count: PageSize.searchAlbum)
-                async let trackResults = sonosManager.search(query: query, in: BrowseID.tracks, start: 0, count: PageSize.searchTrack)
+                async let artistResults = sonosManager.search(query: query, in: BrowseID.albumArtist, householdID: group?.householdID, start: 0, count: PageSize.searchArtist)
+                async let albumResults = sonosManager.search(query: query, in: BrowseID.album, householdID: group?.householdID, start: 0, count: PageSize.searchAlbum)
+                async let trackResults = sonosManager.search(query: query, in: BrowseID.tracks, householdID: group?.householdID, start: 0, count: PageSize.searchTrack)
                 let (artists, albums, tracks) = try await (artistResults, albumResults, trackResults)
                 items = artists.items + albums.items + tracks.items
                 totalItems = items.count
                 loadedCount = items.count
             } else {
-                let (result, total) = try await sonosManager.browse(objectID: objectID, start: 0, count: pageSize)
-                // Hide internal queue-history snapshots when browsing the
+                let (result, total) = try await sonosManager.browse(objectID: objectID, householdID: group?.householdID, start: 0, count: pageSize)
+                // Hide legacy queue-history snapshots when browsing the
                 // saved-queues container — they're an undo buffer, not
-                // user content.
+                // user content. `loadedCount` stays the RAW count: it is
+                // the speaker-side paging offset, and filtered rows still
+                // advance it (using the visible count re-fetches overlaps
+                // and leaks hidden rows on later pages).
                 let visible = result.filter { !QueueHistoryStore.isHistoryTitle($0.title) }
+                hiddenCount = result.count - visible.count
                 items = visible
-                totalItems = total - (result.count - visible.count)
-                loadedCount = visible.count
+                totalItems = total - hiddenCount
+                loadedCount = result.count
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -247,13 +255,17 @@ final class BrowseViewModel {
                     if result.total > totalItems { totalItems = result.total }
                 }
             } else {
-                let (result, total) = try await sonosManager.browse(objectID: objectID, start: loadedCount, count: pageSize)
+                let (result, total) = try await sonosManager.browse(objectID: objectID, householdID: group?.householdID, start: loadedCount, count: pageSize)
                 if result.isEmpty {
                     reachedEnd = true
                 } else {
-                    items.append(contentsOf: result)
+                    // Same snapshot filter as the initial page — without it,
+                    // pages past the first surface the hidden rows.
+                    let visible = result.filter { !QueueHistoryStore.isHistoryTitle($0.title) }
+                    hiddenCount += result.count - visible.count
+                    items.append(contentsOf: visible)
                     loadedCount += result.count
-                    if total > totalItems { totalItems = total }
+                    if total - hiddenCount > totalItems { totalItems = total - hiddenCount }
                 }
             }
         } catch {
@@ -264,7 +276,7 @@ final class BrowseViewModel {
 
     func loadPlaylists() async {
         do {
-            let (result, _) = try await sonosManager.browse(objectID: BrowseID.playlists, start: 0, count: PageSize.browse)
+            let (result, _) = try await sonosManager.browse(objectID: BrowseID.playlists, householdID: group?.householdID, start: 0, count: PageSize.browse)
             // Exclude internal queue-history snapshots — they're saved
             // queues too, but they're an undo buffer, not user playlists.
             playlists = result.filter { $0.isContainer && !QueueHistoryStore.isHistoryTitle($0.title) }
@@ -284,8 +296,17 @@ final class BrowseViewModel {
             switch error {
             case .soapFault(let code, _):
                 if code == "402" || code == "714" || code == "800" {
-                    let serviceName = item.resourceURI.flatMap { sonosManager.detectServiceName(fromURI: $0) } ?? "the streaming service"
-                    playbackError = "\(L10n.couldNotPlay) \"\(item.title)\" — \(serviceName) \(L10n.mayRequireSignIn)"
+                    // Sonos can return 714/402/800 on the direct play of a
+                    // YouTube Music favorite yet still load and play it (issue
+                    // #69). The fault is not terminal — confirm the speaker's
+                    // actual transport state before surfacing a failure, and
+                    // suppress the banner when it is in fact playing.
+                    if await isGroupPlayingAfterGrace(group) {
+                        playbackError = nil
+                    } else {
+                        let serviceName = item.resourceURI.flatMap { sonosManager.detectServiceName(fromURI: $0) } ?? "the streaming service"
+                        playbackError = "\(L10n.couldNotPlay) \"\(item.title)\" — \(serviceName) \(L10n.mayRequireSignIn)"
+                    }
                 } else {
                     let appErr = AppError.from(error)
                     playbackError = "\(L10n.couldNotPlay) \"\(item.title)\": \(appErr.errorDescription ?? "")"
@@ -298,6 +319,16 @@ final class BrowseViewModel {
             let appErr = AppError.unknown(error)
             playbackError = "\(L10n.couldNotPlay) \"\(item.title)\": \(appErr.errorDescription ?? "")"
         }
+    }
+
+    /// Issue #69: some services (notably YouTube Music) return a SOAP fault on
+    /// the direct play of a favorite yet still load and play it. After such a
+    /// fault, confirm the speaker's real transport state before reporting a
+    /// failure — the observed state is authoritative, the fault is not.
+    private func isGroupPlayingAfterGrace(_ group: SonosGroup) async -> Bool {
+        try? await Task.sleep(nanoseconds: 1_500_000_000)  // let the speaker settle
+        let state = try? await sonosManager.getTransportState(group: group)
+        return state == .playing || state == .transitioning
     }
 
     /// View calls this when the user taps "Add All". If the recursion
@@ -681,7 +712,7 @@ final class BrowseViewModel {
         var index = 0
         while collected.count < ceiling {
             let want = min(pageSize, ceiling - collected.count)
-            guard let page = try? await sonosManager.browse(objectID: objectID, start: index, count: want) else {
+            guard let page = try? await sonosManager.browse(objectID: objectID, householdID: group?.householdID, start: index, count: want) else {
                 sonosDiagLog(.warning, tag: "QUEUE",
                              "pagedBrowse threw at index \(index)",
                              context: ["objectID": objectID])

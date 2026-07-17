@@ -171,7 +171,7 @@ public protocol QueueServiceProtocol {
     /// Recoverable queue snapshots, newest first, taken before destructive
     /// mutations (replace-all / clear). Restoring one re-enqueues it.
     func queueSnapshots(group: SonosGroup) -> [QueueSnapshot]
-    func restoreQueueSnapshot(group: SonosGroup, objectID: String) async throws
+    func restoreQueueSnapshot(group: SonosGroup, localID: Int64) async throws
     /// Choragus-side saved queues (local SQLite, independent of the household).
     func saveQueueToChoragus(group: SonosGroup, name: String) async throws -> Int
     func localSavedQueues() -> [LocalSavedQueue]
@@ -187,13 +187,27 @@ public protocol QueueServiceProtocol {
 
 @MainActor
 public protocol BrowsingServiceProtocol {
-    func browse(objectID: String, start: Int, count: Int) async throws -> (items: [BrowseItem], total: Int)
+    /// `householdID` scopes the browse to a specific Sonos system's
+    /// ContentDirectory (S1 vs S2 expose different local-library shares). nil
+    /// falls back to the global `preferredDevice`.
+    func browse(objectID: String, householdID: String?, start: Int, count: Int) async throws -> (items: [BrowseItem], total: Int)
     func browseMetadata(objectID: String) async throws -> BrowseItem?
-    func search(query: String, in containerID: String, start: Int, count: Int) async throws -> (items: [BrowseItem], total: Int)
+    func search(query: String, in containerID: String, householdID: String?, start: Int, count: Int) async throws -> (items: [BrowseItem], total: Int)
     func loadBrowseSections() async
     func addToPlaylist(playlistID: String, item: BrowseItem) async throws
     func deletePlaylist(playlistID: String) async throws
     func renamePlaylist(playlistID: String, oldTitle: String, newTitle: String) async throws
+}
+
+public extension BrowsingServiceProtocol {
+    /// Unscoped overloads — preserve existing call sites that don't care which
+    /// system serves the request (art probes, scanners, favourites, playlists).
+    func browse(objectID: String, start: Int = 0, count: Int = PageSize.browse) async throws -> (items: [BrowseItem], total: Int) {
+        try await browse(objectID: objectID, householdID: nil, start: start, count: count)
+    }
+    func search(query: String, in containerID: String = BrowseID.tracks, start: Int = 0, count: Int = PageSize.search) async throws -> (items: [BrowseItem], total: Int) {
+        try await search(query: query, in: containerID, householdID: nil, start: start, count: count)
+    }
 }
 
 // MARK: - Grouping Service (SRP: speaker grouping only)

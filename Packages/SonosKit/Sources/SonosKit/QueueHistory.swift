@@ -1,68 +1,78 @@
 /// QueueHistory.swift — Per-coordinator ring buffer of queue snapshots.
 ///
-/// A snapshot is a Sonos server-side saved queue (`SaveQueue` → `SQ:N`)
-/// captured immediately BEFORE a destructive queue mutation (replace-all,
-/// clear, bulk remove). Restoring one re-enqueues that saved queue, so an
-/// accidental "play this now" that wiped a 50-track queue is recoverable.
+/// A snapshot is a hidden Choragus-side saved queue (a `SavedQueueRepository`
+/// row flagged `is_snapshot`) captured immediately BEFORE a destructive queue
+/// mutation (replace-all, clear, bulk remove). Restoring one re-enqueues its
+/// stored tracks, so an accidental "play this now" that wiped a 50-track
+/// queue is recoverable. Snapshots never touch the speaker: earlier versions
+/// stored them as Sonos server-side saved queues, which surfaced as
+/// `__cghist__*` playlists in every other controller (the official app
+/// doesn't know the prefix) — see `purgeLegacySpeakerSnapshots`.
 ///
-/// This type holds only state + retention policy + persistence. It performs
-/// NO networking — the SOAP `SaveQueue` / `DestroyObject` / enqueue calls
-/// live in `SonosManager`, which owns the speaker connection. Keeping the
-/// two apart leaves this unit pure and unit-testable (SRP), and means the
-/// retention math can be exercised without a live household.
+/// This type holds only state + retention policy + persistence of the index.
+/// The queue reads, track storage, and restore enqueue live in
+/// `SonosManager` / `SavedQueueRepository`. Keeping them apart leaves this
+/// unit pure and unit-testable (SRP), and means the retention math can be
+/// exercised without a live household or a database.
 import Foundation
 
-/// One recoverable queue state. `objectID` is the Sonos saved-queue handle
-/// (`SQ:N`); the tracks themselves live on the speaker, not here.
+/// One recoverable queue state. `localID` is the `SavedQueueRepository` row
+/// holding the tracks; nothing is stored speaker-side.
 public struct QueueSnapshot: Codable, Equatable, Identifiable {
-    public let objectID: String
+    public let localID: Int64
     public let savedAt: Date
     public let trackCount: Int
     /// Human label for the history list, e.g. "47 tracks · The Bends".
     public let summary: String
 
-    public var id: String { objectID }
+    public var id: Int64 { localID }
 
-    public init(objectID: String, savedAt: Date, trackCount: Int, summary: String) {
-        self.objectID = objectID
+    public init(localID: Int64, savedAt: Date, trackCount: Int, summary: String) {
+        self.localID = localID
         self.savedAt = savedAt
         self.trackCount = trackCount
         self.summary = summary
     }
 }
 
-/// Ring-buffer store of snapshots keyed by group-coordinator ID, persisted
-/// to `UserDefaults` so the history list survives an app restart (the saved
-/// queues it points at already persist on the speaker).
+/// Ring-buffer index of snapshots keyed by group-coordinator ID, persisted
+/// to `UserDefaults` so the history list survives an app restart (the track
+/// rows live in the saved-queue database).
 @MainActor
 public final class QueueHistoryStore: ObservableObject {
-    /// Title prefix for the speaker-side saved queue. The prefix is how
-    /// every UI list that enumerates saved queues / playlists filters
-    /// these internal snapshots back out — see `isHistoryTitle`.
+    /// Name prefix for snapshot rows — and for the legacy speaker-side saved
+    /// queues that versions ≤4.12 created, which `isHistoryTitle` still
+    /// filters out of browse/playlist UI until the one-time purge removes them.
     public static let titlePrefix = "__cghist__"
 
     /// Retention depth per coordinator. Older snapshots beyond this are
-    /// pruned (and their speaker-side saved queue destroyed).
+    /// pruned (and their database rows deleted).
     public static let maxDepth = 5
 
     @Published public private(set) var snapshotsByCoordinator: [String: [QueueSnapshot]] = [:]
 
     private let defaults: UserDefaults
-    private let storageKey = "choragus.queueHistory.v1"
+    /// v2: snapshots moved from speaker-side saved queues (`objectID`) to
+    /// local database rows (`localID`). The v1 blob is discarded, not
+    /// migrated — its speaker-side queues are destroyed by the legacy purge.
+    private let storageKey = "choragus.queueHistory.v2"
+    private let legacyStorageKey = "choragus.queueHistory.v1"
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        defaults.removeObject(forKey: legacyStorageKey)
         load()
     }
 
     /// True when a saved-queue title is an internal history snapshot, not a
-    /// user playlist. Used to exclude snapshots from browse / playlist UI.
+    /// user playlist. Used to exclude snapshots from browse / playlist UI
+    /// and to identify legacy speaker-side snapshots for the purge.
     public static func isHistoryTitle(_ title: String) -> Bool {
         title.hasPrefix(titlePrefix)
     }
 
-    /// The speaker-side title to use when saving a snapshot. Encodes the
-    /// epoch so concurrent saves across coordinators never collide.
+    /// The row name to use when saving a snapshot. Encodes the epoch so
+    /// concurrent saves across coordinators never collide.
     public static func snapshotTitle(at date: Date) -> String {
         "\(titlePrefix)\(Int(date.timeIntervalSince1970))"
     }
@@ -72,27 +82,32 @@ public final class QueueHistoryStore: ObservableObject {
     }
 
     /// Registers a freshly-created snapshot at the head of the ring buffer.
-    /// Returns the objectIDs that fell off the end and must be destroyed
-    /// speaker-side by the caller. Newest-first ordering.
+    /// Returns the row IDs that fell off the end and must be deleted from
+    /// the database by the caller. Newest-first ordering.
     @discardableResult
-    public func register(_ snapshot: QueueSnapshot, for coordinatorID: String) -> [String] {
+    public func register(_ snapshot: QueueSnapshot, for coordinatorID: String) -> [Int64] {
         var list = snapshotsByCoordinator[coordinatorID] ?? []
-        list.removeAll { $0.objectID == snapshot.objectID }
+        list.removeAll { $0.localID == snapshot.localID }
         list.insert(snapshot, at: 0)
         let overflow = list.count > Self.maxDepth ? Array(list[Self.maxDepth...]) : []
         if !overflow.isEmpty { list.removeLast(list.count - Self.maxDepth) }
         snapshotsByCoordinator[coordinatorID] = list
         persist()
-        return overflow.map(\.objectID)
+        return overflow.map(\.localID)
     }
 
-    /// Drops a snapshot from the index after its speaker-side queue is
-    /// consumed or destroyed.
-    public func remove(objectID: String, for coordinatorID: String) {
+    /// Drops a snapshot from the index after its database row is deleted.
+    public func remove(localID: Int64, for coordinatorID: String) {
         guard var list = snapshotsByCoordinator[coordinatorID] else { return }
-        list.removeAll { $0.objectID == objectID }
+        list.removeAll { $0.localID == localID }
         snapshotsByCoordinator[coordinatorID] = list
         persist()
+    }
+
+    /// Every row ID the index currently tracks, across all coordinators.
+    /// The purge uses this to garbage-collect orphaned snapshot rows.
+    public func allTrackedLocalIDs() -> Set<Int64> {
+        Set(snapshotsByCoordinator.values.flatMap { $0.map(\.localID) })
     }
 
     // MARK: - Persistence

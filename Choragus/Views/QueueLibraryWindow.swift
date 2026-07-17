@@ -40,7 +40,7 @@ struct QueueLibraryCard: Identifiable, Equatable {
         case choragus(Int64)
         case sonos(String)                       // objectID
         case smart(SonosManager.SmartQueueKind)
-        case history(String)                     // objectID of the SQ: snapshot
+        case history(Int64)                      // local snapshot row ID
 
         var sourceLabel: String {
             switch self {
@@ -275,7 +275,7 @@ final class QueueLibraryViewModel: ObservableObject {
                 let date = snap.savedAt.formatted(date: .abbreviated, time: .omitted)
                 let time = snap.savedAt.formatted(date: .omitted, time: .shortened)
                 let when = "\(date)\n\(time)"
-                built.append(QueueLibraryCard(id: "hist:\(snap.objectID)", name: when, kind: .history(snap.objectID),
+                built.append(QueueLibraryCard(id: "hist:\(snap.localID)", name: when, kind: .history(snap.localID),
                                               trackCount: snap.trackCount, folderIDs: [], coverURLs: [], roomName: entry.room))
             }
         }
@@ -311,10 +311,10 @@ final class QueueLibraryViewModel: ObservableObject {
         // Resolve covers (network) and update in place.
         for card in built {
             switch card.kind {
-            case .sonos(let objectID), .history(let objectID):
+            case .sonos(let objectID):
                 let art = await manager.savedQueueCoverArt(objectID: objectID)
                 if let idx = cards.firstIndex(where: { $0.id == card.id }) { cards[idx].coverURLs = art }
-            case .choragus(let id):
+            case .choragus(let id), .history(let id):
                 let art = await manager.choragusCoverArtResolved(localID: id)
                 if let idx = cards.firstIndex(where: { $0.id == card.id }) { cards[idx].coverURLs = art }
             case .smart:
@@ -328,11 +328,11 @@ final class QueueLibraryViewModel: ObservableObject {
     func tracks(for card: QueueLibraryCard) async -> [QueueItem] {
         let raw: [QueueItem]
         switch card.kind {
-        case .choragus(let id):
+        case .choragus(let id), .history(let id):
             raw = manager.savedQueueTracks(localID: id)
         case .smart(let kind):
             raw = manager.smartQueueTracks(kind: kind, room: roomFilter)
-        case .sonos(let objectID), .history(let objectID):
+        case .sonos(let objectID):
             guard let (items, _) = try? await manager.browse(objectID: objectID, start: 0, count: 500) else { return [] }
             raw = items.enumerated().map { offset, item in
                 QueueItem(id: offset + 1, title: item.title, artist: item.artist,
@@ -351,12 +351,12 @@ final class QueueLibraryViewModel: ObservableObject {
             case .choragus(let id): try await manager.loadLocalSavedQueue(id: id, group: group, append: append)
             case .sonos(let objectID): try await manager.playSavedQueueToRoom(objectID: objectID, group: group, append: append)
             case .smart(let kind): try await manager.playSmartQueue(kind: kind, room: roomFilter, group: group, append: append)
-            case .history(let objectID):
+            case .history(let localID):
                 // Replace = undo-aware restore (snapshots current first).
                 if append {
-                    try await manager.playSavedQueueToRoom(objectID: objectID, group: group, append: true)
+                    try await manager.loadLocalSavedQueue(id: localID, group: group, append: true)
                 } else {
-                    try await manager.restoreQueueSnapshot(group: group, objectID: objectID)
+                    try await manager.restoreQueueSnapshot(group: group, localID: localID)
                 }
             }
             flash(append ? "Added \u{201C}\(card.name)\u{201D} to \(group.name)" : "Playing \u{201C}\(card.name)\u{201D} on \(group.name)")
@@ -370,7 +370,8 @@ final class QueueLibraryViewModel: ObservableObject {
         do {
             switch card.kind {
             case .choragus(let id): _ = manager.cloneLocalSavedQueue(id: id, name: cloneName)
-            case .sonos(let objectID), .history(let objectID): _ = try await manager.cloneSonosPlaylistToChoragus(objectID: objectID, name: cloneName)
+            case .sonos(let objectID): _ = try await manager.cloneSonosPlaylistToChoragus(objectID: objectID, name: cloneName)
+            case .history(let localID): _ = manager.cloneLocalSavedQueue(id: localID, name: cloneName)
             case .smart(let kind): _ = manager.freezeSmartQueueToChoragus(kind: kind, room: roomFilter, name: card.name)
             }
             await load()

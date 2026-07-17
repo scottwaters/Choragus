@@ -325,7 +325,7 @@ final class QueueViewModel: ObservableObject {
 
     func restoreSnapshot(_ snapshot: QueueSnapshot) async {
         do {
-            try await sonosManager.restoreQueueSnapshot(group: group, objectID: snapshot.objectID)
+            try await sonosManager.restoreQueueSnapshot(group: group, localID: snapshot.localID)
             // Do NOT loadQueue() here. The replace path is audio-first: the
             // first track lands now, the rest fill in the background, and each
             // step posts `.queueChanged`, which the panel observer reloads on.

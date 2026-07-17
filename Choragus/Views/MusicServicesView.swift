@@ -226,6 +226,11 @@ struct MusicServicesSettingsSection: View {
         if let desc = smapiManager.availableServices.first(where: { $0.id == serviceID }) {
             return desc.name
         }
+        // Catalog canonical resolution covers ids the household reports only via
+        // favorites (e.g. Spotify at sid 9) that aren't in `availableServices`.
+        if let canonical = MusicServiceCatalog.shared.canonicalDisplayName(forSid: serviceID) {
+            return canonical
+        }
         return ServiceID.knownNames[serviceID] ?? "Service \(serviceID)"
     }
 
@@ -324,6 +329,10 @@ struct MusicServicesSettingsSection: View {
         for (sid, name) in ServiceID.knownNames where name.lowercased() == lowered {
             ids.insert(sid)
         }
+        // Fold in every sid the catalog knows for this canonical service
+        // (e.g. Spotify → {9, 12}) so a household at an alternate id (sid 9)
+        // still matches a tested/blocked/search-only set keyed on another (12).
+        ids.formUnion(MusicServiceCatalog.shared.relatedSids(forSid: service.serviceID))
         return ids
     }
 

@@ -153,14 +153,50 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
     /// callers (notably `ServiceSearchProvider.buildPlayURI`).
     private let lock = NSLock()
     private var snapshotDescriptors: [ServiceDescriptor] = []
+    // Dynamic canonical table (lock-guarded). A canonical service can hold
+    // MORE THAN ONE sid — Sonos assigns the id per household/region/registration
+    // (Spotify is 9 in most systems, 12 in others), so we group ids by service
+    // rather than hardcode one. Seeded from the well-known online id set, then
+    // augmented at every `ListAvailableServices` refresh with whatever ids this
+    // household actually reports.
+    private var canonicalRelatedSids: [String: Set<Int>] = [:]  // lower(name) -> ids
+    private var canonicalKeyBySid: [Int: String] = [:]          // sid -> lower(name)
+    private var canonicalDisplayByKey: [String: String] = [:]   // lower(name) -> display
 
     private let staticRulesByName: [String: ServiceRules]
     private var refreshInFlight: Task<Void, Never>?
     private let fetcher: ListAvailableServicesFetching
 
+    /// Well-known starting id set, taken from the public Sonos service list
+    /// (svrooij / SoCo community references) plus the ids this codebase has
+    /// observed in real households. Multiple ids per service is intentional:
+    /// e.g. Spotify is 9 in the documented list and 12 in some live systems.
+    /// Per-household `ListAvailableServices` descriptors add any others at
+    /// runtime, so this is only a seed, never the sole source of truth.
+    static let seededServiceIDs: [(name: String, ids: Set<Int>)] = [
+        (ServiceName.spotify, [9, 12]),
+        (ServiceName.appleMusic, [204]),
+        (ServiceName.amazonMusic, [201]),
+        (ServiceName.deezer, [2]),
+        (ServiceName.tidal, [174]),
+        ("Qobuz", [31]),
+        (ServiceName.soundCloud, [160]),
+        (ServiceName.youTubeMusic, [284]),
+        (ServiceName.tuneIn, [254, 333]),
+        (ServiceName.calmRadio, [144]),
+        (ServiceName.sonosRadio, [303]),
+        ("Plex", [212]),
+        ("Audible", [239]),
+        ("Bandcamp", [157]),
+        (ServiceName.pandora, [3]),
+        (ServiceName.radioParadise, [308]),
+        ("SomaFM Radio", [516]),
+    ]
+
     public init(fetcher: ListAvailableServicesFetching = LiveListAvailableServicesFetcher()) {
         self.staticRulesByName = Self.buildStaticRulesTable()
         self.fetcher = fetcher
+        rebuildCanonicalTable([])  // seed-only until the first refresh
     }
 
     // MARK: - Lookup (nonisolated, sync, lock-guarded)
@@ -196,6 +232,98 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
     /// speaker stamps in DIDL `desc` elements.
     public func rinconServiceType(forSid sid: Int) -> Int {
         descriptor(forSid: sid)?.rinconServiceType ?? ((sid << 8) + 7)
+    }
+
+    // MARK: - Canonical service resolution (multi-id, dynamic)
+
+    /// The canonical, display-cased service name for any sid we can resolve —
+    /// from the household descriptor's own name, the seeded id set, or a
+    /// URI-scheme match. nil only for a sid we genuinely don't recognise (the
+    /// caller then falls back to "Service N").
+    public func canonicalDisplayName(forSid sid: Int) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        guard let key = canonicalKeyBySid[sid] else { return nil }
+        return canonicalDisplayByKey[key]
+    }
+
+    /// Every sid known to belong to the same canonical service as `sid`
+    /// (e.g. Spotify → {9, 12}). Lets the UI classify a row by any of its
+    /// aliases, so a household at sid 9 still matches a tested/blocked set
+    /// keyed on 12. Empty when unresolved.
+    public func relatedSids(forSid sid: Int) -> Set<Int> {
+        lock.lock(); defer { lock.unlock() }
+        guard let key = canonicalKeyBySid[sid] else { return [] }
+        return canonicalRelatedSids[key] ?? []
+    }
+
+    /// Resolve a household descriptor to a canonical key: exact name match
+    /// first (Sonos usually returns the brand name), then a URI-scheme / host
+    /// token match so a localised or renamed descriptor still maps home.
+    private func canonicalKey(forDescriptor d: ServiceDescriptor) -> String? {
+        let lname = d.name.lowercased()
+        if staticRulesByName[lname] != nil { return lname }
+        if Self.seededServiceIDs.contains(where: { $0.name.lowercased() == lname }) { return lname }
+        // Match against the host's FIRST DNS label only (e.g. "spotify-v5" from
+        // "spotify-v5.ws.sonos.com"). Matching the whole host is useless — every
+        // Sonos SMAPI endpoint is `*.ws.sonos.com`, so "sonos" et al. would hit
+        // everything.
+        let label = Self.hostFirstLabel(d.secureUri.isEmpty ? d.uri : d.secureUri)
+        guard label.count > 3 else { return nil }
+        // 1) Service-specific scheme token (x-sonos-spotify: → "spotify").
+        for (key, rule) in staticRulesByName {
+            let token = rule.trackURIScheme
+                .replacingOccurrences(of: "x-sonosapi-", with: "")
+                .replacingOccurrences(of: "x-sonos-", with: "")
+                .replacingOccurrences(of: "x-rincon-", with: "")
+                .replacingOccurrences(of: ":", with: "")
+            if token.count > 3, label.contains(token) { return key }
+        }
+        // 2) Canonical name's first word in the host label.
+        for key in staticRulesByName.keys {
+            if let nameTok = key.split(separator: " ").first.map(String.init),
+               nameTok.count > 3, label.contains(nameTok) { return key }
+        }
+        return nil
+    }
+
+    /// First DNS label of a URL/host string, lower-cased.
+    static func hostFirstLabel(_ uri: String) -> String {
+        var s = uri.lowercased()
+        if let r = s.range(of: "://") { s = String(s[r.upperBound...]) }
+        if let slash = s.firstIndex(of: "/") { s = String(s[..<slash]) }
+        return s.split(separator: ".").first.map(String.init) ?? s
+    }
+
+    /// Rebuild the canonical maps from the seed plus the current descriptors.
+    /// Called at init (seed only) and on every refresh.
+    func rebuildCanonicalTable(_ descriptors: [ServiceDescriptor]) {
+        var related: [String: Set<Int>] = [:]
+        var display: [String: String] = [:]
+        for (name, ids) in Self.seededServiceIDs {
+            let key = name.lowercased()
+            related[key, default: []].formUnion(ids)
+            display[key] = name
+        }
+        // The household's descriptor list is authoritative for the ids it
+        // reports: evict each reported id from every seeded group first, so a
+        // sid this household assigns to a different (possibly unrecognised)
+        // service never resolves to the seed's service. Seeded aliases the
+        // household doesn't report stay grouped.
+        for d in descriptors {
+            for key in related.keys { related[key]?.remove(d.id) }
+        }
+        for d in descriptors {
+            guard let key = canonicalKey(forDescriptor: d) else { continue }
+            related[key, default: []].insert(d.id)
+            if display[key] == nil { display[key] = d.name }   // prefer seeded display
+        }
+        var bySid: [Int: String] = [:]
+        for (key, ids) in related { for id in ids { bySid[id] = key } }
+        lock.lock()
+        canonicalRelatedSids = related
+        canonicalKeyBySid = bySid
+        canonicalDisplayByKey = display
+        lock.unlock()
     }
 
     /// Resolve a track URI scheme for a runtime sid. Falls back to
@@ -362,6 +490,7 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
         snapshotDescriptors = incoming
         lock.unlock()
         descriptors = incoming
+        rebuildCanonicalTable(incoming)
     }
 
     // MARK: - Static rules table

@@ -181,7 +181,7 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
     func addBrowseItemsToQueue(_ items: [BrowseItem], in group: SonosGroup, playNext: Bool) async throws -> Int { items.count }
     var stubbedSnapshots: [QueueSnapshot] = []
     func queueSnapshots(group: SonosGroup) -> [QueueSnapshot] { stubbedSnapshots }
-    func restoreQueueSnapshot(group: SonosGroup, objectID: String) async throws {}
+    func restoreQueueSnapshot(group: SonosGroup, localID: Int64) async throws {}
     var stubbedLocalSavedQueues: [LocalSavedQueue] = []
     func saveQueueToChoragus(group: SonosGroup, name: String) async throws -> Int { stubbedQueue.count }
     func localSavedQueues() -> [LocalSavedQueue] { stubbedLocalSavedQueues }
@@ -194,11 +194,11 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
     // MARK: - BrowsingServiceProtocol
 
     var stubbedBrowseItems: [BrowseItem] = []
-    func browse(objectID: String, start: Int, count: Int) async throws -> (items: [BrowseItem], total: Int) {
+    func browse(objectID: String, householdID: String?, start: Int, count: Int) async throws -> (items: [BrowseItem], total: Int) {
         (stubbedBrowseItems, stubbedBrowseItems.count)
     }
     func browseMetadata(objectID: String) async throws -> BrowseItem? { nil }
-    func search(query: String, in containerID: String, start: Int, count: Int) async throws -> (items: [BrowseItem], total: Int) { ([], 0) }
+    func search(query: String, in containerID: String, householdID: String?, start: Int, count: Int) async throws -> (items: [BrowseItem], total: Int) { ([], 0) }
     func loadBrowseSections() async {}
     func addToPlaylist(playlistID: String, item: BrowseItem) async throws {}
     func deletePlaylist(playlistID: String) async throws {}

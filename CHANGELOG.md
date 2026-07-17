@@ -1,6 +1,41 @@
 
 # Changelog
 
+## v4.13 — 2026-07-17 — YouTube Music metadata, per-system libraries, queue-history cleanup, canonical services
+
+A fix-and-feature release. YouTube Music titles settle correctly and the false play warning is gone, households running S1 and S2 side by side see which system carries each library share, queue-history snapshots no longer appear as playlists in other controllers (and existing ones are cleaned up automatically), and a service registered under an alternate id resolves to its proper name and status. Build 33.
+
+### YouTube Music — settled titles, no false warnings (#69)
+
+Two fixes for YouTube Music (sid 284). First, an HLS-static track transition often arrives carrying the prior track's title/artist — or an empty title — and then settles a beat later; sid-284 ids are opaque, so unlike Apple Music there is no catalog lookup to repair from. When the leak signature is detected (track URI changed but the title is empty or unchanged), a single delayed `GetPositionInfo` re-poll pulls the settled metadata — gated to the signature so steady-state radio doesn't re-poll every song. Second, the direct play of a favorite can fault SOAP 714/402/800 yet still load and play; the "may require sign-in" banner is now gated on the group's observed transport state after a short grace, so it only appears when playback genuinely failed.
+
+### Per-system local libraries (S1 / S2)
+
+For households running an S1 and an S2 system side by side:
+
+- Browse rows and library sections carry **(S1) / (S2) / (S1/S2)** tags when the systems' library shares differ; no tags appear in single-system households.
+- Browse and search are scoped to the selected speaker's own system, so each system's shares are the ones listed.
+- Playing a local-library item whose share isn't configured on the selected system fails fast with a message naming the Sonos app to set it up in, instead of the misleading UPnP 701 "speaker layout changed" error.
+- The per-system capability probes run concurrently, so a slow or unreachable system delays Browse by at most one round-trip.
+
+### Queue history — snapshots move off the speaker
+
+The undo snapshots taken before destructive queue operations were stored as Sonos saved queues, which other controllers (including the official app) listed as `__cghist__` playlists — and failed evictions let them accumulate. Snapshots are now hidden rows in the local saved-queue database: capture reads the live queue with per-track DIDL, restore replays through the normal enqueue path, and retention deletes rows locally. A one-time purge removes every legacy `__cghist__` saved queue from every detected system on launch, and browse pagination now filters hidden rows on every page (previously only the first).
+
+### Music services — canonical multi-id resolution (#57)
+
+Sonos assigns SMAPI service ids per household/region — Spotify has been observed at both sid 9 and sid 12. A seeded multi-id table, augmented by every `ListAvailableServices` refresh, now maps any runtime sid to its canonical service, so the Music Services list shows the right name and tested status regardless of which id a household reports. Household descriptors override the seed when they disagree, and a renamed or localised descriptor still resolves via its SMAPI host.
+
+### Playback
+
+- Play/Pause pressed while nothing is loaded on the speaker (fresh boot, cleared queue) now reports exactly that, instead of a generic "unexpected error" and a needless topology rescan — the speaker's UPnP 701 for an empty transport is distinguished from the stale-topology 701 by checking the transport's current source (#72).
+
+### Browse
+
+- Move Up/Down in Service Search re-renders immediately; the order previously saved but didn't refresh until relaunch (#70).
+- A service's Search and Browse tabs keep separate root content — switching tabs no longer shows the other tab's results, including after drilling into folders or during slow loads.
+- Browse and search resolve a reachable coordinator in the selected system before falling back to the default device.
+
 ## v4.12 — 2026-06-21 — Queue Library (beta), Audible, Apple Music library, A–Z browse, discovery & reliability fixes
 
 A feature release. A new Queue Library window for organising saved queues, Audible audiobook playback, a native Apple Music "Your Library" surface, an A–Z fast-scroll for long browse lists, a fix for households whose speakers stopped discovering when a room name contained "&", reduced speaker drop-outs, album right-click track-order and menu-bar window-lifecycle fixes, and a wide localization pass. Build 31.
