@@ -217,8 +217,8 @@ struct ArtworkSearchView: View {
     }
 
     private func iTunesSearch(query: String, entity: String, limit: Int) async -> [ArtResult] {
-        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=\(limit)") else {
+        let encoded = URLEncode.queryValue(query)
+        guard let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=\(limit)") else {
             return []
         }
 

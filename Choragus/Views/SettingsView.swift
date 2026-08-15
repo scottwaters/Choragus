@@ -83,7 +83,9 @@ private struct TabContentView: View {
     /// Event-listener callback port (applied at next launch — see
     /// EventListener.preferredPort). Clamped to the unprivileged range.
     @AppStorage(UDKey.eventListenerPort) private var eventListenerPort = 3401
+    @AppStorage(UDKey.ssdpMulticastTTL) private var ssdpMulticastTTL = Int(Timing.ssdpDefaultMulticastTTL)
     @AppStorage(UDKey.hideDiagnosticsIcon) private var hideDiagnosticsIcon = false
+    @AppStorage(UDKey.mediaKeysEnabled) private var mediaKeysEnabled = true
     @AppStorage(UDKey.scrollVolumeEnabled) private var scrollVolumeEnabled = false
     @AppStorage(UDKey.middleClickMuteEnabled) private var middleClickMuteEnabled = true
     @AppStorage(UDKey.classicShuffleEnabled) private var classicShuffleEnabled = false
@@ -189,6 +191,18 @@ private struct TabContentView: View {
 
                 Toggle(L10n.hideDiagnosticsIcon, isOn: $hideDiagnosticsIcon)
                 Text(L10n.hideDiagnosticsIconHint)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+
+                Text(L10n.keyboardControls)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Toggle(L10n.mediaKeysEnabled, isOn: $mediaKeysEnabled)
+                Text(L10n.mediaKeysEnabledHint)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -369,6 +383,12 @@ private struct TabContentView: View {
     @AppStorage(UDKey.visHistorySource) private var visHistorySourceRaw = VisHistorySource.defaultMode.rawValue
     @AppStorage(UDKey.karaokeStyle) private var karaokeStyleRaw = KaraokeStyle.defaultMode.rawValue
 
+    /// Colour-scheme state lives on the shared Club Vis state object
+    /// (not @AppStorage) — it persists itself to UserDefaults and
+    /// starts the lighting crossfade on every change, so Settings and
+    /// the vis window stay on a single source of truth.
+    @ObservedObject private var clubVisState = BackOfTheClubDebugState.shared
+
     @ViewBuilder
     private var visualisationsTab: some View {
         // All visualisation settings live as sibling sections so users
@@ -418,6 +438,36 @@ private struct TabContentView: View {
                     .labelsHidden()
                     .languageReactive()
                 }
+
+                visSettingRow(label: L10n.visColourScheme,
+                              help: L10n.visColourSchemeHelp) {
+                    Picker("", selection: $clubVisState.colourScheme) {
+                        Text(L10n.visColourSchemeAlbumArt).tag(VisColourScheme.albumArt)
+                        Text(L10n.visColourSchemeChoragus).tag(VisColourScheme.choragus)
+                        Text(L10n.visColourSchemeCustom).tag(VisColourScheme.custom)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .languageReactive()
+                }
+
+                if clubVisState.colourScheme == .custom {
+                    HStack(spacing: 24) {
+                        customTonePicker(L10n.visCustomToneWash,
+                                         hex: $clubVisState.customWashHex,
+                                         fallback: ClubStageSets.choragusSet.wash)
+                        customTonePicker(L10n.visCustomToneBeamA,
+                                         hex: $clubVisState.customBeamAHex,
+                                         fallback: ClubStageSets.choragusSet.beamA)
+                        customTonePicker(L10n.visCustomToneBeamB,
+                                         hex: $clubVisState.customBeamBHex,
+                                         fallback: ClubStageSets.choragusSet.beamB)
+                        customTonePicker(L10n.visCustomToneAccent,
+                                         hex: $clubVisState.customAccentHex,
+                                         fallback: ClubStageSets.choragusSet.accent)
+                        Spacer()
+                    }
+                }
             }
         }
         settingsSection(L10n.karaokeSection) {
@@ -458,6 +508,27 @@ private struct TabContentView: View {
                 }
             }
         }
+    }
+
+    /// One custom-scheme tone: a labelled ColorPicker bridging the
+    /// persisted "#RRGGBB" string to SwiftUI Color. Malformed stored
+    /// values render as the role's Choragus fallback tone (matching
+    /// `ClubStageSets.customSet`).
+    private func customTonePicker(_ label: String,
+                                  hex: Binding<String>,
+                                  fallback: StageTone) -> some View {
+        ColorPicker(label, selection: Binding<Color>(
+            get: {
+                (StageTone(hex: hex.wrappedValue) ?? fallback).color
+            },
+            set: { newColor in
+                let ns = NSColor(newColor).usingColorSpace(.sRGB) ?? .white
+                hex.wrappedValue = StageTone(r: Double(ns.redComponent),
+                                             g: Double(ns.greenComponent),
+                                             b: Double(ns.blueComponent)).hexString
+            }),
+            supportsOpacity: false)
+            .font(.body)
     }
 
     /// Single setting row inside a visualisation section: the
@@ -553,6 +624,18 @@ private struct TabContentView: View {
                         .onSubmit { clampEventListenerPort() }
                 }
                 Text(L10n.eventListenerPortHint)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                Divider()
+
+                settingsRow(L10n.ssdpMulticastTTL) {
+                    TextField("", value: $ssdpMulticastTTL, format: .number.grouping(.never))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 90)
+                        .onSubmit { clampMulticastTTL() }
+                }
+                Text(L10n.ssdpMulticastTTLHint)
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
@@ -821,6 +904,13 @@ private struct TabContentView: View {
     private func clampEventListenerPort() {
         if eventListenerPort < 1024 || eventListenerPort > 65535 {
             eventListenerPort = 3401
+        }
+    }
+
+    private func clampMulticastTTL() {
+        let limit = Int(Timing.ssdpMaxMulticastTTL)
+        if ssdpMulticastTTL < 1 || ssdpMulticastTTL > limit {
+            ssdpMulticastTTL = Int(Timing.ssdpDefaultMulticastTTL)
         }
     }
 }

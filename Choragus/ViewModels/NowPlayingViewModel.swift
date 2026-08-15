@@ -98,6 +98,13 @@ final class NowPlayingViewModel {
     /// of `fetchCurrentState`.
     private var dragSnapshot: (master: Double, volumes: [String: Double])?
 
+    /// Holding the master at 0 for `zeroHoldToSyncDelay` discards the
+    /// per-member spread so the group rises together (#74). Cancelled the
+    /// moment the master leaves 0.
+    private var zeroHoldTask: Task<Void, Never>?
+
+    private static let zeroHoldToSyncDelay: Duration = .seconds(1)
+
     // MARK: - Position
 
     /// Shared playhead anchor maintained by `SonosManager`. Every
@@ -402,7 +409,26 @@ final class NowPlayingViewModel {
             }
             sonosManager.updateDeviceVolume(member.id, volume: clamped)
         }
+        updateZeroHold(master: newMaster)
         scheduleThrottledMasterCommit()
+    }
+
+    /// Arms or cancels the hold-at-zero sync. Members are already at 0;
+    /// what the hold changes is the snapshot they rise from.
+    private func updateZeroHold(master: Double) {
+        guard master <= 0 else {
+            zeroHoldTask?.cancel()
+            zeroHoldTask = nil
+            return
+        }
+        guard zeroHoldTask == nil else { return }   // already counting
+        zeroHoldTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.zeroHoldToSyncDelay)
+            guard let self, !Task.isCancelled, self.dragVolume <= 0 else { return }
+            var flattened: [String: Double] = [:]
+            for member in self.group.members { flattened[member.id] = 0 }
+            self.dragSnapshot = (master: 0, volumes: flattened)
+        }
     }
 
     /// Captures the immutable drag-start state — current master baseline
@@ -448,6 +474,10 @@ final class NowPlayingViewModel {
         // SOAP below is authoritative.
         throttledMasterCommitTask?.cancel()
         throttledMasterCommitTask = nil
+        // The drag is over — a pending zero-hold must not fire against a
+        // later drag's snapshot.
+        zeroHoldTask?.cancel()
+        zeroHoldTask = nil
         // Per-device SOAPs in parallel — for a group of N speakers a
         // serial loop took N × ~150 ms (the cumulative SOAP round-trip
         // time), which read as sluggish on 3+ speaker groups. TaskGroup
@@ -505,8 +535,17 @@ final class NowPlayingViewModel {
     /// members can have independent in-flight throttles when the
     /// user nudges them in turn. Cancelled by `setSpeakerVolume`
     /// (drag-end) so the final SOAP is the authoritative write.
+    /// Per-device commit generation. A completing throttled task may only
+    /// nil its dictionary slot when it is still the latest scheduled task
+    /// for that device — an unconditional nil would wipe a NEWER task's
+    /// slot (the old task can pass its cancellation check, then get
+    /// cancelled mid-SOAP after the newer task has taken the slot).
+    private var memberCommitGenerations: [String: Int] = [:]
+
     func scheduleThrottledSpeakerCommit(device: SonosDevice, volume: Int) {
         throttledMemberCommitTasks[device.id]?.cancel()
+        let generation = (memberCommitGenerations[device.id] ?? 0) + 1
+        memberCommitGenerations[device.id] = generation
         throttledMemberCommitTasks[device.id] = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: Self.throttleInterval)
             guard !Task.isCancelled, let self else { return }
@@ -515,7 +554,9 @@ final class NowPlayingViewModel {
             } catch {
                 sonosDebugLog("[VOLUME] throttled mid-drag setVolume failed for \(device.roomName): \(error)")
             }
-            self.throttledMemberCommitTasks[device.id] = nil
+            if self.memberCommitGenerations[device.id] == generation {
+                self.throttledMemberCommitTasks[device.id] = nil
+            }
         }
     }
 
@@ -560,16 +601,25 @@ final class NowPlayingViewModel {
 
     // MARK: - Action Runner
 
+    /// Token for the action that currently owns `actionInFlight`. Only
+    /// the call that SET the flag may clear it — after a
+    /// `resetForGroupChange` (which nils the flag directly), a still-
+    /// running old action's completion must not clear a newer action's
+    /// in-flight state.
+    private var actionGeneration = 0
+
     func performAction(_ id: String, _ action: @escaping () async throws -> Void) {
         guard actionInFlight == nil else { return }
         actionInFlight = id
+        actionGeneration += 1
+        let generation = actionGeneration
         Task {
             do {
                 try await action()
             } catch {
                 ErrorHandler.shared.handle(error, context: "TRANSPORT")
             }
-            actionInFlight = nil
+            if generation == actionGeneration { actionInFlight = nil }
         }
     }
 
@@ -710,8 +760,11 @@ final class NowPlayingViewModel {
         // `speakerVolumes`, and `speakerMutes` derive directly from
         // `sonosManager.deviceVolumes` / `deviceMutes`, which `scanGroup`
         // above just refreshed. Clear any stale drag snapshot so the
-        // next user drag captures fresh state.
-        dragSnapshot = nil
+        // next user drag captures fresh state — but only when no drag is
+        // active NOW: the awaits above are long enough for a drag to have
+        // started, and wiping its immutable reference snapshot mid-drag
+        // breaks the offset-preserving distribution math.
+        if !isDraggingVolume { dragSnapshot = nil }
     }
 
 }

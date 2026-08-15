@@ -14,6 +14,9 @@ struct DiagnosticsView: View {
     @State private var saveError: String?
     @State private var selection: Set<Int64> = []
     @State private var activeTab: Tab = .log
+    /// Shared by the Network / Speaker Health / Signal Matrix tabs so
+    /// switching between them keeps one fetch cycle and one history.
+    @StateObject private var networkModel = NetworkDiagnosticsModel()
 
     /// Pending encrypted-bundle preview state. When non-nil the
     /// preview sheet is shown; user confirmation triggers the
@@ -34,12 +37,14 @@ struct DiagnosticsView: View {
     }
 
     enum Tab: String, CaseIterable, Identifiable {
-        case log, liveEvents
+        case log, liveEvents, speakers, network
         var id: String { rawValue }
         var displayName: String {
             switch self {
             case .log:        return L10n.diagTabLog
             case .liveEvents: return L10n.diagTabLiveEvents
+            case .speakers:   return L10n.diagTabSpeakers
+            case .network:    return L10n.diagTabNetwork
             }
         }
     }
@@ -73,6 +78,10 @@ struct DiagnosticsView: View {
                 logTab
             case .liveEvents:
                 LiveEventsView()
+            case .speakers:
+                speakersTab
+            case .network:
+                NetworkDiagnosticsTab(model: networkModel)
             }
         }
         .frame(minWidth: 720, minHeight: 520)
@@ -321,6 +330,220 @@ struct DiagnosticsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    // MARK: - Speakers tab
+
+    /// Bumped by the manual refresh button. `subscriptionDetails` is
+    /// computed on the transport and isn't @Published, so lease renewals
+    /// don't push view updates — reading this tick in `speakersTable`
+    /// forces a re-evaluation on demand.
+    @State private var speakersRefreshTick = 0
+
+    /// One display row per physical box. Sonos publishes two device
+    /// records per speaker — the bare ZonePlayer and a MediaRenderer
+    /// sub-record (`_MR` suffix) that often carries the descriptive
+    /// metadata the bare record lacks (see `SonosGroup.isAtmosCapable`).
+    /// Fold each pair into one row, borrowing empty fields from the
+    /// sibling.
+    private struct SpeakerRow: Identifiable {
+        let device: SonosDevice
+        let roomName: String
+        let modelName: String
+        let modelNumber: String
+        let softwareVersion: String
+        var id: String { device.id }
+    }
+
+    private var speakerRows: [SpeakerRow] {
+        let all = sonosManager.devices
+        func pick(_ own: String, _ sibling: String?) -> String {
+            own.isEmpty ? (sibling ?? "") : own
+        }
+        return all.values
+            .filter { !$0.id.hasSuffix("_MR") }
+            .map { dev in
+                let mr = all["\(dev.id)_MR"]
+                return SpeakerRow(
+                    device: dev,
+                    roomName: pick(dev.roomName, mr?.roomName),
+                    modelName: pick(dev.modelName, mr?.modelName),
+                    modelNumber: pick(dev.modelNumber, mr?.modelNumber),
+                    softwareVersion: pick(dev.softwareVersion, mr?.softwareVersion)
+                )
+            }
+            .sorted { $0.roomName.localizedCaseInsensitiveCompare($1.roomName) == .orderedAscending }
+    }
+
+    private func subscriptionCount(for row: SpeakerRow) -> Int {
+        sonosManager.subscriptionDetails.filter { $0.deviceID == row.device.id }.count
+    }
+
+    private func roleText(for row: SpeakerRow) -> String {
+        if row.device.isCoordinator { return L10n.coordinatorLabel }
+        // Name the coordinator the member is bound to when known —
+        // "Member" alone doesn't say which group.
+        if let group = sonosManager.groups.first(where: { g in
+            g.members.contains { $0.id == row.device.id }
+        }), let coordRoom = group.coordinator?.roomName, !coordRoom.isEmpty {
+            return "\(L10n.diagSpeakerRoleMember) (\(coordRoom))"
+        }
+        return L10n.diagSpeakerRoleMember
+    }
+
+    private var speakersTab: some View {
+        VStack(spacing: 0) {
+            speakersHeader
+            Divider()
+            if speakerRows.isEmpty {
+                Spacer()
+                Text(L10n.diagSpeakersEmpty)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            } else {
+                speakersTable
+            }
+            Divider()
+            speakersFooter
+        }
+    }
+
+    private var speakersHeader: some View {
+        HStack(spacing: 12) {
+            Spacer()
+            Text(L10n.diagSpeakersCountFormat(speakerRows.count))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button {
+                speakersRefreshTick += 1
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.refresh)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var speakersTable: some View {
+        // Read the tick so manual refresh re-evaluates the table (the
+        // subscription snapshot is pulled fresh on every evaluation).
+        let _ = speakersRefreshTick
+        return Table(speakerRows) {
+            TableColumn(L10n.roomLabel) { row in
+                Text(row.roomName.isEmpty ? row.device.id : row.roomName)
+                    .font(.callout.weight(.medium))
+            }
+            .width(min: 100, ideal: 130)
+
+            TableColumn(L10n.diagSpeakerColumnModel) { row in
+                Text(row.modelNumber.isEmpty
+                     ? row.modelName
+                     : "\(row.modelName) (\(row.modelNumber))")
+                    .font(.callout)
+            }
+            .width(min: 110, ideal: 150)
+
+            TableColumn(L10n.diagSpeakerColumnIP) { row in
+                Text("\(row.device.ip):\(row.device.port)")
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+            }
+            .width(min: 110, ideal: 130)
+
+            TableColumn(L10n.system) { row in
+                Text(row.device.systemVersion.displayLabel)
+            }
+            .width(min: 50, ideal: 60, max: 80)
+
+            TableColumn(L10n.diagSpeakerColumnFirmware) { row in
+                Text(row.softwareVersion)
+                    .font(.callout.monospaced())
+            }
+            .width(min: 60, ideal: 80)
+
+            TableColumn(L10n.diagSpeakerColumnRole) { row in
+                Text(roleText(for: row))
+                    .font(.callout)
+            }
+            .width(min: 90, ideal: 130)
+
+            TableColumn(L10n.diagSpeakerColumnEvents) { row in
+                let count = subscriptionCount(for: row)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(count > 0 ? Color.green : Color.secondary.opacity(0.4))
+                        .frame(width: 6, height: 6)
+                    Text("\(count)")
+                        .font(.callout.monospacedDigit())
+                }
+            }
+            .width(min: 55, ideal: 65, max: 90)
+        }
+    }
+
+    private var speakersFooter: some View {
+        HStack(spacing: 8) {
+            Button {
+                copySpeakers()
+            } label: {
+                Label(copied ? L10n.copied : L10n.diagCopyAll,
+                      systemImage: copied ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.bordered)
+            .disabled(speakerRows.isEmpty)
+
+            Spacer()
+
+            // The GENA callback endpoint the speakers NOTIFY into — the
+            // single most useful fact when events silently stop arriving.
+            Text("\(L10n.diagSpeakerCallbackLabel) \(sonosManager.eventCallbackURL)")
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    /// Copies the full topology snapshot in cleartext. Deliberately
+    /// unredacted — LAN IPs and RINCON IDs are the *content* here, and
+    /// the on-disk diagnostic store keeps them too. The export-tier
+    /// scrub applies only to bundles headed for public channels
+    /// (`formatRow` / `bundleText`), not to the user's own clipboard.
+    private func copySpeakers() {
+        var lines: [String] = []
+        lines.append("=== Choragus Speaker Topology ===")
+        lines.append("Generated: \(Self.bundleStampFormatter.string(from: Date()))")
+        lines.append("Event callback: \(sonosManager.eventCallbackURL)")
+        lines.append("Active subscriptions: \(sonosManager.activeSubscriptionCount)")
+        lines.append("")
+        let subs = sonosManager.subscriptionDetails
+        for row in speakerRows {
+            let d = row.device
+            lines.append(row.roomName.isEmpty ? d.id : row.roomName)
+            lines.append("  Model: \(row.modelName) (\(row.modelNumber))")
+            lines.append("  IP: \(d.ip):\(d.port)")
+            lines.append("  ID: \(d.id)")
+            lines.append("  System: \(d.systemVersion.displayLabel)  Firmware: \(row.softwareVersion)")
+            if let household = d.householdID, !household.isEmpty {
+                lines.append("  Household: \(household)")
+            }
+            if let groupID = d.groupID, !groupID.isEmpty {
+                lines.append("  Group: \(groupID)  Role: \(d.isCoordinator ? "coordinator" : "member")")
+            }
+            if d.isPortable { lines.append("  Portable: yes") }
+            for sub in subs where sub.deviceID == d.id {
+                lines.append("  Subscription: \(sub.service)  expires \(Self.bundleStampFormatter.string(from: sub.expiresAt))")
+            }
+            lines.append("")
+        }
+        copyToClipboard(lines.joined(separator: "\n"))
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
     }
 
 

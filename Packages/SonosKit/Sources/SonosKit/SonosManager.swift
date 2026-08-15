@@ -187,6 +187,11 @@ public class SonosManager: ObservableObject {
     /// Per-group playback state, keyed by group ID
     @Published public var groupTransportStates: [String: TransportState] = [:]
     @Published public var groupTrackMetadata: [String: TrackMetadata] = [:]
+    /// Format evidence per recent track URI — restores audioFormat /
+    /// streamInfoRaw when a transient bogus publish interrupts a track
+    /// and the flip-back arrives as a "new" track with `.unknown`
+    /// (see the restore site in the metadata merge).
+    private var groupFormatMemory = AudioFormatMemory()
     @Published public var groupPlayModes: [String: PlayMode] = [:]
     /// High-churn playhead state lives on dedicated publishers rather
     /// than directly on this class — see `PositionTrackers.swift`.
@@ -245,7 +250,24 @@ public class SonosManager: ObservableObject {
     /// its own `isLoading` flag — on S1 the per-track fallback loop can
     /// take 30 s or more and the user needs visible confirmation that
     /// something is happening the whole time, not just at the end.
-    @Published public var isAddingToQueue: Bool = false
+    @Published public private(set) var isAddingToQueue: Bool = false
+
+    /// Overlap-safe depth behind `isAddingToQueue`. Two concurrent adds
+    /// previously shared the single Bool — the first to finish cleared
+    /// the flag while the second was still running. The published Bool
+    /// stays as the UI-facing property; all writers go through
+    /// `beginAddingToQueue` / `endAddingToQueue`.
+    private var addingToQueueDepth = 0
+
+    public func beginAddingToQueue() {
+        addingToQueueDepth += 1
+        if !isAddingToQueue { isAddingToQueue = true }
+    }
+
+    public func endAddingToQueue() {
+        addingToQueueDepth = max(0, addingToQueueDepth - 1)
+        if addingToQueueDepth == 0, isAddingToQueue { isAddingToQueue = false }
+    }
 
     /// Drag state for cross-view drag-and-drop (browse → queue)
     public var draggedBrowseItem: BrowseItem?
@@ -403,9 +425,21 @@ public class SonosManager: ObservableObject {
     @Published public var communicationMode: CommunicationMode {
         didSet {
             UserDefaults.standard.set(communicationMode.rawValue, forKey: UDKey.communicationMode)
-            Task { await switchTransportStrategy() }
+            // Serialize switches: two rapid toggles would otherwise
+            // interleave across the stop/start awaits and leave two live
+            // strategies running. Each new switch awaits the previous
+            // switch task before stopping/creating strategies.
+            let previous = strategySwitchTask
+            strategySwitchTask = Task { [weak self] in
+                await previous?.value
+                await self?.switchTransportStrategy()
+            }
         }
     }
+
+    /// In-flight communication-mode switch — chained so switches run
+    /// strictly one at a time (see `communicationMode.didSet`).
+    private var strategySwitchTask: Task<Void, Never>?
 
     @Published public var discoveryMode: DiscoveryMode {
         didSet {
@@ -514,6 +548,9 @@ public class SonosManager: ObservableObject {
         dbPath: AppPaths.appSupportDirectory.appendingPathComponent("saved_queues.sqlite").path)
     private var refreshTimer: Timer?
     private var refreshingHouseholds: Set<String> = []  // serializes topology refreshes per household (S1/S2 coexist)
+    /// Households whose forced refresh arrived while a non-forced refresh
+    /// was mid-flight — replayed once when the in-flight refresh completes.
+    private var pendingForcedTopologyRefreshes: Set<String> = []
     /// Last successful topology refresh per household. Used to throttle —
     /// within one 30 s rescan cycle we typically receive ~13 SSDP responses
     /// that would each otherwise trigger their own GetZoneGroupState call.
@@ -699,7 +736,28 @@ public class SonosManager: ObservableObject {
         // Quick Start: load cache first for instant UI
         if startupMode == .quickStart, let cached = cache.load() {
             let cachedDevices = cache.restoreDevices(from: cached)
+            // Cached groups are restored verbatim, so a household persisted
+            // by a build with the #83 coordinator defect would come back
+            // just as inert. Repair on the way in — same rule as the live
+            // topology paths.
             let cachedGroups = cache.restoreGroups(from: cached, devices: cachedDevices)
+                .map { group -> SonosGroup in
+                    let resolution = TopologyCoordinatorResolver.resolve(
+                        reported: group.coordinatorID,
+                        visibleMemberIDs: group.members.map(\.id))
+                    guard resolution.substituted else { return group }
+                    sonosDiagLog(.error, tag: "TOPOLOGY",
+                                 "Cached group had no usable coordinator — substituting",
+                                 context: [
+                                    "groupID": group.id,
+                                    "reportedCoordinator": group.coordinatorID,
+                                    "substituted": resolution.coordinatorID
+                                 ])
+                    return SonosGroup(id: group.id,
+                                      coordinatorID: resolution.coordinatorID,
+                                      members: group.members,
+                                      householdID: group.householdID)
+                }
             let cachedSections = cache.restoreBrowseSections(from: cached)
 
             if !cachedGroups.isEmpty {
@@ -708,6 +766,10 @@ public class SonosManager: ObservableObject {
                 self.browseSections = cachedSections
                 self.isUsingCachedData = true
                 self.cacheAge = cached.ageDescription
+                // Cached groups are restored verbatim, so a household that
+                // was persisted in a broken state comes back broken — worth
+                // one line per launch to place it on the timeline.
+                logTopologyOutcome("cache", groups: cachedGroups)
             }
         }
 
@@ -715,6 +777,19 @@ public class SonosManager: ObservableObject {
         isDiscovering = true
         isRefreshing = true
         for t in discoveryTransports { t.startDiscovery() }
+
+        // Safety timeout — same as `rescan()`. Without it, `isRefreshing`
+        // stays true forever when no speakers respond to the M-SEARCH
+        // (multicast blocked, network wedged) and the spinner spins
+        // indefinitely.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard let self else { return }
+            if self.isRefreshing {
+                sonosDebugLog("[DISCOVERY] Startup discovery timeout — no devices responded within 8 s")
+                self.isRefreshing = false
+            }
+        }
 
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -752,6 +827,28 @@ public class SonosManager: ObservableObject {
         discoveredLocations.removeAll()
         isRefreshing = true
         for t in discoveryTransports { t.rescan() }
+        // Unicast fallback: SSDP M-SEARCH is multicast and dies silently
+        // on networks that filter it — leaving Refresh unable to correct
+        // a bad topology even though every speaker is directly reachable
+        // (observed 2026-08-05: household wiped by a bad merge; Refresh
+        // could not recover it, app restart could). Force a topology
+        // re-pull over plain HTTP from one known device per household in
+        // parallel with the SSDP attempt.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Coordinators first — a satellite's topology answer is a
+            // self-view the merge guard rejects, so it wastes the shot.
+            let candidates = self.devices.values
+                .filter { !$0.id.hasSuffix("_MR") }
+                .sorted { ($0.isCoordinator ? 0 : 1) < ($1.isCoordinator ? 0 : 1) }
+            var refreshedHouseholds = Set<String>()
+            for device in candidates {
+                let household = device.householdID ?? device.id
+                guard !refreshedHouseholds.contains(household) else { continue }
+                refreshedHouseholds.insert(household)
+                await self.refreshTopology(from: device, force: true)
+            }
+        }
         // Safety timeout — without this, `isRefreshing` stays true
         // forever when no speakers respond to the M-SEARCH (router
         // change wedged the network, multicast blocked, etc.) and
@@ -1000,7 +1097,14 @@ public class SonosManager: ObservableObject {
         // don't race within a single household (main-actor re-entry across awaits).
         // Use source device UUID when householdID is not yet known (first discovery).
         let refreshKey = device.householdID ?? device.id
-        guard !refreshingHouseholds.contains(refreshKey) else { return }
+        guard !refreshingHouseholds.contains(refreshKey) else {
+            // A forced refresh (user-initiated group change) must not be
+            // silently dropped because a non-forced refresh is mid-flight —
+            // record it and re-run one forced refresh when the in-flight
+            // one completes (see the defer below).
+            if force { pendingForcedTopologyRefreshes.insert(refreshKey) }
+            return
+        }
 
         // Throttle: skip refreshes that arrive within the minimum interval of
         // the previous successful refresh for this household. Keeps SSDP
@@ -1015,7 +1119,15 @@ public class SonosManager: ObservableObject {
         }
 
         refreshingHouseholds.insert(refreshKey)
-        defer { refreshingHouseholds.remove(refreshKey) }
+        defer {
+            refreshingHouseholds.remove(refreshKey)
+            if pendingForcedTopologyRefreshes.contains(refreshKey) {
+                pendingForcedTopologyRefreshes.remove(refreshKey)
+                Task { [weak self] in
+                    await self?.refreshTopology(from: device, force: true)
+                }
+            }
+        }
 
         do {
             let groupData = try await zoneTopology.getZoneGroupState(device: device)
@@ -1082,10 +1194,36 @@ public class SonosManager: ObservableObject {
                 // of the order the speaker returned them in — otherwise the equality
                 // check below can false-positive on a pure reorder and cause flicker.
                 let stableMembers = members.sorted { $0.id < $1.id }
-                let group = SonosGroup(id: gd.id, coordinatorID: gd.coordinatorUUID,
+                let group = SonosGroup(id: gd.id,
+                                       coordinatorID: resolvedCoordinatorID(for: gd,
+                                                                            visibleMembers: stableMembers),
                                        members: stableMembers, householdID: household)
                 newGroups.append(group)
             }
+
+            // Reject satellite self-views before the merge. A home-theater
+            // satellite (or a speaker mid-reboot) answers GetZoneGroupState
+            // with a topology containing only `…:orphan` groups — its own
+            // isolated view, not the household. Latest-response-wins would
+            // accept it and wipe every real group (observed 2026-08-05:
+            // one Living Room satellite response removed all 11 S2 groups;
+            // with event subscriptions torn down by the wipe and SSDP
+            // blocked on this network, the empty state persisted until app
+            // restart). A response with no non-orphan groups carries no
+            // household information — skip the merge entirely.
+            // An empty (or all-orphan) response carries no household
+            // information — a real household always has at least one
+            // group, so merging it would wipe every room. Empty responses
+            // reach here from aborted ZoneGroupState parses (issue #81)
+            // as well as satellite self-views; both keep the previous
+            // topology and retry later.
+            let realGroups = newGroups.filter { !$0.id.hasSuffix(":orphan") }
+            if realGroups.isEmpty {
+                sonosDebugLog("[MERGE] REJECTED empty/self-view topology from \(device.roomName) — \(newGroups.count) group(s), none usable; keeping previous topology")
+                self.isRefreshing = false
+                return
+            }
+            newGroups = realGroups
 
             // Backfill nil householdID on legacy (pre-upgrade) cached groups whose
             // coordinator is now a known device with a household. Without this, stale
@@ -1136,6 +1274,7 @@ public class SonosManager: ObservableObject {
                 }
                 sonosDebugLog("[MERGE] source=\(device.roomName) household=\(household) newCount=\(newGroups.count) totalCount=\(mergedGroups.count) changed=true added=\(added) removed=\(removed) memberDiffs=\(memberDiffs)")
                 self.groups = mergedGroups
+                logTopologyOutcome("refresh(\(device.roomName))", groups: mergedGroups)
                 saveCache()
             } else {
                 sonosDebugLog("[MERGE] source=\(device.roomName) household=\(household) newCount=\(newGroups.count) totalCount=\(mergedGroups.count) changed=false")
@@ -1187,6 +1326,46 @@ public class SonosManager: ObservableObject {
         }
     }
 
+    /// Repairs a group whose `Coordinator` UUID names no visible member
+    /// (#83) — such a group takes no transport command and reports no
+    /// state. Substitutions are logged, never silent.
+    private func resolvedCoordinatorID(for gd: ZoneGroupData,
+                                       visibleMembers: [SonosDevice]) -> String {
+        let resolution = TopologyCoordinatorResolver.resolve(
+            reported: gd.coordinatorUUID,
+            visibleMemberIDs: visibleMembers.map(\.id),
+            previouslyKnownCoordinator: groups.first { $0.id == gd.id }?.coordinatorID)
+        guard resolution.substituted else { return resolution.coordinatorID }
+        sonosDiagLog(.error, tag: "TOPOLOGY",
+                     "Group coordinator not among its visible members — substituting",
+                     context: [
+                        "groupID": gd.id,
+                        "reportedCoordinator": gd.coordinatorUUID,
+                        "substituted": resolution.coordinatorID,
+                        "substitutedRoom": visibleMembers
+                            .first { $0.id == resolution.coordinatorID }?.roomName ?? "",
+                        "visibleMembers": String(visibleMembers.count),
+                        "totalMembers": String(gd.members.count)
+                     ])
+        return resolution.coordinatorID
+    }
+
+    /// Records what each topology application produced — #83 bundles
+    /// logged parse aborts but not successful merges, so a broken
+    /// household left no trace of which update caused it.
+    private func logTopologyOutcome(_ source: String, groups: [SonosGroup]) {
+        let coordinatorless = groups.filter { $0.coordinator == nil }
+        sonosDiagLog(coordinatorless.isEmpty ? .info : .error, tag: "TOPOLOGY",
+                     "Topology applied from \(source)",
+                     context: [
+                        "groups": String(groups.count),
+                        "visibleSpeakers": String(groups.reduce(0) { $0 + $1.members.count }),
+                        "groupsWithoutCoordinator": String(coordinatorless.count),
+                        "namesWithoutCoordinator": coordinatorless.prefix(5)
+                            .map(\.name).joined(separator: ", ")
+                     ])
+    }
+
     /// Parses ChannelMapSet from topology data to identify stereo-pair
     /// primaries and their invisible right-channel siblings. Same
     /// shape as `parseHTChannelMaps`, different attribute source.
@@ -1225,27 +1404,33 @@ public class SonosManager: ObservableObject {
         }
     }
 
-    /// Parses HTSatChanMapSet from topology data to identify surround/sub configurations
+    /// Parses HTSatChanMapSet into surround/sub configurations. A 5.1 zone
+    /// publishes four different values — the soundbar's complete map plus
+    /// one partial view per satellite — so the merge is across all members;
+    /// taking the first found hid the Surrounds tab (#78).
     private func parseHTChannelMaps(from groupData: [ZoneGroupData]) {
-        var maps: [String: [(String, SpeakerChannel)]] = [:]
+        // Start from what is known: payloads without the bonded-channel
+        // attributes would otherwise publish an empty map and flicker every
+        // home-theatre zone out of existence between refreshes.
+        var maps = htSatChannelMaps
+        var payloadReportedAnyMap = false
         for gd in groupData {
-            for md in gd.members where !md.htSatChanMapSet.isEmpty {
-                // Format: "RINCON_xxx:LF,RF;RINCON_yyy:SW;RINCON_zzz:LR;RINCON_www:RR"
-                var channelList: [(String, SpeakerChannel)] = []
-                let pairs = md.htSatChanMapSet.components(separatedBy: ";")
-                for pair in pairs {
-                    let parts = pair.components(separatedBy: ":")
-                    guard parts.count == 2 else { continue }
-                    let deviceID = parts[0]
-                    let channelStr = parts[1]
-                    if let channel = SpeakerChannel(rawValue: channelStr) {
-                        channelList.append((deviceID, channel))
-                    }
-                }
-                if !channelList.isEmpty {
-                    maps[gd.coordinatorUUID] = channelList
-                    break // Only need it from the coordinator's entry
-                }
+            // Format: "RINCON_xxx:LF,RF;RINCON_yyy:SW;RINCON_zzz:LR;RINCON_www:RR"
+            let merged = HomeTheaterChannelMap.merge(
+                memberMapSets: gd.members.map(\.htSatChanMapSet))
+            if !merged.isEmpty {
+                payloadReportedAnyMap = true
+                maps[gd.coordinatorUUID] = merged
+            }
+        }
+        // Only a payload that demonstrably carries the attributes can be
+        // trusted to report un-bonding.
+        if payloadReportedAnyMap {
+            let reportedNoMap = groupData
+                .filter { HomeTheaterChannelMap.merge(memberMapSets: $0.members.map(\.htSatChanMapSet)).isEmpty }
+                .map(\.coordinatorUUID)
+            for coordinatorID in reportedNoMap {
+                maps.removeValue(forKey: coordinatorID)
             }
         }
         // Equality-gate the @Published write — `parseHTChannelMaps`
@@ -1287,7 +1472,22 @@ public class SonosManager: ObservableObject {
             let position = try await avTransport.getPositionInfo(device: coordinator)
             let mode = try await avTransport.getTransportSettings(device: coordinator)
 
-            if groupTransportStates[coordinator.id] != state {
+            // Same grace check as the event path (`transportDidUpdateState`):
+            // a poll whose result predates an optimistic write must not
+            // revert it (e.g. stale .stopped clobbering an optimistic
+            // .playing set by a play action moments earlier).
+            var applyTransportState = true
+            if let grace = transportGraceUntils[coordinator.id], Date() < grace {
+                let currentOptimistic = groupTransportStates[coordinator.id]
+                if state == currentOptimistic {
+                    transportGraceUntils[coordinator.id] = nil
+                } else if currentOptimistic == .transitioning && state == .playing {
+                    transportGraceUntils[coordinator.id] = nil
+                } else {
+                    applyTransportState = false
+                }
+            }
+            if applyTransportState, groupTransportStates[coordinator.id] != state {
                 tagPublish("transport")
                 groupTransportStates[coordinator.id] = state
             }
@@ -1467,7 +1667,7 @@ public class SonosManager: ObservableObject {
                     handleStaleness(for: roomName, kind: code)
                 }
             case .serviceRejected, .groupChanged, .serviceUnavailable, .libraryNotConfigured,
-                 .nothingLoaded:
+                 .nothingLoaded, .notPlayable, .tracksSkippingEarly:
                 break
             }
             throw mapped
@@ -1549,6 +1749,7 @@ public class SonosManager: ObservableObject {
     }
 
     public func next(group: SonosGroup) async throws {
+        lastControllerTransportCommandAt[group.coordinatorID] = Date()
         guard let coordinator = group.coordinator else { return }
         try await withStaleHandling(for: group.name) {
             try await avTransport.next(device: coordinator)
@@ -1556,6 +1757,7 @@ public class SonosManager: ObservableObject {
     }
 
     public func previous(group: SonosGroup) async throws {
+        lastControllerTransportCommandAt[group.coordinatorID] = Date()
         guard let coordinator = group.coordinator else { return }
         try await withStaleHandling(for: group.name) {
             try await avTransport.previous(device: coordinator)
@@ -1563,6 +1765,7 @@ public class SonosManager: ObservableObject {
     }
 
     public func seek(group: SonosGroup, to time: String) async throws {
+        lastControllerTransportCommandAt[group.coordinatorID] = Date()
         guard let coordinator = group.coordinator else { return }
         try await avTransport.seek(device: coordinator, to: time)
     }
@@ -1958,6 +2161,21 @@ public class SonosManager: ObservableObject {
 
     /// Serial background repair chain per coordinator.
     private var queueRepairTasks: [String: Task<Void, Never>] = [:]
+    /// Background queue fill per coordinator. A replace-queue action
+    /// cancels the previous coordinator's fill — otherwise Play All on
+    /// album B while album A's fill was mid-flight interleaved both
+    /// albums' remaining chunks into the new queue.
+    private var queueFillTasks: [String: Task<Void, Never>] = [:]
+    /// Early-advance detector state: last observed track identity per
+    /// group, and when this controller last issued a transport command
+    /// (next/previous/seek) that legitimately truncates a track.
+    var lastTrackIdentity: [String: (uri: String, title: String)] = [:]
+
+    /// Timestamps of recent early advances per group, and when the user was
+    /// last told, so a failing queue reports once rather than once per track.
+    var earlyAdvances: [String: [Date]] = [:]
+    var lastEarlyAdvanceReportAt: [String: Date] = [:]
+    var lastControllerTransportCommandAt: [String: Date] = [:]
     /// Count of repairs in flight per coordinator — Q:0 GENA events are
     /// suppressed while non-zero so the swap churn doesn't blink the queue
     /// panel; one reload fires when the last chained repair finishes.
@@ -2259,7 +2477,18 @@ public class SonosManager: ObservableObject {
         lastQueueItems[group.coordinatorID] = nil
         cachedTrackByPosition[group.coordinatorID] = nil
 
-        if wasPlayingFromQueue {
+        // The cached-metadata read above predates two long awaits — the
+        // source may have changed meanwhile (e.g. user started a radio
+        // stream from another controller). Re-read the live transport URI
+        // just before the stop decision; fall back to the cached answer
+        // if the read fails.
+        var playingFromQueueNow = wasPlayingFromQueue
+        if let mediaInfo = try? await avTransport.getMediaInfo(device: coordinator),
+           let currentURI = mediaInfo["CurrentURI"] {
+            playingFromQueueNow = currentURI.hasPrefix(URIPrefix.rinconQueue)
+        }
+
+        if playingFromQueueNow {
             try? await avTransport.stop(device: coordinator)
             groupTrackMetadata[coordinator.id] = TrackMetadata()
             groupTransportStates[coordinator.id] = .stopped
@@ -2828,6 +3057,15 @@ public class SonosManager: ObservableObject {
     /// Returns the number of rows removed.
     public func dedupeQueue(group: SonosGroup) async throws -> Int {
         guard let coordinator = group.coordinator else { return 0 }
+        // A background queue repair (Apple Music name-swap walker) mutates
+        // rows while it runs — positions computed here would be stale by
+        // removal time. Skip rather than remove the wrong rows.
+        if queueRepairDepth[coordinator.id, default: 0] > 0 {
+            sonosDiagLog(.info, tag: "QUEUE",
+                         "dedupeQueue skipped — queue repair in flight",
+                         context: ["coordinator": coordinator.id])
+            return 0
+        }
         var collected: [QueueItem] = []
         var index = 0
         while true {
@@ -2837,23 +3075,36 @@ public class SonosManager: ObservableObject {
             index += page.count
         }
         var seen = Set<String>()
-        var duplicatePositions: [Int] = []
+        var duplicates: [(position: Int, uri: String)] = []
         for item in collected {
             guard let uri = item.uri, !uri.isEmpty else { continue }
             if seen.contains(uri) {
-                duplicatePositions.append(item.id)
+                duplicates.append((position: item.id, uri: uri))
             } else {
                 seen.insert(uri)
             }
         }
-        guard !duplicatePositions.isEmpty else { return 0 }
+        guard !duplicates.isEmpty else { return 0 }
         await snapshotQueueForHistory(group: group)
         // Remove bottom-up so earlier removals don't shift later positions.
-        for position in duplicatePositions.sorted(by: >) {
+        // Positions were computed across paged awaits — re-verify each
+        // row's URI with a single-row browse immediately before removing
+        // so a queue mutated since the scan can't lose the wrong track.
+        var removed = 0
+        for (position, uri) in duplicates.sorted(by: { $0.position > $1.position }) {
+            guard let row = try? await contentDirectory.browseQueue(
+                    device: coordinator, start: position - 1, count: 1).items.first,
+                  row.uri == uri else {
+                sonosDiagLog(.info, tag: "QUEUE",
+                             "dedupeQueue skipped shifted row",
+                             context: ["position": String(position)])
+                continue
+            }
             try await contentDirectory.removeTrackFromQueue(device: coordinator, objectID: "Q:0/\(position)")
+            removed += 1
         }
         postQueueChanged(optimisticItems: [])
-        return duplicatePositions.count
+        return removed
     }
 
     /// "Play All" / "Replace Queue" semantics with audio-first sequencing.
@@ -2915,7 +3166,7 @@ public class SonosManager: ObservableObject {
             }
 
             var meta = first.resourceMetadata ?? ""
-            if meta.contains("&lt;") { meta = XMLResponseParser.xmlUnescape(meta) }
+            meta = DIDLNormalize.metadata(meta)
             _ = try await contentDirectory.addURIToQueue(
                 device: coordinator, uri: uri, metadata: meta,
                 desiredFirstTrackNumberEnqueued: 0, enqueueAsNext: false
@@ -2949,10 +3200,13 @@ public class SonosManager: ObservableObject {
         // to do its first chunk and then refresh.
         postQueueChanged(optimisticItems: [])
 
-        // 2. Remaining tracks in background.
+        // 2. Remaining tracks in background — cancelling any fill still
+        // running for this coordinator from a previous replace, so two
+        // consecutive Play All actions can't interleave their chunks.
         let rest = Array(playable.dropFirst())
         if !rest.isEmpty {
-            Task { [weak self] in
+            queueFillTasks[coordinator.id]?.cancel()
+            queueFillTasks[coordinator.id] = Task { [weak self] in
                 await self?.fillQueueInBackground(rest, in: group)
             }
         }
@@ -2974,9 +3228,9 @@ public class SonosManager: ObservableObject {
     /// already had the fallback.
     private func fillQueueInBackground(_ items: [BrowseItem], in group: SonosGroup) async {
         guard let coordinator = group.coordinator, !items.isEmpty else { return }
-        isAddingToQueue = true
+        beginAddingToQueue()
         defer {
-            isAddingToQueue = false
+            endAddingToQueue()
             postQueueChanged(optimisticItems: [])
         }
 
@@ -3005,7 +3259,7 @@ public class SonosManager: ObservableObject {
             guard let uri = item.resourceURI, !uri.isEmpty else { continue }
             uris.append(uri)
             var meta = item.resourceMetadata ?? ""
-            if meta.contains("&lt;") { meta = XMLResponseParser.xmlUnescape(meta) }
+            meta = DIDLNormalize.metadata(meta)
             metas.append(meta)
             sources.append(item)
             if !item.title.isEmpty {
@@ -3023,13 +3277,22 @@ public class SonosManager: ObservableObject {
 
         let chunkSize = 16
         var repairRows: [(position: Int, uri: String)] = []
+        var failedTitles: [String] = []
         for chunkStart in stride(from: 0, to: uris.count, by: chunkSize) {
+            // A newer replace-queue action cancels this fill; continuing
+            // would append this (stale) selection's chunks into the new
+            // queue.
+            if Task.isCancelled { return }
             let end = min(chunkStart + chunkSize, uris.count)
             let uriChunk = Array(uris[chunkStart..<end])
             let metaChunk = Array(metas[chunkStart..<end])
             let sourceChunk = Array(sources[chunkStart..<end])
 
-            var bulkSucceeded = false
+            // Items the bulk call did not land — the whole chunk on a
+            // fault, or the tail beyond `numAdded` on a partial add
+            // (previously a partial bulk result silently dropped the
+            // remainder of the chunk).
+            var pending: [BrowseItem] = []
             do {
                 let result = try await contentDirectory.addMultipleURIsToQueue(
                     device: coordinator,
@@ -3044,38 +3307,53 @@ public class SonosManager: ObservableObject {
                         repairRows.append((position: result.firstTrackNumber + offset, uri: u))
                     }
                 }
-                bulkSucceeded = result.numAdded > 0
+                if result.numAdded < sourceChunk.count {
+                    pending = Array(sourceChunk.dropFirst(max(result.numAdded, 0)))
+                }
             } catch {
                 sonosDebugLog("[QUEUE] Background fill chunk \(chunkStart)-\(end-1) bulk failed: \(error). Falling back.")
+                pending = sourceChunk
             }
 
-            if !bulkSucceeded {
+            if !pending.isEmpty {
                 // Per-track fallback. Same defensive pattern as
                 // `addBrowseItemsToQueue` — single-track adds are
                 // more forgiving than bulk and recover the cases
                 // where the bulk variant rejects mid-transition.
+                // Each failed add gets one delayed retry: the observed
+                // fault mode is a transient rejection immediately after
+                // stop/clear/play, which clears within a second.
                 var perTrackAdded = 0
-                for (i, item) in sourceChunk.enumerated() {
+                for (i, item) in pending.enumerated() {
                     guard let uri = item.resourceURI, !uri.isEmpty else { continue }
                     var meta = item.resourceMetadata ?? ""
-                    if meta.contains("&lt;") { meta = XMLResponseParser.xmlUnescape(meta) }
-                    do {
-                        let pos = try await contentDirectory.addURIToQueue(
-                            device: coordinator, uri: uri, metadata: meta,
-                            desiredFirstTrackNumberEnqueued: 0,
-                            enqueueAsNext: false
-                        )
-                        if pos > 0 { perTrackAdded += 1 }
-                    } catch {
-                        sonosDebugLog("[QUEUE] Background per-track fallback FAILED for '\(item.title)' (chunk \(chunkStart)+\(i)): \(error)")
-                        // Keep going — one bad track shouldn't kill
-                        // the rest of the chunk. (Differs from the
-                        // user-initiated `addBrowseItemsToQueue`
-                        // which breaks on first error to avoid
-                        // hammering a misbehaving speaker.)
+                    meta = DIDLNormalize.metadata(meta)
+                    var added = false
+                    for attempt in 1...2 {
+                        do {
+                            let pos = try await contentDirectory.addURIToQueue(
+                                device: coordinator, uri: uri, metadata: meta,
+                                desiredFirstTrackNumberEnqueued: 0,
+                                enqueueAsNext: false
+                            )
+                            if pos > 0 { perTrackAdded += 1 }
+                            added = true
+                            break
+                        } catch {
+                            sonosDebugLog("[QUEUE] Background per-track add attempt \(attempt) failed for '\(item.title)' (chunk \(chunkStart)+\(i)): \(error)")
+                            // Keep going — one bad track shouldn't kill
+                            // the rest of the chunk. (Differs from the
+                            // user-initiated `addBrowseItemsToQueue`
+                            // which breaks on first error to avoid
+                            // hammering a misbehaving speaker.)
+                            if attempt == 1 {
+                                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                            }
+                        }
                     }
+                    if !added { failedTitles.append(item.title) }
                 }
-                sonosDebugLog("[QUEUE] Background per-track fallback chunk \(chunkStart)-\(end-1): \(perTrackAdded)/\(sourceChunk.count)")
+                sonosDebugLog("[QUEUE] Background per-track fallback chunk \(chunkStart)-\(end-1): \(perTrackAdded)/\(pending.count)")
             }
 
             // Refresh the queue panel after each chunk so large
@@ -3084,6 +3362,10 @@ public class SonosManager: ObservableObject {
             postQueueChanged(optimisticItems: [])
         }
         scheduleAppleMusicQueueRepair(group: group, rows: repairRows)
+        if !failedTitles.isEmpty {
+            sonosDebugLog("[QUEUE] Background fill dropped \(failedTitles.count) track(s): \(failedTitles.joined(separator: ", "))")
+            ErrorHandler.shared.warning(L10n.queueTracksNotAdded(failedTitles.count), context: "QUEUE")
+        }
     }
 
     public func playTrackFromQueue(group: SonosGroup, trackNumber: Int) async throws {
@@ -3124,7 +3406,7 @@ public class SonosManager: ObservableObject {
         guard let device = preferredDevice else { return }
         guard let uri = item.resourceURI, !uri.isEmpty else { return }
         var meta = item.resourceMetadata ?? ""
-        if meta.contains("&lt;") { meta = XMLResponseParser.xmlUnescape(meta) }
+        meta = DIDLNormalize.metadata(meta)
         _ = try await contentDirectory.addURIToSavedQueue(device: device, objectID: playlistID, uri: uri, metadata: meta)
     }
 
@@ -3455,6 +3737,56 @@ public class SonosManager: ObservableObject {
         return (triggered, librariesFound)
     }
 
+    // MARK: - Music library shares (#75)
+
+    /// One configured music-library share, per household.
+    public struct LibraryShare: Identifiable, Hashable {
+        /// Unique per household. The browse id alone is NOT unique: two
+        /// systems indexing the same NAS path report the identical
+        /// `S://host/share` id, and a `ForEach` over duplicate ids
+        /// renders one element twice — which showed both rows with the
+        /// first row's system tag and would have sent a removal to the
+        /// wrong system.
+        public var id: String { "\(householdID)|\(objectID)" }
+        /// Browse id, e.g. `S://192.168.1.10/Media/Music`. What
+        /// `DestroyObject` takes.
+        public let objectID: String
+        /// UNC path as the speaker reports it.
+        public let path: String
+        public let householdID: String
+        /// Room of the coordinator the share was read from — the same
+        /// device any mutation must be sent to.
+        public let coordinatorRoom: String
+        /// Which system indexes this share. Households running S1 beside
+        /// S2 configure the same path twice, once per system, so the
+        /// rows are otherwise indistinguishable.
+        public let systemVersion: SonosSystemVersion
+    }
+
+    /// Lists every household's configured shares. Fail-soft per system:
+    /// an unreachable coordinator contributes nothing rather than
+    /// failing the whole listing.
+    public func libraryShares() async -> [LibraryShare] {
+        var out: [LibraryShare] = []
+        for (household, group) in householdsByCoordinator() {
+            guard let coordinator = group.coordinator else { continue }
+            guard let result = try? await contentDirectory.browse(device: coordinator,
+                                                                  objectID: BrowseID.shares,
+                                                                  start: 0, count: 100) else { continue }
+            for item in result.items {
+                out.append(LibraryShare(objectID: item.objectID,
+                                        path: item.title,
+                                        householdID: household,
+                                        coordinatorRoom: coordinator.roomName,
+                                        systemVersion: group.systemVersion))
+            }
+        }
+        return out.sorted {
+            $0.path == $1.path ? $0.systemVersion.displayLabel < $1.systemVersion.displayLabel
+                               : $0.path < $1.path
+        }
+    }
+
     public func loadMusicServices() async {
         guard musicServicesList.isEmpty else { return }
         for attempt in 0..<3 {
@@ -3599,223 +3931,287 @@ public class SonosManager: ObservableObject {
             setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
         }
 
-        // Containers (local-library playlists, library albums, Sonos
-        // saved queues, streaming-service containers) report a
-        // `resourceURI` that points at the source — e.g. the raw CIFS
-        // path to `iTunes Music Library.xml` for a local playlist.
-        // `SetAVTransportURI` rejects those with UPnP fault 800 because
-        // they're containers, not playable resources. Route containers
-        // through `makeContainerURI`, which rewrites `S:` / `A:` /
-        // `SQ:` objectIDs to the Sonos-internal `x-rincon-playlist:` /
-        // `file:///jffs/` form the queue-based playlist branch below
-        // knows how to enqueue and play. Items without a recognised
-        // prefix fall through to their original `resourceURI`, so
-        // streaming-service `x-rincon-cpcontainer:` containers keep
-        // their existing path.
-        let candidateURI: String? = item.isContainer
-            ? makeContainerURI(item)
-            : item.resourceURI
-        if let uri = candidateURI, !uri.isEmpty {
-            // Unescape metadata — browse parser stores it XML-escaped
-            var meta = item.resourceMetadata ?? ""
-            if meta.contains("&lt;") {
-                meta = XMLResponseParser.xmlUnescape(meta)
-            }
+        // Every throw below this point would otherwise leave
+        // `awaitingPlayback` stuck true (spinner never clears) — clear
+        // it on the way out and rethrow.
+        do {
 
-            if uri.hasPrefix(URIPrefix.rinconContainer) {
-                // Streaming service containers (albums/playlists) —
-                // try adding to queue first, fall back to direct transport URI
-                var queueWasModified = false
-                do {
-                    try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
-                    _ = try await contentDirectory.addURIToQueue(
-                        device: coordinator, uri: uri, metadata: meta
-                    )
-                    queueWasModified = true
-                    try await avTransport.setAVTransportURI(
-                        device: coordinator, uri: "x-rincon-queue:\(coordinator.id)#0"
-                    )
-                    try await avTransport.play(device: coordinator)
-                } catch {
-                    sonosDebugLog("[PLAYBACK] Queue-based play failed, falling back to direct URI: \(error)")
-                    try await avTransport.setAVTransportURI(
-                        device: coordinator, uri: uri, metadata: meta
-                    )
-                    try await avTransport.play(device: coordinator)
-                }
-                // Optimistic .playing — see playItemsReplacingQueue.
-                var pendingMeta = initialMeta
-                if let cachedArt = discoveredArtURLs[item.objectID] ?? lookupCachedArt(uri: item.resourceURI, title: item.title) {
-                    pendingMeta.albumArtURI = cachedArt
-                }
-                groupTrackMetadata[coordinator.id] = pendingMeta
-                groupTransportStates[coordinator.id] = .playing
-                setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
-                awaitingPlayback[coordinator.id] = false
-                // Notify QueueView to reload — it was previously
-                // missing this signal when the queue-based play path
-                // ran, leaving the panel stale until the user toggled
-                // it off and back on (issue #8).
-                if queueWasModified {
-                    postQueueChanged(optimisticItems: [])
-                }
-            } else if uri.hasPrefix(URIPrefix.rinconPlaylist) || uri.hasPrefix("file:///jffs/") {
-                // Sonos playlists and library playlists — add to queue then play
-                try await withStaleHandling(for: group.name) {
-                    try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
-                    _ = try await contentDirectory.addURIToQueue(
-                        device: coordinator, uri: uri, metadata: meta
-                    )
-                    try await avTransport.setAVTransportURI(
-                        device: coordinator, uri: "x-rincon-queue:\(coordinator.id)#0"
-                    )
-                    try await avTransport.play(device: coordinator)
-                }
-                // Promote past the preflight .transitioning.
-                groupTransportStates[coordinator.id] = .playing
-                awaitingPlayback[coordinator.id] = false
-                postQueueChanged(optimisticItems: [])
-            } else {
-                // Pre-strategy gate: SMAPI service-track URIs
-                // (`x-sonos-spotify:`, `x-sonos-http:`, `x-sonos-hls:`)
-                // are rejected by direct `SetAVTransportURI` with UPnP
-                // 714 regardless of which strategy would run next. The
-                // `.smapiResolveThenEmpty` resolver makes this strictly
-                // worse for Spotify — it rewrites the URI to
-                // `x-spotify://…` which the speaker also rejects, with
-                // the side effect of stripping the DIDL metadata. We
-                // route every SMAPI service track through the queue
-                // path (same as the working "Play All" button) using
-                // the ORIGINAL `uri` + `meta`, bypassing the strategy
-                // switch entirely. Issue #42.
-                if Self.isSMAPIServiceTrackURI(uri) {
-                    // Controller-authenticated SMAPI services (Audible
-                    // sid=239, TIDAL) fault UPnP 800 on AddURIToQueue
-                    // with the raw `x-sonos-http:…?sid=…&sn=…` URI — they
-                    // have no speaker-side account binding and must be
-                    // resolved to a direct stream URL via getMediaURI
-                    // first. resolveSMAPIPlayback is a no-op for
-                    // speaker-account-bound services: Spotify keeps its
-                    // raw `x-sonos-spotify:…?sid=12` + DIDL because its
-                    // getMediaURI returns an `x-spotify://` URI the
-                    // http-guard rejects, so issue #42 is preserved.
-                    // This applies the same resolution the enqueue path
-                    // (addBrowseItemToQueue) already does — play and
-                    // enqueue now resolve identically.
-                    let (queueURI, queueMeta) = await resolveSMAPIPlayback(item, uri: uri, meta: meta)
-                    sonosDiagLog(.info, tag: "PLAYBACK",
-                                 "SMAPI single track via queue: \(item.title.isEmpty ? "<no title>" : item.title)",
-                                 context: [
-                                    "uri": queueURI,
-                                    "resolved": String(queueURI != uri),
-                                    "objectID": item.objectID,
-                                    "service": serviceLabel(for: item) ?? "unknown"
-                                 ])
+            // Containers (local-library playlists, library albums, Sonos
+            // saved queues, streaming-service containers) report a
+            // `resourceURI` that points at the source — e.g. the raw CIFS
+            // path to `iTunes Music Library.xml` for a local playlist.
+            // `SetAVTransportURI` rejects those with UPnP fault 800 because
+            // they're containers, not playable resources. Route containers
+            // through `makeContainerURI`, which rewrites `S:` / `A:` /
+            // `SQ:` objectIDs to the Sonos-internal `x-rincon-playlist:` /
+            // `file:///jffs/` form the queue-based playlist branch below
+            // knows how to enqueue and play. Items without a recognised
+            // prefix fall through to their original `resourceURI`, so
+            // streaming-service `x-rincon-cpcontainer:` containers keep
+            // their existing path.
+            let candidateURI: String? = item.isContainer
+                ? makeContainerURI(item)
+                : item.resourceURI
+            if let uri = candidateURI, !uri.isEmpty {
+                var meta = DIDLNormalize.metadata(item.resourceMetadata ?? "")
+
+                if uri.hasPrefix(URIPrefix.rinconContainer) {
+                    // Streaming service containers (albums/playlists) —
+                    // try adding to queue first, fall back to direct transport URI
+                    var queueWasModified = false
                     do {
-                        try await withStaleHandling(for: group.name) {
-                            // "Play Now" for a SMAPI single track:
-                            // match the official Sonos app — replace
-                            // the queue with this one track and play.
-                            // Sonos rejects direct `SetAVTransportURI`
-                            // for SMAPI URIs with UPnP 714, so the
-                            // queue path is the only working route.
-                            // Stop first because
-                            // `removeAllTracksFromQueue` on an
-                            // actively-playing coordinator leaves the
-                            // current track in place, which would push
-                            // the new row to position 2 and break
-                            // playback.
-                            try? await avTransport.stop(device: coordinator)
-                            try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
-                            _ = try await contentDirectory.addURIToQueue(
-                                device: coordinator, uri: queueURI, metadata: queueMeta
-                            )
-                            try await avTransport.setAVTransportURI(
-                                device: coordinator,
-                                uri: "x-rincon-queue:\(coordinator.id)#0"
-                            )
-                            try await avTransport.play(device: coordinator)
-                        }
-                        postQueueChanged(optimisticItems: [])
-                        return
+                        try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
+                        _ = try await contentDirectory.addURIToQueue(
+                            device: coordinator, uri: uri, metadata: meta
+                        )
+                        queueWasModified = true
+                        try await avTransport.setAVTransportURI(
+                            device: coordinator, uri: "x-rincon-queue:\(coordinator.id)#0"
+                        )
+                        try await avTransport.play(device: coordinator)
                     } catch {
-                        sonosDiagLog(.error, tag: "PLAYBACK",
-                                     "SMAPI single track via queue failed for \(item.title.isEmpty ? "<no title>" : item.title)",
+                        sonosDebugLog("[PLAYBACK] Queue-based play failed, falling back to direct URI: \(error)")
+                        try await avTransport.setAVTransportURI(
+                            device: coordinator, uri: uri, metadata: meta
+                        )
+                        try await avTransport.play(device: coordinator)
+                    }
+                    // Optimistic .playing — see playItemsReplacingQueue.
+                    var pendingMeta = initialMeta
+                    if let cachedArt = discoveredArtURLs[item.objectID] ?? lookupCachedArt(uri: item.resourceURI, title: item.title) {
+                        pendingMeta.albumArtURI = cachedArt
+                    }
+                    groupTrackMetadata[coordinator.id] = pendingMeta
+                    groupTransportStates[coordinator.id] = .playing
+                    setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
+                    awaitingPlayback[coordinator.id] = false
+                    // Notify QueueView to reload — it was previously
+                    // missing this signal when the queue-based play path
+                    // ran, leaving the panel stale until the user toggled
+                    // it off and back on (issue #8).
+                    if queueWasModified {
+                        postQueueChanged(optimisticItems: [])
+                    }
+                } else if uri.hasPrefix(URIPrefix.rinconPlaylist) || uri.hasPrefix("file:///jffs/") {
+                    // Sonos playlists and library playlists — add to queue then play
+                    try await withStaleHandling(for: group.name) {
+                        try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
+                        _ = try await contentDirectory.addURIToQueue(
+                            device: coordinator, uri: uri, metadata: meta
+                        )
+                        try await avTransport.setAVTransportURI(
+                            device: coordinator, uri: "x-rincon-queue:\(coordinator.id)#0"
+                        )
+                        try await avTransport.play(device: coordinator)
+                    }
+                    // Promote past the preflight .transitioning.
+                    groupTransportStates[coordinator.id] = .playing
+                    awaitingPlayback[coordinator.id] = false
+                    postQueueChanged(optimisticItems: [])
+                } else {
+                    // Pre-strategy gate: SMAPI service-track URIs
+                    // (`x-sonos-spotify:`, `x-sonos-http:`, `x-sonos-hls:`)
+                    // are rejected by direct `SetAVTransportURI` with UPnP
+                    // 714 regardless of which strategy would run next. The
+                    // `.smapiResolveThenEmpty` resolver makes this strictly
+                    // worse for Spotify — it rewrites the URI to
+                    // `x-spotify://…` which the speaker also rejects, with
+                    // the side effect of stripping the DIDL metadata. We
+                    // route every SMAPI service track through the queue
+                    // path (same as the working "Play All" button) using
+                    // the ORIGINAL `uri` + `meta`, bypassing the strategy
+                    // switch entirely. Issue #42.
+                    if Self.isSMAPIServiceTrackURI(uri) {
+                        // Controller-authenticated SMAPI services (Audible
+                        // sid=239, TIDAL) fault UPnP 800 on AddURIToQueue
+                        // with the raw `x-sonos-http:…?sid=…&sn=…` URI — they
+                        // have no speaker-side account binding and must be
+                        // resolved to a direct stream URL via getMediaURI
+                        // first. resolveSMAPIPlayback is a no-op for
+                        // speaker-account-bound services: Spotify keeps its
+                        // raw `x-sonos-spotify:…?sid=12` + DIDL because its
+                        // getMediaURI returns an `x-spotify://` URI the
+                        // http-guard rejects, so issue #42 is preserved.
+                        // This applies the same resolution the enqueue path
+                        // (addBrowseItemToQueue) already does — play and
+                        // enqueue now resolve identically.
+                        let (queueURI, queueMeta) = await resolveSMAPIPlayback(item, uri: uri, meta: meta)
+                        // Fail-fast pre-flight: a container id inside a
+                        // track-shaped item is a guaranteed UPnP 800 from
+                        // AddURIToQueue (#77 — a Spotify error row titled
+                        // "Unable to access playlist" carried a playlist
+                        // URI through this leaf path).
+                        let decodedQueueURI = queueURI.removingPercentEncoding ?? queueURI
+                        if decodedQueueURI.contains(":playlist:")
+                            || decodedQueueURI.contains(":album:")
+                            || decodedQueueURI.contains(":artist:") {
+                            sonosDiagLog(.error, tag: "PLAYBACK",
+                                         "Container id in single-track path — refusing pre-flight",
+                                         context: [
+                                            "uri": queueURI,
+                                            "title": item.title,
+                                            "service": serviceLabel(for: item) ?? "unknown"
+                                         ])
+                            throw StaleDataError.notPlayable
+                        }
+                        sonosDiagLog(.info, tag: "PLAYBACK",
+                                     "SMAPI single track via queue: \(item.title.isEmpty ? "<no title>" : item.title)",
                                      context: [
                                         "uri": queueURI,
                                         "resolved": String(queueURI != uri),
-                                        "error": String(describing: error),
+                                        "objectID": item.objectID,
                                         "service": serviceLabel(for: item) ?? "unknown"
                                      ])
-                        throw error
+                        do {
+                            try await withStaleHandling(for: group.name) {
+                                // "Play Now" for a SMAPI single track:
+                                // match the official Sonos app — replace
+                                // the queue with this one track and play.
+                                // Sonos rejects direct `SetAVTransportURI`
+                                // for SMAPI URIs with UPnP 714, so the
+                                // queue path is the only working route.
+                                // Stop first because
+                                // `removeAllTracksFromQueue` on an
+                                // actively-playing coordinator leaves the
+                                // current track in place, which would push
+                                // the new row to position 2 and break
+                                // playback.
+                                try? await avTransport.stop(device: coordinator)
+                                try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
+                                _ = try await contentDirectory.addURIToQueue(
+                                    device: coordinator, uri: queueURI, metadata: queueMeta
+                                )
+                                try await avTransport.setAVTransportURI(
+                                    device: coordinator,
+                                    uri: "x-rincon-queue:\(coordinator.id)#0"
+                                )
+                                try await avTransport.play(device: coordinator)
+                            }
+                            postQueueChanged(optimisticItems: [])
+                            return
+                        } catch {
+                            sonosDiagLog(.error, tag: "PLAYBACK",
+                                         "SMAPI single track via queue failed for \(item.title.isEmpty ? "<no title>" : item.title)",
+                                         context: [
+                                            "uri": queueURI,
+                                            "resolved": String(queueURI != uri),
+                                            "error": String(describing: error),
+                                            "service": serviceLabel(for: item) ?? "unknown"
+                                         ])
+                            throw error
+                        }
                     }
-                }
 
-                // Direct playback — dispatch on the item's per-service
-                // playback strategy. Each strategy is a closed unit: one
-                // service's quirks live in one place and changes there
-                // can't bleed into another service's path.
-                var effectiveURI = uri
-                var effectiveMeta = meta
-                switch item.playbackStrategy {
-                case .smapiResolveThenEmpty:
-                    // SMAPI search items: getMediaURI returns the direct
-                    // stream URL (with embedded credentials). The speaker
-                    // rejects the raw `x-sonosapi-stream:` SMAPI control
-                    // URI with UPnP 402, but accepts the resolved URL
-                    // with empty DIDL. Recently-played items already hold
-                    // the resolved URL via play history.
-                    (effectiveURI, effectiveMeta) = await resolveSMAPIPlayback(item, uri: uri, meta: meta)
-                case .directURIWithDIDL:
-                    // TuneIn music stations (s-prefix), Sonos favourites,
-                    // raw HTTP/HLS, line-in, etc. The URI is the
-                    // authoritative target and the DIDL carries cdudn /
-                    // source identification the speaker needs
-                    // (SA_RINCON3079_ for TuneIn). No resolve, no
-                    // metadata stripping.
-                    break
-                case .tuneInResolveViaRadioTime:
-                    // TuneIn topics / programs / podcast episodes
-                    // (t/p/g-prefix). Resolve via RadioTime's Tune.ashx
-                    // to the direct CDN URL, then play queue-based
-                    // (AddURIToQueue + SetAVTransportURI to queue +
-                    // play). Queue-based play is required because:
-                    //   - x-sonosapi-stream: rejects topics with 800
-                    //     (they're not audioBroadcasts).
-                    //   - x-rincon-mp3radio://<host_and_path> strips
-                    //     https:// and fails on HSTS-protected CDNs
-                    //     (fireside.fm rejects the speaker's plain
-                    //     HTTP fetch).
-                    //   - x-rincon-mp3radio:https://... is rejected
-                    //     with UPnP 714 (Illegal MIME Type).
-                    // AddURIToQueue with the raw https:// URL plus a
-                    // track DIDL declaring the MIME lets Sonos's queue
-                    // fetcher use TLS correctly. Mirrors how the
-                    // official app handles podcast playback.
-                    let guideId = item.objectID.hasPrefix("tunein:")
-                        ? String(item.objectID.dropFirst("tunein:".count))
-                        : item.objectID
-                    if let resolved = await ServiceSearchProvider.shared.resolveTuneIn(guideId: guideId) {
-                        let trackDIDL = ServiceSearchProvider.shared.buildDirectHTTPTrackDIDL(
-                            title: item.title,
-                            artist: item.artist ?? "",
-                            url: resolved.directURL,
-                            mediaType: resolved.mediaType
-                        )
+                    // Direct playback — dispatch on the item's per-service
+                    // playback strategy. Each strategy is a closed unit: one
+                    // service's quirks live in one place and changes there
+                    // can't bleed into another service's path.
+                    var effectiveURI = uri
+                    var effectiveMeta = meta
+                    switch item.playbackStrategy {
+                    case .smapiResolveThenEmpty:
+                        // SMAPI search items: getMediaURI returns the direct
+                        // stream URL (with embedded credentials). The speaker
+                        // rejects the raw `x-sonosapi-stream:` SMAPI control
+                        // URI with UPnP 402, but accepts the resolved URL
+                        // with empty DIDL. Recently-played items already hold
+                        // the resolved URL via play history.
+                        (effectiveURI, effectiveMeta) = await resolveSMAPIPlayback(item, uri: uri, meta: meta)
+                    case .directURIWithDIDL:
+                        // TuneIn music stations (s-prefix), Sonos favourites,
+                        // raw HTTP/HLS, line-in, etc. The URI is the
+                        // authoritative target and the DIDL carries cdudn /
+                        // source identification the speaker needs
+                        // (SA_RINCON3079_ for TuneIn). No resolve, no
+                        // metadata stripping.
+                        break
+                    case .tuneInResolveViaRadioTime:
+                        // TuneIn topics / programs / podcast episodes
+                        // (t/p/g-prefix). Resolve via RadioTime's Tune.ashx
+                        // to the direct CDN URL, then play queue-based
+                        // (AddURIToQueue + SetAVTransportURI to queue +
+                        // play). Queue-based play is required because:
+                        //   - x-sonosapi-stream: rejects topics with 800
+                        //     (they're not audioBroadcasts).
+                        //   - x-rincon-mp3radio://<host_and_path> strips
+                        //     https:// and fails on HSTS-protected CDNs
+                        //     (fireside.fm rejects the speaker's plain
+                        //     HTTP fetch).
+                        //   - x-rincon-mp3radio:https://... is rejected
+                        //     with UPnP 714 (Illegal MIME Type).
+                        // AddURIToQueue with the raw https:// URL plus a
+                        // track DIDL declaring the MIME lets Sonos's queue
+                        // fetcher use TLS correctly. Mirrors how the
+                        // official app handles podcast playback.
+                        let guideId = item.objectID.hasPrefix("tunein:")
+                            ? String(item.objectID.dropFirst("tunein:".count))
+                            : item.objectID
+                        if let resolved = await ServiceSearchProvider.shared.resolveTuneIn(guideId: guideId) {
+                            let trackDIDL = ServiceSearchProvider.shared.buildDirectHTTPTrackDIDL(
+                                title: item.title,
+                                artist: item.artist ?? "",
+                                url: resolved.directURL,
+                                mediaType: resolved.mediaType
+                            )
+                            sonosDiagLog(.info, tag: "PLAYBACK",
+                                         "TuneIn topic via queue: \(item.title)",
+                                         context: [
+                                            "guideId": guideId,
+                                            "directURL": resolved.directURL,
+                                            "mediaType": resolved.mediaType
+                                         ])
+                            do {
+                                try await withStaleHandling(for: group.name) {
+                                    try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
+                                    _ = try await contentDirectory.addURIToQueue(
+                                        device: coordinator,
+                                        uri: resolved.directURL,
+                                        metadata: trackDIDL
+                                    )
+                                    try await avTransport.setAVTransportURI(
+                                        device: coordinator,
+                                        uri: "x-rincon-queue:\(coordinator.id)#0"
+                                    )
+                                    try await avTransport.play(device: coordinator)
+                                }
+                                // Optimistic .playing — see playItemsReplacingQueue.
+                                // Without it a stale AVT SUBSCRIBE callback after a
+                                // network-path change can leave the UI on .transitioning.
+                                groupTransportStates[coordinator.id] = .playing
+                                awaitingPlayback[coordinator.id] = false
+                                postQueueChanged(optimisticItems: [])
+                                return
+                            } catch {
+                                sonosDiagLog(.error, tag: "PLAYBACK",
+                                             "TuneIn topic queue-based play failed",
+                                             context: [
+                                                "guideId": guideId,
+                                                "directURL": resolved.directURL,
+                                                "error": String(describing: error)
+                                             ])
+                                throw error
+                            }
+                        } else {
+                            sonosDiagLog(.warning, tag: "PLAYBACK",
+                                         "TuneIn Tune.ashx resolve returned no playable URL; falling back to raw URI",
+                                         context: ["guideId": guideId])
+                        }
+                    case .directHTTPSQueue:
+                        // Direct finite HTTPS media file that isn't a Sonos
+                        // service (e.g. a public Suno CDN MP3). `uri` is already
+                        // the direct CDN URL and `meta` already carries the
+                        // http-get track DIDL — no resolve step. Direct
+                        // SetAVTransportURI of a raw https:// URL is rejected
+                        // (UPnP 714); queue-based play is the only working route,
+                        // identical to the TuneIn-topic branch above.
                         sonosDiagLog(.info, tag: "PLAYBACK",
-                                     "TuneIn topic via queue: \(item.title)",
-                                     context: [
-                                        "guideId": guideId,
-                                        "directURL": resolved.directURL,
-                                        "mediaType": resolved.mediaType
-                                     ])
+                                     "Direct HTTPS queue play: \(item.title.isEmpty ? "<no title>" : item.title)",
+                                     context: ["uri": uri])
                         do {
                             try await withStaleHandling(for: group.name) {
                                 try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
                                 _ = try await contentDirectory.addURIToQueue(
-                                    device: coordinator,
-                                    uri: resolved.directURL,
-                                    metadata: trackDIDL
+                                    device: coordinator, uri: uri, metadata: meta
                                 )
                                 try await avTransport.setAVTransportURI(
                                     device: coordinator,
@@ -3824,124 +4220,83 @@ public class SonosManager: ObservableObject {
                                 try await avTransport.play(device: coordinator)
                             }
                             // Optimistic .playing — see playItemsReplacingQueue.
-                            // Without it a stale AVT SUBSCRIBE callback after a
-                            // network-path change can leave the UI on .transitioning.
                             groupTransportStates[coordinator.id] = .playing
                             awaitingPlayback[coordinator.id] = false
                             postQueueChanged(optimisticItems: [])
                             return
                         } catch {
                             sonosDiagLog(.error, tag: "PLAYBACK",
-                                         "TuneIn topic queue-based play failed",
-                                         context: [
-                                            "guideId": guideId,
-                                            "directURL": resolved.directURL,
-                                            "error": String(describing: error)
-                                         ])
+                                         "Direct HTTPS queue play failed",
+                                         context: ["uri": uri, "error": String(describing: error)])
                             throw error
                         }
-                    } else {
-                        sonosDiagLog(.warning, tag: "PLAYBACK",
-                                     "TuneIn Tune.ashx resolve returned no playable URL; falling back to raw URI",
-                                     context: ["guideId": guideId])
                     }
-                case .directHTTPSQueue:
-                    // Direct finite HTTPS media file that isn't a Sonos
-                    // service (e.g. a public Suno CDN MP3). `uri` is already
-                    // the direct CDN URL and `meta` already carries the
-                    // http-get track DIDL — no resolve step. Direct
-                    // SetAVTransportURI of a raw https:// URL is rejected
-                    // (UPnP 714); queue-based play is the only working route,
-                    // identical to the TuneIn-topic branch above.
+                    sonosDebugLog("[PLAYBACK] SetAVTransportURI: \(effectiveURI.prefix(80))")
                     sonosDiagLog(.info, tag: "PLAYBACK",
-                                 "Direct HTTPS queue play: \(item.title.isEmpty ? "<no title>" : item.title)",
-                                 context: ["uri": uri])
+                                 "Direct play attempt: \(item.title.isEmpty ? "<no title>" : item.title)",
+                                 context: [
+                                    "uri": effectiveURI,
+                                    "uri_original": uri,
+                                    "didl_metadata": meta,
+                                    "sent_metadata": effectiveMeta,
+                                    "title": item.title,
+                                    "artist": item.artist ?? "",
+                                    "service": serviceLabel(for: item) ?? "unknown",
+                                    "objectID": item.objectID
+                                 ])
                     do {
                         try await withStaleHandling(for: group.name) {
-                            try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
-                            _ = try await contentDirectory.addURIToQueue(
-                                device: coordinator, uri: uri, metadata: meta
-                            )
                             try await avTransport.setAVTransportURI(
-                                device: coordinator,
-                                uri: "x-rincon-queue:\(coordinator.id)#0"
+                                device: coordinator, uri: effectiveURI, metadata: effectiveMeta
                             )
                             try await avTransport.play(device: coordinator)
                         }
-                        // Optimistic .playing — see playItemsReplacingQueue.
-                        groupTransportStates[coordinator.id] = .playing
-                        awaitingPlayback[coordinator.id] = false
-                        postQueueChanged(optimisticItems: [])
-                        return
                     } catch {
+                        // Capture the URI + metadata that triggered the failure so
+                        // diagnostics can pinpoint single-track service plays that
+                        // need queue-routed handling instead.
                         sonosDiagLog(.error, tag: "PLAYBACK",
-                                     "Direct HTTPS queue play failed",
-                                     context: ["uri": uri, "error": String(describing: error)])
+                                     "Direct play failed for \(item.title.isEmpty ? "<no title>" : item.title)",
+                                     context: [
+                                        "uri": uri,
+                                        "didl_metadata": meta,
+                                        "error": String(describing: error),
+                                        "title": item.title,
+                                        "artist": item.artist ?? "",
+                                        "service": serviceLabel(for: item) ?? "unknown"
+                                     ])
+                        // A persistent 701 on a single-track direct play (after the
+                        // stale-handling rescan) means the speaker can't resolve the
+                        // URI — almost always because the track's service/library
+                        // isn't set up on this speaker's system. Surface that
+                        // instead of a misleading "speaker layout changed" error.
+                        if case StaleDataError.topologyStale = error {
+                            throw StaleDataError.serviceUnavailable
+                        }
                         throw error
                     }
+                    // Optimistic .playing — see playItemsReplacingQueue.
+                    groupTransportStates[coordinator.id] = .playing
+                    awaitingPlayback[coordinator.id] = false
+                    // Direct-URI playback bypasses the queue, but `Play
+                    // Now` semantics imply replacing whatever was there;
+                    // a notification triggers a Browse(Q:0) so the panel
+                    // shows the newly-empty (or radio-streaming) state.
+                    postQueueChanged(optimisticItems: [])
                 }
-                sonosDebugLog("[PLAYBACK] SetAVTransportURI: \(effectiveURI.prefix(80))")
-                sonosDiagLog(.info, tag: "PLAYBACK",
-                             "Direct play attempt: \(item.title.isEmpty ? "<no title>" : item.title)",
-                             context: [
-                                "uri": effectiveURI,
-                                "uri_original": uri,
-                                "didl_metadata": meta,
-                                "sent_metadata": effectiveMeta,
-                                "title": item.title,
-                                "artist": item.artist ?? "",
-                                "service": serviceLabel(for: item) ?? "unknown",
-                                "objectID": item.objectID
-                             ])
-                do {
-                    try await withStaleHandling(for: group.name) {
-                        try await avTransport.setAVTransportURI(
-                            device: coordinator, uri: effectiveURI, metadata: effectiveMeta
-                        )
-                        try await avTransport.play(device: coordinator)
-                    }
-                } catch {
-                    // Capture the URI + metadata that triggered the failure so
-                    // diagnostics can pinpoint single-track service plays that
-                    // need queue-routed handling instead.
-                    sonosDiagLog(.error, tag: "PLAYBACK",
-                                 "Direct play failed for \(item.title.isEmpty ? "<no title>" : item.title)",
-                                 context: [
-                                    "uri": uri,
-                                    "didl_metadata": meta,
-                                    "error": String(describing: error),
-                                    "title": item.title,
-                                    "artist": item.artist ?? "",
-                                    "service": serviceLabel(for: item) ?? "unknown"
-                                 ])
-                    // A persistent 701 on a single-track direct play (after the
-                    // stale-handling rescan) means the speaker can't resolve the
-                    // URI — almost always because the track's service/library
-                    // isn't set up on this speaker's system. Surface that
-                    // instead of a misleading "speaker layout changed" error.
-                    if case StaleDataError.topologyStale = error {
-                        throw StaleDataError.serviceUnavailable
-                    }
-                    throw error
+            } else if item.isContainer {
+                try await withStaleHandling(for: group.name) {
+                    try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
+                    let containerURI = makeContainerURI(item)
+                    _ = try await contentDirectory.addURIToQueue(device: coordinator, uri: containerURI)
+                    try await avTransport.setAVTransportURI(device: coordinator, uri: "x-rincon-queue:\(coordinator.id)#0")
+                    try await avTransport.play(device: coordinator)
                 }
-                // Optimistic .playing — see playItemsReplacingQueue.
-                groupTransportStates[coordinator.id] = .playing
-                awaitingPlayback[coordinator.id] = false
-                // Direct-URI playback bypasses the queue, but `Play
-                // Now` semantics imply replacing whatever was there;
-                // a notification triggers a Browse(Q:0) so the panel
-                // shows the newly-empty (or radio-streaming) state.
                 postQueueChanged(optimisticItems: [])
             }
-        } else if item.isContainer {
-            try await withStaleHandling(for: group.name) {
-                try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
-                let containerURI = makeContainerURI(item)
-                _ = try await contentDirectory.addURIToQueue(device: coordinator, uri: containerURI)
-                try await avTransport.setAVTransportURI(device: coordinator, uri: "x-rincon-queue:\(coordinator.id)#0")
-                try await avTransport.play(device: coordinator)
-            }
-            postQueueChanged(optimisticItems: [])
+        } catch {
+            awaitingPlayback[coordinator.id] = false
+            throw error
         }
     }
 
@@ -3997,8 +4352,8 @@ public class SonosManager: ObservableObject {
             return try await addBrowseItemToQueue(items[0], in: group, playNext: playNext)
         }
         guard let coordinator = group.coordinator else { return 0 }
-        isAddingToQueue = true
-        defer { isAddingToQueue = false }
+        beginAddingToQueue()
+        defer { endAddingToQueue() }
 
         var uris: [String] = []
         var metas: [String] = []
@@ -4018,10 +4373,7 @@ public class SonosManager: ObservableObject {
             // containers (see the singular `addBrowseItemToQueue`).
             guard let uri = item.resourceURI, !uri.isEmpty else { continue }
             uris.append(uri)
-            var meta = item.resourceMetadata ?? ""
-            if meta.contains("&lt;") {
-                meta = XMLResponseParser.xmlUnescape(meta)
-            }
+            let meta = DIDLNormalize.metadata(item.resourceMetadata ?? "")
             metas.append(meta)
             optimisticSource.append(item)
             // Cache track info for queue-row recovery: Apple Music enqueues
@@ -4139,7 +4491,7 @@ public class SonosManager: ObservableObject {
                     let item = optimisticSource[i]
                     guard let uri = item.resourceURI, !uri.isEmpty else { continue }
                     var meta = item.resourceMetadata ?? ""
-                    if meta.contains("&lt;") { meta = XMLResponseParser.xmlUnescape(meta) }
+                    meta = DIDLNormalize.metadata(meta)
                     let target = insertAt > 0 ? insertAt + i : 0
                     do {
                         let pos = try await contentDirectory.addURIToQueue(
@@ -4232,8 +4584,8 @@ public class SonosManager: ObservableObject {
 
     public func addBrowseItemToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool = false, atPosition: Int = 0) async throws -> Int {
         guard let coordinator = group.coordinator else { return 0 }
-        isAddingToQueue = true
-        defer { isAddingToQueue = false }
+        beginAddingToQueue()
+        defer { endAddingToQueue() }
 
         // Determine insertion position
         var insertAt = atPosition
@@ -4251,11 +4603,7 @@ public class SonosManager: ObservableObject {
         }
 
         if let rawURI = item.resourceURI, !rawURI.isEmpty {
-            // Unescape metadata — browse parser stores it XML-escaped
-            var rawMeta = item.resourceMetadata ?? ""
-            if rawMeta.contains("&lt;") {
-                rawMeta = XMLResponseParser.xmlUnescape(rawMeta)
-            }
+            let rawMeta = DIDLNormalize.metadata(item.resourceMetadata ?? "")
             // Resolve controller-authenticated SMAPI items (e.g. TIDAL) to a
             // direct stream URL with empty DIDL — same step the play path
             // applies. Without it the raw `sid=…&sn=…` URI faults UPnP 800.
@@ -4514,6 +4862,50 @@ extension SonosManager: TransportStrategyDelegate {
     /// when a station "won't play", the bundle now contains an
     /// explicit `[TUNEIN-AD]` event so it's clear Sonos's ad backend
     /// is the cause, not Choragus.
+    /// Diagnostics for speaker-side early track advances. A track that
+    /// changes while the previous one had ≥ 20 s left — with no
+    /// controller transport command in the last 8 s — is the signature
+    /// of a stream-delivery failure (the speaker abandons the track and
+    /// moves on without surfacing any UPnP fault to controllers).
+    /// Detection only; playback is untouched.
+    private func logEarlyTrackAdvanceIfNeeded(groupID: String, incoming: TrackMetadata) {
+        guard let newURI = incoming.trackURI, !newURI.isEmpty else { return }
+        defer { lastTrackIdentity[groupID] = (newURI, incoming.title) }
+        guard let previous = lastTrackIdentity[groupID], previous.uri != newURI else { return }
+        let position = positionTracker.groupPositions[groupID] ?? 0
+        let duration = positionTracker.groupDurations[groupID] ?? 0
+        guard duration > 60, position > 5, duration - position >= 20 else { return }
+        if let commandAt = lastControllerTransportCommandAt[groupID],
+           Date().timeIntervalSince(commandAt) < 8 { return }
+        sonosDiagLog(.warning, tag: "PLAYBACK",
+                     "Track advanced early — possible stream failure",
+                     context: [
+                        "previousTitle": previous.title,
+                        "playedSeconds": String(Int(position)),
+                        "durationSeconds": String(Int(duration)),
+                        "shortfallSeconds": String(Int(duration - position)),
+                        "nextTitle": incoming.title
+                     ])
+
+        // One early advance is ordinary — a user skip that raced the
+        // command window, or a single bad track. Several in a row is a
+        // queue whose media URLs no longer resolve: the speaker plays
+        // silence, advances, and reports no fault, so nothing reaches the
+        // user unless we say so. Observed with TIDAL queue entries holding
+        // an expired pre-signed URL; re-adding the track fixes it.
+        let now = Date()
+        var recent = (earlyAdvances[groupID] ?? []).filter { now.timeIntervalSince($0) < 60 }
+        recent.append(now)
+        earlyAdvances[groupID] = recent
+        if recent.count >= 3, now.timeIntervalSince(lastEarlyAdvanceReportAt[groupID] ?? .distantPast) > 120 {
+            lastEarlyAdvanceReportAt[groupID] = now
+            earlyAdvances[groupID] = []
+            ErrorHandler.shared.handle(StaleDataError.tracksSkippingEarly,
+                                       context: "PLAYBACK", userFacing: true)
+        }
+    }
+
+
     private func detectTuneInAdLoop(groupID: String, metadata: TrackMetadata) {
         let adURI: String? = {
             // Only an actively-playing group can be "in" an ad pre-roll. A
@@ -4567,12 +4959,29 @@ extension SonosManager: TransportStrategyDelegate {
         // trackURI change instead, which converges on the right state
         // regardless of which source happened to be racy this time.
         detectTuneInAdLoop(groupID: groupID, metadata: metadata)
+        logEarlyTrackAdvanceIfNeeded(groupID: groupID, incoming: metadata)
+
+        // Only GetMediaInfo reports `CurrentURI`, so event-sourced updates
+        // leave `isQueueSource` at its false default. Publishing that
+        // default killed the queue highlight, bars and auto-scroll on every
+        // event-driven advance, so the last observed value carries forward.
+        // The inherited value is not marked as observed (one carry-forward
+        // must not authorise the next), and a radio-scheme track URI drops
+        // it outright — otherwise queue→radio keeps the queue UI lit.
+        var metadata = metadata
+        if !metadata.didReportTransportSource,
+           let existing = groupTrackMetadata[groupID],
+           existing.didReportTransportSource {
+            let uri = metadata.trackURI ?? ""
+            let looksLikeStream = !uri.isEmpty && URIPrefix.isRadio(uri)
+            metadata.isQueueSource = looksLikeStream ? false : existing.isQueueSource
+            if metadata.queueSize == 0 { metadata.queueSize = existing.queueSize }
+        }
 
         // Suno normalization up front so it applies on every path below
         // (including the first-metadata and station-change early returns):
         // derive the cover from the clip id, recover the persisted title, and
         // lazily fetch it if this clip has never been resolved.
-        var metadata = metadata
         if let uri = metadata.trackURI, let uuid = SunoCatalog.uuid(fromURI: uri) {
             metadata.albumArtURI = SunoCatalog.coverURL(forUUID: uuid)
             if let t = SunoCatalog.title(forUUID: uuid) {
@@ -4867,6 +5276,25 @@ extension SonosManager: TransportStrategyDelegate {
         if !trackChanged, updated.audioFormat == .unknown,
            existing.audioFormat != .unknown {
             updated.audioFormat = existing.audioFormat
+            updated.streamInfoRaw = existing.streamInfoRaw
+        }
+        // The carry-over above only survives same-track rebuilds. A
+        // transient bogus publish (#47-class HLS-static leak: a stray
+        // song id with flags=0 flashes in and back) makes the
+        // flip-back a track CHANGE, and streamInfo is only broadcast
+        // at transitions — the returning track would stay `.unknown`
+        // for its remainder. Format evidence is remembered per URI and
+        // restored on any flip-back. Observed live 2026-08-08: Silence
+        // (Instrumental) atmos → stray publish → same URI back as
+        // unknown, pills gone.
+        if updated.audioFormat == .unknown, let uri = updated.trackURI,
+           let remembered = groupFormatMemory.recall(group: groupID, uri: uri) {
+            updated.audioFormat = remembered.format
+            updated.streamInfoRaw = remembered.streamInfo
+        } else if let uri = updated.trackURI {
+            groupFormatMemory.remember(group: groupID, uri: uri,
+                                       format: updated.audioFormat,
+                                       streamInfo: updated.streamInfoRaw)
         }
         // Same sticky-carry-over for the TV/HDMI audio format. Only
         // `fetchGroupState` (reconciliation poll) repopulates it from
@@ -4916,6 +5344,20 @@ extension SonosManager: TransportStrategyDelegate {
         if changed {
             tagPublish("metadata")
             groupTrackMetadata[groupID] = updated
+        }
+
+        // Record the delivery format on every content publish — track
+        // changes AND late format decodes (streamInfo often settles
+        // after track start, and the sticky carry-over above keeps it
+        // attached). Covers normal audio: HDMI sources are skipped
+        // inside the observer, which records them via HTAudioIn.
+        if changed, !updated.title.isEmpty,
+           let uri = updated.trackURI, !uri.isEmpty {
+            AudioFormatObserver.shared.recordTrack(
+                uri: uri,
+                streamInfo: updated.streamInfoRaw,
+                audioFormat: updated.audioFormat,
+                room: devices[groupID]?.roomName ?? "")
         }
 
         // Log to play history for all groups — only when the metadata
@@ -5462,11 +5904,16 @@ extension SonosManager: TransportStrategyDelegate {
                     members.append(dev)
                 }
             }
-            let group = SonosGroup(id: gd.id, coordinatorID: gd.coordinatorUUID, members: members)
+            let stableMembers = members.sorted { $0.id < $1.id }
+            let group = SonosGroup(id: gd.id,
+                                   coordinatorID: resolvedCoordinatorID(for: gd,
+                                                                        visibleMembers: stableMembers),
+                                   members: stableMembers)
             newGroups.append(group)
         }
 
         self.groups = newGroups.sorted { $0.name < $1.name }
+        logTopologyOutcome("event", groups: self.groups)
         saveCache()
 
         // Notify transport strategy about topology change

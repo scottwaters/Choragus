@@ -26,6 +26,13 @@ public enum TrackMetadataSource: Sendable {
 
 // MARK: - Protocol
 
+/// Main-actor isolated: strategy implementations hold mutable state
+/// (current groups/devices, SID maps, liveness sets) that was
+/// previously mutated from whatever pool thread ran each async call —
+/// concurrent topology refreshes corrupted a probe-miss Dictionary and
+/// crashed (SIGABRT in `probeLiveness`, 2026-08-06). Isolation
+/// serializes all state access; network awaits still run off-actor.
+@MainActor
 public protocol TransportStrategy: AnyObject {
     func start(groups: [SonosGroup], devices: [String: SonosDevice]) async
     func stop() async
@@ -76,7 +83,7 @@ public protocol TransportStrategyDelegate: AnyObject {
 
 // MARK: - Hybrid Event-First Transport
 
-public final class HybridEventFirstTransport: TransportStrategy, @unchecked Sendable {
+public final class HybridEventFirstTransport: TransportStrategy {
     public weak var delegate: TransportStrategyDelegate?
 
     private var eventListener: EventListener?
@@ -95,6 +102,19 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
     // honour. Probed once per (re)start; refreshed by
     // `restartForNetworkChange()` because that calls stop()+start().
     private var liveDeviceIDs: Set<String> = []
+
+    // Network-change rebuild coalescing — see `restartForNetworkChange`.
+    private var isRebuildingForNetworkChange = false
+    private var networkRebuildPending = false
+    /// Bumped by every start()/stop(). A start() that finds the
+    /// generation changed after its awaits has been superseded and must
+    /// not install its renewal loop (the orphaned-loop failure mode).
+    private var lifecycleGeneration = 0
+    /// SUBSCRIBE calls currently in flight, keyed `deviceID|service`.
+    /// The SID map only records a subscription AFTER its network
+    /// round-trip, so overlapping `onGroupsChanged` passes both saw
+    /// "not subscribed" and double-subscribed the same coordinator.
+    private var subscribesInFlight: Set<String> = []
     /// Consecutive failed liveness probes per device. A device must miss two
     /// probes in a row before it's dropped from `liveDeviceIDs` — a single
     /// 2.5 s timeout under network contention shouldn't sever a working
@@ -157,11 +177,23 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
     public func start(groups: [SonosGroup], devices: [String: SonosDevice]) async {
         guard !isRunning else { return }
         isRunning = true
+        lifecycleGeneration += 1
+        let generation = lifecycleGeneration
         currentGroups = groups
         currentDevices = devices
 
         // Start event listener and subscriptions (best-effort — reconciliation is the safety net)
         let listener = EventListener()
+        // Handler installed BEFORE the socket binds: the callback port is
+        // stable across launches, so a speaker holding an orphaned
+        // prior-session subscription can NOTIFY the instant the bind
+        // completes — assigning the closure afterwards raced that
+        // delivery (unsynchronized closure write vs NW-queue read).
+        listener.onEvent = { [weak self] sid, seq, body in
+            Task { @MainActor [weak self] in
+                self?.handleEvent(sid: sid, seq: seq, body: body)
+            }
+        }
         do {
             try listener.start()
             if let callbackURL = listener.callbackURL {
@@ -169,14 +201,19 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                 let subManager = EventSubscriptionManager(callbackURL: callbackURL)
                 self.subscriptionManager = subManager
 
-                listener.onEvent = { [weak self] sid, seq, body in
-                    Task { @MainActor [weak self] in
-                        self?.handleEvent(sid: sid, seq: seq, body: body)
-                    }
-                }
-
                 await subscribeToAll(groups: groups, devices: devices)
 
+                // A stop()/restart that interleaved with the awaits above
+                // has superseded this start — installing the renewal loop
+                // now would orphan it forever (nothing stops a loop whose
+                // manager was already discarded). Tear down and yield to
+                // the newer lifecycle.
+                guard lifecycleGeneration == generation else {
+                    sonosDebugLog("[TRANSPORT] start() superseded mid-flight (gen \(generation) -> \(lifecycleGeneration)) — tearing down stale listener")
+                    listener.stop()
+                    await subManager.unsubscribeAll()
+                    return
+                }
                 subManager.startRenewalLoop { [weak self] expiredSub in
                     Task { [weak self] in
                         await self?.resubscribe(expiredSub)
@@ -198,6 +235,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
     public func stop() async {
         isRunning = false
+        lifecycleGeneration += 1
         positionPollingTask?.cancel()
         positionPollingTask = nil
         reconciliationTask?.cancel()
@@ -216,11 +254,27 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
     public func restartForNetworkChange() async {
         guard isRunning else { return }
-        let groups = currentGroups
-        let devices = currentDevices
-        sonosDebugLog("[TRANSPORT] Network path changed — rebuilding event subscriptions (\(groups.count) groups, \(devices.count) devices)")
-        await stop()
-        await start(groups: groups, devices: devices)
+        // Coalesce bursts. Path changes arrive in quick succession while
+        // an interface settles (two 3 s apart observed 2026-07-22); a
+        // second rebuild entering while the first was mid-subscribe
+        // cancelled all of the first's in-flight SUBSCRIBEs and left the
+        // pipeline with no subscriptions until the second finished. One
+        // rebuild runs at a time; changes arriving during it fold into
+        // one trailing re-run.
+        if isRebuildingForNetworkChange {
+            networkRebuildPending = true
+            return
+        }
+        isRebuildingForNetworkChange = true
+        defer { isRebuildingForNetworkChange = false }
+        repeat {
+            networkRebuildPending = false
+            let groups = currentGroups
+            let devices = currentDevices
+            sonosDebugLog("[TRANSPORT] Network path changed — rebuilding event subscriptions (\(groups.count) groups, \(devices.count) devices)")
+            await stop()
+            await start(groups: groups, devices: devices)
+        } while networkRebuildPending
     }
 
     public func onGroupsChanged(_ groups: [SonosGroup], devices: [String: SonosDevice]) async {
@@ -266,12 +320,28 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
         // Take thread-safe snapshots
         let (deviceSnapshot, serviceSnapshot) = snapshotSIDs()
 
-        // Subscribe to topology from one device
-        if let anyDevice = groups.first?.coordinator ?? devices.values.first {
-            let alreadySubscribed = serviceSnapshot.values.contains("topology")
-            if !alreadySubscribed {
-                await subscribeToService(device: anyDevice, path: Self.topologyPath, serviceType: "topology", manager: subManager)
-            }
+        // Subscribe to ZoneGroupTopology once per household. A topology
+        // subscription only reports the household of the device it is made
+        // against, so a single subscription left the other household's
+        // group changes invisible until an SSDP-triggered refresh — and
+        // which household was covered depended on unordered `groups.first`.
+        let coveredHouseholds = Set(serviceSnapshot.compactMap { sid, service -> String? in
+            guard service == "topology", let deviceID = deviceSnapshot[sid] else { return nil }
+            let device = devices[deviceID] ?? currentDevices[deviceID]
+            return device?.householdID ?? deviceID
+        })
+        var topologyCandidates: [String: SonosDevice] = [:]
+        for group in groups {
+            guard let coordinator = group.coordinator else { continue }
+            let household = coordinator.householdID ?? coordinator.id
+            guard !coveredHouseholds.contains(household) else { continue }
+            // Keep an already-chosen live candidate; otherwise take this
+            // one (a later live coordinator replaces a dead earlier pick).
+            if let existing = topologyCandidates[household], liveDeviceIDs.contains(existing.id) { continue }
+            topologyCandidates[household] = coordinator
+        }
+        for device in topologyCandidates.values {
+            await subscribeToService(device: device, path: Self.topologyPath, serviceType: "topology", manager: subManager)
         }
 
         // Subscribe to AVTransport on each coordinator
@@ -314,6 +384,14 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             sonosDebugLog("[TRANSPORT] Skipping SUBSCRIBE for unreachable \(device.roomName) \(serviceType) — liveness probe failed")
             return
         }
+        // Reentrancy guard: overlapping subscribeToAll passes (topology
+        // NOTIFY bursts) interleave at every await; without this, both
+        // passes see the SID map without the not-yet-landed subscription
+        // and SUBSCRIBE the same device+service twice.
+        let inFlightKey = "\(device.id)|\(serviceType)"
+        guard !subscribesInFlight.contains(inFlightKey) else { return }
+        subscribesInFlight.insert(inFlightKey)
+        defer { subscribesInFlight.remove(inFlightKey) }
         do {
             let sub = try await manager.subscribe(device: device, servicePath: path)
             setSID(sub.sid, device: device.id, service: serviceType)
@@ -394,7 +472,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
         }
     }
 
-    private static func probe(device: SonosDevice, session: URLSession) async -> String? {
+    private nonisolated static func probe(device: SonosDevice, session: URLSession) async -> String? {
         guard let url = URL(string: "http://\(device.ip):\(device.port)/xml/device_description.xml") else { return nil }
         do {
             let (_, response) = try await session.data(from: url)
@@ -492,6 +570,16 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             return
         }
 
+        // Record the decoded stream format (first sighting per launch
+        // is diag-logged; distinct formats persist for playback tags).
+        // `.unknown` here means an empty/all-zero descriptor — the
+        // speaker hasn't decoded yet, not a new format — so skip it.
+        if eventAudioFormat != .unknown {
+            AudioFormatObserver.shared.recordStreamInfo(
+                bodyStreamInfo, mapped: eventAudioFormat,
+                room: group.coordinator?.roomName ?? "")
+        }
+
         if let state = event.transportState {
             delegate?.transportDidUpdateState(group.coordinatorID, state: state)
         }
@@ -511,7 +599,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             // Radio/stream: parse r:streamContent for current track info (Artist - Title)
             // enrichFromDIDL only extracts dc:title (station name) — the actual song info
             // lives in r:streamContent which must be parsed separately.
-            let unescaped = didlXML.contains("&lt;") ? XMLResponseParser.xmlUnescape(didlXML) : didlXML
+            let unescaped = DIDLNormalize.metadata(didlXML)
             let parsed = XMLResponseParser.parseDIDLMetadata(unescaped)
             // Fallback: if streamContent is empty (bare & breaks XML parser), extract with string matching
             let streamContent: String? = {
@@ -537,6 +625,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             // the merged TrackMetadata.
             if eventAudioFormat != .unknown {
                 metadata.audioFormat = eventAudioFormat
+                metadata.streamInfoRaw = bodyStreamInfo
             }
 
             delegate?.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: metadata, source: .event)
@@ -544,6 +633,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             // Event has URI/duration but no DIDL — trigger a position refresh
             // This happens on some radio stations when tracks change
             let capturedAudioFormat = eventAudioFormat
+            let capturedStreamInfo = bodyStreamInfo
             Task {
                 guard let delegate = await self.delegate else { return }
                 let avTransport = await delegate.getAVTransportService()
@@ -556,6 +646,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                     }
                     if capturedAudioFormat != .unknown {
                         enriched.audioFormat = capturedAudioFormat
+                        enriched.streamInfoRaw = capturedStreamInfo
                     }
                     await delegate.transportDidUpdateTrackMetadata(group.coordinatorID, metadata: enriched, source: .event)
                 }
@@ -681,7 +772,11 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                trackURI.contains("x-sonos-htastream:") ||
                trackURI.contains("x-rincon-stream:") {
                 if let raw = try? await zoneTopology.getHTAudioIn(device: coordinator) {
-                    enrichedPosition.tvAudioFormat = TVAudioFormat.from(htAudioIn: raw)
+                    let mapped = TVAudioFormat.from(htAudioIn: raw)
+                    enrichedPosition.tvAudioFormat = mapped
+                    AudioFormatObserver.shared.recordHTAudioIn(
+                        raw, mapped: mapped,
+                        room: coordinator.roomName, model: coordinator.modelName)
                 }
             }
 
@@ -724,7 +819,7 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
 // MARK: - Legacy Polling Transport
 
-public final class LegacyPollingTransport: TransportStrategy, @unchecked Sendable {
+public final class LegacyPollingTransport: TransportStrategy {
     public weak var delegate: TransportStrategyDelegate?
 
     private var pollingTask: Task<Void, Never>?

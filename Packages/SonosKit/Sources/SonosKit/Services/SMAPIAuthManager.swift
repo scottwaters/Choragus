@@ -225,6 +225,14 @@ public final class SMAPIAuthManager: ObservableObject {
             return nil
         }
 
+        // Cancel any in-flight auth before starting a new one — the old
+        // poll task would otherwise keep running (and could store a token)
+        // behind the new flow's back.
+        authTask?.cancel()
+        authTask = nil
+        authSession += 1
+        let session = authSession
+
         isAuthenticating = true
         authServiceName = service.name
         authError = nil
@@ -249,6 +257,12 @@ public final class SMAPIAuthManager: ObservableObject {
                     deviceID: deviceID
                 )
             }
+
+            // `cancelAuth()` (or a newer `startAuth`) during the link
+            // fetch above has no task to cancel — the session token is
+            // the cancellation signal for that window. Abort without
+            // touching the newer session's state.
+            guard session == authSession, isAuthenticating else { return nil }
 
             if link.regUrl.isEmpty {
                 authError = "\(service.name) did not return an authorization URL. This service may not support third-party authentication."
@@ -288,9 +302,14 @@ public final class SMAPIAuthManager: ObservableObject {
     }
 
     private var authTask: Task<Void, Never>?
+    /// Session token covering the pre-task window in `startAuth` (the
+    /// `getAppLink` / `getDeviceLinkCode` await runs before any task
+    /// exists to cancel). Bumped by every `startAuth` and `cancelAuth`.
+    private var authSession = 0
 
     /// Cancels an in-progress authentication
     public func cancelAuth() {
+        authSession += 1
         authTask?.cancel()
         authTask = nil
         isAuthenticating = false
@@ -301,11 +320,11 @@ public final class SMAPIAuthManager: ObservableObject {
     private func pollForAuth(service: SMAPIServiceDescriptor, linkCode: String, linkDeviceId: String?) async {
         guard let deviceID else { return }
         for _ in 0..<60 { // Poll for up to 5 minutes (60 * 5s)
-            guard !Task.isCancelled else {
-                isAuthenticating = false
-                return
-            }
+            // `cancelAuth` already reset the UI flags — a newer auth may
+            // be in flight, so mutate nothing here.
+            guard !Task.isCancelled else { return }
             try? await Task.sleep(nanoseconds: Timing.smapiAuthPollInterval)
+            guard !Task.isCancelled else { return }
 
             do {
                 if let result = try await client.getDeviceAuthToken(
@@ -315,6 +334,9 @@ public final class SMAPIAuthManager: ObservableObject {
                     linkCode: linkCode,
                     linkDeviceId: linkDeviceId
                 ) {
+                    // Cancelled during the token round-trip — do not
+                    // store a token for an auth the user backed out of.
+                    guard !Task.isCancelled else { return }
                     // Success!
                     let token = SMAPIToken(
                         serviceID: service.id,
@@ -341,7 +363,9 @@ public final class SMAPIAuthManager: ObservableObject {
             }
         }
 
-        // Timeout
+        // Timeout — suppressed when the loop drained because of
+        // cancellation rather than a real timeout.
+        guard !Task.isCancelled else { return }
         authError = "Authentication timed out. Please try again."
         sonosDiagLog(.error, tag: "SMAPI",
                      "Authentication timed out after polling window",

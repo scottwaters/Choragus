@@ -9,6 +9,11 @@ struct RoomListView: View {
     @EnvironmentObject var sonosManager: SonosManager
     @Binding var selectedGroupID: String?
     @State private var showGroupEditorFor: SonosGroup?
+    /// Group id currently hovered as a drop target (#82). Drives the row
+    /// highlight so the user can see where the drop will land.
+    @State private var dropTargetGroupID: String?
+    /// True while a row is hovering the ungroup strip below the list.
+    @State private var ungroupZoneTargeted = false
 
     private let iconColumnWidth: CGFloat = 34
 
@@ -119,12 +124,40 @@ struct RoomListView: View {
                                 selectedGroupID = group.id
                             } label: {
                                 roomRow(group: group, isPlaying: isPlaying, isSelected: isSelected)
+                                    .overlay {
+                                        if dropTargetGroupID == group.id {
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .strokeBorder(selectionColor, lineWidth: 2)
+                                        }
+                                    }
                             }
                             .buttonStyle(.plain)
                             .id(group.id)
+                            // Double-click opens the grouping editor for the
+                            // row (#71). The single-click selection above
+                            // still fires first, so the editor always opens
+                            // against the row the user actually hit.
+                            .simultaneousGesture(TapGesture(count: 2).onEnded {
+                                selectedGroupID = group.id
+                                showGroupEditorFor = group
+                            })
+                            // Drag a room onto another to group them, or
+                            // onto the strip below the list to ungroup it
+                            // (#82). The payload is the group id; the drop
+                            // handler resolves it against live topology so
+                            // a drag that outlives a regroup can't act on
+                            // stale membership.
+                            .onDrag { NSItemProvider(object: group.id as NSString) }
+                            .onDrop(of: [.text], isTargeted: Binding(
+                                get: { dropTargetGroupID == group.id },
+                                set: { dropTargetGroupID = $0 ? group.id : nil }
+                            )) { providers in
+                                handleRoomDrop(providers: providers, onto: group)
+                            }
                             .contextMenu { roomContextMenu(group: group, isPlaying: isPlaying) }
                         }
                     }
+                    ungroupDropZone
                 }
                 .padding(.vertical, 4)
                 .padding(.horizontal, 4)
@@ -142,6 +175,92 @@ struct RoomListView: View {
                 GroupEditorView(initialGroup: group)
                     .environmentObject(sonosManager)
             }
+        }
+    }
+
+    // MARK: - Drag and Drop (#82)
+
+    /// Strip below the last room. Dropping a grouped room here splits it
+    /// back into standalone rooms. Only visible while something is being
+    /// dragged over it, so the sidebar keeps its normal density.
+    private var ungroupDropZone: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4]))
+            .foregroundStyle(ungroupZoneTargeted ? selectionColor : Color.clear)
+            .frame(height: 34)
+            .overlay {
+                if ungroupZoneTargeted {
+                    Text(L10n.ungroupAll)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.top, 4)
+            .onDrop(of: [.text], isTargeted: $ungroupZoneTargeted) { providers in
+                handleUngroupDrop(providers: providers)
+            }
+    }
+
+    /// Groups the dragged room into `target`. Cross-household drops are
+    /// refused: two Sonos systems cannot form a group, and the speaker
+    /// would answer the join with a SOAP fault.
+    private func handleRoomDrop(providers: [NSItemProvider], onto target: SonosGroup) -> Bool {
+        loadGroupID(from: providers) { sourceID in
+            guard sourceID != target.id,
+                  let source = sonosManager.groups.first(where: { $0.id == sourceID }),
+                  let coordinator = target.coordinator
+            else { return }
+            guard source.householdID == target.householdID else {
+                sonosDiagLog(.info, tag: "GROUPING",
+                             "Cross-household drop refused",
+                             context: ["source": source.name, "target": target.name])
+                return
+            }
+            Task {
+                for member in source.members {
+                    do {
+                        try await sonosManager.joinGroup(device: member, toCoordinator: coordinator)
+                    } catch {
+                        sonosDiagLog(.error, tag: "GROUPING",
+                                     "Join failed: \(error.localizedDescription)",
+                                     context: ["room": member.roomName,
+                                               "target": target.name])
+                    }
+                }
+                selectedGroupID = target.id
+            }
+        }
+        return true
+    }
+
+    /// Splits the dragged room's group into standalone rooms.
+    private func handleUngroupDrop(providers: [NSItemProvider]) -> Bool {
+        loadGroupID(from: providers) { sourceID in
+            guard let source = sonosManager.groups.first(where: { $0.id == sourceID }),
+                  source.members.count > 1 else { return }
+            Task {
+                for member in source.members where member.id != source.coordinatorID {
+                    do {
+                        try await sonosManager.ungroupDevice(member)
+                    } catch {
+                        sonosDiagLog(.error, tag: "GROUPING",
+                                     "Ungroup failed: \(error.localizedDescription)",
+                                     context: ["room": member.roomName])
+                    }
+                }
+            }
+        }
+        return true
+    }
+
+    /// Pulls the dragged group id out of the pasteboard payload and hands
+    /// it to `action` on the main actor.
+    private func loadGroupID(from providers: [NSItemProvider],
+                             action: @escaping (String) -> Void) {
+        guard let provider = providers.first else { return }
+        _ = provider.loadObject(ofClass: NSString.self) { value, _ in
+            guard let id = value as? String else { return }
+            Task { @MainActor in action(id) }
         }
     }
 

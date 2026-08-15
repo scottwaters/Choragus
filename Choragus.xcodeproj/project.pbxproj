@@ -30,6 +30,9 @@
 		A10024 /* PlayHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10024 /* PlayHistoryView.swift */; };
 		A10025 /* MarqueeText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10025 /* MarqueeText.swift */; };
 		A10026 /* HomeTheaterEQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10026 /* HomeTheaterEQView.swift */; };
+		A10096 /* HomeTheaterQuickControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10096 /* HomeTheaterQuickControls.swift */; };
+		A10097 /* LibrarySharesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10097 /* LibrarySharesSection.swift */; };
+		A10098 /* SupportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10098 /* SupportSheet.swift */; };
 		A10027 /* WindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10027 /* WindowManager.swift */; };
 		A10028 /* HoverTooltip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10028 /* HoverTooltip.swift */; };
 		A10029 /* RecentlyPlayedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10029 /* RecentlyPlayedView.swift */; };
@@ -62,8 +65,11 @@
 		A10063 /* SlidingLyricsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10063 /* SlidingLyricsView.swift */; };
 		A10064 /* LyricsKaraokeWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10064 /* LyricsKaraokeWindow.swift */; };
 		A10065 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10065 /* DiagnosticsView.swift */; };
+		A10801 /* NetworkDiagnosticsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10801 /* NetworkDiagnosticsTab.swift */; };
+		A10802 /* DiagnosticsHealthTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10802 /* DiagnosticsHealthTabs.swift */; };
 		A10066 /* LiveEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10066 /* LiveEventsView.swift */; };
 		A10067 /* ClubVisWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10067 /* ClubVisWindow.swift */; };
+		A10068 /* ClubStageSets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10068 /* ClubStageSets.swift */; };
 		A10069 /* QueueLibraryWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10069 /* QueueLibraryWindow.swift */; };
 		A100A0 /* PlaybackIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A0 /* PlaybackIntents.swift */; };
 		A100A1 /* AppleMusicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A1 /* AppleMusicProvider.swift */; };
@@ -102,6 +108,9 @@
 		B10024 /* PlayHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayHistoryView.swift; sourceTree = "<group>"; };
 		B10025 /* MarqueeText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarqueeText.swift; sourceTree = "<group>"; };
 		B10026 /* HomeTheaterEQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTheaterEQView.swift; sourceTree = "<group>"; };
+		B10096 /* HomeTheaterQuickControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTheaterQuickControls.swift; sourceTree = "<group>"; };
+		B10097 /* LibrarySharesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySharesSection.swift; sourceTree = "<group>"; };
+		B10098 /* SupportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportSheet.swift; sourceTree = "<group>"; };
 		B10027 /* WindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManager.swift; sourceTree = "<group>"; };
 		B10028 /* HoverTooltip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverTooltip.swift; sourceTree = "<group>"; };
 		B10029 /* RecentlyPlayedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentlyPlayedView.swift; sourceTree = "<group>"; };
@@ -134,8 +143,11 @@
 		B10063 /* SlidingLyricsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlidingLyricsView.swift; sourceTree = "<group>"; };
 		B10064 /* LyricsKaraokeWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsKaraokeWindow.swift; sourceTree = "<group>"; };
 		B10065 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
+		B10801 /* NetworkDiagnosticsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkDiagnosticsTab.swift; sourceTree = "<group>"; };
+		B10802 /* DiagnosticsHealthTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsHealthTabs.swift; sourceTree = "<group>"; };
 		B10066 /* LiveEventsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsView.swift; sourceTree = "<group>"; };
 		B10067 /* ClubVisWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClubVisWindow.swift; sourceTree = "<group>"; };
+		B10068 /* ClubStageSets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClubStageSets.swift; sourceTree = "<group>"; };
 		B10069 /* QueueLibraryWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueLibraryWindow.swift; sourceTree = "<group>"; };
 		B100A0 /* PlaybackIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackIntents.swift; sourceTree = "<group>"; };
 		B100A1 /* AppleMusicProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicProvider.swift; sourceTree = "<group>"; };
@@ -209,6 +221,9 @@
 				B10040 /* PlayHistoryView2.swift */,
 				B10025 /* MarqueeText.swift */,
 				B10026 /* HomeTheaterEQView.swift */,
+				B10096 /* HomeTheaterQuickControls.swift */,
+				B10097 /* LibrarySharesSection.swift */,
+				B10098 /* SupportSheet.swift */,
 				B10027 /* WindowManager.swift */,
 				B10028 /* HoverTooltip.swift */,
 				B10029 /* RecentlyPlayedView.swift */,
@@ -221,8 +236,11 @@
 				B10063 /* SlidingLyricsView.swift */,
 				B10064 /* LyricsKaraokeWindow.swift */,
 				B10065 /* DiagnosticsView.swift */,
+				B10801 /* NetworkDiagnosticsTab.swift */,
+				B10802 /* DiagnosticsHealthTabs.swift */,
 				B10066 /* LiveEventsView.swift */,
 				B10067 /* ClubVisWindow.swift */,
+				B10068 /* ClubStageSets.swift */,
 				B10069 /* QueueLibraryWindow.swift */,
 				B10041 /* ArtworkSearchView.swift */,
 				B10042 /* SonosRadioSearchView.swift */,
@@ -381,6 +399,9 @@
 				A10040 /* PlayHistoryView2.swift in Sources */,
 				A10025 /* MarqueeText.swift in Sources */,
 				A10026 /* HomeTheaterEQView.swift in Sources */,
+				A10096 /* HomeTheaterQuickControls.swift in Sources */,
+				A10097 /* LibrarySharesSection.swift in Sources */,
+				A10098 /* SupportSheet.swift in Sources */,
 				A10027 /* WindowManager.swift in Sources */,
 				A10028 /* HoverTooltip.swift in Sources */,
 				A10029 /* RecentlyPlayedView.swift in Sources */,
@@ -393,9 +414,12 @@
 				A10063 /* SlidingLyricsView.swift in Sources */,
 				A10064 /* LyricsKaraokeWindow.swift in Sources */,
 				A10065 /* DiagnosticsView.swift in Sources */,
+				A10801 /* NetworkDiagnosticsTab.swift in Sources */,
+				A10802 /* DiagnosticsHealthTabs.swift in Sources */,
 				A10066 /* LiveEventsView.swift in Sources */,
 				08A8536F2FB99F44009E2133 /* TestFixtureCapture.swift in Sources */,
 				A10067 /* ClubVisWindow.swift in Sources */,
+				A10068 /* ClubStageSets.swift in Sources */,
 				A10069 /* QueueLibraryWindow.swift in Sources */,
 				A10041 /* ArtworkSearchView.swift in Sources */,
 				A10042 /* SonosRadioSearchView.swift in Sources */,
@@ -481,7 +505,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 34;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Choragus/Info.plist;
@@ -492,7 +516,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 4.13;
+				MARKETING_VERSION = 4.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -507,7 +531,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 34;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Choragus/Info.plist;
@@ -518,7 +542,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 4.13;
+				MARKETING_VERSION = 4.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;

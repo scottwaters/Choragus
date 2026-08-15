@@ -175,6 +175,13 @@ public final class EventSubscriptionManager: @unchecked Sendable {
 
         lock.lock()
         defer { lock.unlock() }
+        // Only record the renewal if the subscription still exists — an
+        // unsubscribe that raced this renewal's HTTP round-trip has
+        // already removed the SID, and unconditionally re-inserting it
+        // resurrected a zombie entry the loop kept renewing forever.
+        guard subscriptions[subscription.sid] != nil else {
+            throw EventSubscriptionError.renewFailed(0)
+        }
         subscriptions[subscription.sid] = renewed
         return renewed
     }
@@ -201,8 +208,18 @@ public final class EventSubscriptionManager: @unchecked Sendable {
         lock.lock()
         allSubs = Array(subscriptions.values)
         lock.unlock()
-        for sub in allSubs {
-            await unsubscribe(sub)
+        // Concurrent, not serial. Each UNSUBSCRIBE carries a 10–15 s
+        // URLSession timeout; during a network-path change most peers
+        // are unreachable, so a serial loop over ~40 subscriptions
+        // stalled the event-pipeline rebuild for minutes with no
+        // subscriptions active (observed 2026-07-22). Concurrency
+        // bounds the wall-clock to the slowest single request; the
+        // UNSUBSCRIBE is best-effort anyway — speakers expire the SID
+        // at lease end regardless.
+        await withTaskGroup(of: Void.self) { taskGroup in
+            for sub in allSubs {
+                taskGroup.addTask { await self.unsubscribe(sub) }
+            }
         }
         stopRenewalLoop()
     }
@@ -229,9 +246,14 @@ public final class EventSubscriptionManager: @unchecked Sendable {
                             _ = try await renew(sub)
                         } catch {
                             self.lock.lock()
-                            defer { self.lock.unlock() }
-                            self.subscriptions.removeValue(forKey: sub.sid)
-                            onRenewalFailed(sub)
+                            let wasPresent = self.subscriptions.removeValue(forKey: sub.sid) != nil
+                            self.lock.unlock()
+                            // A subscription that vanished mid-renewal was
+                            // deliberately unsubscribed — firing the failure
+                            // callback would resubscribe and resurrect it.
+                            if wasPresent {
+                                onRenewalFailed(sub)
+                            }
                         }
                     }
                 }

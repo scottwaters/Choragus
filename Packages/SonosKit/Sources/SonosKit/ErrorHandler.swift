@@ -44,6 +44,23 @@ public final class ErrorHandler: ObservableObject {
         currentInfo = nil
     }
 
+    /// Shows the error banner with a pre-composed message when there is
+    /// no `Error` value to hand — e.g. "2 tracks were not added to the
+    /// queue" after a background queue fill. Logs through the same
+    /// diagnostics sink as `handle`.
+    public func warning(_ message: String, context: String) {
+        sonosDiagLog(.warning, tag: context, message)
+        currentError = message
+        showError = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: Timing.errorAutoDismiss)
+            if self.currentError == message {
+                self.showError = false
+                self.currentError = nil
+            }
+        }
+    }
+
     /// Handles an error — logs it and optionally shows to user
     public func handle(_ error: Error, context: String, userFacing: Bool = false) {
         let appError: AppError

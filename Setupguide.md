@@ -102,6 +102,14 @@ Once it's green, the service appears in the **Browse** panel and you can search,
 
 ---
 
+## Music stored on a NAS or network folder
+
+Sonos indexes network folders itself; Choragus reads that index rather than keeping its own. **Settings → Music → Local Music Library** lists the folders each system indexes, tagged (S1) or (S2) when both are on the network, and has a button to rebuild the index after you add or change files.
+
+Adding or removing a folder has to be done in the Sonos app — Sonos accepts the instruction over the local protocol and then discards it, so no third-party controller can do it. Once the folder is in Sonos, it shows up in Choragus under Music Library with no further setup.
+
+---
+
 ## What if my service is in neither list?
 
 The **Other Services** section in Settings → Music lists every service Sonos has registered (~100). Most have not been individually tested — many *should* work via AppLink, but we haven't confirmed each one. If you connect one and it works, please open an issue so we can promote it to "tested".

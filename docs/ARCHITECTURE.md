@@ -328,8 +328,14 @@ Centralized constants file containing:
 #### SonosGroup.swift
 `Identifiable`, `Hashable`. Represents a zone group. Fields: `id`, `coordinatorID`, `members: [SonosDevice]`. Computed `coordinator` (first member matching coordinatorID) and `name` (single room name or "Room1 + Room2" for groups).
 
+#### HomeTheaterChannelMap.swift
+Merges each bonded member's partial `HTSatChanMapSet` view into one device-id → channel map, ordered by channel then id so the result does not depend on enumeration order. Reading a single member's value loses the channels that member cannot see, which hid the Surrounds tab on systems that had surrounds (#78).
+
+#### TopologyCoordinatorResolver.swift
+Decides which speaker a group is controlled through when the topology names a coordinator that is not one of the group's visible members. Such a group otherwise resolves to no coordinator: it accepts no transport command and reports no state while its speakers keep emitting events (#83). Prefers the coordinator the group was last controlled through, then the lowest visible id; substitutions are logged, never silent.
+
 #### HomeTheaterZone.swift
-Represents a home theater configuration parsed from `HTSatChanMapSet` in the zone topology XML. Fields: `soundbarID`, `subID`, `surroundIDs`, `channelMap`. Used to detect 5.1/sub setups and enable the home theater EQ window. Computed `hasSubwoofer` and `hasSurrounds`.
+Represents a home theater configuration parsed from `HTSatChanMapSet` in the zone topology XML. Every bonded member advertises that attribute, but a satellite advertises only the soundbar and itself, so the zone layout is the union across members — see `HomeTheaterChannelMap`. Fields: `soundbarID`, `subID`, `surroundIDs`, `channelMap`. Used to detect 5.1/sub setups and enable the home theater EQ window. Computed `hasSubwoofer` and `hasSurrounds`.
 
 #### GroupPreset.swift
 `Codable`. Represents a saved speaker group configuration. Fields: `id`, `name`, `coordinatorID`, `memberIDs: [String]`, `volumes: [String: Int]` (per-speaker volume map). Stored as JSON array via `PresetManager`.
@@ -468,7 +474,7 @@ Cache key: deterministic hash of the URL string.
 Methods: `image(for:)`, `store(_:for:)`, `clearDisk()`, `clearMemory()`, `diskUsage`, `diskUsageString`, `evictIfNeeded()`.
 
 #### StaleDataError.swift
-Error types for cache staleness: `deviceUnreachable(roomName)`, `groupChanged(groupName)`, `topologyStale`. Each provides a user-facing `errorDescription` used in the warning banner.
+Cache-staleness error types: `deviceUnreachable(roomName)`, `groupChanged(groupName)`, `topologyStale`. Each provides a user-facing `errorDescription` used in the warning banner.
 
 ### Tests
 

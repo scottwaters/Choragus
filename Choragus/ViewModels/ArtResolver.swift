@@ -270,6 +270,11 @@ final class ArtResolver {
                     artist: artist, album: ""
                 )
             }
+            // Apply only when this search is still for the current track —
+            // mirrors the radio path's staleness key. A slow lookup for a
+            // previous track must not overwrite (or clear) the art the
+            // current track's search resolved.
+            guard self.lastArtSearchKey == key else { return }
             if let artURL = foundArt, let url = URL(string: artURL) {
                 self.playHistoryManager?.updateArtwork(
                     forTitle: metadata.title, artist: metadata.artist, artURL: artURL

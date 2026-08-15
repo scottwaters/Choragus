@@ -48,12 +48,22 @@ private class MusicServiceXMLParser: NSObject, XMLParserDelegate {
     private var services: [MusicService] = []
 
     static func parse(_ xml: String) -> [MusicService] {
-        let unescaped = XMLResponseParser.xmlUnescape(xml)
-        guard let data = unescaped.data(using: .utf8) else { return [] }
+        // The descriptor list arrives from the SOAP layer already
+        // unescaped exactly once — valid XML. A second unescape turned
+        // `&amp;` inside Uri/SecureUri attributes into bare `&`, aborting
+        // the parse and silently dropping every service after that point
+        // (same defect class as issue #81).
+        guard let data = xml.data(using: .utf8) else { return [] }
         let handler = MusicServiceXMLParser()
         let parser = XMLParser(data: data)
         parser.delegate = handler
-        parser.parse()
+        guard parser.parse() else {
+            sonosDiagLog(.error, tag: "SERVICES",
+                         "Service descriptor parse aborted — discarding partial list",
+                         context: ["parserError": String(describing: parser.parserError),
+                                   "servicesBeforeAbort": String(handler.services.count)])
+            return []
+        }
         return handler.services
     }
 

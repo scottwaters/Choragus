@@ -48,6 +48,80 @@ final class ChoragusAppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    /// State restoration can resurrect the main window somewhere no one can
+    /// see it: on a Space that isn't currently displayed (loginwindow
+    /// relaunches after a reboot land on whatever Space macOS remembered,
+    /// while the user is looking at Desktop 1), or on coordinates that no
+    /// longer exist because the two identical monitors swapped identities at
+    /// boot. Every window-server metric still reports the window "on screen",
+    /// so nothing downstream notices. Rescue it once launch has settled.
+    ///
+    /// The SwiftUI scene mounts asynchronously and `WindowFrameAutosaver`
+    /// applies the saved frame a runloop tick after that, so the check can't
+    /// run immediately. A single fixed delay is fragile at reboot login —
+    /// exactly when the machine is most loaded — so re-check at 1 s / 3 s /
+    /// 6 s and stop at the first attempt that finds the window. Rescuing at
+    /// most once means a window the user closes later is never yanked back.
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.rescueMainWindowWhenSettled()
+    }
+
+    private static let rescueDelays: [TimeInterval] = [1, 2, 3]
+
+    private static func rescueMainWindowWhenSettled(attempt: Int = 0) {
+        guard attempt < rescueDelays.count else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + rescueDelays[attempt]) {
+            if !ensureMainWindowVisible() {
+                rescueMainWindowWhenSettled(attempt: attempt + 1)
+            }
+        }
+    }
+
+    /// Returns true once the main window has been found (whether or not it
+    /// needed rescuing) so the retry loop knows to stop. Miniaturized counts
+    /// as found: a Dock-minimized restore is a legitimate state, not a ghost.
+    @discardableResult
+    static func ensureMainWindowVisible() -> Bool {
+        guard let window = NSApp.windows.first(where: {
+            $0.frameAutosaveName == "ChoragusMainWindow"
+        }) else { return false }
+        guard !window.isMiniaturized else { return true }
+
+        // Restored frame no longer meaningfully overlaps any attached
+        // screen (display arrangement changed since the frame was saved):
+        // pull it back to the center of the main screen. "Meaningful"
+        // guards against a sliver technically intersecting an edge.
+        let visiblyPlaced = NSScreen.screens.contains { screen in
+            let overlap = screen.visibleFrame.intersection(window.frame)
+            return overlap.width >= 200 && overlap.height >= 100
+        }
+        if !visiblyPlaced {
+            window.center()
+        }
+
+        // Never ordered in at all (login-launch restore race): order front
+        // on the active Space. `orderFrontRegardless` shows the window
+        // without activating the app, so a background login relaunch
+        // doesn't steal focus. Collection behavior is restored a tick
+        // later — the move happens during ordering.
+        //
+        // Deliberately NOT gated on `isOnActiveSpace`: a window restored
+        // visible on another Space or display is at the user's chosen
+        // location — yanking it to the active Space on every relaunch
+        // moved the window when nothing was wrong (reported: "put it in
+        // its current location"). The ghost this rescue exists for (#73)
+        // is never ordered in at all, so `isVisible` alone identifies it.
+        if !window.isVisible {
+            let saved = window.collectionBehavior
+            window.collectionBehavior.insert(.moveToActiveSpace)
+            window.orderFrontRegardless()
+            DispatchQueue.main.async {
+                window.collectionBehavior = saved
+            }
+        }
+        return true
+    }
+
     /// Best-effort GENA unsubscribe on quit. Orphaned subscriptions make the
     /// speaker burn a connect-timeout per dead callback before delivering to
     /// live subscribers (measured 6–14 s NOTIFY latency). ⌘Q now cleans up;
@@ -195,6 +269,10 @@ struct ChoragusApp: App {
                         // and easy to enable from Settings if wanted.
                         UDKey.scrollVolumeEnabled: false,
                         UDKey.middleClickMuteEnabled: true,
+                        // On by default — the keyboard media row is the
+                        // expected control surface. Users hit by stray
+                        // Bluetooth AVRCP play commands turn it off.
+                        UDKey.mediaKeysEnabled: true,
                         // Lyrics nudged 2 s earlier by default — Sonos
                         // position polling lags true playback by ~1–2 s
                         // and most LRCs are tuned to as-sung timing.
@@ -219,7 +297,8 @@ struct ChoragusApp: App {
                     MenuBarController.shared.setup(sonosManager: sonosManager)
                     // Hardware media keys (F7/F8/F9) via MPRemoteCommandCenter
                     // and a sandbox-safe volume chord (⌃⌥↑/↓/M) via local
-                    // NSEvent monitor. Always on — no settings toggle.
+                    // NSEvent monitor. The transport half honours
+                    // `UDKey.mediaKeysEnabled`; the volume chord is always on.
                     MediaKeyHandler.shared.start(sonosManager: sonosManager)
                     // Load SMAPI services if enabled
                     if smapiManager.isEnabled, let speaker = sonosManager.groups.first?.coordinator {

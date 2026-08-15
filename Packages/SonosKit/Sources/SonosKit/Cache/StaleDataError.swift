@@ -23,6 +23,12 @@ public enum StaleDataError: Error, LocalizedError, Equatable {
     /// stale topology produces — so this case exists to report the actual
     /// situation instead of a rescan banner or a generic error (issue #72).
     case nothingLoaded
+
+    /// Tracks skipped within seconds of starting, repeatedly. Sonos reports
+    /// no fault for this: a media URL that no longer resolves simply plays
+    /// nothing and the speaker advances. Common for queue entries holding a
+    /// service's pre-signed URL after its token has expired.
+    case tracksSkippingEarly
     /// Raised *before* the play SOAP is sent (fail-fast pre-flight) when the
     /// selected speaker's system has no music library — or no copy of the
     /// specific share — that the chosen local-library item lives on. Prevents
@@ -30,6 +36,12 @@ public enum StaleDataError: Error, LocalizedError, Equatable {
     /// which Sonos app (S1/S2) to add the folders in. The associated value is
     /// the selected system's generation. See per-household availability design.
     case libraryNotConfigured(SonosSystemVersion)
+    /// Raised before any SOAP is sent when a "track" carries a
+    /// container id (playlist/album/artist) — a service error
+    /// placeholder or malformed row that AddURIToQueue would reject
+    /// with UPnP 800 (#77: Spotify's "Unable to access playlist"
+    /// error row carried a playlist URI through the leaf path).
+    case notPlayable
 
     public var errorDescription: String? {
         switch self {
@@ -41,10 +53,14 @@ public enum StaleDataError: Error, LocalizedError, Equatable {
             return "Speaker layout has changed since last cached. Refreshing now."
         case .serviceRejected:
             return "Speaker rejected request. Please raise bug report."
+        case .notPlayable:
+            return "Service returned an unplayable item. Please raise bug report."
         case .serviceUnavailable:
             return "This track's music service or library isn't available on this speaker's system."
         case .nothingLoaded:
             return "Nothing is loaded on this speaker. Choose something to play."
+        case .tracksSkippingEarly:
+            return L10n.errorTracksSkippingEarly
         case .libraryNotConfigured(let generation):
             let app = generation == .unknown
                 ? "the Sonos app for this system"

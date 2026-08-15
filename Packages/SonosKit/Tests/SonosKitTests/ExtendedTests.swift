@@ -152,6 +152,17 @@ final class URIPrefixExtendedTests: XCTestCase {
         XCTAssertTrue(URIPrefix.isRadio("x-sonosapi-hls-static:stream123"))
     }
 
+    func testHLSStaticSongIsATrackNotRadio() {
+        // Apple Music / YouTube Music deliver catalog songs over
+        // hls-static with a song id — classing them as radio
+        // mislabeled the source and hid Up Next (observed live:
+        // Club Vis said "Radio" for an Apple Music track).
+        XCTAssertFalse(URIPrefix.isRadio(
+            "x-sonosapi-hls-static:song%3a1669713219?sid=204&flags=8232&sn=17"))
+        XCTAssertFalse(URIPrefix.isRadio(
+            "x-sonosapi-hls-static:song:1669713219?sid=204"))
+    }
+
     func testIsRadioEmptyString() {
         XCTAssertFalse(URIPrefix.isRadio(""))
     }

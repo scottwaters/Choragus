@@ -27,6 +27,16 @@ The upstream binary is signed with the maintainer's Apple Developer ID and Apple
 
 A Developer Program membership is currently $99/year. For personal-use builds it's not required: macOS will let you run an unsigned binary after the first right-click → Open, and Keychain access works the same way once granted.
 
+### Donation links
+
+The upstream binary shows a heart button in the toolbar with ways to support the project. Both destinations are injected at package time from build configuration that is not in the repo, so a self-built copy has neither key and shows no button at all — not an empty one. Nothing else differs; no feature is gated behind it.
+
+To point a fork at your own destinations, set `CHORAGUS_SUPPORT_URL` and/or `CHORAGUS_BITCOIN_ADDRESS` as build settings; they land in `Info.plist` as `ChoragusSupportURL` and `ChoragusBitcoinAddress`. Each row appears only if its key is non-empty.
+
+### Maintainer-only tuning surfaces
+
+The Back of the Club debug companion window is compiled only when `CHORAGUS_DEV` is defined, which the maintainer's local build sets and nothing else does. Release builds and fork builds omit it entirely. Nothing depends on it.
+
 ### Stable Keychain access across rebuilds
 
 Choragus stores user-supplied secrets (Last.fm API key, SMAPI tokens, Plex tokens, etc.) in the macOS Keychain, ACL'd to the running binary's code identity. Ad-hoc-signed self-built copies get a different code identity on every rebuild, so macOS re-prompts for Keychain access on each launch. Signing with a stable Developer ID — your own — eliminates the re-prompt loop.

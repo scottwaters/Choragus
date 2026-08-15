@@ -515,6 +515,13 @@ struct MusicServicesSettingsSection: View {
                 .font(.callout)
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            // Share management sits with the reindex control it depends
+            // on — adding a folder is only useful once the system has
+            // indexed it (#75).
+            LibrarySharesSection()
+                .environmentObject(sonosManager)
+                .padding(.top, 8)
         }
         .padding(.top, 4)
     }

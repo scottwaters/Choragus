@@ -216,7 +216,12 @@ private class EventXMLParser: NSObject, XMLParserDelegate {
         guard let data = xml.data(using: .utf8) else { return [:] }
         let parser = XMLParser(data: data)
         parser.delegate = self
-        parser.parse()
+        let succeeded = parser.parse()
+        if !succeeded {
+            sonosDiagLog(.warning, tag: "XML",
+                         "EventXMLParser parse aborted — result may be partial",
+                         context: ["parserError": String(describing: parser.parserError)])
+        }
         return values
     }
 

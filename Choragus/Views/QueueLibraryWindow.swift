@@ -294,18 +294,22 @@ final class QueueLibraryViewModel: ObservableObject {
         defer { isLoading = false }
         folders = manager.savedQueueFolders()
 
-        // Rebuild local cards fresh, then browse Sonos live.
-        var built = buildLocalCards()
+        // Browse Sonos live first, then rebuild local cards AFTER the
+        // await — building them before it would capture pre-await state
+        // and clobber any fresher debounced rebuild that completed while
+        // the browse was in flight.
+        var sonosCards: [QueueLibraryCard] = []
         if let (items, _) = try? await manager.browse(objectID: BrowseID.playlists, start: 0, count: 200) {
             for item in items where item.isContainer
                 && !QueueHistoryStore.isHistoryTitle(item.title) {
                 // Seed Sonos covers from the cache so they don't flash blank.
                 let cached = cards.first { $0.id == item.objectID }?.coverURLs ?? []
-                built.append(QueueLibraryCard(
+                sonosCards.append(QueueLibraryCard(
                     id: item.objectID, name: item.title, kind: .sonos(item.objectID),
                     trackCount: 0, folderIDs: [], coverURLs: cached))
             }
         }
+        let built = buildLocalCards() + sonosCards
         cards = built
 
         // Resolve covers (network) and update in place.
@@ -638,7 +642,7 @@ struct QueueLibraryWindow: View {
                 Button {
                     newFolderParent = nil; showNewFolder = true
                 } label: {
-                    Label("New folder", systemImage: "folder.badge.plus")
+                    Label(L10n.newFolder, systemImage: "folder.badge.plus")
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -929,7 +933,7 @@ struct AddToChoragusQueueMenu: View {
                 }
             }
         } label: {
-            Label("Add to Choragus Queue", systemImage: "internaldrive.fill")
+            Label(L10n.addToChoragusQueue, systemImage: "internaldrive.fill")
         }
     }
 }

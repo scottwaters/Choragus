@@ -40,6 +40,14 @@ struct QueueView: View {
     /// against an id that hasn't materialised in the LazyVStack yet.
     @State private var didInitialScroll = false
 
+    /// Debounce before the authoritative re-sync: long enough to collapse
+    /// the STOPPED→PLAYING flap, short enough to keep up with the speaker.
+    private static let trackURIResyncDebounce: Duration = .milliseconds(400)
+
+    /// Single retry for when the speaker still answers with the outgoing
+    /// track after the URI event.
+    private static let trackURIResyncRetry: Duration = .milliseconds(1200)
+
     @EnvironmentObject private var sonosManager: SonosManager
 
     init(group: SonosGroup, sonosManager: SonosManager) {
@@ -157,21 +165,28 @@ struct QueueView: View {
             // Auto-reconcile on any trackURI change. Events are racy
             // (sometimes stale, sometimes wrong, sometimes out-of-
             // order) so we use them only as a *signal* that something
-            // changed and then ask the speaker authoritatively. 2 s
-            // debounce lets a burst of transient events (STOPPED →
+            // changed and then ask the speaker authoritatively. The
+            // short debounce collapses the transient burst (STOPPED →
             // PLAYING flap during Prev/Next, or the Sonos quirk where
-            // it briefly emits the prior track again) collapse to one
-            // refresh per real change.
+            // it briefly emits the prior track again); the bounded
+            // retry covers the case where the speaker answers with the
+            // outgoing track instead of waiting out a longer sleep on
+            // every single advance.
             let uri = newMap[group.coordinatorID]?.trackURI
             if uri != lastObservedTrackURI {
                 lastObservedTrackURI = uri
                 trackURIRefreshTask?.cancel()
                 trackURIRefreshTask = Task {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    try? await Task.sleep(for: Self.trackURIResyncDebounce)
                     if Task.isCancelled { return }
                     // Lightweight indicator-only sync — no spinner.
                     // Queue items don't change on track advance, so
                     // we skip the full `Browse(Q:0)` round-trip.
+                    let before = vm.currentTrack
+                    await vm.refreshCurrentTrack()
+                    guard vm.currentTrack == before else { return }
+                    try? await Task.sleep(for: Self.trackURIResyncRetry)
+                    if Task.isCancelled { return }
                     await vm.refreshCurrentTrack()
                 }
             }

@@ -58,6 +58,20 @@ MX: 3
 ST: urn:schemas-upnp-org:device:ZonePlayer:1
 ```
 
+The socket's multicast hop limit is set to 4 (`IP_MULTICAST_TTL`) rather than
+the platform default of 1. A TTL of 1 is discarded by the first router it
+meets, so a speaker one hop away — on another VLAN or subnet — never receives
+the search even where the network is willing to forward it. Adjustable in **Settings → System → Discovery hop limit**, or with the
+`ssdp.multicastTTL` default; values are clamped to 16, and 0 or unset means 4.
+
+```
+defaults write com.choragus.app ssdp.multicastTTL -int 8
+```
+
+The TTL governs only how far the datagram may travel. Where IGMP snooping, an
+access point that drops multicast, or a firewall rule blocks the traffic, no
+hop limit recovers it — use Bonjour or put the Mac on the speakers' VLAN.
+
 Parses HTTP-like responses, extracts the `LOCATION` header, filters for "ZonePlayer" or "Sonos" so non-Sonos UPnP devices on the network are ignored. Receive loop on a background `DispatchQueue`. `rescan()` re-sends without recreating the socket.
 
 ### `MDNSDiscovery`
@@ -78,7 +92,7 @@ In Auto mode, both transports are kicked off in parallel on `SonosManager.startD
 
 ## Household-ID short-circuit
 
-Sonos speakers expose a `GetHouseholdID` SOAP action that the app needs in order to partition speakers into S1 / S2 systems on networks where both coexist. Pre-v4.0, `GetHouseholdID` was always a SOAP round-trip to every speaker.
+Sonos speakers expose a `GetHouseholdID` SOAP action that the app uses to partition speakers into S1 / S2 systems on networks where both coexist. Pre-v4.0, `GetHouseholdID` was always a SOAP round-trip to every speaker.
 
 With Bonjour, the household ID is already in the TXT record. `MDNSDiscovery` populates `device.householdID` from the TXT before the topology pipeline runs, and `handleDiscoveredDevice` skips the SOAP fetch when the field is already set. This is a measurable win on S1 hardware, which throttles aggressively under request pressure during topology discovery.
 
@@ -88,7 +102,7 @@ If speakers don't show up in **Auto** mode, the most common causes (in order of 
 
 1. **macOS Local Network permission denied.** Choragus asks for it on first launch; if denied, both SSDP and Bonjour silently see zero results. Fix in System Settings → Privacy & Security → Local Network.
 2. **Router doesn't reflect mDNS across the speaker VLAN.** UniFi: enable "Enable mDNS Reflector" in the relevant network. OPNsense: install and enable the Avahi service (cross-VLAN reflection). Firewalla: enable "mDNS Forwarding" per network.
-3. **Router blocks SSDP multicast across VLANs and Bonjour reflection isn't enabled either.** Either fix the router, or move the Mac onto the same VLAN as the speakers.
+3. **Router blocks SSDP multicast across VLANs and Bonjour reflection isn't enabled either.** Either fix the router, or move the Mac onto the same VLAN as the speakers. Where the router does route multicast but the speakers sit more than four hops away, raise the hop limit in Settings → System as described above.
 4. **Mac is on a guest network that has client-isolation enabled.** Discovery can't see speakers if your own NIC is firewalled from the broadcast domain. Switch to a non-isolated network.
 
 ## Implementation notes

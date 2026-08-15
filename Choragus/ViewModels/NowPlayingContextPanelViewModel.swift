@@ -50,6 +50,7 @@ final class NowPlayingContextPanelViewModel {
         artistInfo = nil
         albumInfo = nil
         aboutState = .idle
+        aboutIdentity = ""
     }
 
     /// Loads whichever tab is currently active, then pre-warms the
@@ -87,17 +88,39 @@ final class NowPlayingContextPanelViewModel {
         await loadAbout(metadata)
     }
 
+    /// Pixel-level gallery dedupe. Delegates to the service, which
+    /// persists per-URL dHash records so the CPU-bound downsample runs
+    /// once per image URL across sessions.
+    func refinedGallery(_ urls: [URL]) async -> [URL] {
+        await metadataService.refineGallery(urls)
+    }
+
     // MARK: - Private loaders
 
+    /// Track identity the current `aboutState` / fetched info belongs to.
+    /// Captured at fetch start and compared before applying results so a
+    /// slow fetch for a previous track cannot land on the current one —
+    /// and so a `.loaded` state for an OLD track doesn't block a refetch
+    /// after the track changed.
+    private var aboutIdentity = ""
+
+    private func aboutIdentity(for metadata: TrackMetadata) -> String {
+        "\(metadata.trackURI ?? "")|\(metadata.artist)|\(metadata.album)|\(metadata.title)"
+    }
+
     private func loadAbout(_ metadata: TrackMetadata) async {
-        if case .loaded = aboutState { return }
-        if case .loading = aboutState { return }
+        let identity = aboutIdentity(for: metadata)
+        if case .loaded = aboutState, aboutIdentity == identity { return }
+        if case .loading = aboutState, aboutIdentity == identity { return }
+        aboutIdentity = identity
         // Suno tracks: the "artist" is the Suno creator, which Last.fm /
         // Wikipedia don't know. Populate the About card from Suno's own creator
         // profile (avatar, bio) plus the track's style tags instead.
         if let uri = metadata.trackURI, let uuid = SunoCatalog.uuid(fromURI: uri) {
             aboutState = .loading
-            artistInfo = await SunoResolver.artistProfile(forUUID: uuid)
+            let profile = await SunoResolver.artistProfile(forUUID: uuid)
+            guard aboutIdentity == identity else { return }
+            artistInfo = profile
             albumInfo = nil
             aboutState = .loaded
             return
@@ -126,8 +149,12 @@ final class NowPlayingContextPanelViewModel {
         async let albumTask: AlbumInfo? = metadata.album.isEmpty
             ? nil
             : metadataService.albumInfo(artist: metadata.artist, album: metadata.album)
-        artistInfo = await artistTask
-        albumInfo = await albumTask
+        let fetchedArtist = await artistTask
+        let fetchedAlbum = await albumTask
+        // Apply only if this fetch is still for the current track.
+        guard aboutIdentity == identity else { return }
+        artistInfo = fetchedArtist
+        albumInfo = fetchedAlbum
         aboutState = .loaded
     }
 

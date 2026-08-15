@@ -31,7 +31,17 @@ public enum L10n {
     public static var noTrack: String { tr("noTrack") }
     public static var nothingPlaying: String { tr("nothingPlaying") }
     public static var playingFrom: String { tr("playingFrom") }
+    public static var errorTracksSkippingEarly: String { tr("errorTracksSkippingEarly") }
     public static var live: String { tr("live") }
+    public static var addToChoragusQueue: String { tr("addToChoragusQueue") }
+    public static var jumpToLetter: String { tr("jumpToLetter") }
+    public static var pasteSunoLink: String { tr("pasteSunoLink") }
+    public static func trackPhoto(_ title: String) -> String {
+        String(format: tr("trackPhoto"), title)
+    }
+    public static func trackAppleMusicImage(_ title: String) -> String {
+        String(format: tr("trackAppleMusicImage"), title)
+    }
     public static var group: String { tr("group") }
     public static var sleep: String { tr("sleep") }
     public static var eq: String { tr("eq") }
@@ -247,7 +257,49 @@ public enum L10n {
     public static var helpAboutAndSupport: String { tr("helpAboutAndSupport") }
 
     // MARK: - Help body strings
+    public static var diagNetworkSettleNote: String { tr("diagNetworkSettleNote") }
     public static var helpWelcome: String { tr("helpWelcome") }
+    public static var helpQueueLibrarySourcesBody: String { tr("helpQueueLibrarySourcesBody") }
+    public static var helpQueueLibraryOrganiseBody: String { tr("helpQueueLibraryOrganiseBody") }
+    public static var helpQueueLibraryExportBody: String { tr("helpQueueLibraryExportBody") }
+    public static var helpPresetsHeading: String { tr("helpPresetsHeading") }
+    public static var helpPresetsBody: String { tr("helpPresetsBody") }
+    public static var helpPlaylistManagementBody: String { tr("helpPlaylistManagementBody") }
+    public static var helpKaraokeSettingsBody: String { tr("helpKaraokeSettingsBody") }
+    public static var helpNetworkTabHeading: String { tr("helpNetworkTabHeading") }
+    public static var helpNetworkTabBody: String { tr("helpNetworkTabBody") }
+    public static var helpSunoBody: String { tr("helpSunoBody") }
+    public static var helpSupportHeading: String { tr("helpSupportHeading") }
+    public static var helpSupportBody: String { tr("helpSupportBody") }
+    public static var helpVisualisationsHeading: String { tr("helpVisualisationsHeading") }
+    public static var helpVisualisationsBody: String { tr("helpVisualisationsBody") }
+    public static var helpCrossfadeSleepHeading: String { tr("helpCrossfadeSleepHeading") }
+    public static var helpCrossfadeSleepBody: String { tr("helpCrossfadeSleepBody") }
+    public static var helpAudioFormatBadgesBody: String { tr("helpAudioFormatBadgesBody") }
+    public static var helpSurroundModeBody: String { tr("helpSurroundModeBody") }
+    public static var helpIgnoreTVBody: String { tr("helpIgnoreTVBody") }
+    public static var helpQueueLibraryHeading: String { tr("helpQueueLibraryHeading") }
+    public static var helpQueueLibraryBody: String { tr("helpQueueLibraryBody") }
+    public static var helpSaveToPlaylistBody: String { tr("helpSaveToPlaylistBody") }
+    public static var helpQueueSourceBody: String { tr("helpQueueSourceBody") }
+    public static var helpMoreServicesHeading: String { tr("helpMoreServicesHeading") }
+    public static var helpMoreServicesBody: String { tr("helpMoreServicesBody") }
+    public static var helpHistoryActionsBody: String { tr("helpHistoryActionsBody") }
+    public static var helpWindowLifecycleBody: String { tr("helpWindowLifecycleBody") }
+    public static var helpMediaKeysHeading: String { tr("helpMediaKeysHeading") }
+    public static var helpMediaKeysBody: String { tr("helpMediaKeysBody") }
+    public static var helpLockedScreenBody: String { tr("helpLockedScreenBody") }
+    public static var helpHomeTheaterTogglesHeading: String { tr("helpHomeTheaterTogglesHeading") }
+    public static var helpHomeTheaterTogglesBody: String { tr("helpHomeTheaterTogglesBody") }
+    public static var helpGroupingGesturesHeading: String { tr("helpGroupingGesturesHeading") }
+    public static var helpGroupingGesturesBody: String { tr("helpGroupingGesturesBody") }
+    public static var helpVolumeSyncBody: String { tr("helpVolumeSyncBody") }
+    public static var helpLibrarySharesHeading: String { tr("helpLibrarySharesHeading") }
+    public static var helpLibrarySharesBody: String { tr("helpLibrarySharesBody") }
+    public static var helpRenameFavoriteBody: String { tr("helpRenameFavoriteBody") }
+    public static var helpQueueFollowBody: String { tr("helpQueueFollowBody") }
+    public static var helpFastScrollBody: String { tr("helpFastScrollBody") }
+    public static var helpSpeakersTabBody: String { tr("helpSpeakersTabBody") }
     public static var helpWelcomeBody: String { tr("helpWelcomeBody") }
     public static var helpFirstLaunch: String { tr("helpFirstLaunch") }
     public static var helpBulletDiscovery: String { tr("helpBulletDiscovery") }
@@ -381,6 +433,7 @@ public enum L10n {
     public static var helpBulletLanguage: String { tr("helpBulletLanguage") }
     public static var helpBulletMouseControls: String { tr("helpBulletMouseControls") }
     public static var helpBulletDiscoveryMode: String { tr("helpBulletDiscoveryMode") }
+    public static var helpBulletDiscoveryHopLimit: String { tr("helpBulletDiscoveryHopLimit") }
     public static var helpBulletScrobbling: String { tr("helpBulletScrobbling") }
     public static var helpBulletImageCache: String { tr("helpBulletImageCache") }
 
@@ -765,6 +818,9 @@ public enum L10n {
     public static func queueLimitReachedRemainderNotAdded(_ limit: Int) -> String {
         String(format: tr("queueLimitReachedRemainderNotAdded"), limit)
     }
+    public static func queueTracksNotAdded(_ count: Int) -> String {
+        String(format: tr("queueTracksNotAdded"), count)
+    }
     public static func deleteFilteredEntriesTitle(_ count: Int) -> String {
         String(format: tr("deleteFilteredEntriesTitle"), count)
     }
@@ -863,6 +919,16 @@ public enum L10n {
     public static var visRandomArtMixHelp: String { tr("visRandomArtMixHelp") }
     public static var visShowAboutPanelHelp: String { tr("visShowAboutPanelHelp") }
     public static var visHistorySourceHelp: String { tr("visHistorySourceHelp") }
+    // Club Vis lighting colour scheme (Settings)
+    public static var visColourScheme: String { tr("visColourScheme") }
+    public static var visColourSchemeHelp: String { tr("visColourSchemeHelp") }
+    public static var visColourSchemeAlbumArt: String { tr("visColourSchemeAlbumArt") }
+    public static var visColourSchemeChoragus: String { tr("visColourSchemeChoragus") }
+    public static var visColourSchemeCustom: String { tr("visColourSchemeCustom") }
+    public static var visCustomToneWash: String { tr("visCustomToneWash") }
+    public static var visCustomToneBeamA: String { tr("visCustomToneBeamA") }
+    public static var visCustomToneBeamB: String { tr("visCustomToneBeamB") }
+    public static var visCustomToneAccent: String { tr("visCustomToneAccent") }
     // Visualisation menu (top-level + toolbar dropdown)
     public static var visualisationMenu: String { tr("visualisationMenu") }
     // ABOUT label on the visualisation's artist panel header
@@ -929,6 +995,12 @@ public enum L10n {
 
     // MARK: - v4.0 inline string localization
     public static var mouseControls: String { tr("mouseControls") }
+    public static var librarySharesHeader: String { tr("librarySharesHeader") }
+    public static var libraryShareHint: String { tr("libraryShareHint") }
+    public static var noLibrarySharesConfigured: String { tr("noLibrarySharesConfigured") }
+    public static var keyboardControls: String { tr("keyboardControls") }
+    public static var mediaKeysEnabled: String { tr("mediaKeysEnabled") }
+    public static var mediaKeysEnabledHint: String { tr("mediaKeysEnabledHint") }
     public static var scrollWheelAdjustsVolume: String { tr("scrollWheelAdjustsVolume") }
     public static var scrollWheelAdjustsVolumeHint: String { tr("scrollWheelAdjustsVolumeHint") }
     public static var middleClickTogglesMute: String { tr("middleClickTogglesMute") }
@@ -1032,9 +1104,14 @@ public enum L10n {
     public static var karaokeStyleDynamic: String { tr("karaokeStyleDynamic") }
     public static var karaokeStyleClassic: String { tr("karaokeStyleClassic") }
     public static var audioFormatAtmos: String { tr("audioFormatAtmos") }
+    public static var audioFormatLossless: String { tr("audioFormatLossless") }
     public static var tvAudioStereoPCM: String { tr("tvAudioStereoPCM") }
-    public static var tvAudioMultichannelPCM: String { tr("tvAudioMultichannelPCM") }
-    public static var tvAudioDolbyDigital: String { tr("tvAudioDolbyDigital") }
+    public static var tvAudioMultichannelPCM51: String { tr("tvAudioMultichannelPCM51") }
+    public static var tvAudioMultichannelPCM71: String { tr("tvAudioMultichannelPCM71") }
+    public static var tvAudioDolbyDigital51: String { tr("tvAudioDolbyDigital51") }
+    public static var tvAudioDolbyDigitalPlus71: String { tr("tvAudioDolbyDigitalPlus71") }
+    public static var tvAudioDolbyAtmosTrueHD71: String { tr("tvAudioDolbyAtmosTrueHD71") }
+    public static var tvAudioDTSSurround51: String { tr("tvAudioDTSSurround51") }
 
     // Diagnostics
     public static var diagnostics: String { tr("diagnostics") }
@@ -1093,6 +1170,64 @@ public enum L10n {
     }
     public static var diagTabLog: String { tr("diagTabLog") }
     public static var diagTabLiveEvents: String { tr("diagTabLiveEvents") }
+    public static var diagTabSpeakers: String { tr("diagTabSpeakers") }
+    public static var diagTabNetwork: String { tr("diagTabNetwork") }
+    public static var diagTabHealth: String { tr("diagTabHealth") }
+    public static var diagTabMatrix: String { tr("diagTabMatrix") }
+    public static var diagHealthBanner: String { tr("diagHealthBanner") }
+    public static var diagMatrixBannerWifiMode: String { tr("diagMatrixBannerWifiMode") }
+    public static var diagFilterRooms: String { tr("diagFilterRooms") }
+    public static var diagColumnStatus: String { tr("diagColumnStatus") }
+    public static var diagColumnSerial: String { tr("diagColumnSerial") }
+    public static var diagColumnHardware: String { tr("diagColumnHardware") }
+    public static var diagColumnInterference: String { tr("diagColumnInterference") }
+    public static var diagStatusOK: String { tr("diagStatusOK") }
+    public static var diagStatusCheckWifi: String { tr("diagStatusCheckWifi") }
+    public static var diagStatusOffline: String { tr("diagStatusOffline") }
+    public static var diagLegendNormal: String { tr("diagLegendNormal") }
+    public static var diagLegendAttention: String { tr("diagLegendAttention") }
+    public static var diagLegendProblem: String { tr("diagLegendProblem") }
+    public static var diagLegendNoData: String { tr("diagLegendNoData") }
+    public static var diagConnHomeTheater: String { tr("diagConnHomeTheater") }
+    public static var diagGroupByRoom: String { tr("diagGroupByRoom") }
+    public static var supportProject: String { tr("supportProject") }
+    public static var supportOnKofi: String { tr("supportOnKofi") }
+    public static var supportSheetTitle: String { tr("supportSheetTitle") }
+    public static var supportBlurb: String { tr("supportBlurb") }
+    public static var bitcoin: String { tr("bitcoin") }
+    public static var copyBitcoinAddress: String { tr("copyBitcoinAddress") }
+    public static var diagTileOnline: String { tr("diagTileOnline") }
+    public static var diagTileGoodLink: String { tr("diagTileGoodLink") }
+    public static var diagTileAlerts: String { tr("diagTileAlerts") }
+    public static var diagTileMedianLatency: String { tr("diagTileMedianLatency") }
+    public static var diagNetworkColumnConnection: String { tr("diagNetworkColumnConnection") }
+    public static var diagNetworkColumnLatency: String { tr("diagNetworkColumnLatency") }
+    public static var diagNetworkColumnNoise: String { tr("diagNetworkColumnNoise") }
+    public static var diagNetworkColumnPhyErrors: String { tr("diagNetworkColumnPhyErrors") }
+    public static var diagNetworkUnreachable: String { tr("diagNetworkUnreachable") }
+    public static func diagNetworkUpdatedFormat(_ time: String) -> String {
+        String(format: tr("diagNetworkUpdatedFormat"), time)
+    }
+    public static func diagNetworkHealthReachableFormat(_ reachable: Int, _ total: Int) -> String {
+        String(format: tr("diagNetworkHealthReachableFormat"), reachable, total)
+    }
+    public static func diagNetworkHealth24Format(_ count: Int) -> String {
+        String(format: tr("diagNetworkHealth24Format"), count)
+    }
+    public static func diagNetworkHealthSlowFormat(_ count: Int) -> String {
+        String(format: tr("diagNetworkHealthSlowFormat"), count)
+    }
+    public static var diagSpeakerColumnModel: String { tr("diagSpeakerColumnModel") }
+    public static var diagSpeakerColumnIP: String { tr("diagSpeakerColumnIP") }
+    public static var diagSpeakerColumnFirmware: String { tr("diagSpeakerColumnFirmware") }
+    public static var diagSpeakerColumnRole: String { tr("diagSpeakerColumnRole") }
+    public static var diagSpeakerColumnEvents: String { tr("diagSpeakerColumnEvents") }
+    public static var diagSpeakerRoleMember: String { tr("diagSpeakerRoleMember") }
+    public static var diagSpeakersEmpty: String { tr("diagSpeakersEmpty") }
+    public static var diagSpeakerCallbackLabel: String { tr("diagSpeakerCallbackLabel") }
+    public static func diagSpeakersCountFormat(_ count: Int) -> String {
+        String(format: tr("diagSpeakersCountFormat"), count)
+    }
     public static var liveEventsPause: String { tr("liveEventsPause") }
     public static var liveEventsResume: String { tr("liveEventsResume") }
     public static var liveEventsClear: String { tr("liveEventsClear") }
@@ -1213,6 +1348,8 @@ public enum L10n {
     public static var clubVisWindowTitle: String { tr("clubVisWindowTitle") }
     public static var eventListenerPort: String { tr("eventListenerPort") }
     public static var eventListenerPortHint: String { tr("eventListenerPortHint") }
+    public static var ssdpMulticastTTL: String { tr("ssdpMulticastTTL") }
+    public static var ssdpMulticastTTLHint: String { tr("ssdpMulticastTTLHint") }
     public static var galaxyVis: String { tr("galaxyVis") }
     public static var galaxyVisWindowTitle: String { tr("galaxyVisWindowTitle") }
     public static var galaxyLegend: String { tr("galaxyLegend") }
@@ -1330,7 +1467,11 @@ public enum L10n {
     // MARK: - Translation Dictionary
 
     // swiftlint:disable function_body_length
-    private static let translations: [String: [String: String]] = [
+    // Chunked deliberately: one 1,100-entry dictionary literal produced a
+    // single initializer large enough to stall the SIL optimiser under -O
+    // (a Release build ran 56 minutes on this file at 100 entries per chunk,
+    // and never finished as one literal). Merged once, lazily, on first use.
+    private static let translations0: [String: [String: String]] = [
 
         // ========================
         // MARK: Queue Library window / Suno / Plex-direct / context-panel history / preset status (l10n backfill)
@@ -1492,6 +1633,9 @@ public enum L10n {
             "da": "Kunne ikke afspille den sang", "ja": "その曲を再生できませんでした",
             "pt": "Não foi possível reproduzir essa música", "pl": "Nie można odtworzyć tego utworu", "zh-Hans": "无法播放该歌曲",
         ],
+    ]
+
+    private static let translations1: [String: [String: String]] = [
         "loadingPlaylistEllipsis": [
             "en": "Loading playlist…", "de": "Wiedergabeliste wird geladen…", "fr": "Chargement de la liste de lecture…",
             "nl": "Afspeellijst laden…", "es": "Cargando lista de reproducción…", "it": "Caricamento playlist…",
@@ -1500,7 +1644,7 @@ public enum L10n {
             "pl": "Ładowanie listy odtwarzania…", "zh-Hans": "正在加载播放列表…",
         ],
         "openASongToPlay": [
-            "en": "Open a song to play it", "de": "Öffnen Sie einen Titel zum Abspielen",
+            "en": "Open a song to play it", "de": "Öffne einen Titel zum Abspielen",
             "fr": "Ouvrez un morceau pour le lire", "nl": "Open een nummer om het af te spelen",
             "es": "Abre una canción para reproducirla", "it": "Apri un brano per riprodurlo",
             "sv": "Öppna en låt för att spela upp den", "nb": "Åpne en sang for å spille den av",
@@ -1515,7 +1659,7 @@ public enum L10n {
         ],
         "pasteSunoLinkHint": [
             "en": "Paste a public Suno song link to play it here.",
-            "de": "Fügen Sie einen öffentlichen Suno-Songlink ein, um ihn hier abzuspielen.",
+            "de": "Füge einen öffentlichen Suno-Songlink ein, um ihn hier abzuspielen.",
             "fr": "Collez le lien d'un morceau Suno public pour le lire ici.",
             "nl": "Plak een openbare Suno-songlink om deze hier af te spelen.",
             "es": "Pega el enlace de una canción pública de Suno para reproducirla aquí.",
@@ -1582,7 +1726,7 @@ public enum L10n {
         ],
         "directBrowseUnavailable": [
             "en": "Direct browse unavailable. Use the Music Services SMAPI Plex entry from the sidebar to browse via Sonos's relay.",
-            "de": "Direktes Durchsuchen nicht verfügbar. Verwenden Sie den SMAPI-Plex-Eintrag unter Musikdienste in der Seitenleiste, um über das Sonos-Relay zu browsen.",
+            "de": "Direktes Durchsuchen nicht verfügbar. Verwende den SMAPI-Plex-Eintrag unter Musikdienste in der Seitenleiste, um über das Sonos-Relay zu browsen.",
             "fr": "Navigation directe indisponible. Utilisez l'entrée Plex SMAPI des Services musicaux dans la barre latérale pour naviguer via le relais Sonos.",
             "nl": "Direct bladeren niet beschikbaar. Gebruik de SMAPI Plex-vermelding bij Muziekdiensten in de zijbalk om via de Sonos-relay te bladeren.",
             "es": "Exploración directa no disponible. Usa la entrada Plex de SMAPI en Servicios de música de la barra lateral para explorar mediante el relé de Sonos.",
@@ -1698,6 +1842,9 @@ public enum L10n {
             "da": "\"%1$@\" gemt med EQ (%2$@)", "ja": "\"%1$@\" を EQ 付きで保存しました（%2$@）",
             "pt": "\"%1$@\" guardado com EQ (%2$@)", "pl": "Zapisano \"%1$@\" z EQ (%2$@)", "zh-Hans": "已保存“%1$@”（含 EQ）（%2$@）",
         ],
+    ]
+
+    private static let translations2: [String: [String: String]] = [
         "savedPresetFormat": [
             "en": "Saved \"%1$@\" (%2$@)", "de": "\"%1$@\" gespeichert (%2$@)",
             "fr": "\"%1$@\" enregistré (%2$@)", "nl": "\"%1$@\" opgeslagen (%2$@)",
@@ -1730,9 +1877,9 @@ public enum L10n {
         ],
         "updateLibraryIndexHint": [
             "en": "Re-scans your NAS or shared-folder music after you add or change files. Runs on every connected system; systems without a local library are skipped.",
-            "de": "Durchsucht Ihre NAS- oder Freigabeordner-Musik erneut, nachdem Sie Dateien hinzugefügt oder geändert haben. Läuft auf jedem verbundenen System; Systeme ohne lokale Bibliothek werden übersprungen.",
+            "de": "Durchsucht deine NAS- oder Freigabeordner-Musik erneut, nachdem du Dateien hinzugefügt oder geändert hast. Läuft auf jedem verbundenen System; Systeme ohne lokale Bibliothek werden übersprungen.",
             "fr": "Réanalyse la musique de votre NAS ou dossier partagé après l'ajout ou la modification de fichiers. S'exécute sur chaque système connecté ; les systèmes sans bibliothèque locale sont ignorés.",
-            "nl": "Scant uw NAS- of gedeelde-mapmuziek opnieuw nadat u bestanden hebt toegevoegd of gewijzigd. Wordt uitgevoerd op elk verbonden systeem; systemen zonder lokale bibliotheek worden overgeslagen.",
+            "nl": "Scant je NAS- of gedeelde-mapmuziek opnieuw nadat je bestanden hebt toegevoegd of gewijzigd. Wordt uitgevoerd op elk verbonden systeem; systemen zonder lokale bibliotheek worden overgeslagen.",
             "es": "Vuelve a escanear la música de su NAS o carpeta compartida después de añadir o cambiar archivos. Se ejecuta en cada sistema conectado; los sistemas sin biblioteca local se omiten.",
             "it": "Esegue di nuovo la scansione della musica sul NAS o nella cartella condivisa dopo aver aggiunto o modificato file. Viene eseguita su ogni sistema connesso; i sistemi senza libreria locale vengono ignorati.",
             "sv": "Skannar om musiken på din NAS eller delade mapp efter att du lagt till eller ändrat filer. Körs på varje anslutet system; system utan lokalt bibliotek hoppas över.",
@@ -1754,7 +1901,7 @@ public enum L10n {
         ],
         "reindexingSystemsFormat": [
             "en": "Reindexing %d system(s)\u{2026}", "de": "%d System(e) werden neu indiziert\u{2026}",
-            "fr": "Réindexation de %d système(s)\u{2026}", "nl": "%d systeem/systemen opnieuw indexeren\u{2026}",
+            "fr": "Réindexation de %d système(s)\u{2026}", "nl": "%d systeem/systemen opnieuw indexeren…",
             "es": "Reindexando %d sistema(s)\u{2026}", "it": "Reindicizzazione di %d sistema/i\u{2026}",
             "sv": "Indexerar om %d system\u{2026}", "nb": "Reindekserer %d system(er)\u{2026}",
             "da": "Genindekserer %d system(er)\u{2026}", "ja": "%d 台のシステムを再インデックス中\u{2026}",
@@ -1763,9 +1910,9 @@ public enum L10n {
         ],
         "fixedLineOutVolume": [
             "en": "Line-out volume is fixed on this device \u{2014} set it in the Sonos app.",
-            "de": "Die Line-Out-Lautstärke ist auf diesem Gerät fest eingestellt \u{2014} ändern Sie sie in der Sonos-App.",
+            "de": "Die Line-Out-Lautstärke ist auf diesem Gerät fest eingestellt — ändere sie in der Sonos-App.",
             "fr": "Le volume de sortie ligne est fixe sur cet appareil \u{2014} réglez-le dans l'app Sonos.",
-            "nl": "Het line-out-volume is vast op dit apparaat \u{2014} stel het in de Sonos-app in.",
+            "nl": "Het line-out-volume is vast op dit apparaat — stel het in de Sonos-app in.",
             "es": "El volumen de salida de línea es fijo en este dispositivo \u{2014} ajústelo en la app Sonos.",
             "it": "Il volume dell'uscita di linea è fisso su questo dispositivo \u{2014} impostalo nell'app Sonos.",
             "sv": "Line-out-volymen är fast på den här enheten \u{2014} ställ in den i Sonos-appen.",
@@ -1802,7 +1949,7 @@ public enum L10n {
         ],
         "saveToPlaylist": [
             "en": "Save to Playlist\u{2026}", "de": "In Playlist speichern\u{2026}",
-            "fr": "Enregistrer dans une liste\u{2026}", "nl": "Opslaan in afspeellijst\u{2026}",
+            "fr": "Enregistrer dans une liste\u{2026}", "nl": "Opslaan in afspeellijst…",
             "es": "Guardar en lista\u{2026}", "it": "Salva nella playlist\u{2026}",
             "sv": "Spara i spellista\u{2026}", "nb": "Lagre i spilleliste\u{2026}",
             "da": "Gem i spilleliste\u{2026}", "ja": "プレイリストに保存\u{2026}",
@@ -1911,6 +2058,9 @@ public enum L10n {
             "pt": "Indisponível nesta versão", "pl": "Niedostępne w tej wersji",
             "zh-Hans": "此版本中不可用",
         ],
+    ]
+
+    private static let translations3: [String: [String: String]] = [
         "amDetailConnected": [
             "en": "Catalog browse, search, library, recommendations.",
             "de": "Katalog durchsuchen, suchen, Mediathek, Empfehlungen.",
@@ -1930,7 +2080,7 @@ public enum L10n {
             "en": "Grant Apple Music access under Privacy & Security \u{2192} Media & Apple Music to enable.",
             "de": "Apple Music-Zugriff unter Datenschutz & Sicherheit \u{2192} Medien & Apple Music erteilen, um zu aktivieren.",
             "fr": "Accordez l'accès à Apple Music dans Confidentialité et sécurité \u{2192} Médias et Apple Music pour activer.",
-            "nl": "Verleen Apple Music-toegang onder Privacy en beveiliging \u{2192} Media en Apple Music om in te schakelen.",
+            "nl": "Verleen Apple Music-toegang onder Privacy en beveiliging → Media en Apple Music om in te schakelen.",
             "es": "Conceda acceso a Apple Music en Privacidad y seguridad \u{2192} Multimedia y Apple Music para activar.",
             "it": "Concedi l'accesso ad Apple Music in Privacy e sicurezza \u{2192} Media e Apple Music per abilitare.",
             "sv": "Bevilja Apple Music-åtkomst under Integritet och säkerhet \u{2192} Medier och Apple Music för att aktivera.",
@@ -1973,7 +2123,7 @@ public enum L10n {
         ],
         "amActionInProgress": [
             "en": "Action in progress\u{2026}", "de": "Aktion läuft\u{2026}",
-            "fr": "Action en cours\u{2026}", "nl": "Actie wordt uitgevoerd\u{2026}",
+            "fr": "Action en cours\u{2026}", "nl": "Actie wordt uitgevoerd…",
             "es": "Acción en curso\u{2026}", "it": "Azione in corso\u{2026}",
             "sv": "Åtgärd pågår\u{2026}", "nb": "Handling pågår\u{2026}",
             "da": "Handling i gang\u{2026}", "ja": "処理中\u{2026}",
@@ -1982,7 +2132,7 @@ public enum L10n {
         ],
         "amPlayingFormat": [
             "en": "Playing %@\u{2026}", "de": "%@ wird abgespielt\u{2026}",
-            "fr": "Lecture de %@\u{2026}", "nl": "%@ afspelen\u{2026}",
+            "fr": "Lecture de %@\u{2026}", "nl": "%@ afspelen…",
             "es": "Reproduciendo %@\u{2026}", "it": "Riproduzione di %@\u{2026}",
             "sv": "Spelar %@\u{2026}", "nb": "Spiller %@\u{2026}",
             "da": "Afspiller %@\u{2026}", "ja": "%@ を再生中\u{2026}",
@@ -1991,7 +2141,7 @@ public enum L10n {
         ],
         "amQueueingNextFormat": [
             "en": "Queueing %@ next\u{2026}", "de": "%@ wird als Nächstes eingereiht\u{2026}",
-            "fr": "Mise en file de %@ ensuite\u{2026}", "nl": "%@ als volgende in wachtrij\u{2026}",
+            "fr": "Mise en file de %@ ensuite\u{2026}", "nl": "%@ als volgende in wachtrij…",
             "es": "Poniendo %@ a continuación\u{2026}", "it": "%@ in coda come successivo\u{2026}",
             "sv": "Köar %@ härnäst\u{2026}", "nb": "Køer %@ som neste\u{2026}",
             "da": "Sætter %@ i kø som næste\u{2026}", "ja": "%@ を次にキューに追加中\u{2026}",
@@ -2000,7 +2150,7 @@ public enum L10n {
         ],
         "amAddingToQueueFormat": [
             "en": "Adding %@ to queue\u{2026}", "de": "%@ wird zur Warteschlange hinzugefügt\u{2026}",
-            "fr": "Ajout de %@ à la file\u{2026}", "nl": "%@ toevoegen aan wachtrij\u{2026}",
+            "fr": "Ajout de %@ à la file\u{2026}", "nl": "%@ toevoegen aan wachtrij…",
             "es": "Añadiendo %@ a la cola\u{2026}", "it": "Aggiunta di %@ alla coda\u{2026}",
             "sv": "Lägger till %@ i kön\u{2026}", "nb": "Legger til %@ i køen\u{2026}",
             "da": "Tilføjer %@ til køen\u{2026}", "ja": "%@ をキューに追加中\u{2026}",
@@ -2009,7 +2159,7 @@ public enum L10n {
         ],
         "amPlayingTopSongsFormat": [
             "en": "Playing %@ top songs\u{2026}", "de": "Top-Titel von %@ werden abgespielt\u{2026}",
-            "fr": "Lecture des meilleurs titres de %@\u{2026}", "nl": "Topnummers van %@ afspelen\u{2026}",
+            "fr": "Lecture des meilleurs titres de %@\u{2026}", "nl": "Topnummers van %@ afspelen…",
             "es": "Reproduciendo las canciones principales de %@\u{2026}", "it": "Riproduzione dei brani principali di %@\u{2026}",
             "sv": "Spelar de bästa låtarna av %@\u{2026}", "nb": "Spiller de beste sangene av %@\u{2026}",
             "da": "Afspiller de bedste sange af %@\u{2026}", "ja": "%@ の人気曲を再生中\u{2026}",
@@ -2018,7 +2168,7 @@ public enum L10n {
         ],
         "amQueueingTopSongsNextFormat": [
             "en": "Queueing %@ top songs next\u{2026}", "de": "Top-Titel von %@ werden als Nächstes eingereiht\u{2026}",
-            "fr": "Mise en file des meilleurs titres de %@ ensuite\u{2026}", "nl": "Topnummers van %@ als volgende in wachtrij\u{2026}",
+            "fr": "Mise en file des meilleurs titres de %@ ensuite\u{2026}", "nl": "Topnummers van %@ als volgende in wachtrij…",
             "es": "Poniendo las canciones principales de %@ a continuación\u{2026}", "it": "Brani principali di %@ in coda come successivi\u{2026}",
             "sv": "Köar de bästa låtarna av %@ härnäst\u{2026}", "nb": "Køer de beste sangene av %@ som neste\u{2026}",
             "da": "Sætter de bedste sange af %@ i kø som næste\u{2026}", "ja": "%@ の人気曲を次にキューに追加中\u{2026}",
@@ -2027,7 +2177,7 @@ public enum L10n {
         ],
         "amAddingTopSongsToQueueFormat": [
             "en": "Adding %@ top songs to queue\u{2026}", "de": "Top-Titel von %@ werden zur Warteschlange hinzugefügt\u{2026}",
-            "fr": "Ajout des meilleurs titres de %@ à la file\u{2026}", "nl": "Topnummers van %@ toevoegen aan wachtrij\u{2026}",
+            "fr": "Ajout des meilleurs titres de %@ à la file\u{2026}", "nl": "Topnummers van %@ toevoegen aan wachtrij…",
             "es": "Añadiendo las canciones principales de %@ a la cola\u{2026}", "it": "Aggiunta dei brani principali di %@ alla coda\u{2026}",
             "sv": "Lägger till de bästa låtarna av %@ i kön\u{2026}", "nb": "Legger til de beste sangene av %@ i køen\u{2026}",
             "da": "Tilføjer de bedste sange af %@ til køen\u{2026}", "ja": "%@ の人気曲をキューに追加中\u{2026}",
@@ -2036,7 +2186,7 @@ public enum L10n {
         ],
         "amPlayingTracksFormat": [
             "en": "Playing %d track(s)\u{2026}", "de": "%d Titel werden abgespielt\u{2026}",
-            "fr": "Lecture de %d piste(s)\u{2026}", "nl": "%d nummer(s) afspelen\u{2026}",
+            "fr": "Lecture de %d piste(s)\u{2026}", "nl": "%d nummer(s) afspelen…",
             "es": "Reproduciendo %d pista(s)\u{2026}", "it": "Riproduzione di %d brano/i\u{2026}",
             "sv": "Spelar %d låt(ar)\u{2026}", "nb": "Spiller %d spor\u{2026}",
             "da": "Afspiller %d numre\u{2026}", "ja": "%d 曲を再生中\u{2026}",
@@ -2045,7 +2195,7 @@ public enum L10n {
         ],
         "amAddingTracksToQueueFormat": [
             "en": "Adding %d track(s) to queue\u{2026}", "de": "%d Titel werden zur Warteschlange hinzugefügt\u{2026}",
-            "fr": "Ajout de %d piste(s) à la file\u{2026}", "nl": "%d nummer(s) toevoegen aan wachtrij\u{2026}",
+            "fr": "Ajout de %d piste(s) à la file\u{2026}", "nl": "%d nummer(s) toevoegen aan wachtrij…",
             "es": "Añadiendo %d pista(s) a la cola\u{2026}", "it": "Aggiunta di %d brano/i alla coda\u{2026}",
             "sv": "Lägger till %d låt(ar) i kön\u{2026}", "nb": "Legger til %d spor i køen\u{2026}",
             "da": "Tilføjer %d numre til køen\u{2026}", "ja": "%d 曲をキューに追加中\u{2026}",
@@ -2054,7 +2204,7 @@ public enum L10n {
         ],
         "amQueueingTracksNextFormat": [
             "en": "Queueing %d track(s) next\u{2026}", "de": "%d Titel werden als Nächstes eingereiht\u{2026}",
-            "fr": "Mise en file de %d piste(s) ensuite\u{2026}", "nl": "%d nummer(s) als volgende in wachtrij\u{2026}",
+            "fr": "Mise en file de %d piste(s) ensuite\u{2026}", "nl": "%d nummer(s) als volgende in wachtrij…",
             "es": "Poniendo %d pista(s) a continuación\u{2026}", "it": "%d brano/i in coda come successivi\u{2026}",
             "sv": "Köar %d låt(ar) härnäst\u{2026}", "nb": "Køer %d spor som neste\u{2026}",
             "da": "Sætter %d numre i kø som næste\u{2026}", "ja": "%d 曲を次にキューに追加中\u{2026}",
@@ -2126,7 +2276,7 @@ public enum L10n {
         ],
         "amSearchHint": [
             "en": "Try \"jazz\", \"pop\", \"rock\", \"chill\" or an artist name.",
-            "de": "Versuchen Sie \"jazz\", \"pop\", \"rock\", \"chill\" oder einen Künstlernamen.",
+            "de": "Versuche \\\"jazz\\\", \\\"pop\\\", \\\"rock\\\", \\\"chill\\\" oder einen Künstlernamen.",
             "fr": "Essayez \"jazz\", \"pop\", \"rock\", \"chill\" ou un nom d’artiste.",
             "nl": "Probeer \"jazz\", \"pop\", \"rock\", \"chill\" of een artiestennaam.",
             "es": "Prueba \"jazz\", \"pop\", \"rock\", \"chill\" o el nombre de un artista.",
@@ -2139,6 +2289,9 @@ public enum L10n {
             "pl": "Wypróbuj \"jazz\", \"pop\", \"rock\", \"chill\" lub nazwę wykonawcy.",
             "zh-Hans": "试试 \"jazz\"、\"pop\"、\"rock\"、\"chill\" 或艺人名称。",
         ],
+    ]
+
+    private static let translations4: [String: [String: String]] = [
         "amItemsCountFormat": [
             "en": "%d item(s)", "de": "%d Objekt(e)", "fr": "%d élément(s)", "nl": "%d item(s)",
             "es": "%d elemento(s)", "it": "%d elemento/i", "sv": "%d objekt", "nb": "%d element(er)",
@@ -2299,9 +2452,12 @@ public enum L10n {
         "amMadeForYou": [
             "en": "Made for You", "de": "Für dich", "fr": "Pour vous", "nl": "Voor jou",
             "es": "Hecho para ti", "it": "Per te", "sv": "Skapat för dig", "nb": "Laget for deg",
-            "da": "Lavet til dig", "ja": "あなたのために", "pt": "Feito para você", "pl": "Dla Ciebie",
+            "da": "Lavet til dig", "ja": "あなたのために", "pt": "Feito para ti", "pl": "Dla Ciebie",
             "zh-Hans": "为你推荐",
         ],
+    ]
+
+    private static let translations5: [String: [String: String]] = [
         "amCharts": [
             "en": "Charts", "de": "Charts", "fr": "Classements", "nl": "Hitlijsten",
             "es": "Listas", "it": "Classifiche", "sv": "Listor", "nb": "Lister",
@@ -2341,7 +2497,7 @@ public enum L10n {
         "amStationsForYou": [
             "en": "Stations For You", "de": "Sender für dich", "fr": "Stations pour vous", "nl": "Stations voor jou",
             "es": "Emisoras para ti", "it": "Stazioni per te", "sv": "Stationer för dig", "nb": "Stasjoner for deg",
-            "da": "Stationer til dig", "ja": "あなたへのステーション", "pt": "Estações para você", "pl": "Stacje dla Ciebie",
+            "da": "Stationer til dig", "ja": "あなたへのステーション", "pt": "Estações para ti", "pl": "Stacje dla Ciebie",
             "zh-Hans": "为你推荐的电台",
         ],
         "amRadioStations": [
@@ -2412,7 +2568,7 @@ public enum L10n {
         ],
         "amSearchPrompt": [
             "en": "Type a song, album, artist, or playlist to search the catalog.",
-            "de": "Geben Sie einen Titel, ein Album, einen Interpreten oder eine Playlist ein, um den Katalog zu durchsuchen.",
+            "de": "Gib einen Titel, ein Album, einen Interpreten oder eine Playlist ein, um den Katalog zu durchsuchen.",
             "fr": "Saisissez un morceau, un album, un artiste ou une playlist pour rechercher dans le catalogue.",
             "nl": "Typ een nummer, album, artiest of afspeellijst om de catalogus te doorzoeken.",
             "es": "Escribe una canción, álbum, artista o lista para buscar en el catálogo.",
@@ -2427,7 +2583,7 @@ public enum L10n {
         ],
         "amSearchCatalogPrompt": [
             "en": "Type a song, album, or artist to search the Apple Music catalog.",
-            "de": "Geben Sie einen Titel, ein Album oder einen Interpreten ein, um den Apple Music-Katalog zu durchsuchen.",
+            "de": "Gib einen Titel, ein Album oder einen Interpreten ein, um den Apple Music-Katalog zu durchsuchen.",
             "fr": "Saisissez un morceau, un album ou un artiste pour rechercher dans le catalogue Apple Music.",
             "nl": "Typ een nummer, album of artiest om de Apple Music-catalogus te doorzoeken.",
             "es": "Escribe una canción, álbum o artista para buscar en el catálogo de Apple Music.",
@@ -2447,7 +2603,7 @@ public enum L10n {
             "zh-Hans": "没有结果",
         ],
         "amTryDifferentQuery": [
-            "en": "Try a different query.", "de": "Versuchen Sie eine andere Suche.", "fr": "Essayez une autre recherche.", "nl": "Probeer een andere zoekopdracht.",
+            "en": "Try a different query.", "de": "Versuche eine andere Suche.", "fr": "Essayez une autre recherche.", "nl": "Probeer een andere zoekopdracht.",
             "es": "Prueba otra búsqueda.", "it": "Prova una ricerca diversa.", "sv": "Prova en annan sökning.", "nb": "Prøv et annet søk.",
             "da": "Prøv en anden søgning.", "ja": "別のキーワードをお試しください。", "pt": "Tente outra busca.", "pl": "Spróbuj innego zapytania.",
             "zh-Hans": "请尝试其他搜索词。",
@@ -2470,6 +2626,9 @@ public enum L10n {
             "da": "Ingen album matchede.", "ja": "一致するアルバムがありません。", "pt": "Nenhum álbum correspondente.", "pl": "Brak pasujących albumów.",
             "zh-Hans": "没有匹配的专辑。",
         ],
+    ]
+
+    private static let translations6: [String: [String: String]] = [
         "amNoArtists": [
             "en": "No artists", "de": "Keine Interpreten", "fr": "Aucun artiste", "nl": "Geen artiesten",
             "es": "Sin artistas", "it": "Nessun artista", "sv": "Inga artister", "nb": "Ingen artister",
@@ -2514,7 +2673,7 @@ public enum L10n {
         ],
         "amPromptBodyNotDetermined": [
             "en": "Allow Choragus to read your Apple Music catalog so you can search and browse from inside the app.",
-            "de": "Erlauben Sie Choragus, Ihren Apple Music-Katalog zu lesen, damit Sie direkt in der App suchen und stöbern können.",
+            "de": "Erlaube Choragus, deinen Apple Music-Katalog zu lesen, damit du direkt in der App suchen und stöbern kannst.",
             "fr": "Autorisez Choragus à lire votre catalogue Apple Music afin de rechercher et parcourir depuis l’app.",
             "nl": "Geef Choragus toegang tot je Apple Music-catalogus zodat je in de app kunt zoeken en bladeren.",
             "es": "Permite que Choragus lea tu catálogo de Apple Music para buscar y explorar desde la app.",
@@ -2529,9 +2688,9 @@ public enum L10n {
         ],
         "amPromptBodyDenied": [
             "en": "Choragus needs Apple Music access to search the catalog. Open System Settings \u{2192} Privacy & Security \u{2192} Media & Apple Music and enable Choragus.",
-            "de": "Choragus benötigt Apple Music-Zugriff, um den Katalog zu durchsuchen. Öffnen Sie Systemeinstellungen \u{2192} Datenschutz & Sicherheit \u{2192} Medien & Apple Music und aktivieren Sie Choragus.",
+            "de": "Choragus benötigt Apple Music-Zugriff, um den Katalog zu durchsuchen. Öffne Systemeinstellungen → Datenschutz & Sicherheit → Medien & Apple Music und aktiviere Choragus.",
             "fr": "Choragus a besoin de l’accès à Apple Music pour rechercher dans le catalogue. Ouvrez Réglages Système \u{2192} Confidentialité et sécurité \u{2192} Médias et Apple Music et activez Choragus.",
-            "nl": "Choragus heeft Apple Music-toegang nodig om de catalogus te doorzoeken. Open Systeeminstellingen \u{2192} Privacy en beveiliging \u{2192} Media en Apple Music en schakel Choragus in.",
+            "nl": "Choragus heeft Apple Music-toegang nodig om de catalogus te doorzoeken. Open Systeeminstellingen → Privacy en beveiliging → Media en Apple Music en schakel Choragus in.",
             "es": "Choragus necesita acceso a Apple Music para buscar en el catálogo. Abre Ajustes del Sistema \u{2192} Privacidad y seguridad \u{2192} Contenido y Apple Music y activa Choragus.",
             "it": "Choragus ha bisogno dell’accesso ad Apple Music per cercare nel catalogo. Apri Impostazioni di Sistema \u{2192} Privacy e sicurezza \u{2192} Contenuti multimediali e Apple Music e attiva Choragus.",
             "sv": "Choragus behöver Apple Music-åtkomst för att söka i katalogen. Öppna Systeminställningar \u{2192} Integritet och säkerhet \u{2192} Media och Apple Music och aktivera Choragus.",
@@ -2544,7 +2703,7 @@ public enum L10n {
         ],
         "amPromptBodyNoSubscription": [
             "en": "Apple Music search needs an active subscription on the Apple ID you're signed in with on this Mac.",
-            "de": "Die Apple Music-Suche erfordert ein aktives Abonnement für die Apple-ID, mit der Sie auf diesem Mac angemeldet sind.",
+            "de": "Die Apple Music-Suche erfordert ein aktives Abonnement für die Apple-ID, mit der du auf diesem Mac angemeldet bist.",
             "fr": "La recherche Apple Music nécessite un abonnement actif sur l’identifiant Apple connecté sur ce Mac.",
             "nl": "Apple Music-zoeken vereist een actief abonnement op de Apple ID waarmee je op deze Mac bent ingelogd.",
             "es": "La búsqueda en Apple Music necesita una suscripción activa en el ID de Apple con el que iniciaste sesión en este Mac.",
@@ -2553,13 +2712,13 @@ public enum L10n {
             "nb": "Apple Music-søk krever et aktivt abonnement på Apple-ID-en du er logget på med på denne Macen.",
             "da": "Søgning i Apple Music kræver et aktivt abonnement på det Apple-id, du er logget ind med på denne Mac.",
             "ja": "Apple Musicの検索には、このMacでサインインしているApple IDでの有効な登録が必要です。",
-            "pt": "A busca no Apple Music precisa de uma assinatura ativa no ID Apple com que você fez login neste Mac.",
+            "pt": "A busca no Apple Music precisa de uma assinatura ativa no ID Apple com que fizeste login neste Mac.",
             "pl": "Wyszukiwanie w Apple Music wymaga aktywnej subskrypcji na Apple ID, na którym zalogowano się na tym Macu.",
             "zh-Hans": "Apple Music 搜索需要你在此 Mac 上登录的 Apple ID 拥有有效订阅。",
         ],
         "amPromptBodyNotApplicable": [
             "en": "This build doesn't include MusicKit support. Use the legacy Apple Music entry under Music Services to search via Sonos.",
-            "de": "Diese Version enthält keine MusicKit-Unterstützung. Verwenden Sie den älteren Apple Music-Eintrag unter Musikdienste, um über Sonos zu suchen.",
+            "de": "Diese Version enthält keine MusicKit-Unterstützung. Verwende den älteren Apple Music-Eintrag unter Musikdienste, um über Sonos zu suchen.",
             "fr": "Cette version n’inclut pas la prise en charge de MusicKit. Utilisez l’entrée Apple Music classique sous Services musicaux pour rechercher via Sonos.",
             "nl": "Deze build bevat geen MusicKit-ondersteuning. Gebruik de oudere Apple Music-vermelding onder Muziekdiensten om via Sonos te zoeken.",
             "es": "Esta versión no incluye compatibilidad con MusicKit. Usa la entrada clásica de Apple Music en Servicios de música para buscar a través de Sonos.",
@@ -2792,6 +2951,9 @@ public enum L10n {
             "pl": "Poka\u{017C} kolejk\u{0119} odtwarzania",
             "zh-Hans": "\u{663E}\u{793A}\u{64AD}\u{653E}\u{961F}\u{5217}",
         ],
+    ]
+
+    private static let translations7: [String: [String: String]] = [
         "manageAlarms": [
             "en": "Manage alarms",
             "de": "Wecker verwalten",
@@ -2932,6 +3094,96 @@ public enum L10n {
             "pl": "Odtwarzanie z",
             "zh-Hans": "\u{64AD}\u{653E}\u{6765}\u{6E90}",
         ],
+        "addToChoragusQueue": [
+            "en": "Add to Choragus Queue",
+            "de": "Zur Choragus-Warteschlange hinzufügen",
+            "fr": "Ajouter à la file d’attente Choragus",
+            "nl": "Toevoegen aan Choragus-wachtrij",
+            "es": "Añadir a la cola de Choragus",
+            "it": "Aggiungi alla coda di Choragus",
+            "sv": "Lägg till i Choragus-kön",
+            "nb": "Legg til i Choragus-køen",
+            "da": "Føj til Choragus-køen",
+            "ja": "Choragus のキューに追加",
+            "pt": "Adicionar à fila do Choragus",
+            "pl": "Dodaj do kolejki Choragus",
+            "zh-Hans": "添加到 Choragus 队列",
+        ],
+        "jumpToLetter": [
+            "en": "Jump to letter",
+            "de": "Zum Buchstaben springen",
+            "fr": "Aller à la lettre",
+            "nl": "Ga naar letter",
+            "es": "Ir a la letra",
+            "it": "Vai alla lettera",
+            "sv": "Hoppa till bokstav",
+            "nb": "Gå til bokstav",
+            "da": "Gå til bogstav",
+            "ja": "文字へジャンプ",
+            "pt": "Ir para a letra",
+            "pl": "Przejdź do litery",
+            "zh-Hans": "跳转到字母",
+        ],
+        "pasteSunoLink": [
+            "en": "Paste a suno.com song link",
+            "de": "Suno.com-Songlink einsetzen",
+            "fr": "Collez un lien vers un morceau suno.com",
+            "nl": "Plak een suno.com-songlink",
+            "es": "Pega un enlace de canción de suno.com",
+            "it": "Incolla un link a un brano di suno.com",
+            "sv": "Klistra in en suno.com-låtlänk",
+            "nb": "Lim inn en suno.com-sanglenke",
+            "da": "Indsæt et suno.com-sanglink",
+            "ja": "suno.com の曲リンクを貼り付け",
+            "pt": "Cole uma ligação de música do suno.com",
+            "pl": "Wklej link do utworu z suno.com",
+            "zh-Hans": "粘贴 suno.com 歌曲链接",
+        ],
+        "trackPhoto": [
+            "en": "%@ photo",
+            "de": "Foto von %@",
+            "fr": "Photo de %@",
+            "nl": "Foto van %@",
+            "es": "Foto de %@",
+            "it": "Foto di %@",
+            "sv": "Foto av %@",
+            "nb": "Bilde av %@",
+            "da": "Foto af %@",
+            "ja": "%@ の写真",
+            "pt": "Fotografia de %@",
+            "pl": "Zdjęcie: %@",
+            "zh-Hans": "%@的照片",
+        ],
+        "trackAppleMusicImage": [
+            "en": "%@ Apple Music image",
+            "de": "Apple-Music-Bild von %@",
+            "fr": "Image Apple Music de %@",
+            "nl": "Apple Music-afbeelding van %@",
+            "es": "Imagen de Apple Music de %@",
+            "it": "Immagine Apple Music di %@",
+            "sv": "Apple Music-bild av %@",
+            "nb": "Apple Music-bilde av %@",
+            "da": "Apple Music-billede af %@",
+            "ja": "%@ の Apple Music 画像",
+            "pt": "Imagem do Apple Music de %@",
+            "pl": "Obraz Apple Music: %@",
+            "zh-Hans": "%@ 的 Apple Music 图片",
+        ],
+        "errorTracksSkippingEarly": [
+            "en": "Tracks are being skipped — the song links may have expired. Re-add them from the service.",
+            "de": "Titel werden übersprungen — die Songlinks sind möglicherweise abgelaufen. Füge sie erneut aus dem Dienst hinzu.",
+            "fr": "Les morceaux sont ignorés — les liens ont peut-être expiré. Rajoutez-les depuis le service.",
+            "nl": "Nummers worden overgeslagen — de songlinks zijn mogelijk verlopen. Voeg ze opnieuw toe vanuit de service.",
+            "es": "Se están saltando pistas: puede que los enlaces hayan caducado. Vuelve a añadirlas desde el servicio.",
+            "it": "I brani vengono saltati: i link potrebbero essere scaduti. Aggiungili di nuovo dal servizio.",
+            "sv": "Spår hoppas över – låtlänkarna kan ha gått ut. Lägg till dem igen från tjänsten.",
+            "nb": "Spor hoppes over – sanglenkene kan ha utløpt. Legg dem til på nytt fra tjenesten.",
+            "da": "Numre springes over – sanglinkene kan være udløbet. Føj dem til igen fra tjenesten.",
+            "ja": "トラックがスキップされています。曲のリンクの有効期限が切れている可能性があります。サービスから追加し直してください。",
+            "pt": "As faixas estão a ser ignoradas — as ligações podem ter expirado. Volta a adicioná-las a partir do serviço.",
+            "pl": "Utwory są pomijane — linki do utworów mogły wygasnąć. Dodaj je ponownie z poziomu usługi.",
+            "zh-Hans": "曲目被跳过——歌曲链接可能已过期。请从该服务重新添加。",
+        ],
         "live": [
             "en": "Live",
             "de": "Live",
@@ -3056,7 +3308,7 @@ public enum L10n {
             "en": "Copy Track Info",
             "de": "Titelinfo kopieren",
             "fr": "Copier les infos",
-            "nl": "Trackinfo kopi\u{00EB}ren",
+            "nl": "Trackinfo kopiëren",
             "es": "Copiar info de pista",
             "it": "Copia info traccia",
             "sv": "Kopiera sp\u{00E5}rinfo",
@@ -3102,6 +3354,9 @@ public enum L10n {
         // MARK: Browse
         // ========================
 
+    ]
+
+    private static let translations8: [String: [String: String]] = [
         "browseHome": [
             "en": "Browse home",
             "de": "Startseite durchsuchen",
@@ -3462,6 +3717,9 @@ public enum L10n {
             "pl": "Klonuj do Choragus",
             "zh-Hans": "\u{514B}\u{9686}\u{5230} Choragus",
         ],
+    ]
+
+    private static let translations9: [String: [String: String]] = [
         "emptyQueueLibrary": [
             "en": "No saved queues or playlists yet",
             "de": "Noch keine gespeicherten Warteschlangen oder Playlists",
@@ -3761,7 +4019,7 @@ public enum L10n {
             "en": "Coordinator",
             "de": "Koordinator",
             "fr": "Coordinateur",
-            "nl": "Co\u{00F6}rdinator",
+            "nl": "Coördinator",
             "es": "Coordinador",
             "it": "Coordinatore",
             "sv": "Koordinator",
@@ -3852,6 +4110,9 @@ public enum L10n {
             "pl": "Pozosta\u{0142}y czas",
             "zh-Hans": "\u{5269}\u{4F59}\u{65F6}\u{95F4}",
         ],
+    ]
+
+    private static let translations10: [String: [String: String]] = [
         "cancelTimer": [
             "en": "Cancel Timer",
             "de": "Timer abbrechen",
@@ -4195,7 +4456,7 @@ public enum L10n {
         "networkInfo": [
             "en": "Event-Driven: Real-time UPnP subscriptions. Lower traffic, faster response. Legacy Polling: Queries every 2 seconds. More predictable on problematic networks. Quick Start: Instant UI from cache, verified in background. Classic: Waits for live discovery. Always accurate.",
             "de": "Ereignisgesteuert: UPnP-Abonnements in Echtzeit. Weniger Datenverkehr, schnellere Reaktion. Legacy-Abfrage: Abfragen alle 2 Sekunden. Zuverl\u{00E4}ssiger in problematischen Netzwerken. Schnellstart: Sofortige UI aus dem Cache, im Hintergrund verifiziert. Klassisch: Wartet auf Live-Erkennung. Immer genau.",
-            "fr": "\u{00C9}v\u{00E9}nementiel : Abonnements UPnP en temps r\u{00E9}el. Moins de trafic, r\u{00E9}ponse plus rapide. Interrogation classique : Requ\u{00EA}tes toutes les 2 secondes. Plus pr\u{00E9}visible sur les r\u{00E9}seaux probl\u{00E9}matiques. D\u{00E9}marrage rapide : Interface instantan\u{00E9}e depuis le cache, v\u{00E9}rifi\u{00E9}e en arri\u{00E8}re-plan. Classique : Attend la d\u{00E9}couverte en direct. Toujours pr\u{00E9}cis.",
+            "fr": "Événementiel : Abonnements UPnP en temps réel. Moins de trafic, réponse plus rapide. Interrogation classique : Requêtes toutes les 2 secondes. Plus prévisible sur les réseaux problématiques. Démarrage rapide : Interface instantanée depuis le cache, vérifiée en arrière-plan. Classique : Attend la découverte en direct. Toujours précis.",
             "nl": "Gebeurtenisgestuurd: Realtime UPnP-abonnementen. Minder verkeer, snellere respons. Legacy-polling: Vraagt elke 2 seconden. Voorspelbaarder op problematische netwerken. Snelle start: Directe UI uit cache, geverifieerd op de achtergrond. Klassiek: Wacht op live-detectie. Altijd nauwkeurig.",
             "es": "Basado en eventos: Suscripciones UPnP en tiempo real. Menos tr\u{00E1}fico, respuesta m\u{00E1}s r\u{00E1}pida. Sondeo heredado: Consultas cada 2 segundos. M\u{00E1}s predecible en redes problem\u{00E1}ticas. Inicio r\u{00E1}pido: Interfaz instant\u{00E1}nea desde la cach\u{00E9}, verificada en segundo plano. Cl\u{00E1}sico: Espera la detecci\u{00F3}n en vivo. Siempre preciso.",
             "it": "Basato su eventi: Abbonamenti UPnP in tempo reale. Meno traffico, risposta pi\u{00F9} rapida. Polling tradizionale: Interrogazioni ogni 2 secondi. Pi\u{00F9} prevedibile su reti problematiche. Avvio rapido: Interfaccia istantanea dalla cache, verificata in background. Classico: Attende il rilevamento in tempo reale. Sempre preciso.",
@@ -4237,6 +4498,9 @@ public enum L10n {
             "pl": "W pami\u{0119}ci podr\u{0119}cznej",
             "zh-Hans": "\u{5DF2}\u{7F13}\u{5B58}",
         ],
+    ]
+
+    private static let translations11: [String: [String: String]] = [
         "liveData": [
             "en": "Live",
             "de": "Live",
@@ -4434,9 +4698,9 @@ public enum L10n {
         ],
         "cacheInfo": [
             "en": "Speaker cache stores your room layout for instant startup. Artwork cache stores album art for faster browsing. Both rebuild automatically when cleared.",
-            "de": "Der Lautsprecher-Cache speichert Ihre Raumanordnung f\u{00FC}r sofortigen Start. Der Cover-Cache speichert Albumcover f\u{00FC}r schnelleres Durchsuchen. Beide werden nach dem Leeren automatisch neu aufgebaut.",
+            "de": "Der Lautsprecher-Cache speichert deine Raumanordnung für sofortigen Start. Der Cover-Cache speichert Albumcover für schnelleres Durchsuchen. Beide werden nach dem Leeren automatisch neu aufgebaut.",
             "fr": "Le cache des enceintes stocke la disposition de vos pi\u{00E8}ces pour un d\u{00E9}marrage instantan\u{00E9}. Le cache des pochettes stocke les pochettes d\u{2019}albums pour une navigation plus rapide. Les deux se reconstruisent automatiquement apr\u{00E8}s effacement.",
-            "nl": "De speakercache slaat uw kamerindeling op voor directe opstart. De albumhoescache slaat albumhoezen op voor sneller bladeren. Beide worden automatisch opnieuw opgebouwd na het wissen.",
+            "nl": "De speakercache slaat je kamerindeling op voor directe opstart. De albumhoescache slaat albumhoezen op voor sneller bladeren. Beide worden automatisch opnieuw opgebouwd na het wissen.",
             "es": "La cach\u{00E9} de altavoces almacena la disposici\u{00F3}n de las habitaciones para un inicio instant\u{00E1}neo. La cach\u{00E9} de car\u{00E1}tulas almacena las portadas de los \u{00E1}lbumes para una navegaci\u{00F3}n m\u{00E1}s r\u{00E1}pida. Ambas se reconstruyen autom\u{00E1}ticamente al borrarlas.",
             "it": "La cache degli altoparlanti memorizza la disposizione delle stanze per un avvio istantaneo. La cache delle copertine memorizza le copertine degli album per una navigazione pi\u{00F9} veloce. Entrambe si ricostruiscono automaticamente dopo la cancellazione.",
             "sv": "H\u{00F6}gtalarcachen lagrar din rumsuppst\u{00E4}llning f\u{00F6}r omedelbar start. Omslagscachen lagrar albumomslag f\u{00F6}r snabbare bl\u{00E4}ddring. B\u{00E5}da \u{00E5}teruppbyggs automatiskt n\u{00E4}r de rensas.",
@@ -4609,6 +4873,9 @@ public enum L10n {
             "sv": "Hantera f\u{00F6}rinst\u{00E4}llningar...", "nb": "Administrer forh\u{00E5}ndsinnstillinger...", "da": "Administrer forudindstillinger...",
             "ja": "\u{30D7}\u{30EA}\u{30BB}\u{30C3}\u{30C8}\u{3092}\u{7BA1}\u{7406}...", "pt": "Gerir predefinições...", "pl": "Zarządzaj ustawieniami...", "zh-Hans": "\u{7BA1}\u{7406}\u{9884}\u{8BBE}...",
         ],
+    ]
+
+    private static let translations12: [String: [String: String]] = [
         "saveFromCurrent": [
             "en": "Save Current", "de": "Aktuelle speichern", "fr": "Enregistrer l\u{2019}actuel",
             "nl": "Huidige opslaan", "es": "Guardar actual", "it": "Salva corrente",
@@ -4885,7 +5152,7 @@ public enum L10n {
             "en": "Auto runs both — keep it unless you know your network needs one specific transport.",
             "de": "Auto verwendet beide — nur \u{00E4}ndern, wenn dein Netzwerk gezielt eine Variante erfordert.",
             "fr": "Auto utilise les deux — laissez tel quel sauf si votre r\u{00E9}seau exige un transport sp\u{00E9}cifique.",
-            "nl": "Auto gebruikt beide — laat staan tenzij je netwerk \u{00E9}\u{00E9}n specifieke methode vereist.",
+            "nl": "Auto gebruikt beide — laat staan tenzij je netwerk één specifieke methode vereist.",
             "es": "Auto usa ambos — d\u{00E9}jalo as\u{00ED} salvo que tu red requiera un transporte espec\u{00ED}fico.",
             "it": "Auto utilizza entrambi — lascialo cos\u{00EC} a meno che la tua rete richieda un trasporto specifico.",
             "sv": "Auto k\u{00F6}r b\u{00E5}da — beh\u{00E5}ll om inte ditt n\u{00E4}tverk kr\u{00E4}ver en specifik transport.",
@@ -4948,6 +5215,9 @@ public enum L10n {
             "pl": "Wyszukiwanie Apple Music jest chwilowo niedost\u{0119}pne",
             "zh-Hans": "Apple Music \u{641C}\u{7D22}\u{6682}\u{65F6}\u{4E0D}\u{53EF}\u{7528}",
         ],
+    ]
+
+    private static let translations13: [String: [String: String]] = [
         "appleMusicSearchCoolingDown": [
             "en": "Cooling down",
             "de": "Wartezeit",
@@ -5052,7 +5322,7 @@ public enum L10n {
             "en": "Check for Updates\u{2026}",
             "de": "Nach Updates suchen\u{2026}",
             "fr": "Rechercher les mises \u{00E0} jour\u{2026}",
-            "nl": "Zoek naar updates\u{2026}",
+            "nl": "Zoek naar updates…",
             "es": "Buscar actualizaciones\u{2026}",
             "it": "Cerca aggiornamenti\u{2026}",
             "sv": "S\u{00F6}k efter uppdateringar\u{2026}",
@@ -5250,9 +5520,9 @@ public enum L10n {
         ],
         "updateAvailableBody": [
             "en": "You are running %1$@. The latest release is %2$@.",
-            "de": "Sie verwenden %1$@. Die neueste Version ist %2$@.",
+            "de": "Du verwendest %1$@. Die neueste Version ist %2$@.",
             "fr": "Vous utilisez %1$@. La derni\u{00E8}re version est %2$@.",
-            "nl": "U gebruikt %1$@. De laatste versie is %2$@.",
+            "nl": "Je gebruikt %1$@. De laatste versie is %2$@.",
             "es": "Est\u{00E1}s usando %1$@. La \u{00FA}ltima versi\u{00F3}n es %2$@.",
             "it": "Stai utilizzando %1$@. L\u{2019}ultima versione \u{00E8} %2$@.",
             "sv": "Du anv\u{00E4}nder %1$@. Senaste versionen \u{00E4}r %2$@.",
@@ -5310,9 +5580,9 @@ public enum L10n {
         ],
         "upToDateBody": [
             "en": "You are running the latest release (%@).",
-            "de": "Sie verwenden die neueste Version (%@).",
+            "de": "Du verwendest die neueste Version (%@).",
             "fr": "Vous utilisez la derni\u{00E8}re version (%@).",
-            "nl": "U gebruikt de laatste versie (%@).",
+            "nl": "Je gebruikt de laatste versie (%@).",
             "es": "Est\u{00E1}s usando la \u{00FA}ltima versi\u{00F3}n (%@).",
             "it": "Stai utilizzando l\u{2019}ultima versione (%@).",
             "sv": "Du anv\u{00E4}nder senaste versionen (%@).",
@@ -5338,6 +5608,9 @@ public enum L10n {
             "pl": "Sprawdzanie aktualizacji nie powiod\u{0142}o si\u{0119}.",
             "zh-Hans": "\u{68C0}\u{67E5}\u{66F4}\u{65B0}\u{5931}\u{8D25}\u{3002}",
         ],
+    ]
+
+    private static let translations14: [String: [String: String]] = [
         "releaseNotesLabel": [
             "en": "Release notes:",
             "de": "Versionshinweise:",
@@ -5393,9 +5666,9 @@ public enum L10n {
             // Setup Guide. Other locales still hold the prior, broadly-correct translation; refresh
             // when the next localization sweep happens.
             "en": "Open Settings (\u{2318},) \u{2192} Music to choose what to listen to.\n\n• TuneIn, Calm Radio, Sonos Radio, Apple Music search \u{2014} just tick the checkbox; no other setup needed.\n\n• Spotify, Plex, Apple Music playback \u{2014} first add the service in the official Sonos app (and play one song from it as a Sonos Favorite for Spotify and Apple Music), then click Connect in Settings \u{2192} Music.\n\nFor step-by-step instructions, click the Setup Guide button at the top of the Music section.",
-            "de": "Um Musik von Streaming-Diensten abzuspielen, richten Sie zun\u{00E4}chst Ihre Lautsprecher und Dienste (Spotify, Apple Music, TuneIn und andere) in der offiziellen Sonos-App ein.\n\n\u{00D6}ffnen Sie dann Einstellungen (\u{2318},) \u{2192} Musik, um die Dienste zu aktivieren, die Sie hier suchen und durchsuchen m\u{00F6}chten.",
+            "de": "Um Musik von Streaming-Diensten abzuspielen, richte zunächst deine Lautsprecher und Dienste (Spotify, Apple Music, TuneIn und andere) in der offiziellen Sonos-App ein.\\n\\nÖffne dann Einstellungen (⌘,) → Musik, um die Dienste zu aktivieren, die du hier suchen und durchsuchen möchtest.",
             "fr": "Pour lire de la musique depuis des services de streaming, configurez d\u{2019}abord vos enceintes et vos services (Spotify, Apple Music, TuneIn et autres) dans l\u{2019}application Sonos officielle.\n\nOuvrez ensuite R\u{00E9}glages (\u{2318},) \u{2192} Musique pour activer les services que vous souhaitez rechercher et explorer ici.",
-            "nl": "Om muziek van streamingdiensten af te spelen, stelt u eerst uw luidsprekers en diensten (Spotify, Apple Music, TuneIn en andere) in de offici\u{00EB}le Sonos-app in.\n\nOpen vervolgens Instellingen (\u{2318},) \u{2192} Muziek om de diensten in te schakelen die u hier wilt doorzoeken en bladeren.",
+            "nl": "Om muziek van streamingdiensten af te spelen, stel je eerst je luidsprekers en diensten (Spotify, Apple Music, TuneIn en andere) in de officiële Sonos-app in.\\n\\nOpen vervolgens Instellingen (⌘,) → Muziek om de diensten in te schakelen die je hier wilt doorzoeken en bladeren.",
             "es": "Para reproducir m\u{00FA}sica de servicios de streaming, primero configura tus altavoces y servicios (Spotify, Apple Music, TuneIn y otros) en la app oficial de Sonos.\n\nLuego abre Ajustes (\u{2318},) \u{2192} M\u{00FA}sica para activar los servicios que quieras buscar y explorar aqu\u{00ED}.",
             "it": "Per riprodurre musica dai servizi di streaming, configura prima i tuoi altoparlanti e servizi (Spotify, Apple Music, TuneIn e altri) nell\u{2019}app Sonos ufficiale.\n\nPoi apri Impostazioni (\u{2318},) \u{2192} Musica per abilitare i servizi che vuoi cercare ed esplorare qui.",
             "sv": "F\u{00F6}r att spela musik fr\u{00E5}n str\u{00F6}mningstj\u{00E4}nster, st\u{00E4}ll f\u{00F6}rst in h\u{00F6}gtalarna och tj\u{00E4}nsterna (Spotify, Apple Music, TuneIn med flera) i den officiella Sonos-appen.\n\n\u{00D6}ppna sedan Inst\u{00E4}llningar (\u{2318},) \u{2192} Musik f\u{00F6}r att aktivera de tj\u{00E4}nster du vill s\u{00F6}ka och bl\u{00E4}ddra i h\u{00E4}r.",
@@ -5581,7 +5854,7 @@ public enum L10n {
             "en": "Scrobbling sends what you listen to on Sonos to an external service so it shows up in your listening profile. All submissions come from local play history — no new network taps on your speakers.",
             "de": "Scrobbling sendet, was du auf Sonos h\u{00F6}rst, an einen externen Dienst, sodass es in deinem H\u{00F6}rprofil erscheint. Alle \u{00DC}bertragungen stammen aus dem lokalen Wiedergabeverlauf \u{2014} keine zus\u{00E4}tzlichen Netzwerkanfragen an deine Lautsprecher.",
             "fr": "Le scrobbling envoie ce que vous \u{00E9}coutez sur Sonos \u{00E0} un service externe afin qu\u{2019}il appara\u{00EE}sse dans votre profil d\u{2019}\u{00E9}coute. Toutes les soumissions proviennent de l\u{2019}historique de lecture local \u{2014} aucune nouvelle interception r\u{00E9}seau sur vos enceintes.",
-            "nl": "Scrobbling stuurt wat je op Sonos afspeelt naar een externe dienst, zodat het in je luisterprofiel verschijnt. Alle inzendingen komen uit de lokale afspeelgeschiedenis \u{2014} geen nieuwe netwerkverbindingen met je luidsprekers.",
+            "nl": "Scrobbling stuurt wat je op Sonos afspeelt naar een externe dienst, zodat het in je luisterprofiel verschijnt. Alle inzendingen komen uit de lokale afspeelgeschiedenis — geen nieuwe netwerkverbindingen met je luidsprekers.",
             "es": "El scrobbling env\u{00ED}a lo que escuchas en Sonos a un servicio externo para que aparezca en tu perfil de escucha. Todos los env\u{00ED}os provienen del historial local \u{2014} sin nuevas conexiones a tus altavoces.",
             "it": "Lo scrobbling invia ci\u{00F2} che ascolti su Sonos a un servizio esterno, cos\u{00EC} da apparire nel tuo profilo di ascolto. Tutti gli invii provengono dalla cronologia locale \u{2014} nessuna nuova connessione ai tuoi altoparlanti.",
             "sv": "Scrobbling skickar det du lyssnar p\u{00E5} i Sonos till en extern tj\u{00E4}nst s\u{00E5} det visas i din lyssnarprofil. Alla \u{00F6}verf\u{00F6}ringar kommer fr\u{00E5}n den lokala uppspelningshistoriken \u{2014} inga nya n\u{00E4}tverksanslutningar till dina h\u{00F6}gtalare.",
@@ -5647,7 +5920,7 @@ public enum L10n {
         ],
         "apiKeyPlaceholder": [
             "en": "your API key", "de": "dein API-Schl\u{00FC}ssel", "fr": "votre cl\u{00E9} API",
-            "nl": "uw API-sleutel", "es": "tu clave API", "it": "la tua chiave API",
+            "nl": "je API-sleutel", "es": "tu clave API", "it": "la tua chiave API",
             "sv": "din API-nyckel", "nb": "din API-n\u{00F8}kkel", "da": "din API-n\u{00F8}gle",
             "ja": "API \u{30AD}\u{30FC}\u{3092}\u{5165}\u{529B}",
             "pt": "sua chave de API", "pl": "tw\u{00F3}j klucz API",
@@ -5655,7 +5928,7 @@ public enum L10n {
         ],
         "sharedSecretPlaceholder": [
             "en": "your shared secret", "de": "dein gemeinsames Geheimnis",
-            "fr": "votre secret partag\u{00E9}", "nl": "uw gedeelde geheim",
+            "fr": "votre secret partag\u{00E9}", "nl": "je gedeelde geheim",
             "es": "tu secreto compartido", "it": "il tuo segreto condiviso",
             "sv": "din delade hemlighet", "nb": "din delte hemmelighet",
             "da": "din delte hemmelighed",
@@ -5683,9 +5956,12 @@ public enum L10n {
             "pt": "Credenciais v\u{00E1}lidas", "pl": "Dane logowania prawid\u{0142}owe",
             "zh-Hans": "\u{51ED}\u{8BC1}\u{6709}\u{6548}",
         ],
+    ]
+
+    private static let translations15: [String: [String: String]] = [
         "waitingForBrowser": [
             "en": "Waiting for browser\u{2026}", "de": "Warten auf Browser\u{2026}",
-            "fr": "En attente du navigateur\u{2026}", "nl": "Wachten op browser\u{2026}",
+            "fr": "En attente du navigateur\u{2026}", "nl": "Wachten op browser…",
             "es": "Esperando al navegador\u{2026}", "it": "In attesa del browser\u{2026}",
             "sv": "V\u{00E4}ntar p\u{00E5} webbl\u{00E4}saren\u{2026}",
             "nb": "Venter p\u{00E5} nettleser\u{2026}",
@@ -5738,7 +6014,7 @@ public enum L10n {
             "en": "Which speakers/rooms' history to scrobble. Group playback matches any member.",
             "de": "Welcher Lautsprecher/Raum-Verlauf gescrobbelt wird. Gruppenwiedergabe passt auf beliebige Mitglieder.",
             "fr": "Quels haut-parleurs/pi\u{00E8}ces dont l\u{2019}historique sera scrobbl\u{00E9}. La lecture group\u{00E9}e correspond \u{00E0} n\u{2019}importe quel membre.",
-            "nl": "Welke luidsprekers/kamers\u{2019} geschiedenis gescrobbled wordt. Groepsafspelen matcht elk lid.",
+            "nl": "Welke luidsprekers/kamers’ geschiedenis gescrobbled wordt. Groepsafspelen matcht elk lid.",
             "es": "De qu\u{00E9} altavoces/habitaciones se env\u{00ED}a el historial. La reproducci\u{00F3}n en grupo coincide con cualquier miembro.",
             "it": "Di quali altoparlanti/stanze inviare la cronologia. La riproduzione in gruppo corrisponde a qualsiasi membro.",
             "sv": "Vilka h\u{00F6}gtalares/rums historik att scrobbla. Gruppuppspelning matchar vilken medlem som helst.",
@@ -5826,7 +6102,7 @@ public enum L10n {
         ],
         "scrobblingProgress": [
             "en": "Scrobbling\u{2026}", "de": "Scrobbeln\u{2026}",
-            "fr": "Scrobbling\u{2026}", "nl": "Bezig met scrobblen\u{2026}",
+            "fr": "Scrobbling\u{2026}", "nl": "Bezig met scrobblen…",
             "es": "Enviando scrobbles\u{2026}", "it": "Scrobble in corso\u{2026}",
             "sv": "Scrobblar\u{2026}", "nb": "Scrobbler\u{2026}", "da": "Scrobbler\u{2026}",
             "ja": "\u{30B9}\u{30AF}\u{30ED}\u{30D6}\u{30EB}\u{4E2D}\u{2026}",
@@ -5990,6 +6266,9 @@ public enum L10n {
             "pl": "Dodaj wszystkie do kolejki",
             "zh-Hans": "\u{5168}\u{90E8}\u{6DFB}\u{52A0}\u{5230}\u{961F}\u{5217}",
         ],
+    ]
+
+    private static let translations16: [String: [String: String]] = [
         "connect": [
             "en": "Connect", "de": "Verbinden", "fr": "Se connecter",
             "nl": "Verbinden", "es": "Conectar", "it": "Connetti",
@@ -6046,7 +6325,7 @@ public enum L10n {
         ],
         "searching": [
             "en": "Searching\u{2026}", "de": "Suche\u{2026}",
-            "fr": "Recherche\u{2026}", "nl": "Zoeken\u{2026}",
+            "fr": "Recherche\u{2026}", "nl": "Zoeken…",
             "es": "Buscando\u{2026}", "it": "Ricerca in corso\u{2026}",
             "sv": "S\u{00F6}ker\u{2026}", "nb": "S\u{00F8}ker\u{2026}",
             "da": "S\u{00F8}ger\u{2026}",
@@ -6110,7 +6389,7 @@ public enum L10n {
             "en": "These services use public APIs and do not require sign-in here.\n\nTuneIn and Calm Radio support direct browsing and playback with no setup.\n\nApple Music uses the public iTunes API — no connection needed to search. For playback, Apple Music must be connected in the official Sonos app and you need one favorited song from Apple Music in your Sonos Favorites. This allows the app to discover your account credentials. Once that one favorited song exists, all search results become directly playable.\n\nSonos Radio supports search only — browsing categories requires DeviceLink authentication which is not currently supported.",
             "de": "Diese Dienste verwenden \u{00F6}ffentliche APIs und ben\u{00F6}tigen hier keine Anmeldung.\n\nTuneIn und Calm Radio unterst\u{00FC}tzen direktes Durchsuchen und Wiedergabe ohne Einrichtung.\n\nApple Music verwendet die \u{00F6}ffentliche iTunes-API \u{2014} keine Verbindung zum Suchen erforderlich. F\u{00FC}r die Wiedergabe muss Apple Music in der offiziellen Sonos-App verbunden sein und du brauchst einen favorisierten Song von Apple Music in deinen Sonos-Favoriten. Damit kann die App deine Kontoanmeldedaten entdecken. Sobald dieser favorisierte Song existiert, sind alle Suchergebnisse direkt abspielbar.\n\nSonos Radio unterst\u{00FC}tzt nur Suche \u{2014} das Durchsuchen von Kategorien erfordert DeviceLink-Authentifizierung, die derzeit nicht unterst\u{00FC}tzt wird.",
             "fr": "Ces services utilisent des API publiques et ne n\u{00E9}cessitent pas de connexion ici.\n\nTuneIn et Calm Radio permettent de parcourir et lire directement sans configuration.\n\nApple Music utilise l\u{2019}API publique d\u{2019}iTunes \u{2014} aucune connexion requise pour rechercher. Pour la lecture, Apple Music doit \u{00EA}tre connect\u{00E9} dans l\u{2019}application Sonos officielle et vous devez avoir une chanson Apple Music favorite dans vos Favoris Sonos. Cela permet \u{00E0} l\u{2019}application de d\u{00E9}couvrir vos identifiants. Une fois cette chanson favorite pr\u{00E9}sente, tous les r\u{00E9}sultats de recherche sont directement lisibles.\n\nSonos Radio ne prend en charge que la recherche \u{2014} parcourir les cat\u{00E9}gories n\u{00E9}cessite une authentification DeviceLink qui n\u{2019}est pas support\u{00E9}e.",
-            "nl": "Deze diensten gebruiken publieke API\u{2019}s en vereisen hier geen aanmelding.\n\nTuneIn en Calm Radio ondersteunen direct bladeren en afspelen zonder instelling.\n\nApple Music gebruikt de publieke iTunes-API \u{2014} geen verbinding nodig om te zoeken. Voor afspelen moet Apple Music verbonden zijn in de offici\u{00EB}le Sonos-app en moet je \u{00E9}\u{00E9}n favoriet nummer van Apple Music in je Sonos-favorieten hebben. Hierdoor kan de app je accountgegevens vinden. Zodra dat favoriete nummer bestaat, zijn alle zoekresultaten direct afspeelbaar.\n\nSonos Radio ondersteunt alleen zoeken \u{2014} bladeren door categorie\u{00EB}n vereist DeviceLink-authenticatie die momenteel niet wordt ondersteund.",
+            "nl": "Deze diensten gebruiken publieke API’s en vereisen hier geen aanmelding.\\n\\nTuneIn en Calm Radio ondersteunen direct bladeren en afspelen zonder instelling.\\n\\nApple Music gebruikt de publieke iTunes-API — geen verbinding nodig om te zoeken. Voor afspelen moet Apple Music verbonden zijn in de officiële Sonos-app en moet je één favoriet nummer van Apple Music in je Sonos-favorieten hebben. Hierdoor kan de app je accountgegevens vinden. Zodra dat favoriete nummer bestaat, zijn alle zoekresultaten direct afspeelbaar.\\n\\nSonos Radio ondersteunt alleen zoeken — bladeren door categorieën vereist DeviceLink-authenticatie die momenteel niet wordt ondersteund.",
             "es": "Estos servicios usan APIs p\u{00FA}blicas y no requieren iniciar sesi\u{00F3}n aqu\u{00ED}.\n\nTuneIn y Calm Radio admiten navegaci\u{00F3}n y reproducci\u{00F3}n directa sin configuraci\u{00F3}n.\n\nApple Music usa la API p\u{00FA}blica de iTunes \u{2014} no se necesita conexi\u{00F3}n para buscar. Para reproducir, Apple Music debe estar conectado en la app oficial de Sonos y necesitas una canci\u{00F3}n favorita de Apple Music en tus Favoritos de Sonos. Esto permite a la app descubrir las credenciales de tu cuenta. Cuando exista esa canci\u{00F3}n favorita, todos los resultados de b\u{00FA}squeda ser\u{00E1}n reproducibles.\n\nSonos Radio solo admite b\u{00FA}squeda \u{2014} explorar categor\u{00ED}as requiere autenticaci\u{00F3}n DeviceLink que actualmente no es compatible.",
             "it": "Questi servizi usano API pubbliche e non richiedono accesso qui.\n\nTuneIn e Calm Radio supportano navigazione e riproduzione diretta senza configurazione.\n\nApple Music usa l\u{2019}API pubblica di iTunes \u{2014} nessuna connessione richiesta per cercare. Per la riproduzione, Apple Music deve essere connesso nell\u{2019}app Sonos ufficiale e serve un brano preferito di Apple Music nei Preferiti Sonos. Questo consente all\u{2019}app di scoprire le credenziali del tuo account. Una volta presente quel brano preferito, tutti i risultati di ricerca saranno direttamente riproducibili.\n\nSonos Radio supporta solo la ricerca \u{2014} sfogliare le categorie richiede l\u{2019}autenticazione DeviceLink che non \u{00E8} attualmente supportata.",
             "sv": "Dessa tj\u{00E4}nster anv\u{00E4}nder publika API:er och kr\u{00E4}ver ingen inloggning h\u{00E4}r.\n\nTuneIn och Calm Radio st\u{00F6}der direkt bl\u{00E4}ddring och uppspelning utan installation.\n\nApple Music anv\u{00E4}nder iTunes publika API \u{2014} ingen anslutning beh\u{00F6}vs f\u{00F6}r s\u{00F6}kning. F\u{00F6}r uppspelning m\u{00E5}ste Apple Music vara anslutet i den officiella Sonos-appen och du beh\u{00F6}ver en favoriserad l\u{00E5}t fr\u{00E5}n Apple Music i dina Sonos-favoriter. Det g\u{00F6}r att appen kan hitta dina kontouppgifter. N\u{00E4}r den l\u{00E5}ten finns g\u{00E5}r alla s\u{00F6}kresultat att spela direkt.\n\nSonos Radio st\u{00F6}der bara s\u{00F6}kning \u{2014} kategoribl\u{00E4}ddring kr\u{00E4}ver DeviceLink-autentisering som inte st\u{00F6}ds f\u{00F6}r n\u{00E4}rvarande.",
@@ -6123,7 +6402,7 @@ public enum L10n {
         ],
         "searchServicesPlaceholder": [
             "en": "Search services\u{2026}", "de": "Dienste suchen\u{2026}",
-            "fr": "Rechercher des services\u{2026}", "nl": "Diensten zoeken\u{2026}",
+            "fr": "Rechercher des services\u{2026}", "nl": "Diensten zoeken…",
             "es": "Buscar servicios\u{2026}", "it": "Cerca servizi\u{2026}",
             "sv": "S\u{00F6}k tj\u{00E4}nster\u{2026}", "nb": "S\u{00F8}k tjenester\u{2026}",
             "da": "S\u{00F8}g tjenester\u{2026}",
@@ -6133,7 +6412,7 @@ public enum L10n {
         ],
         "otherServicesBody": [
             "en": "These services have not been tested. They may work with AppLink authentication but results are not guaranteed. Amazon Music and YouTube Music require their own OAuth and cannot be connected here.",
-            "de": "Diese Dienste wurden nicht getestet. Sie k\u{00F6}nnen mit AppLink-Authentifizierung funktionieren, aber Ergebnisse sind nicht garantiert. Amazon Music und YouTube Music ben\u{00F6}tigen ihr eigenes OAuth und k\u{00F6}nnen hier nicht verbunden werden.",
+            "de": "Diese Dienste wurden nicht getestet. Sie können mit AppLink-Authentifizierung funktionieren, aber Ergebnisse sind nicht garantiert. Amazon Music und YouTube Music benötigen ihr eigenes OAuth und können hier nicht verbunden werden.",
             "fr": "Ces services n\u{2019}ont pas \u{00E9}t\u{00E9} test\u{00E9}s. Ils peuvent fonctionner avec l\u{2019}authentification AppLink, mais les r\u{00E9}sultats ne sont pas garantis. Amazon Music et YouTube Music n\u{00E9}cessitent leur propre OAuth et ne peuvent pas \u{00EA}tre connect\u{00E9}s ici.",
             "nl": "Deze diensten zijn niet getest. Ze werken mogelijk met AppLink-authenticatie, maar resultaten zijn niet gegarandeerd. Amazon Music en YouTube Music vereisen hun eigen OAuth en kunnen hier niet verbonden worden.",
             "es": "Estos servicios no han sido probados. Pueden funcionar con autenticaci\u{00F3}n AppLink, pero los resultados no est\u{00E1}n garantizados. Amazon Music y YouTube Music requieren su propio OAuth y no pueden conectarse aqu\u{00ED}.",
@@ -6149,8 +6428,8 @@ public enum L10n {
         "testedConnectedBody": [
             "en": "Spotify and Plex have been tested and confirmed working. Connect your account; for Spotify, then add one favorited song through the Sonos app to enable full browsing and playback. Plex streams from your own server, so once connected the search works against your library directly.",
             "de": "Spotify und Plex wurden getestet und best\u{00E4}tigt. Verbinde dein Konto; f\u{00FC}ge f\u{00FC}r Spotify danach einen favorisierten Song \u{00FC}ber die Sonos-App hinzu, um vollst\u{00E4}ndiges Durchsuchen und Wiedergabe zu aktivieren. Plex streamt vom eigenen Server, daher funktioniert die Suche nach dem Verbinden direkt gegen deine Bibliothek.",
-            "fr": "Spotify et Plex ont \u{00E9}t\u{00E9} test\u{00E9}s et fonctionnent. Connectez votre compte\u{00A0}; pour Spotify, ajoutez ensuite une chanson favorite via l\u{2019}application Sonos pour activer la navigation et la lecture compl\u{00E8}tes. Plex diffuse depuis votre propre serveur, donc une fois connect\u{00E9}, la recherche fonctionne directement avec votre biblioth\u{00E8}que.",
-            "nl": "Spotify en Plex zijn getest en werken. Verbind je account; voor Spotify voeg je daarna \u{00E9}\u{00E9}n favoriet nummer toe via de Sonos-app om volledig bladeren en afspelen in te schakelen. Plex streamt vanaf je eigen server, dus na verbinden werkt zoeken direct tegen je bibliotheek.",
+            "fr": "Spotify et Plex ont été testés et fonctionnent. Connectez votre compte ; pour Spotify, ajoutez ensuite une chanson favorite via l’application Sonos pour activer la navigation et la lecture complètes. Plex diffuse depuis votre propre serveur, donc une fois connecté, la recherche fonctionne directement avec votre bibliothèque.",
+            "nl": "Spotify en Plex zijn getest en werken. Verbind je account; voor Spotify voeg je daarna één favoriet nummer toe via de Sonos-app om volledig bladeren en afspelen in te schakelen. Plex streamt vanaf je eigen server, dus na verbinden werkt zoeken direct tegen je bibliotheek.",
             "es": "Spotify y Plex han sido probados y confirmados. Conecta tu cuenta; para Spotify, agrega despu\u{00E9}s una canci\u{00F3}n favorita a trav\u{00E9}s de la app Sonos para habilitar navegaci\u{00F3}n y reproducci\u{00F3}n completas. Plex transmite desde tu propio servidor, as\u{00ED} que una vez conectado la b\u{00FA}squeda funciona directamente contra tu biblioteca.",
             "it": "Spotify e Plex sono stati testati e confermati. Connetti il tuo account; per Spotify, aggiungi poi un brano preferito tramite l\u{2019}app Sonos per abilitare navigazione e riproduzione complete. Plex trasmette dal tuo server, quindi una volta connesso la ricerca funziona direttamente sulla tua libreria.",
             "sv": "Spotify och Plex har testats och fungerar. Anslut ditt konto; f\u{00F6}r Spotify, l\u{00E4}gg sedan till en favoriserad l\u{00E5}t via Sonos-appen f\u{00F6}r att aktivera full bl\u{00E4}ddring och uppspelning. Plex str\u{00F6}mmar fr\u{00E5}n din egen server, s\u{00E5} n\u{00E4}r det \u{00E4}r anslutet fungerar s\u{00F6}kning direkt mot ditt bibliotek.",
@@ -6255,7 +6534,7 @@ public enum L10n {
             "en": "Add One Favorited Song",
             "de": "Einen favorisierten Song hinzuf\u{00FC}gen",
             "fr": "Ajouter une chanson favorite",
-            "nl": "Voeg \u{00E9}\u{00E9}n favoriet nummer toe",
+            "nl": "Voeg één favoriet nummer toe",
             "es": "A\u{00F1}adir una canci\u{00F3}n favorita",
             "it": "Aggiungi un brano preferito",
             "sv": "L\u{00E4}gg till en favoriserad l\u{00E5}t",
@@ -6270,7 +6549,7 @@ public enum L10n {
             "en": "For connected services only: using the official Sonos app on your phone, play a song from this service and add it to your Sonos Favorites. This links your account for playback.",
             "de": "Nur f\u{00FC}r verbundene Dienste: Spiele in der offiziellen Sonos-App auf deinem Smartphone einen Song dieses Dienstes ab und f\u{00FC}ge ihn zu den Sonos-Favoriten hinzu. So wird dein Konto f\u{00FC}r die Wiedergabe verkn\u{00FC}pft.",
             "fr": "Services connect\u{00E9}s uniquement\u{00A0}: dans l\u{2019}application Sonos officielle sur votre t\u{00E9}l\u{00E9}phone, lisez une chanson de ce service et ajoutez-la \u{00E0} vos Favoris Sonos. Cela lie votre compte pour la lecture.",
-            "nl": "Alleen voor verbonden diensten: speel in de offici\u{00EB}le Sonos-app op je telefoon een nummer van deze dienst af en voeg het toe aan je Sonos-favorieten. Dit koppelt je account voor afspelen.",
+            "nl": "Alleen voor verbonden diensten: speel in de officiële Sonos-app op je telefoon een nummer van deze dienst af en voeg het toe aan je Sonos-favorieten. Dit koppelt je account voor afspelen.",
             "es": "Solo servicios conectados: en la app oficial de Sonos de tu tel\u{00E9}fono, reproduce una canci\u{00F3}n del servicio y a\u{00F1}\u{00E1}dela a tus Favoritos. Esto vincula tu cuenta para la reproducci\u{00F3}n.",
             "it": "Solo servizi connessi: nell\u{2019}app Sonos ufficiale sul telefono, riproduci un brano del servizio e aggiungilo ai tuoi Preferiti Sonos. Questo collega il tuo account per la riproduzione.",
             "sv": "Endast anslutna tj\u{00E4}nster: i den officiella Sonos-appen p\u{00E5} din telefon, spela en l\u{00E5}t fr\u{00E5}n tj\u{00E4}nsten och l\u{00E4}gg till den i Sonos-favoriter. Det l\u{00E4}nkar ditt konto f\u{00F6}r uppspelning.",
@@ -6321,11 +6600,14 @@ public enum L10n {
             "pt": "Status do servi\u{00E7}o", "pl": "Stan us\u{0142}ugi",
             "zh-Hans": "\u{670D}\u{52A1}\u{72B6}\u{6001}",
         ],
+    ]
+
+    private static let translations17: [String: [String: String]] = [
         "statusActiveLine": [
             "en": "Active \u{2014} Connected and ready to play",
             "de": "Aktiv \u{2014} Verbunden und bereit zur Wiedergabe",
             "fr": "Actif \u{2014} Connect\u{00E9} et pr\u{00EA}t \u{00E0} lire",
-            "nl": "Actief \u{2014} Verbonden en klaar om af te spelen",
+            "nl": "Actief — Verbonden en klaar om af te spelen",
             "es": "Activo \u{2014} Conectado y listo para reproducir",
             "it": "Attivo \u{2014} Connesso e pronto alla riproduzione",
             "sv": "Aktiv \u{2014} Ansluten och redo att spela",
@@ -6340,7 +6622,7 @@ public enum L10n {
             "en": "Needs Favorite \u{2014} Connected but needs step 3",
             "de": "Favorit ben\u{00F6}tigt \u{2014} Verbunden, aber Schritt 3 fehlt",
             "fr": "Favori requis \u{2014} Connect\u{00E9} mais \u{00E9}tape 3 n\u{00E9}cessaire",
-            "nl": "Favoriet nodig \u{2014} Verbonden maar stap 3 vereist",
+            "nl": "Favoriet nodig — Verbonden maar stap 3 vereist",
             "es": "Necesita favorito \u{2014} Conectado pero falta paso 3",
             "it": "Richiede preferito \u{2014} Connesso ma serve lo step 3",
             "sv": "Kr\u{00E4}ver favorit \u{2014} Ansluten men steg 3 beh\u{00F6}vs",
@@ -6355,7 +6637,7 @@ public enum L10n {
             "en": "Not connected \u{2014} use Connect button",
             "de": "Nicht verbunden \u{2014} Verbinden-Taste verwenden",
             "fr": "Non connect\u{00E9} \u{2014} utilisez le bouton Se connecter",
-            "nl": "Niet verbonden \u{2014} gebruik de Verbinden-knop",
+            "nl": "Niet verbonden — gebruik de Verbinden-knop",
             "es": "No conectado \u{2014} usa el bot\u{00F3}n Conectar",
             "it": "Non connesso \u{2014} usa il pulsante Connetti",
             "sv": "Inte ansluten \u{2014} anv\u{00E4}nd Anslut-knappen",
@@ -6385,7 +6667,7 @@ public enum L10n {
             "en": "Sonos uses an internal account identifier to authenticate streaming playback. This identifier is only created when content from a service is first used through the Sonos system. Adding one favorite through the official Sonos app creates this link.",
             "de": "Sonos verwendet eine interne Konto-Kennung zur Authentifizierung der Streaming-Wiedergabe. Diese Kennung entsteht erst, wenn Inhalte eines Dienstes zum ersten Mal \u{00FC}ber das Sonos-System genutzt werden. Das Hinzuf\u{00FC}gen eines Favoriten \u{00FC}ber die offizielle Sonos-App erstellt diese Verkn\u{00FC}pfung.",
             "fr": "Sonos utilise un identifiant de compte interne pour authentifier la lecture en streaming. Cet identifiant n\u{2019}est cr\u{00E9}\u{00E9} qu\u{2019}\u{00E0} la premi\u{00E8}re utilisation d\u{2019}un contenu du service via le syst\u{00E8}me Sonos. Ajouter un favori via l\u{2019}application Sonos officielle cr\u{00E9}e ce lien.",
-            "nl": "Sonos gebruikt een interne accountidentifier voor het authenticeren van streaming-afspelen. Deze identifier wordt pas aangemaakt wanneer inhoud van een dienst voor het eerst via het Sonos-systeem wordt gebruikt. Een favoriet toevoegen via de offici\u{00EB}le Sonos-app maakt deze koppeling.",
+            "nl": "Sonos gebruikt een interne accountidentifier voor het authenticeren van streaming-afspelen. Deze identifier wordt pas aangemaakt wanneer inhoud van een dienst voor het eerst via het Sonos-systeem wordt gebruikt. Een favoriet toevoegen via de officiële Sonos-app maakt deze koppeling.",
             "es": "Sonos usa un identificador de cuenta interno para autenticar la reproducci\u{00F3}n en streaming. Este identificador solo se crea cuando el contenido de un servicio se usa por primera vez a trav\u{00E9}s del sistema Sonos. A\u{00F1}adir un favorito desde la app oficial Sonos crea ese v\u{00ED}nculo.",
             "it": "Sonos usa un identificativo account interno per autenticare la riproduzione streaming. Questo identificativo viene creato solo quando i contenuti del servizio vengono usati per la prima volta tramite il sistema Sonos. Aggiungere un preferito dall\u{2019}app Sonos ufficiale crea questo collegamento.",
             "sv": "Sonos anv\u{00E4}nder en intern kontoidentifierare f\u{00F6}r att autentisera str\u{00F6}mmande uppspelning. Identifieraren skapas f\u{00F6}rst n\u{00E4}r inneh\u{00E5}ll fr\u{00E5}n tj\u{00E4}nsten anv\u{00E4}nds f\u{00F6}rsta g\u{00E5}ngen via Sonos-systemet. Att l\u{00E4}gga till en favorit via den officiella Sonos-appen skapar l\u{00E4}nken.",
@@ -6430,7 +6712,7 @@ public enum L10n {
             "en": "Existing favorites you saved in the official Sonos app still play from the Favorites view.",
             "de": "Bestehende Favoriten, die du in der offiziellen Sonos-App gespeichert hast, lassen sich weiterhin \u{00FC}ber die Favoritenansicht abspielen.",
             "fr": "Les favoris d\u{00E9}j\u{00E0} enregistr\u{00E9}s dans l\u{2019}app Sonos officielle restent lisibles depuis la vue Favoris.",
-            "nl": "Bestaande favorieten die je in de offici\u{00EB}le Sonos-app hebt bewaard, kun je nog steeds afspelen vanuit het Favorieten-overzicht.",
+            "nl": "Bestaande favorieten die je in de officiële Sonos-app hebt bewaard, kun je nog steeds afspelen vanuit het Favorieten-overzicht.",
             "es": "Los favoritos que ya guardaste en la app oficial de Sonos se siguen reproduciendo desde la vista Favoritos.",
             "it": "I preferiti gi\u{00E0} salvati nell\u{2019}app Sonos ufficiale si possono ancora riprodurre dalla vista Preferiti.",
             "sv": "Befintliga favoriter som du sparat i den officiella Sonos-appen kan fortfarande spelas upp fr\u{00E5}n favoritvyn.",
@@ -6546,6 +6828,21 @@ public enum L10n {
             "pl": "Zatrzymano przy limicie kolejki Sonos wynosz\u{0105}cym %d utwor\u{00F3}w. Niekt\u{00F3}re utwory nie zosta\u{0142}y dodane.",
             "zh-Hans": "\u{5DF2}\u{5728} Sonos \u{7684} %d \u{9996}\u{961F}\u{5217}\u{4E0A}\u{9650}\u{5904}\u{505C}\u{6B62}\u{3002}\u{90E8}\u{5206}\u{6B4C}\u{66F2}\u{672A}\u{6DFB}\u{52A0}\u{3002}",
         ],
+        "queueTracksNotAdded": [
+            "en": "%d tracks were not added to the queue.",
+            "de": "%d Titel wurden nicht zur Warteschlange hinzugef\u{00FC}gt.",
+            "fr": "%d morceaux n\u{2019}ont pas \u{00E9}t\u{00E9} ajout\u{00E9}s \u{00E0} la file d\u{2019}attente.",
+            "nl": "%d nummers zijn niet aan de wachtrij toegevoegd.",
+            "es": "%d canciones no se a\u{00F1}adieron a la cola.",
+            "it": "%d brani non sono stati aggiunti alla coda.",
+            "sv": "%d sp\u{00E5}r lades inte till i k\u{00F6}n.",
+            "nb": "%d spor ble ikke lagt til i k\u{00F8}en.",
+            "da": "%d numre blev ikke tilf\u{00F8}jet til k\u{00F8}en.",
+            "ja": "%d \u{66F2}\u{304C}\u{30AD}\u{30E5}\u{30FC}\u{306B}\u{8FFD}\u{52A0}\u{3055}\u{308C}\u{307E}\u{305B}\u{3093}\u{3067}\u{3057}\u{305F}\u{3002}",
+            "pt": "%d faixas n\u{00E3}o foram adicionadas \u{00E0} fila.",
+            "pl": "%d utwor\u{00F3}w nie zosta\u{0142}o dodanych do kolejki.",
+            "zh-Hans": "%d \u{9996}\u{6B4C}\u{66F2}\u{672A}\u{6DFB}\u{52A0}\u{5230}\u{961F}\u{5217}\u{3002}",
+        ],
         "queueLimitReachedRemainderNotAdded": [
             "en": "Stopped at Sonos's %d-track queue limit. The remainder of the selection wasn't added.",
             "de": "Beim Sonos-Warteschlangenlimit von %d Titeln gestoppt. Der Rest der Auswahl wurde nicht hinzugef\u{00FC}gt.",
@@ -6580,7 +6877,7 @@ public enum L10n {
             "en": "Deleted \u{201C}%@\u{201D}",
             "de": "\u{201E}%@\u{201C} gel\u{00F6}scht",
             "fr": "\u{00AB}\u{00A0}%@\u{00A0}\u{00BB} supprim\u{00E9}",
-            "nl": "\u{2018}%@\u{2019} verwijderd",
+            "nl": "‘%@’ verwijderd",
             "es": "\u{00AB}%@\u{00BB} eliminado",
             "it": "\u{00AB}%@\u{00BB} eliminato",
             "sv": "\u{201D}%@\u{201D} raderades",
@@ -6595,7 +6892,7 @@ public enum L10n {
             "en": "Building %d tracks to add\u{2026}",
             "de": "%d Titel zum Hinzuf\u{00FC}gen werden vorbereitet\u{2026}",
             "fr": "Pr\u{00E9}paration de %d morceaux \u{00E0} ajouter\u{2026}",
-            "nl": "Bezig met opbouwen van %d nummers om toe te voegen\u{2026}",
+            "nl": "Bezig met opbouwen van %d nummers om toe te voegen…",
             "es": "Preparando %d canciones para a\u{00F1}adir\u{2026}",
             "it": "Preparazione di %d brani da aggiungere\u{2026}",
             "sv": "F\u{00F6}rbereder %d sp\u{00E5}r att l\u{00E4}gga till\u{2026}",
@@ -6625,7 +6922,7 @@ public enum L10n {
             "en": "Choragus is walking the library. Add All becomes available once the count is final, or Cancel to stop without adding anything.",
             "de": "Choragus durchsucht die Mediathek. \u{201E}Alle hinzuf\u{00FC}gen\u{201C} wird verf\u{00FC}gbar, sobald die Anzahl feststeht, oder mit \u{201E}Abbrechen\u{201C} beenden, ohne etwas hinzuzuf\u{00FC}gen.",
             "fr": "Choragus parcourt la biblioth\u{00E8}que. \u{00AB}\u{00A0}Tout ajouter\u{00A0}\u{00BB} sera disponible une fois le d\u{00E9}compte termin\u{00E9}, ou cliquez sur \u{00AB}\u{00A0}Annuler\u{00A0}\u{00BB} pour arr\u{00EA}ter sans rien ajouter.",
-            "nl": "Choragus doorloopt de bibliotheek. \u{2018}Alles toevoegen\u{2019} wordt beschikbaar zodra het totaal vaststaat, of klik op \u{2018}Annuleer\u{2019} om te stoppen zonder iets toe te voegen.",
+            "nl": "Choragus doorloopt de bibliotheek. ‘Alles toevoegen’ wordt beschikbaar zodra het totaal vaststaat, of klik op ‘Annuleer’ om te stoppen zonder iets toe te voegen.",
             "es": "Choragus est\u{00E1} recorriendo la biblioteca. \u{00AB}A\u{00F1}adir todo\u{00BB} estar\u{00E1} disponible cuando se conozca el total, o pulsa \u{00AB}Cancelar\u{00BB} para detener sin a\u{00F1}adir nada.",
             "it": "Choragus sta esplorando la libreria. \u{00AB}Aggiungi tutto\u{00BB} sar\u{00E0} disponibile quando il conteggio sar\u{00E0} definitivo, oppure fai clic su \u{00AB}Annulla\u{00BB} per interrompere senza aggiungere nulla.",
             "sv": "Choragus g\u{00E5}r igenom biblioteket. \u{201D}L\u{00E4}gg till alla\u{201D} blir tillg\u{00E4}ngligt n\u{00E4}r antalet \u{00E4}r klart, eller v\u{00E4}lj \u{201D}Avbryt\u{201D} f\u{00F6}r att stoppa utan att l\u{00E4}gga till n\u{00E5}got.",
@@ -6640,7 +6937,7 @@ public enum L10n {
             "en": "Click Add All to queue these tracks. The queue panel will update progressively as they\u{2019}re added.",
             "de": "Klicke auf \u{201E}Alle hinzuf\u{00FC}gen\u{201C}, um diese Titel in die Warteschlange aufzunehmen. Die Warteschlange wird beim Hinzuf\u{00FC}gen fortlaufend aktualisiert.",
             "fr": "Cliquez sur \u{00AB}\u{00A0}Tout ajouter\u{00A0}\u{00BB} pour mettre ces morceaux en file d\u{2019}attente. Le panneau de file d\u{2019}attente se met \u{00E0} jour au fur et \u{00E0} mesure de leur ajout.",
-            "nl": "Klik op \u{2018}Alles toevoegen\u{2019} om deze nummers in de wachtrij te plaatsen. Het wachtrijpaneel wordt geleidelijk bijgewerkt naarmate ze worden toegevoegd.",
+            "nl": "Klik op ‘Alles toevoegen’ om deze nummers in de wachtrij te plaatsen. Het wachtrijpaneel wordt geleidelijk bijgewerkt naarmate ze worden toegevoegd.",
             "es": "Pulsa \u{00AB}A\u{00F1}adir todo\u{00BB} para poner estas canciones en la cola. El panel de la cola se ir\u{00E1} actualizando a medida que se a\u{00F1}adan.",
             "it": "Fai clic su \u{00AB}Aggiungi tutto\u{00BB} per mettere questi brani in coda. Il pannello della coda si aggiorner\u{00E0} progressivamente man mano che vengono aggiunti.",
             "sv": "Klicka p\u{00E5} \u{201D}L\u{00E4}gg till alla\u{201D} f\u{00F6}r att k\u{00F6}a dessa sp\u{00E5}r. K\u{00F6}panelen uppdateras efter hand som de l\u{00E4}ggs till.",
@@ -6655,7 +6952,7 @@ public enum L10n {
             "en": "Apple Music search works without connection using the public iTunes API. For playback, Apple Music must be connected in the official Sonos app, and you need one favorited song from Apple Music in your Sonos Favorites. This allows the app to discover your account credentials. Once that exists, all search results are directly playable.",
             "de": "Apple Music-Suche funktioniert ohne Verbindung \u{00FC}ber die \u{00F6}ffentliche iTunes-API. Zur Wiedergabe muss Apple Music in der offiziellen Sonos-App verbunden sein und du brauchst einen favorisierten Apple Music-Song in deinen Sonos-Favoriten. Damit kann die App deine Kontoanmeldedaten entdecken. Danach sind alle Suchergebnisse direkt abspielbar.",
             "fr": "La recherche Apple Music fonctionne sans connexion via l\u{2019}API publique d\u{2019}iTunes. Pour la lecture, Apple Music doit \u{00EA}tre connect\u{00E9} dans l\u{2019}application Sonos officielle et vous avez besoin d\u{2019}une chanson Apple Music favorite dans vos Favoris Sonos. Cela permet \u{00E0} l\u{2019}application de d\u{00E9}couvrir vos identifiants. Ensuite, tous les r\u{00E9}sultats sont directement lisibles.",
-            "nl": "Apple Music-zoeken werkt zonder verbinding via de publieke iTunes-API. Voor afspelen moet Apple Music verbonden zijn in de offici\u{00EB}le Sonos-app en heb je \u{00E9}\u{00E9}n favoriet Apple Music-nummer in je Sonos-favorieten nodig. Zo kan de app je accountgegevens vinden. Daarna zijn alle zoekresultaten direct afspeelbaar.",
+            "nl": "Apple Music-zoeken werkt zonder verbinding via de publieke iTunes-API. Voor afspelen moet Apple Music verbonden zijn in de officiële Sonos-app en heb je één favoriet Apple Music-nummer in je Sonos-favorieten nodig. Zo kan de app je accountgegevens vinden. Daarna zijn alle zoekresultaten direct afspeelbaar.",
             "es": "La b\u{00FA}squeda de Apple Music funciona sin conexi\u{00F3}n usando la API p\u{00FA}blica de iTunes. Para reproducir, Apple Music debe estar conectado en la app oficial de Sonos y necesitas una canci\u{00F3}n favorita de Apple Music en tus Favoritos Sonos. Esto permite a la app descubrir tus credenciales. Una vez exista, todos los resultados son directamente reproducibles.",
             "it": "La ricerca Apple Music funziona senza connessione tramite l\u{2019}API pubblica di iTunes. Per la riproduzione, Apple Music deve essere connesso nell\u{2019}app Sonos ufficiale e serve un brano preferito Apple Music nei Preferiti Sonos. Questo permette all\u{2019}app di scoprire le credenziali. Dopodich\u{00E9} tutti i risultati sono direttamente riproducibili.",
             "sv": "Apple Music-s\u{00F6}kning fungerar utan anslutning via iTunes publika API. F\u{00F6}r uppspelning m\u{00E5}ste Apple Music vara anslutet i den officiella Sonos-appen och du beh\u{00F6}ver en favoriserad Apple Music-l\u{00E5}t i dina Sonos-favoriter. Det g\u{00F6}r att appen hittar dina kontouppgifter. Sedan \u{00E4}r alla s\u{00F6}kresultat direkt spelbara.",
@@ -6670,7 +6967,7 @@ public enum L10n {
             "en": "Search Sonos Radio\u{2026}",
             "de": "Sonos Radio suchen\u{2026}",
             "fr": "Rechercher Sonos Radio\u{2026}",
-            "nl": "Sonos Radio zoeken\u{2026}",
+            "nl": "Sonos Radio zoeken…",
             "es": "Buscar Sonos Radio\u{2026}",
             "it": "Cerca Sonos Radio\u{2026}",
             "sv": "S\u{00F6}k Sonos Radio\u{2026}",
@@ -6681,6 +6978,9 @@ public enum L10n {
             "pl": "Szukaj Sonos Radio\u{2026}",
             "zh-Hans": "\u{641C}\u{7D22} Sonos Radio\u{2026}",
         ],
+    ]
+
+    private static let translations18: [String: [String: String]] = [
         "searchSonosRadioEmpty": [
             "en": "Search for Sonos Radio stations",
             "de": "Sonos Radio-Sender suchen",
@@ -6729,7 +7029,7 @@ public enum L10n {
             "en": "Controls how the master volume slider adjusts individual speakers in a group.\n\nProportional (on): Speakers scale relative to each other, preserving the balance between them. If one speaker is 10% louder, it stays 10% louder at any master level.\n\nLinear (off): All speakers move by the same amount. The volume gap between speakers shrinks as you approach maximum.",
             "de": "Steuert, wie der Hauptregler die Lautst\u{00E4}rke einzelner Lautsprecher in einer Gruppe anpasst.\n\nProportional (ein): Lautsprecher skalieren relativ zueinander und die Balance bleibt erhalten. Ein 10\u{00A0}% lauterer Lautsprecher bleibt bei jedem Gesamtpegel 10\u{00A0}% lauter.\n\nLinear (aus): Alle Lautsprecher \u{00E4}ndern sich um den gleichen Betrag. Der Unterschied zwischen Lautsprechern wird mit steigender Lautst\u{00E4}rke geringer.",
             "fr": "Contr\u{00F4}le comment le curseur de volume principal ajuste les enceintes individuelles d\u{2019}un groupe.\n\nProportionnel (activ\u{00E9})\u{00A0}: les enceintes se mettent \u{00E0} l\u{2019}\u{00E9}chelle les unes par rapport aux autres, conservant l\u{2019}\u{00E9}quilibre. Si une enceinte est 10\u{00A0}% plus forte, elle le reste quel que soit le niveau principal.\n\nLin\u{00E9}aire (d\u{00E9}sactiv\u{00E9})\u{00A0}: toutes les enceintes varient de la m\u{00EA}me quantit\u{00E9}. L\u{2019}\u{00E9}cart entre enceintes diminue \u{00E0} l\u{2019}approche du maximum.",
-            "nl": "Bepaalt hoe de hoofdvolumeknop de individuele luidsprekers in een groep regelt.\n\nProportioneel (aan): luidsprekers schalen relatief aan elkaar, waardoor de onderlinge balans behouden blijft. Is een luidspreker 10\u{00A0}% luider, dan blijft dat zo op elk masterniveau.\n\nLineair (uit): alle luidsprekers bewegen evenveel. Het verschil krimpt naarmate je het maximum nadert.",
+            "nl": "Bepaalt hoe de hoofdvolumeknop de individuele luidsprekers in een groep regelt.\n\nProportioneel (aan): luidsprekers schalen relatief aan elkaar, waardoor de onderlinge balans behouden blijft. Is een luidspreker 10 % luider, dan blijft dat zo op elk masterniveau.\n\nLineair (uit): alle luidsprekers bewegen evenveel. Het verschil krimpt naarmate je het maximum nadert.",
             "es": "Controla c\u{00F3}mo el control de volumen maestro ajusta los altavoces individuales de un grupo.\n\nProporcional (activado): los altavoces escalan relativos entre s\u{00ED}, manteniendo el equilibrio. Si uno es 10\u{00A0}% m\u{00E1}s alto, sigue siendo 10\u{00A0}% m\u{00E1}s alto en cualquier nivel.\n\nLineal (desactivado): todos los altavoces cambian la misma cantidad. La diferencia entre altavoces se reduce al acercarse al m\u{00E1}ximo.",
             "it": "Controlla come il volume master regola i singoli altoparlanti di un gruppo.\n\nProporzionale (attivo): gli altoparlanti si scalano relativamente, preservando il bilanciamento. Se uno \u{00E8} pi\u{00F9} forte del 10\u{00A0}%, lo rimane a qualsiasi livello master.\n\nLineare (disattivo): tutti gli altoparlanti si muovono della stessa quantit\u{00E0}. Il divario diminuisce avvicinandosi al massimo.",
             "sv": "Styr hur huvudvolymen justerar enskilda h\u{00F6}gtalare i en grupp.\n\nProportionell (p\u{00E5}): h\u{00F6}gtalare skalas relativt varandra och balansen bevaras. \u{00C4}r en h\u{00F6}gtalare 10\u{00A0}% h\u{00F6}gre \u{00E4}r den det p\u{00E5} alla niv\u{00E5}er.\n\nLinj\u{00E4}r (av): alla h\u{00F6}gtalare \u{00E4}ndras lika mycket. Skillnaden minskar n\u{00E4}ra maximum.",
@@ -7030,6 +7330,9 @@ public enum L10n {
             "pt": "\u{00C1}lbuns principais", "pl": "G\u{0142}\u{00F3}wne albumy",
             "zh-Hans": "\u{70ED}\u{95E8}\u{4E13}\u{8F91}",
         ],
+    ]
+
+    private static let translations19: [String: [String: String]] = [
         "recentActivity": [
             "en": "Recent Activity", "de": "Letzte Aktivit\u{00E4}t",
             "fr": "Activit\u{00E9} r\u{00E9}cente", "nl": "Recente activiteit",
@@ -7092,7 +7395,7 @@ public enum L10n {
         ],
         "updatingEllipsis": [
             "en": "Updating\u{2026}", "de": "Aktualisiere\u{2026}",
-            "fr": "Actualisation\u{2026}", "nl": "Bijwerken\u{2026}",
+            "fr": "Actualisation\u{2026}", "nl": "Bijwerken…",
             "es": "Actualizando\u{2026}", "it": "Aggiornamento\u{2026}",
             "sv": "Uppdaterar\u{2026}", "nb": "Oppdaterer\u{2026}", "da": "Opdaterer\u{2026}",
             "ja": "\u{66F4}\u{65B0}\u{4E2D}\u{2026}",
@@ -7151,7 +7454,7 @@ public enum L10n {
             "en": "Building summaries\u{2026}",
             "de": "Zusammenfassungen werden erstellt\u{2026}",
             "fr": "Cr\u{00E9}ation des r\u{00E9}sum\u{00E9}s\u{2026}",
-            "nl": "Samenvattingen maken\u{2026}",
+            "nl": "Samenvattingen maken…",
             "es": "Creando res\u{00FA}menes\u{2026}",
             "it": "Creazione riepiloghi\u{2026}",
             "sv": "Skapar sammanfattningar\u{2026}",
@@ -7190,7 +7493,7 @@ public enum L10n {
             "en": "Last 30 days \u{00B7} avg: %d",
             "de": "Letzte 30 Tage \u{00B7} \u{00D8}: %d",
             "fr": "30 derniers jours \u{00B7} moy.\u{00A0}: %d",
-            "nl": "Laatste 30 dagen \u{00B7} gem.: %d",
+            "nl": "Laatste 30 dagen · gem.: %d",
             "es": "\u{00DA}ltimos 30 d\u{00ED}as \u{00B7} media: %d",
             "it": "Ultimi 30 giorni \u{00B7} media: %d",
             "sv": "Senaste 30 dagarna \u{00B7} snitt: %d",
@@ -7249,8 +7552,8 @@ public enum L10n {
         "musicServicesBeta": [
             "en": "Music Services (Beta)",
             "de": "Musikdienste (Beta)",
-            "fr": "Services musicaux (b\u{00EA}ta)",
-            "nl": "Muziekdiensten (b\u{00E8}ta)",
+            "fr": "Services musicaux (bêta)",
+            "nl": "Muziekdiensten (bèta)",
             "es": "Servicios musicales (beta)",
             "it": "Servizi musicali (beta)",
             "sv": "Musiktj\u{00E4}nster (beta)",
@@ -7300,6 +7603,9 @@ public enum L10n {
             "pl": "Proporcjonalna g\u{0142}o\u{015B}no\u{015B}\u{0107} grupy",
             "zh-Hans": "\u{7EC4}\u{6BD4}\u{4F8B}\u{97F3}\u{91CF}",
         ],
+    ]
+
+    private static let translations20: [String: [String: String]] = [
         "ignoreTVHDMILineIn": [
             "en": "Ignore TV / HDMI / Line-In",
             "de": "TV / HDMI / Line-In ignorieren",
@@ -7334,7 +7640,7 @@ public enum L10n {
             "en": "These settings control how Choragus communicates with your Sonos system over the local network. The defaults work for most home setups \u{2014} adjust only if Choragus is slow to react to changes you make from the Sonos app, or doesn\u{2019}t see all of your speakers.\n\n**Updates** \u{2014} How Choragus stays in sync with each speaker.\n\u{2022} Event-Driven (recommended): Choragus subscribes to UPnP events on each speaker. State changes \u{2014} track skip, volume, group reshuffle \u{2014} arrive within ~100\u{202F}ms with minimal traffic. Requires that your firewall allows speakers to open inbound HTTP connections to your Mac on the local network.\n\u{2022} Legacy Polling: Choragus queries each speaker every 2 seconds. Higher traffic and slower response, but more predictable on aggressively-firewalled or VLAN-segmented networks where event subscriptions don\u{2019}t arrive reliably.\n\n**Startup** \u{2014} How the speaker layout is loaded on launch.\n\u{2022} Quick Start: Show the cached layout instantly, refresh in the background. Almost zero startup delay if you\u{2019}ve launched recently.\n\u{2022} Classic: Wait for live discovery before showing anything. A few extra seconds at launch, but the layout is guaranteed up-to-date.\n\n**Discovery** \u{2014} How Choragus finds your speakers on the network.\n\u{2022} Auto (recommended): Tries Bonjour (mDNS) first, falls back to SSDP multicast. Works on the majority of home networks.\n\u{2022} Bonjour Only: Skips SSDP entirely. Useful where SSDP multicast is blocked or noisy (some managed switches and mesh routers).\n\u{2022} Legacy Multicast: SSDP only \u{2014} Sonos\u{2019}s original discovery protocol. Use if Bonjour resolution is broken on your network.\n\n**iTunes Throttle** \u{2014} Choragus uses Apple\u{2019}s iTunes Search API to back-fill missing album art. The status row shows the current request rate; Choragus self-throttles to stay well under Apple\u{2019}s limits and keep network usage light.\n\nFor deeper technical detail, troubleshooting steps, and known issues, refer to the project on GitHub: [github.com/scottwaters/Choragus](https://github.com/scottwaters/Choragus).",
             "de": "Diese Einstellungen steuern, wie Choragus mit deinem Sonos-System im lokalen Netzwerk kommuniziert. Die Standardwerte funktionieren für die meisten Heimnetzwerke \u{2014} ändere sie nur, wenn Choragus langsam auf Änderungen aus der Sonos-App reagiert oder nicht alle Lautsprecher findet.\n\n**Aktualisierungen** \u{2014} Wie Choragus mit jedem Lautsprecher in Sync bleibt.\n\u{2022} Ereignisgesteuert (empfohlen): Choragus abonniert UPnP-Ereignisse auf jedem Lautsprecher. Zustandsänderungen \u{2014} Track-Skip, Lautstärke, Gruppenwechsel \u{2014} kommen in ~100\u{202F}ms an, mit minimalem Traffic. Setzt voraus, dass deine Firewall den Lautsprechern eingehende HTTP-Verbindungen zu deinem Mac im lokalen Netzwerk erlaubt.\n\u{2022} Legacy-Abfrage: Choragus fragt jeden Lautsprecher alle 2 Sekunden ab. Mehr Traffic und langsamere Reaktion, aber vorhersagbarer in stark abgeschotteten oder VLAN-segmentierten Netzwerken, in denen Ereignis-Abos nicht zuverlässig ankommen.\n\n**Start** \u{2014} Wie das Lautsprecher-Layout beim Start geladen wird.\n\u{2022} Schnellstart: Zeigt das gecachte Layout sofort, aktualisiert im Hintergrund. Fast keine Startverzögerung, wenn du kürzlich gestartet hast.\n\u{2022} Klassisch: Wartet vor der Anzeige auf die Live-Erkennung. Ein paar Sekunden mehr beim Start, aber das Layout ist garantiert aktuell.\n\n**Netzwerkerkennung** \u{2014} Wie Choragus deine Lautsprecher im Netzwerk findet.\n\u{2022} Auto (empfohlen): Versucht zuerst Bonjour (mDNS), fällt dann auf SSDP-Multicast zurück. Funktioniert in den meisten Heimnetzen.\n\u{2022} Nur Bonjour: Überspringt SSDP komplett. Hilfreich, wo SSDP-Multicast blockiert oder verrauscht ist (manche Managed Switches und Mesh-Router).\n\u{2022} Legacy-Multicast: Nur SSDP \u{2014} das ursprüngliche Sonos-Erkennungsprotokoll. Verwende es, wenn die Bonjour-Auflösung in deinem Netzwerk nicht funktioniert.\n\n**iTunes-Throttling** \u{2014} Choragus verwendet Apples iTunes-Search-API, um fehlende Coverbilder zu ergänzen. Die Statuszeile zeigt die aktuelle Anfragerate; Choragus drosselt sich selbst, um deutlich unter Apples Limits zu bleiben und das Netzwerk zu schonen.\n\nFür tiefere technische Details, Fehlerbehebung und bekannte Probleme, siehe das Projekt auf GitHub: [github.com/scottwaters/Choragus](https://github.com/scottwaters/Choragus).",
             "fr": "Ces réglages contrôlent la façon dont Choragus communique avec votre système Sonos sur le réseau local. Les valeurs par défaut conviennent à la plupart des configurations domestiques \u{2014} ne les modifiez que si Choragus tarde à réagir aux changements faits depuis l\u{2019}app Sonos, ou ne voit pas toutes vos enceintes.\n\n**Mises à jour** \u{2014} Comment Choragus reste synchronisé avec chaque enceinte.\n\u{2022} Événementiel (recommandé) : Choragus s\u{2019}abonne aux événements UPnP de chaque enceinte. Les changements d\u{2019}état \u{2014} piste suivante, volume, regroupement \u{2014} arrivent en ~100\u{202F}ms avec un trafic minimal. Nécessite que votre pare-feu autorise les enceintes à ouvrir des connexions HTTP entrantes vers votre Mac sur le réseau local.\n\u{2022} Sondage legacy : Choragus interroge chaque enceinte toutes les 2 secondes. Plus de trafic et réponse plus lente, mais plus prévisible sur les réseaux fortement filtrés ou segmentés en VLAN où les abonnements aux événements n\u{2019}arrivent pas de manière fiable.\n\n**Démarrage** \u{2014} Comment la disposition des enceintes est chargée au lancement.\n\u{2022} Démarrage rapide : Affiche la disposition en cache instantanément, actualise en arrière-plan. Délai de démarrage quasi nul si vous venez de lancer l\u{2019}app.\n\u{2022} Classique : Attend la découverte en direct avant l\u{2019}affichage. Quelques secondes de plus au démarrage, mais la disposition est garantie à jour.\n\n**Découverte** \u{2014} Comment Choragus trouve vos enceintes sur le réseau.\n\u{2022} Auto (recommandé) : Essaie d\u{2019}abord Bonjour (mDNS), puis revient à SSDP multicast. Fonctionne sur la plupart des réseaux domestiques.\n\u{2022} Bonjour uniquement : Ignore complètement SSDP. Utile lorsque le multicast SSDP est bloqué ou bruyant (certains commutateurs gérés et routeurs mesh).\n\u{2022} Multicast legacy : SSDP uniquement \u{2014} le protocole de découverte original de Sonos. À utiliser si la résolution Bonjour ne fonctionne pas sur votre réseau.\n\n**Limitation iTunes** \u{2014} Choragus utilise l\u{2019}API iTunes Search d\u{2019}Apple pour compléter les pochettes manquantes. La ligne de statut indique le taux de requêtes actuel ; Choragus s\u{2019}auto-limite pour rester bien en dessous des limites d\u{2019}Apple et alléger l\u{2019}usage réseau.\n\nPour plus de détails techniques, des étapes de dépannage et les problèmes connus, consultez le projet sur GitHub : [github.com/scottwaters/Choragus](https://github.com/scottwaters/Choragus).",
-            "nl": "Deze instellingen bepalen hoe Choragus communiceert met je Sonos-systeem op het lokale netwerk. De standaardwaarden werken voor de meeste thuisnetwerken \u{2014} pas ze alleen aan als Choragus traag reageert op wijzigingen vanuit de Sonos-app of niet al je luidsprekers ziet.\n\n**Updates** \u{2014} Hoe Choragus synchroon blijft met elke luidspreker.\n\u{2022} Event-gestuurd (aanbevolen): Choragus abonneert zich op UPnP-events van elke luidspreker. Statusveranderingen \u{2014} track-skip, volume, groepswijziging \u{2014} komen binnen ~100\u{202F}ms aan met minimale verkeersbelasting. Vereist dat je firewall luidsprekers toestaat inkomende HTTP-verbindingen naar je Mac te openen op het lokale netwerk.\n\u{2022} Legacy polling: Choragus bevraagt elke luidspreker om de 2 seconden. Meer verkeer en tragere respons, maar voorspelbaarder op streng afgeschermde of VLAN-gesegmenteerde netwerken waar event-abonnementen niet betrouwbaar binnenkomen.\n\n**Opstarten** \u{2014} Hoe de luidsprekerlay-out bij het opstarten wordt geladen.\n\u{2022} Snelle start: Toont de gecachete lay-out direct, ververst op de achtergrond. Bijna geen opstartvertraging als je recent hebt gestart.\n\u{2022} Klassiek: Wacht op live-detectie voor het tonen. Een paar seconden extra bij opstarten, maar de lay-out is gegarandeerd actueel.\n\n**Detectie** \u{2014} Hoe Choragus je luidsprekers op het netwerk vindt.\n\u{2022} Auto (aanbevolen): Probeert eerst Bonjour (mDNS), valt terug op SSDP-multicast. Werkt op de meeste thuisnetwerken.\n\u{2022} Alleen Bonjour: Slaat SSDP volledig over. Nuttig waar SSDP-multicast geblokkeerd of luidruchtig is (sommige beheerde switches en mesh-routers).\n\u{2022} Legacy multicast: Alleen SSDP \u{2014} het oorspronkelijke Sonos-detectieprotocol. Gebruik dit als Bonjour-resolutie op je netwerk niet werkt.\n\n**iTunes-throttling** \u{2014} Choragus gebruikt Apple\u{2019}s iTunes Search API om ontbrekende albumhoezen aan te vullen. De statusregel toont de huidige verzoekfrequentie; Choragus rem zichzelf om ruim onder Apple\u{2019}s limieten te blijven en het netwerkverbruik beperkt te houden.\n\nVoor diepere technische details, oplossingsstappen en bekende problemen, raadpleeg het project op GitHub: [github.com/scottwaters/Choragus](https://github.com/scottwaters/Choragus).",
+            "nl": "Deze instellingen bepalen hoe Choragus communiceert met je Sonos-systeem op het lokale netwerk. De standaardwaarden werken voor de meeste thuisnetwerken — pas ze alleen aan als Choragus traag reageert op wijzigingen vanuit de Sonos-app of niet al je luidsprekers ziet.\\n\\n**Updates** — Hoe Choragus synchroon blijft met elke luidspreker.\\n• Event-gestuurd (aanbevolen): Choragus abonneert zich op UPnP-events van elke luidspreker. Statusveranderingen — track-skip, volume, groepswijziging — komen binnen ~100 ms aan met minimale verkeersbelasting. Vereist dat je firewall luidsprekers toestaat inkomende HTTP-verbindingen naar je Mac te openen op het lokale netwerk.\\n• Legacy polling: Choragus bevraagt elke luidspreker om de 2 seconden. Meer verkeer en tragere respons, maar voorspelbaarder op streng afgeschermde of VLAN-gesegmenteerde netwerken waar event-abonnementen niet betrouwbaar binnenkomen.\\n\\n**Opstarten** — Hoe de luidsprekerlay-out bij het opstarten wordt geladen.\\n• Snelle start: Toont de gecachete lay-out direct, ververst op de achtergrond. Bijna geen opstartvertraging als je recent hebt gestart.\\n• Klassiek: Wacht op live-detectie voor het tonen. Een paar seconden extra bij opstarten, maar de lay-out is gegarandeerd actueel.\\n\\n**Detectie** — Hoe Choragus je luidsprekers op het netwerk vindt.\\n• Auto (aanbevolen): Probeert eerst Bonjour (mDNS), valt terug op SSDP-multicast. Werkt op de meeste thuisnetwerken.\\n• Alleen Bonjour: Slaat SSDP volledig over. Nuttig waar SSDP-multicast geblokkeerd of luidruchtig is (sommige beheerde switches en mesh-routers).\\n• Legacy multicast: Alleen SSDP — het oorspronkelijke Sonos-detectieprotocol. Gebruik dit als Bonjour-resolutie op je netwerk niet werkt.\\n\\n**iTunes-throttling** — Choragus gebruikt Apple’s iTunes Search API om ontbrekende albumhoezen aan te vullen. De statusregel toont de huidige verzoekfrequentie; Choragus rem zichzelf om ruim onder Apple’s limieten te blijven en het netwerkverbruik beperkt te houden.\\n\\nVoor diepere technische details, oplossingsstappen en bekende problemen, raadpleeg het project op GitHub: [github.com/scottwaters/Choragus](https://github.com/scottwaters/Choragus).",
             "es": "Estos ajustes controlan cómo Choragus se comunica con tu sistema Sonos en la red local. Los valores predeterminados funcionan para la mayoría de configuraciones domésticas \u{2014} ajústalos solo si Choragus tarda en reaccionar a cambios hechos desde la app de Sonos, o no ve todos tus altavoces.\n\n**Actualizaciones** \u{2014} Cómo Choragus se mantiene sincronizado con cada altavoz.\n\u{2022} Por eventos (recomendado): Choragus se suscribe a eventos UPnP en cada altavoz. Los cambios de estado \u{2014} salto de pista, volumen, reagrupación \u{2014} llegan en ~100\u{202F}ms con tráfico mínimo. Requiere que tu cortafuegos permita a los altavoces abrir conexiones HTTP entrantes a tu Mac en la red local.\n\u{2022} Sondeo legacy: Choragus consulta cada altavoz cada 2 segundos. Más tráfico y respuesta más lenta, pero más predecible en redes con cortafuegos agresivos o segmentadas por VLAN donde las suscripciones a eventos no llegan de forma fiable.\n\n**Inicio** \u{2014} Cómo se carga la disposición de altavoces al arrancar.\n\u{2022} Arranque rápido: Muestra la disposición en caché al instante, actualiza en segundo plano. Retraso de arranque casi nulo si has lanzado la app recientemente.\n\u{2022} Clásico: Espera a la detección en vivo antes de mostrar nada. Unos segundos más al arrancar, pero la disposición está garantizada actualizada.\n\n**Detección** \u{2014} Cómo Choragus encuentra tus altavoces en la red.\n\u{2022} Auto (recomendado): Prueba primero Bonjour (mDNS), recurre a multidifusión SSDP. Funciona en la mayoría de las redes domésticas.\n\u{2022} Solo Bonjour: Omite SSDP por completo. Útil donde la multidifusión SSDP está bloqueada o es ruidosa (algunos switches gestionados y routers mesh).\n\u{2022} Multidifusión legacy: Solo SSDP \u{2014} el protocolo original de detección de Sonos. Úsalo si la resolución Bonjour está rota en tu red.\n\n**Limitación de iTunes** \u{2014} Choragus usa la API iTunes Search de Apple para rellenar carátulas faltantes. La fila de estado muestra la tasa actual de solicitudes; Choragus se autolimita para mantenerse muy por debajo de los límites de Apple y reducir el uso de red.\n\nPara más detalle técnico, pasos de resolución de problemas y errores conocidos, consulta el proyecto en GitHub: [github.com/scottwaters/Choragus](https://github.com/scottwaters/Choragus).",
             "it": "Queste impostazioni controllano come Choragus comunica con il tuo sistema Sonos sulla rete locale. I valori predefiniti vanno bene per la maggior parte delle configurazioni domestiche \u{2014} modificali solo se Choragus tarda a reagire ai cambiamenti fatti dall\u{2019}app Sonos, o non vede tutti i tuoi diffusori.\n\n**Aggiornamenti** \u{2014} Come Choragus rimane sincronizzato con ogni diffusore.\n\u{2022} Guidato da eventi (consigliato): Choragus si sottoscrive agli eventi UPnP su ogni diffusore. I cambi di stato \u{2014} skip traccia, volume, riassetto del gruppo \u{2014} arrivano in ~100\u{202F}ms con traffico minimo. Richiede che il firewall consenta ai diffusori di aprire connessioni HTTP in entrata verso il tuo Mac sulla rete locale.\n\u{2022} Polling legacy: Choragus interroga ogni diffusore ogni 2 secondi. Più traffico e risposta più lenta, ma più prevedibile su reti molto firewallate o segmentate in VLAN dove le sottoscrizioni a eventi non arrivano in modo affidabile.\n\n**Avvio** \u{2014} Come viene caricato il layout dei diffusori al lancio.\n\u{2022} Avvio rapido: Mostra il layout in cache istantaneamente, aggiorna in background. Quasi nessun ritardo all\u{2019}avvio se hai lanciato di recente.\n\u{2022} Classico: Attende il rilevamento in tempo reale prima di mostrare alcunché. Qualche secondo in più all\u{2019}avvio, ma il layout è garantito aggiornato.\n\n**Rilevamento** \u{2014} Come Choragus trova i tuoi diffusori sulla rete.\n\u{2022} Auto (consigliato): Prova prima Bonjour (mDNS), ricade su SSDP multicast. Funziona sulla maggior parte delle reti domestiche.\n\u{2022} Solo Bonjour: Salta SSDP completamente. Utile dove il multicast SSDP è bloccato o rumoroso (alcuni switch gestiti e router mesh).\n\u{2022} Multicast legacy: Solo SSDP \u{2014} il protocollo di rilevamento originale di Sonos. Usalo se la risoluzione Bonjour è rotta sulla tua rete.\n\n**Limitazione iTunes** \u{2014} Choragus usa l\u{2019}API iTunes Search di Apple per compilare le copertine mancanti. La riga di stato mostra il tasso attuale di richieste; Choragus si autolimita per restare ben sotto i limiti di Apple e mantenere leggero l\u{2019}uso della rete.\n\nPer maggiori dettagli tecnici, passi di risoluzione e problemi noti, consulta il progetto su GitHub: [github.com/scottwaters/Choragus](https://github.com/scottwaters/Choragus).",
             "sv": "Dessa inställningar styr hur Choragus kommunicerar med ditt Sonos-system över det lokala nätverket. Standardvärdena fungerar för de flesta hemmanätverk \u{2014} justera bara om Choragus är långsam att reagera på ändringar i Sonos-appen, eller inte ser alla dina högtalare.\n\n**Uppdateringar** \u{2014} Hur Choragus håller sig synkad med varje högtalare.\n\u{2022} Händelsedriven (rekommenderas): Choragus prenumererar på UPnP-händelser på varje högtalare. Tillståndsändringar \u{2014} hopp av spår, volym, omgruppering \u{2014} kommer fram inom ~100\u{202F}ms med minimal trafik. Kräver att brandväggen tillåter högtalare att öppna inkommande HTTP-anslutningar till din Mac på det lokala nätverket.\n\u{2022} Gammaldags polling: Choragus frågar varje högtalare varannan sekund. Mer trafik och långsammare svar, men mer förutsägbart på hårt brandväggade eller VLAN-segmenterade nätverk där händelseprenumerationer inte kommer fram tillförlitligt.\n\n**Uppstart** \u{2014} Hur högtalarlayouten laddas vid start.\n\u{2022} Snabbstart: Visar den cachade layouten direkt, uppdaterar i bakgrunden. Nästan noll startfördröjning om du startat nyligen.\n\u{2022} Klassiskt: Väntar på live-upptäckt innan något visas. Några extra sekunder vid start, men layouten är garanterat aktuell.\n\n**Upptäckt** \u{2014} Hur Choragus hittar dina högtalare på nätverket.\n\u{2022} Auto (rekommenderas): Försöker Bonjour (mDNS) först, faller tillbaka på SSDP-multicast. Fungerar på de flesta hemmanätverk.\n\u{2022} Endast Bonjour: Hoppar över SSDP helt. Användbart där SSDP-multicast är blockerad eller brusig (vissa hanterade switchar och mesh-routrar).\n\u{2022} Gammaldags multicast: Endast SSDP \u{2014} Sonos ursprungliga upptäcktsprotokoll. Använd om Bonjour-uppslagning är trasig på ditt nätverk.\n\n**iTunes-strypning** \u{2014} Choragus använder Apples iTunes Search API för att fylla i saknade albumomslag. Statusraden visar aktuell förfrågningsfrekvens; Choragus strypter sig själv för att hålla sig långt under Apples gränser och hålla nätverksanvändningen lätt.\n\nFör djupare teknisk detalj, felsökningssteg och kända problem, se projektet på GitHub: [github.com/scottwaters/Choragus](https://github.com/scottwaters/Choragus).",
@@ -7419,7 +7725,7 @@ public enum L10n {
             "en": "%@ artwork \u{00B7} %d images",
             "de": "%@ Cover \u{00B7} %d Bilder",
             "fr": "%@ de pochettes \u{00B7} %d images",
-            "nl": "%@ hoezen \u{00B7} %d afbeeldingen",
+            "nl": "%@ hoezen · %d afbeeldingen",
             "es": "%@ de portadas \u{00B7} %d im\u{00E1}genes",
             "it": "%@ copertine \u{00B7} %d immagini",
             "sv": "%@ omslag \u{00B7} %d bilder",
@@ -7434,7 +7740,7 @@ public enum L10n {
             "en": "Waiting for %@\u{2026}",
             "de": "Warten auf %@\u{2026}",
             "fr": "En attente de %@\u{2026}",
-            "nl": "Wachten op %@\u{2026}",
+            "nl": "Wachten op %@…",
             "es": "Esperando a %@\u{2026}",
             "it": "In attesa di %@\u{2026}",
             "sv": "V\u{00E4}ntar p\u{00E5} %@\u{2026}",
@@ -7497,7 +7803,7 @@ public enum L10n {
         ],
         "searchArtwork": [
             "en": "Search Artwork\u{2026}", "de": "Cover suchen\u{2026}",
-            "fr": "Rechercher une pochette\u{2026}", "nl": "Hoes zoeken\u{2026}",
+            "fr": "Rechercher une pochette\u{2026}", "nl": "Hoes zoeken…",
             "es": "Buscar portada\u{2026}", "it": "Cerca copertina\u{2026}",
             "sv": "S\u{00F6}k omslag\u{2026}", "nb": "S\u{00F8}k omslag\u{2026}",
             "da": "S\u{00F8}g omslag\u{2026}",
@@ -7625,6 +7931,642 @@ public enum L10n {
         ],
 
         // MARK: - Help body: Getting Started
+        "helpMediaKeysHeading": [
+            "en": "Media keys",
+            "de": "Medientasten",
+            "fr": "Touches multimédias",
+            "nl": "Mediatoetsen",
+            "es": "Teclas multimedia",
+            "it": "Tasti multimediali",
+            "sv": "Medietangenter",
+            "nb": "Medietaster",
+            "da": "Medietaster",
+            "ja": "メディアキー",
+            "pt": "Teclas de multimédia",
+            "pl": "Klawisze multimedialne",
+            "zh-Hans": "媒体键",
+        ],
+    ]
+
+    private static let translations21: [String: [String: String]] = [
+        "helpMediaKeysBody": [
+            "en": "The keyboard's play, pause and skip keys control the selected group. Bluetooth headsets and car units can send the same commands, which occasionally starts playback unexpectedly; turn off Settings → Keyboard Controls → \"Media keys control playback\" to hand the keys back to other apps.",
+            "de": "Die Tasten für Wiedergabe, Pause und Überspringen auf der Tastatur steuern die ausgewählte Gruppe. Bluetooth-Headsets und Autoradios können dieselben Befehle senden, was gelegentlich die Wiedergabe unerwartet startet; deaktiviere Einstellungen → Tastatursteuerung → \\\"Medientasten steuern Wiedergabe\\\", um die Tasten wieder anderen Apps zu überlassen.",
+            "fr": "Les touches de lecture, pause et saut du clavier contrôlent le groupe sélectionné. Les casques Bluetooth et les autoradios peuvent envoyer les mêmes commandes, ce qui lance parfois la lecture de manière inattendue ; désactivez Réglages → Contrôles du clavier → \"Les touches multimédias contrôlent la lecture\" pour redonner le contrôle des touches aux autres apps.",
+            "nl": "De afspeel-, pauze- en overslaantoetsen van het toetsenbord bedienen de geselecteerde groep. Bluetooth-headsets en autosystemen kunnen dezelfde opdrachten verzenden, wat soms onverwacht het afspelen start; schakel Instellingen → Toetsenbordbediening → \"Mediatoetsen bedienen afspelen\" uit om de toetsen weer aan andere apps over te dragen.",
+            "es": "Las teclas de reproducción, pausa y salto del teclado controlan el grupo seleccionado. Los auriculares Bluetooth y los sistemas de los coches pueden enviar los mismos comandos, lo que en ocasiones inicia la reproducción de forma inesperada; desactiva Ajustes → Controles del teclado → \"Las teclas multimedia controlan la reproducción\" para devolver el control de las teclas a otras apps.",
+            "it": "I tasti di riproduzione, pausa e salto della tastiera controllano il gruppo selezionato. Le cuffie Bluetooth e i sistemi per auto possono inviare gli stessi comandi, avviando a volte la riproduzione in modo imprevisto; disattiva Impostazioni → Controlli della tastiera → \"I tasti multimediali controllano la riproduzione\" per restituire il controllo dei tasti alle altre app.",
+            "sv": "Tangentbordets knappar för spela, pausa och hoppa över styr den valda gruppen. Bluetooth-headset och bilsystem kan skicka samma kommandon, vilket ibland startar uppspelningen oväntat. Stäng av Inställningar → Tangentbordsreglage → \"Medietangenter styr uppspelning\" för att överlåta tangenterna till andra appar.",
+            "nb": "Tastaturets taster for spill av, pause og hopp over styrer den valgte gruppen. Bluetooth-headset og bilsystemer kan sende de samme kommandoene, noe som av og til starter avspillingen uventet. Slå av Innstillinger → Tastaturkontroller → \"Medietaster styrer avspilling\" for å overlate tastene til andre apper.",
+            "da": "Tastaturets taster til afspilning, pause og spring over styrer den valgte gruppe. Bluetooth-headset og bilsystemer kan sende de samme kommandoer, hvilket indimellem starter afspilningen uventet; slå Indstillinger → Tastaturbetjening → \"Medietaster styrer afspilning\" fra for at overlade tasterne til andre apps.",
+            "ja": "キーボードの再生、一時停止、スキップキーは選択されたグループを制御します。Bluetoothヘッドセットやカーステレオも同じコマンドを送信できるため、予期せず再生が始まることがあります。「設定」→「キーボードコントロール」→「\"メディアキーで再生を制御\"」をオフにして、キーの制御を他のアプリに戻します。",
+            "pt": "As teclas de reprodução, pausa e avanço do teclado controlam o grupo selecionado. Auscultadores Bluetooth e sistemas de automóveis podem enviar os mesmos comandos, o que por vezes inicia a reprodução de forma inesperada; desative Definições → Controlos do teclado → \"As teclas de multimédia controlam a reprodução\" para devolver as teclas a outras aplicações.",
+            "pl": "Klawisze odtwarzania, pauzy i pomijania na klawiaturze sterują wybraną grupą. Zestawy słuchawkowe Bluetooth i systemy samochodowe mogą wysyłać te same polecenia, co czasami niespodziewanie rozpoczyna odtwarzanie; wyłącz Ustawienia → Sterowanie klawiaturą → \"Klawisze multimedialne sterują odtwarzaniem\", aby przekazać klawisze innym aplikacjom.",
+            "zh-Hans": "键盘的播放、暂停和跳过键控制选定的组。Bluetooth耳机和车载设备也能发送相同的命令，这有时会意外开始播放；请关闭“设置”→“键盘控制”→\"媒体键控制播放\"，以将按键控制权交还给其他App。",
+        ],
+        "helpLockedScreenBody": [
+            "en": "While the Mac's screen is locked, media commands that would start playback are ignored, because at that point they almost always come from a stray Bluetooth device. Pressing play three times within five seconds overrides the guard.",
+            "de": "Während der Bildschirm des Mac gesperrt ist, werden Medienbefehle, die die Wiedergabe starten würden, ignoriert, da sie zu diesem Zeitpunkt fast immer von einem verirrten Bluetooth-Gerät stammen. Dreimaliges Drücken der Wiedergabetaste innerhalb von fünf Sekunden umgeht diese Sperre.",
+            "fr": "Lorsque l’écran du Mac est verrouillé, les commandes multimédias susceptibles de lancer la lecture sont ignorées, car elles proviennent alors presque toujours d’un appareil Bluetooth égaré. Appuyer trois fois sur lecture en moins de cinq secondes contourne cette protection.",
+            "nl": "Terwijl het scherm van de Mac is vergrendeld, worden mediaopdrachten die het afspelen zouden starten genegeerd, omdat deze op dat moment vrijwel altijd afkomstig zijn van een verdwaald Bluetooth-apparaat. Drie keer op afspelen drukken binnen vijf seconden heft deze beveiliging op.",
+            "es": "Mientras la pantalla del Mac está bloqueada, se ignoran los comandos multimedia que iniciarían la reproducción, ya que en ese momento casi siempre provienen de un dispositivo Bluetooth desvinculado. Pulsar el botón de reproducción tres veces en cinco segundos anula esta protección.",
+            "it": "Mentre lo schermo del Mac è bloccato, i comandi multimediali che avvierebbero la riproduzione vengono ignorati, poiché in quel momento provengono quasi sempre da un dispositivo Bluetooth vagante. Premendo il tasto di riproduzione tre volte entro cinque secondi si ignora questa protezione.",
+            "sv": "Medan skärmen på din Mac är låst ignoreras mediekommandon som skulle starta uppspelningen, eftersom de då nästan alltid kommer från en vilsekommen Bluetooth-enhet. Tryck på spela tre gånger inom fem sekunder för att åsidosätta skyddet.",
+            "nb": "Når skjermen på Mac er låst, ignoreres mediekommandoer som ville startet avspillingen, fordi de da nesten alltid kommer fra en tilfeldig Bluetooth-enhet. Å trykke på spill av tre ganger innen fem sekunder overstyrer beskyttelsen.",
+            "da": "Når Mac-skærmen er låst, ignoreres mediekommandoer, der vil starte afspilning, fordi de på det tidspunkt næsten altid kommer fra en tilfældig Bluetooth-enhed. Tryk på afspil tre gange inden for fem sekunder for at tilsidesætte beskyttelsen.",
+            "ja": "Macの画面がロックされている間は、再生を開始するメディアコマンドは無視されます。これは、その状況ではほとんどの場合、無関係なBluetoothデバイスからの誤送信だからです。5秒以内に再生を3回押すと、この保護を解除できます。",
+            "pt": "Enquanto o ecrã do Mac está bloqueado, os comandos de multimédia que iniciariam a reprodução são ignorados, porque nessa altura provêm quase sempre de um dispositivo Bluetooth errante. Premir o botão de reprodução três vezes em cinco segundos anula esta proteção.",
+            "pl": "Gdy ekran komputera Mac jest zablokowany, polecenia multimedialne rozpoczynające odtwarzanie są ignorowane, ponieważ w tym momencie prawie zawsze pochodzą z przypadkowego urządzenia Bluetooth. Trzykrotne naciśnięcie odtwarzania w ciągu pięciu sekund omija to zabezpieczenie.",
+            "zh-Hans": "当 Mac 的屏幕被锁定时，会忽略那些将要开始播放的媒体命令，因为此时它们几乎总是来自杂散的 Bluetooth 设备。在五秒内连按三次播放可覆盖此保护。",
+        ],
+        "helpHomeTheaterTogglesHeading": [
+            "en": "Home theatre controls",
+            "de": "Heimkino-Steuerung",
+            "fr": "Commandes du home cinéma",
+            "nl": "Home cinema-bediening",
+            "es": "Controles del cine en casa",
+            "it": "Controlli home theater",
+            "sv": "Hemmabioreglage",
+            "nb": "Hjemmekinokontroller",
+            "da": "Hjemmebiograf-betjening",
+            "ja": "ホームシアターコントロール",
+            "pt": "Controlos de cinema em casa",
+            "pl": "Sterowanie kinem domowym",
+            "zh-Hans": "家庭影院控制",
+        ],
+        "helpHomeTheaterTogglesBody": [
+            "en": "For a home-theatre zone, Now Playing shows Night Mode and Dialog Enhancement below the group buttons. Other rooms do not show the row. The full set of home-theatre settings stays in the EQ window.",
+            "de": "Für einen Heimkino-Bereich zeigt Now Playing unter den Gruppentasten den Nachtmodus und die Sprachverbesserung an. Bei anderen Räumen wird diese Zeile nicht angezeigt. Die vollständigen Heimkino-Einstellungen finden sich im EQ-Fenster.",
+            "fr": "Pour une zone de home cinéma, Now Playing affiche le Mode nuit et l’Amélioration vocale sous les boutons de groupe. Cette ligne n’apparaît pas pour les autres pièces. L’ensemble complet des réglages du home cinéma se trouve dans la fenêtre EQ.",
+            "nl": "Voor een home cinema-zone toont Now Playing Nachtstand en Spraakversterking onder de groepsknoppen. In andere kamers wordt deze rij niet weergegeven. De volledige set home cinema-instellingen staat in het EQ-venster.",
+            "es": "Para una zona de cine en casa, Now Playing muestra el Modo nocturno y la Mejora de la voz debajo de los botones de grupo. Otras habitaciones no muestran esta fila. Todos los ajustes del cine en casa se encuentran en la ventana EQ.",
+            "it": "Per una zona home theater, Now Playing mostra la Modalità notte e il Miglioramento del parlato sotto i pulsanti del gruppo. Le altre stanze non mostrano questa riga. Tutte le impostazioni per l'home theater si trovano nella finestra EQ.",
+            "sv": "För en hemmabiozon visar Now Playing Nattläge och Talförstärkning under gruppknapparna. Andra rum visar inte denna rad. Alla hemmabioinställningar finns i EQ-fönstret.",
+            "nb": "For en hjemmekinosone viser Now Playing Nattmodus og Taleforbedring under gruppeknappene. Andre rom viser ikke denne raden. Det fulle settet med hjemmekinoinnstillinger finnes i EQ-vinduet.",
+            "da": "For en hjemmebiograf-zone viser Now Playing Natindstilling og Taleforbedring under gruppeknapperne. Andre rum viser ikke denne række. De komplette hjemmebiograf-indstillinger findes i EQ-vinduet.",
+            "ja": "ホームシアターゾーンの場合、Now Playingのグループボタンの下にナイトモードとスピーチエンハンスメントが表示されます。他の部屋ではこの行は表示されません。すべてのホームシアター設定はEQウィンドウにあります。",
+            "pt": "Para uma zona de cinema em casa, o Now Playing mostra o Modo de Noite e a Melhoria de Diálogo por baixo dos botões de grupo. As outras divisões não mostram esta linha. O conjunto completo de definições de cinema em casa permanece na janela EQ.",
+            "pl": "W strefie kina domowego funkcja Now Playing wyświetla Tryb nocny i Wzmocnienie dialogów pod przyciskami grupy. Inne pokoje nie wyświetlają tego wiersza. Pełny zestaw ustawień kina domowego znajduje się w oknie EQ.",
+            "zh-Hans": "对于家庭影院区域，Now Playing 在组按钮下方显示夜间模式和对话增强。其他房间不显示此行。全套家庭影院设置保存在 EQ 窗口中。",
+        ],
+        "helpGroupingGesturesHeading": [
+            "en": "Grouping from the sidebar",
+            "de": "Gruppieren über die Seitenleiste",
+            "fr": "Groupement depuis la barre latérale",
+            "nl": "Groeperen vanuit de navigatiekolom",
+            "es": "Agrupación desde la barra lateral",
+            "it": "Raggruppamento dalla barra laterale",
+            "sv": "Gruppera från sidofältet",
+            "nb": "Gruppering fra sidekolonnen",
+            "da": "Gruppering fra indholdsoversigten",
+            "ja": "サイドバーからのグループ化",
+            "pt": "Agrupamento a partir da barra lateral",
+            "pl": "Grupowanie z paska bocznego",
+            "zh-Hans": "从边栏编组",
+        ],
+        "helpGroupingGesturesBody": [
+            "en": "Double-click a room to open the grouping editor. Drag one room onto another to group them, or drag a room onto the strip below the list to split its group. Rooms on different Sonos systems cannot be grouped together.",
+            "de": "Doppelklicke auf einen Raum, um den Gruppen-Editor zu öffnen. Ziehe einen Raum auf einen anderen, um sie zu gruppieren, oder ziehe einen Raum auf den Streifen unterhalb der Liste, um seine Gruppe aufzulösen. Räume aus unterschiedlichen Sonos-Systemen können nicht gruppiert werden.",
+            "fr": "Double-cliquez sur une pièce pour ouvrir l’éditeur de groupe. Faites glisser une pièce sur une autre pour les grouper, ou faites glisser une pièce sur la bande sous la liste pour la retirer de son groupe. Les pièces situées sur des systèmes Sonos différents ne peuvent pas être groupées.",
+            "nl": "Dubbelklik op een kamer om de groepseditor te openen. Sleep de ene kamer naar de andere om ze te groeperen, of sleep een kamer naar de strook onder de lijst om de groep te splitsen. Kamers in verschillende Sonos-systemen kunnen niet worden gegroepeerd.",
+            "es": "Haz doble clic en una habitación para abrir el editor de grupos. Arrastra una habitación sobre otra para agruparlas, o arrastra una habitación hacia la franja debajo de la lista para separar su grupo. Las habitaciones en diferentes sistemas Sonos no se pueden agrupar.",
+            "it": "Fai doppio clic su una stanza per aprire l'editor dei gruppi. Trascina una stanza su un'altra per raggrupparle, oppure trascina una stanza sulla striscia sotto l'elenco per separarla dal suo gruppo. Le stanze su sistemi Sonos diversi non possono essere raggruppate insieme.",
+            "sv": "Dubbelklicka på ett rum för att öppna grupperingsredigeraren. Dra ett rum till ett annat för att gruppera dem, eller dra ett rum till raden under listan för att dela upp dess grupp. Rum på olika Sonos-system kan inte grupperas tillsammans.",
+            "nb": "Dobbeltklikk på et rom for å åpne grupperingsredigereren. Dra et rom over et annet for å gruppere dem, eller dra et rom til feltet under listen for å dele opp gruppen. Rom på forskjellige Sonos-systemer kan ikke grupperes.",
+            "da": "Dobbeltklik på et rum for at åbne grupperingsredigeringen. Træk et rum over på et andet for at gruppere dem, eller træk et rum ned på striben under listen for at opdele gruppen. Rum på forskellige Sonos-systemer kan ikke grupperes.",
+            "ja": "部屋をダブルクリックすると、グループ化エディタが開きます。部屋を別の部屋にドラッグしてグループ化するか、リストの下の領域に部屋をドラッグしてグループを解除します。異なるSonosシステムにある部屋はグループ化できません。",
+            "pt": "Faça duplo clique numa divisão para abrir o editor de agrupamento. Arraste uma divisão sobre a outra para as agrupar, ou arraste uma divisão para a faixa por baixo da lista para separar o seu grupo. Divisões em sistemas Sonos diferentes não podem ser agrupadas.",
+            "pl": "Kliknij dwukrotnie pokój, aby otworzyć edytor grupowania. Przeciągnij jeden pokój na drugi, aby je zgrupować, lub przeciągnij pokój na pasek pod listą, aby rozdzielić jego grupę. Pokoje w różnych systemach Sonos nie mogą być grupowane.",
+            "zh-Hans": "双击房间以打开编组编辑器。将一个房间拖到另一个房间上以将它们编组，或者将房间拖到列表下方的条带上以拆分其组。不同 Sonos 系统上的房间不能编组在一起。",
+        ],
+        "helpVolumeSyncBody": [
+            "en": "Holding the group volume slider at zero for a second levels every speaker in the group, so raising the slider afterwards moves them together instead of restoring their previous spread.",
+            "de": "Wenn der Gruppen-Lautstärkeregler eine Sekunde lang auf Null gehalten wird, werden alle Lautsprecher in der Gruppe angeglichen. Wenn der Regler anschließend erhöht wird, werden sie gemeinsam lauter, anstatt ihre vorherige Verteilung wiederherzustellen.",
+            "fr": "Maintenir le curseur de volume du groupe à zéro pendant une seconde met tous les haut-parleurs du groupe au même niveau ; l’augmentation du volume qui s’ensuit les fait tous monter ensemble au lieu de rétablir leur répartition précédente.",
+            "nl": "Als je de groepsvolumeschuifknop een seconde op nul houdt, wordt het volume van elke speaker in de groep genivelleerd. Als je de schuifknop daarna omhoog verplaatst, veranderen ze samen in plaats van hun vorige spreiding te herstellen.",
+            "es": "Al mantener el control deslizante de volumen del grupo en cero durante un segundo, se nivelan todos los altavoces del grupo, por lo que, al subir el control a continuación, el volumen de los altavoces aumentará por igual en lugar de restaurar su distribución anterior.",
+            "it": "Mantenendo il cursore del volume del gruppo a zero per un secondo si livella ogni altoparlante del gruppo; se si alza il cursore successivamente, il volume si alzerà in modo omogeneo anziché ripristinare la distribuzione precedente.",
+            "sv": "Om du håller volymreglaget för gruppen på noll i en sekund jämnas volymen ut för varje högtalare i gruppen. När du sedan höjer reglaget ändras volymen för alla högtalare tillsammans i stället för att deras tidigare volymspridning återställs.",
+            "nb": "Å holde gruppevolumglideren på null i et sekund jevner ut alle høyttalerne i gruppen, slik at når du hever glideren etterpå, justeres de sammen i stedet for å gjenopprette den forrige spredningen.",
+            "da": "Hvis du holder gruppens lydstyrkeskyder på nul i et sekund, udlignes alle højttalere i gruppen, så hvis du hæver skyderen bagefter, ændres de sammen i stedet for at gendanne deres tidligere fordeling.",
+            "ja": "グループの音量スライダをゼロで1秒間保持すると、グループ内のすべてのスピーカーの音量が均一になります。その後スライダを上げると、以前の音量バランスに戻るのではなく、すべてのスピーカーの音量が一緒に上がります。",
+            "pt": "Manter o nivelador de volume do grupo no zero durante um segundo nivela todos os altifalantes do grupo, pelo que se aumentar o nivelador posteriormente, os mesmos mover-se-ão em conjunto, em vez de repor a sua distribuição anterior.",
+            "pl": "Przytrzymanie suwaka głośności grupy na zerze przez sekundę wyrównuje poziom każdego głośnika w grupie, dzięki czemu późniejsze podniesienie suwaka podnosi ich głośność równomiernie zamiast przywracać ich poprzedni rozkład.",
+            "zh-Hans": "将组音量滑块保持在零点位置一秒钟，即可将组内每个扬声器的音量拉平，这样在随后调高滑块时，它们会同步变大，而不是恢复先前的音量差。",
+        ],
+        "helpLibrarySharesHeading": [
+            "en": "Library shares",
+            "de": "Bibliotheksfreigaben",
+            "fr": "Partages de la bibliothèque",
+            "nl": "Bibliotheek-shares",
+            "es": "Recursos compartidos de la biblioteca",
+            "it": "Condivisioni della libreria",
+            "sv": "Biblioteksdelningar",
+            "nb": "Bibliotekdelinger",
+            "da": "Biblioteksdelinger",
+            "ja": "ライブラリ共有",
+            "pt": "Partilhas de biblioteca",
+            "pl": "Udziały biblioteki",
+            "zh-Hans": "媒体库共享",
+        ],
+        "helpLibrarySharesBody": [
+            "en": "Music Services lists the network folders each Sonos system indexes as local music, tagged (S1) or (S2) where both systems are present. Adding or removing a share is done in the Sonos app; Choragus can trigger a reindex.",
+            "de": "Unter Musikdienste werden die Netzwerkordner aufgelistet, die jedes Sonos-System als lokale Musik indiziert; bei Vorhandensein beider Systeme mit der Kennzeichnung (S1) oder (S2). Das Hinzufügen oder Entfernen einer Freigabe erfolgt in der Sonos-App; Choragus kann eine Neuindizierung auslösen.",
+            "fr": "Les services musicaux répertorient les dossiers réseau que chaque système Sonos indexe en tant que musique locale, marqués (S1) ou (S2) lorsque les deux systèmes sont présents. L’ajout ou la suppression d’un partage s’effectue dans l’app Sonos ; Choragus peut déclencher une réindexation.",
+            "nl": "Muziekservices toont de netwerkmappen die elk Sonos-systeem indexeert als lokale muziek, gemarkeerd als (S1) of (S2) als beide systemen aanwezig zijn. Het toevoegen of verwijderen van een share doe je in de Sonos-app; Choragus kan een herindexering starten.",
+            "es": "Servicios de música enumera las carpetas de red que cada sistema Sonos indexa como música local, etiquetadas (S1) o (S2) cuando ambos sistemas están presentes. Se puede añadir o eliminar un recurso compartido desde la app Sonos; Choragus puede iniciar una reindexación.",
+            "it": "I servizi musicali elencano le cartelle di rete che ogni sistema Sonos indicizza come musica locale, etichettate con (S1) o (S2) se entrambi i sistemi sono presenti. L'aggiunta o la rimozione di una condivisione si effettua nell'app Sonos; Choragus può avviare una nuova indicizzazione.",
+            "sv": "Musiktjänster listar nätverksmapparna som varje Sonos-system indexerar som lokal musik, märkta (S1) eller (S2) om båda systemen är närvarande. Lägga till eller ta bort en delning görs i Sonos-appen; Choragus kan utlösa en omindexering.",
+            "nb": "Musikktjenester lister opp nettverksmappene som hvert Sonos-system indekserer som lokal musikk, merket med (S1) eller (S2) når begge systemene er til stede. Legge til eller fjerne en deling gjøres i Sonos-appen. Choragus kan starte en ny indeksering.",
+            "da": "Musiktjenester lister netværksmapperne, som hvert Sonos-system indekserer som lokal musik, markeret (S1) eller (S2), hvis begge systemer er til stede. Tilføjelse eller fjernelse af en deling gøres i Sonos-appen; Choragus kan udløse en genindeksering.",
+            "ja": "ミュージックサービスには、各Sonosシステムがローカルミュージックとしてインデックスを作成するネットワークフォルダが一覧表示されます。両方のシステムが存在する場合は、(S1)または(S2)というタグが付きます。共有の追加または削除はSonosアプリで行います。Choragusは再インデックスをトリガーできます。",
+            "pt": "Os serviços de música listam as pastas de rede que cada sistema Sonos indexa como música local, marcadas com (S1) ou (S2) quando ambos os sistemas estão presentes. A adição ou remoção de uma partilha é feita na aplicação Sonos; o Choragus pode acionar uma reindexação.",
+            "pl": "Usługi muzyczne wyświetlają foldery sieciowe, które każdy system Sonos indeksuje jako lokalną muzykę, oznaczone (S1) lub (S2), jeśli oba systemy są obecne. Dodawanie lub usuwanie udziału odbywa się w aplikacji Sonos; Choragus może wyzwolić ponowne indeksowanie.",
+            "zh-Hans": "音乐服务会列出每个 Sonos 系统索引为本地音乐的网络文件夹，如果两个系统同时存在，会带有 (S1) 或 (S2) 标记。添加或移除共享在 Sonos App 中进行；Choragus 可以触发重新索引。",
+        ],
+        "helpRenameFavoriteBody": [
+            "en": "Right-click a Sonos favourite while browsing Favourites to rename it. The new name is written to the Sonos system, so every controller sees it.",
+            "de": "Klicke mit der rechten Maustaste auf einen Sonos-Favoriten beim Durchsuchen der Favoriten, um ihn umzubenennen. Der neue Name wird auf das Sonos-System geschrieben, sodass jeder Controller ihn sieht.",
+            "fr": "Faites un clic droit sur un favori Sonos lors de la navigation dans les Favoris pour le renommer. Le nouveau nom est enregistré sur le système Sonos, afin que chaque contrôleur le voie.",
+            "nl": "Klik met de rechtermuisknop op een Sonos-favoriet tijdens het bladeren in Favorieten om de naam ervan te wijzigen. De nieuwe naam wordt weggeschreven naar het Sonos-systeem, zodat elke controller deze ziet.",
+            "es": "Haz clic derecho en un favorito de Sonos mientras navegas por Favoritos para cambiarle el nombre. El nuevo nombre se guarda en el sistema Sonos, por lo que todos los controladores lo ven.",
+            "it": "Fai clic con il pulsante destro del mouse su un preferito Sonos mentre sfogli i Preferiti per rinominarlo. Il nuovo nome viene scritto sul sistema Sonos, in modo che ogni controller lo veda.",
+            "sv": "Högerklicka på en Sonos-favorit när du bläddrar i Favoriter för att byta namn på den. Det nya namnet sparas i Sonos-systemet, så alla kontroller ser det.",
+            "nb": "Høyreklikk på en Sonos-favoritt mens du blar i Favoritter for å gi den nytt navn. Det nye navnet skrives til Sonos-systemet, slik at enhver kontroller ser det.",
+            "da": "Højreklik på en Sonos-favorit, mens du gennemser Favoritter, for at omdøbe den. Det nye navn gemmes på Sonos-systemet, så enhver controller ser det.",
+            "ja": "「お気に入り」をブラウズ中にSonosのお気に入りを右クリックすると、名前を変更できます。新しい名前はSonosシステムに書き込まれるため、どのコントローラーからでも表示されます。",
+            "pt": "Clique com o botão direito do rato num favorito do Sonos ao navegar em Favoritos para o mudar de nome. O novo nome é escrito no sistema Sonos, pelo que todos os controladores o veem.",
+            "pl": "Kliknij prawym przyciskiem myszy ulubione Sonos podczas przeglądania Ulubionych, aby zmienić jego nazwę. Nowa nazwa jest zapisywana w systemie Sonos, więc widzi ją każdy kontroler.",
+            "zh-Hans": "在浏览“收藏夹”时右键单击 Sonos 收藏即可将其重命名。新名称将写入 Sonos 系统，因此每个控制器都能看到它。",
+        ],
+        "helpQueueFollowBody": [
+            "en": "As tracks change, the queue keeps the previous track at the top of the view so the playing track sits just below it, and scrolls on toward the end of the queue when there are too few tracks left to slide.",
+            "de": "Beim Wechsel der Titel hält die Liste den vorherigen Titel am oberen Rand der Ansicht, sodass sich der gerade gespielte Titel genau darunter befindet, und scrollt weiter zum Ende der Liste, wenn zu wenige Titel zum Weiterschieben übrig sind.",
+            "fr": "À mesure que les pistes changent, la file d’attente maintient la piste précédente en haut de la vue afin que la piste en cours de lecture se trouve juste en dessous, et défile vers la fin de la file d’attente lorsqu’il reste trop peu de pistes à faire glisser.",
+            "nl": "Naarmate nummers wisselen, houdt de wachtrij het vorige nummer bovenaan de weergave zodat het momenteel afgespeelde nummer er net onder staat, en scrolt door naar het einde van de wachtrij als er te weinig nummers over zijn om te schuiven.",
+            "es": "A medida que cambian las pistas, la cola mantiene la pista anterior en la parte superior de la vista para que la pista en reproducción quede justo debajo, y se desplaza hacia el final de la cola cuando quedan muy pocas pistas para deslizar.",
+            "it": "Quando i brani cambiano, la coda mantiene il brano precedente in cima alla vista in modo che il brano in riproduzione si trovi appena sotto, e scorre verso la fine della coda quando rimangono troppo pochi brani da scorrere.",
+            "sv": "När låtar ändras behåller kön den föregående låten överst i vyn så att den låt som spelas är precis under den, och bläddrar vidare mot slutet av kön när det finns för få låtar kvar att rulla.",
+            "nb": "Når sporene skifter, beholder køen det forrige sporet øverst i visningen slik at sporet som spilles ligger rett under det, og ruller videre mot slutten av køen når det er for få spor igjen å bla gjennom.",
+            "da": "Når sporene skifter, bevarer køen det forrige spor øverst i visningen, så det afspillende spor ligger lige under det, og ruller videre mod slutningen af køen, når der er for få spor tilbage at rulle.",
+            "ja": "トラックが切り替わると、キューは前のトラックをビューの一番上に維持し、再生中のトラックがそのすぐ下にくるようにします。スライドするトラックが残り少なくなると、キューの最後までスクロールします。",
+            "pt": "À medida que as faixas mudam, a fila de espera mantém a faixa anterior no topo da vista para que a faixa em reprodução fique logo abaixo, e desloca-se em direção ao fim da fila de espera quando há muito poucas faixas para deslizar.",
+            "pl": "W miarę zmiany utworów kolejka utrzymuje poprzedni utwór na górze widoku, dzięki czemu odtwarzany utwór znajduje się tuż pod nim, a następnie przewija w kierunku końca kolejki, gdy do przesunięcia pozostanie zbyt mało utworów.",
+            "zh-Hans": "当曲目发生更改时，队列将上一首曲目保持在视图顶部，以便正在播放的曲目位于其正下方；当剩下的曲目太少无法滚动时，它会向队列末尾滚动。",
+        ],
+        "helpFastScrollBody": [
+            "en": "Long browse lists carry an A–Z index button; pick a letter to jump straight to that part of the list.",
+            "de": "Lange Listen zum Durchsuchen haben eine A–Z-Indextaste; wähle einen Buchstaben aus, um direkt zu diesem Teil der Liste zu springen.",
+            "fr": "Les listes de navigation longues comportent un bouton d’index A–Z ; choisissez une lettre pour accéder directement à cette partie de la liste.",
+            "nl": "Lange bladerlijsten hebben een A–Z-indexknop; kies een letter om direct naar dat deel van de lijst te springen.",
+            "es": "Las listas de navegación largas tienen un botón de índice de la A a la Z; elige una letra para saltar directamente a esa parte de la lista.",
+            "it": "I lunghi elenchi di navigazione presentano un pulsante indice A–Z; scegli una lettera per passare direttamente a quella parte dell'elenco.",
+            "sv": "Långa bläddringslistor har en A–Z-indexknapp. Välj en bokstav för att hoppa direkt till den delen av listan.",
+            "nb": "Lange lister for å bla gjennom har en A–Z-indeksknapp. Velg en bokstav for å hoppe rett til den delen av listen.",
+            "da": "Lange gennemsynslister har en A–Z-indeksknap; vælg et bogstav for at springe direkte til den del af listen.",
+            "ja": "長いブラウズリストにはA～Zのインデックスボタンがあります。文字を選択すると、リストのその部分に直接ジャンプします。",
+            "pt": "As listas de navegação longas contêm um botão de índice de A a Z; escolha uma letra para saltar diretamente para essa parte da lista.",
+            "pl": "Długie listy przeglądania mają przycisk indeksu A–Z; wybierz literę, aby przejść bezpośrednio do tej części listy.",
+            "zh-Hans": "较长的浏览列表带有 A–Z 索引按钮；选取一个字母可直接跳转到列表的该部分。",
+        ],
+        "helpSpeakersTabBody": [
+            "en": "The Speakers tab lists every discovered speaker with its room, model, IP address, system generation, firmware, group role and event-subscription count. Copy All exports the snapshot for troubleshooting.",
+            "de": "Der Tab Lautsprecher listet jeden entdeckten Lautsprecher mit Raum, Modell, IP-Adresse, Systemgeneration, Firmware, Gruppenrolle und Ereignis-Abonnementanzahl auf. Alle kopieren exportiert den Schnappschuss zur Fehlerbehebung.",
+            "fr": "L’onglet Haut-parleurs répertorie chaque haut-parleur détecté avec sa pièce, son modèle, son adresse IP, la génération du système, son firmware, son rôle de groupe et le nombre d’abonnements aux événements. Tout copier exporte l’instantané à des fins de dépannage.",
+            "nl": "Het tabblad Speakers toont elke ontdekte speaker met de bijbehorende kamer, het model, het IP-adres, de systeemgeneratie, de firmware, de groepsrol en het aantal event-abonnementen. Met Kopieer alles exporteer je de momentopname voor probleemoplossing.",
+            "es": "La pestaña Altavoces enumera todos los altavoces descubiertos con su habitación, modelo, dirección IP, generación de sistema, firmware, rol de grupo y recuento de suscripciones de eventos. Copiar todo exporta la instantánea para la resolución de problemas.",
+            "it": "La scheda Altoparlanti elenca ogni altoparlante rilevato con la sua stanza, modello, indirizzo IP, generazione del sistema, firmware, ruolo del gruppo e conteggio delle sottoscrizioni agli eventi. Copia tutto esporta l'istantanea per la risoluzione dei problemi.",
+            "sv": "Fliken Högtalare listar varje upptäckt högtalare med dess rum, modell, IP-adress, systemgeneration, fast programvara, grupproll och antal händelseprenumerationer. Kopiera alla exporterar ögonblicksbilden för felsökning.",
+            "nb": "Høyttalere-fanen lister opp hver oppdaget høyttaler med rom, modell, IP-adresse, systemgenerasjon, fastvare, grupperolle og antall hendelsesabonnementer. Kopier alt eksporterer øyeblikksbildet for feilsøking.",
+            "da": "Fanen Højttalere viser alle opdagede højttalere med deres rum, model, IP-adresse, systemgeneration, firmware, grupperolle og antal hændelsesabonnementer. Kopier alt eksporterer øjebliksbilledet til fejlfinding.",
+            "ja": "「スピーカー」タブには、検出されたすべてのスピーカーがその部屋、モデル、IPアドレス、システム世代、ファームウェア、グループの役割、イベントサブスクリプション数とともに一覧表示されます。「すべてコピー」を使用すると、トラブルシューティング用のスナップショットをエクスポートできます。",
+            "pt": "O separador Altifalantes lista todos os altifalantes descobertos com a sua divisão, modelo, endereço IP, geração de sistema, firmware, função de grupo e contagem de subscrições de eventos. Copiar tudo exporta o instantâneo para a resolução de problemas.",
+            "pl": "Karta Głośniki wyświetla listę wszystkich wykrytych głośników wraz z ich pokojem, modelem, adresem IP, generacją systemu, oprogramowaniem układowym, rolą w grupie i liczbą subskrypcji zdarzeń. Kopiuj wszystko eksportuje migawkę do celów rozwiązywania problemów.",
+            "zh-Hans": "“扬声器”标签页列出了每个发现的扬声器及其所在房间、型号、IP 地址、系统代数、固件、组角色和事件订阅计数。“拷贝全部”可导出快照以便进行故障排除。",
+        ],
+        "diagNetworkSettleNote": [
+            "en": "Link statistics are counters read from each speaker, so the first reading after opening this tab can look alarmingly high. Give it a minute or two — the figures settle as repeat samples arrive.",
+            "de": "Verbindungsstatistiken sind Zähler, die von jedem Lautsprecher ausgelesen werden, daher kann der erste Wert nach dem Öffnen dieses Tabs alarmierend hoch erscheinen. Warte ein bis zwei Minuten — die Zahlen pendeln sich ein, sobald wiederholte Messwerte eintreffen.",
+            "fr": "Les statistiques de liaison sont des compteurs lus à partir de chaque enceinte. La première lecture après l'ouverture de cet onglet peut donc sembler anormalement élevée. Attendez une minute ou deux — les chiffres se stabilisent à mesure que les échantillons répétés arrivent.",
+            "nl": "Verbindingsstatistiken zijn tellers die van elke luidspreker worden uitgelezen, waardoor de eerste meting na het openen van dit tabblad alarmerend hoog kan lijken. Wacht een minuut of twee — de cijfers stabiliseren zich zodra herhaalde metingen binnenkomen.",
+            "es": "Las estadísticas de enlace son contadores leídos de cada altavoz, por lo que la primera lectura después de abrir esta pestaña puede parecer alarmantemente alta. Espera un par de minutos — las cifras se estabilizarán a medida que lleguen muestras repetidas.",
+            "it": "Le statistiche di collegamento sono contatori letti da ciascuno speaker, pertanto la prima lettura dopo l'apertura di questo pannello può sembrare eccessivamente alta. Attendi un paio di minuti — i dati si stabilizzano man mano che arrivano misurazioni ripetute.",
+            "sv": "Länkstatistik är räknare som läses av från varje högtalare, så den första avläsningen efter att den här fliken har öppnats kan se oroväckande hög ut. Vänta någon minut — siffrorna stabiliseras när upprepade samplingar tas emot.",
+            "nb": "Koblingsstatistikk er tellere som leses fra hver høyttaler, så den første avlesningen etter at du har åpnet denne fanen kan se urovekkende høy ut. Vent et minutt eller to — tallene stabiliserer seg etter hvert som gjentatte målinger mottas.",
+            "da": "Linkstatistik er tællere, der aflæses fra hver højttaler, så den første aflæsning efter åbning af denne fane kan se foruroligende høj ud. Vent et par minutter — tallene stabiliserer sig, når der modtages gentagne målinger.",
+            "ja": "リンク統計は各スピーカーから読み取られるカウンターであるため、このタブを開いた直後の最初の読み取り値が驚くほど高く見える場合があります。1〜2分お待ちください。サンプルの再取得が繰り返されると、数値は安定します。",
+            "pt": "As estatísticas de link são contadores lidos de cada alto-falante, portanto, a primeira leitura após abrir esta aba pode parecer assustadoramente alta. Aguarde um ou dois minutos — os números se estabilizam à medida que novas amostras chegam.",
+            "pl": "Statystyki łącza to liczniki odczytywane z każdego głośnika, dlatego pierwszy odczyt po otwarciu tej karty może wydawać się alarmująco wysoki. Poczekaj minutę lub dwie — liczby ustabilizują się, gdy zaczną napływać kolejne pomiary.",
+            "zh-Hans": "链路统计信息是从每个扬声器读取的计数器，因此打开此标签页后的第一次读数可能会高得惊人。请等待一两分钟 — 随着重复采样的到达，数值会稳定下来。",
+        ],
+        "helpQueueLibraryHeading": [
+            "en": "Queue Library",
+            "de": "Warteschlangen-Mediathek",
+            "fr": "Bibliothèque de la file d'attente",
+            "nl": "Wachtrijbibliotheek",
+            "es": "Biblioteca de cola",
+            "it": "Libreria della coda",
+            "sv": "Köbibliotek",
+            "nb": "Købibliotek",
+            "da": "Købibliotek",
+            "ja": "キューライブラリ",
+            "pt": "Biblioteca da Fila",
+            "pl": "Biblioteka kolejki",
+            "zh-Hans": "队列资料库",
+        ],
+        "helpQueueLibraryBody": [
+            "en": "The Queue Library window stores play queues on this Mac, organised into folders. Save the current queue, restore one to any group, or export a queue as M3U or CSV. Local queues are private to Choragus — they are not written to the Sonos system.",
+            "de": "Das Fenster der Warteschlangen-Mediathek speichert Wiedergabelisten auf diesem Mac, in Ordnern organisiert. Speichere die aktuelle Warteschlange, stelle diese in einer beliebigen Gruppe wieder her oder exportiere eine Warteschlange als M3U oder CSV. Lokale Warteschlangen sind exklusiv für Choragus — sie werden nicht auf das Sonos-System geschrieben.",
+            "fr": "La fenêtre Bibliothèque de la file d'attente stocke les files d'attente de lecture sur ce Mac, organisées en dossiers. Enregistrez la file d'attente actuelle, restaurez-en une dans n'importe quel groupe ou exportez une file d'attente au format M3U ou CSV. Les files d'attente locales sont propres à Choragus — elles ne sont pas enregistrées sur le système Sonos.",
+            "nl": "Het Wachtrijbibliotheek-venster bewaart afspeelwachtrijen op deze Mac, geordend in mappen. Bewaar de huidige wachtrij, herstel er een naar een willekeurige groep of exporteer een wachtrij als M3U of CSV. Lokale wachtrijen zijn privé voor Choragus — ze worden niet naar het Sonos-systeem geschreven.",
+            "es": "La ventana de la biblioteca de cola almacena las colas de reproducción en este Mac, organizadas en carpetas. Guarda la cola actual, restaura una en cualquier grupo o exporta una cola como M3U o CSV. Las colas locales son privadas de Choragus; no se escriben en el sistema Sonos.",
+            "it": "La finestra Libreria della coda archivia le code di riproduzione su questo Mac, organizzate in cartelle. Salva la coda attuale, ripristinane una in qualsiasi gruppo o esporta una coda come M3U o CSV. Le code locali sono private per Choragus: non vengono scritte nel sistema Sonos.",
+            "sv": "Fönstret Köbibliotek lagrar uppspelningsköer på denna Mac, ordnade i mappar. Spara den aktuella kön, återskapa en till valfri grupp, eller exportera en kö som M3U eller CSV. Lokala köer är privata för Choragus — de skrivs inte till Sonos-systemet.",
+            "nb": "Købibliotek-vinduet lagrer avspillingskøer på denne Mac-en, organisert i mapper. Lagre den gjeldende køen, gjenopprett en til en hvilken som helst gruppe, eller eksporter en kø som M3U eller CSV. Lokale køer er private for Choragus — de skrives ikke til Sonos-systemet.",
+            "da": "Vinduet Købibliotek gemmer afspilningskøer på denne Mac, organiseret i mapper. Arkiver den aktuelle kø, gendan en til enhver gruppe, eller eksporter en kø som M3U eller CSV. Lokale køer er private for Choragus — de skrives ikke til Sonos-systemet.",
+            "ja": "キューライブラリウインドウは、このMac上の再生キューをフォルダに整理して保存します。現在のキューを保存したり、任意のグループに復元したり、キューをM3UまたはCSVとして書き出すことができます。ローカルキューはChoragus専用であり、Sonosシステムには書き込まれません。",
+            "pt": "A janela Biblioteca da Fila armazena as filas de reprodução neste Mac, organizadas em pastas. Salve a fila atual, restaure uma para qualquer grupo ou exporte uma fila como M3U ou CSV. As filas locais são privadas do Choragus — elas não são gravadas no sistema Sonos.",
+            "pl": "Okno Biblioteka kolejki przechowuje kolejki odtwarzania na tym Macu, zorganizowane w folderach. Zachowaj bieżącą kolejkę, odtwórz ją w dowolnej grupie lub wyeksportuj kolejkę jako plik M3U albo CSV. Lokalne kolejki są prywatne dla Choragus — nie są zapisywane w systemie Sonos.",
+            "zh-Hans": "队列资料库窗口在此Mac上储存播放队列，并按文件夹整理。您可以存储当前队列、将其恢复到任何群组，或将队列导出为M3U或CSV格式。本地队列仅供Choragus使用 — 它们不会被写入Sonos系统。",
+        ],
+        "helpSaveToPlaylistBody": [
+            "en": "Save to Playlist… writes the current queue back out as a playlist. Sonos playlists are visible to every controller on the system; an Apple Music playlist can be created when every track in the queue is an Apple Music catalogue track.",
+            "de": "„In Playlist sichern…“ schreibt die aktuelle Warteschlange als Playlist. Sonos-Playlists sind für jeden Controller im System sichtbar; eine Apple Music-Playlist kann erstellt werden, wenn jeder Titel in der Warteschlange ein Apple Music-Katalogtitel ist.",
+            "fr": "Enregistrer dans la playlist… exporte la file d'attente actuelle sous forme de playlist. Les playlists Sonos sont visibles par tous les contrôleurs du système ; une playlist Apple Music peut être créée lorsque chaque piste de la file d'attente provient du catalogue Apple Music.",
+            "nl": "Bewaar in afspeellijst… schrijft de huidige wachtrij weg als afspeellijst. Sonos-afspeellijsten zijn zichtbaar voor elke controller op het systeem; een Apple Music-afspeellijst kan worden aangemaakt wanneer elk nummer in de wachtrij uit de Apple Music-catalogus komt.",
+            "es": "Guardar en playlist… guarda la cola actual como una playlist. Las playlists de Sonos son visibles para todos los controladores del sistema; se puede crear una playlist de Apple Music cuando todas las pistas de la cola pertenecen al catálogo de Apple Music.",
+            "it": "Salva in playlist… scrive la coda attuale come playlist. Le playlist Sonos sono visibili a ogni controller del sistema; puoi creare una playlist Apple Music se ogni traccia della coda appartiene al catalogo Apple Music.",
+            "sv": "Spara i spellista… sparar den aktuella kön som en spellista. Sonos-spellistor är synliga för varje kontroll i systemet; en Apple Music-spellista kan skapas när varje spår i kön är ett spår från Apple Music-katalogen.",
+            "nb": "Lagre i spilleliste… lagrer den gjeldende køen som en spilleliste. Sonos-spillelister er synlige for alle kontrollere på systemet. En Apple Music-spilleliste kan opprettes når alle spor i køen finnes i Apple Music-katalogen.",
+            "da": "Arkiver i spilleliste… arkiverer den aktuelle kø som en spilleliste. Sonos-spillelister er synlige for alle controllere på systemet; en Apple Music-spilleliste kan oprettes, når hvert spor i køen er et spor fra Apple Music-kataloget.",
+            "ja": "「プレイリストに保存…」は、現在のキューをプレイリストとして書き出します。Sonosのプレイリストはシステム上のすべてのコントローラに表示されます。キュー内のすべてのトラックがApple Musicカタログのトラックである場合、Apple Musicのプレイリストを作成できます。",
+            "pt": "Salvar na Playlist… grava a fila atual como uma playlist. As playlists do Sonos são visíveis para todos os controladores no sistema; uma playlist do Apple Music pode ser criada quando todas as faixas na fila pertencem ao catálogo do Apple Music.",
+            "pl": "Zachowaj na liście odtwarzania… zapisuje bieżącą kolejkę jako listę odtwarzania. Listy odtwarzania Sonos są widoczne dla każdego kontrolera w systemie; listę odtwarzania Apple Music można utworzyć, gdy każdy utwór w kolejce pochodzi z katalogu Apple Music.",
+            "zh-Hans": "“存储到播放列表…”将当前队列作为播放列表写回。Sonos播放列表对系统上的每个控制器可见；当队列中的每一首曲目都是Apple Music目录中的曲目时，可以创建一个Apple Music播放列表。",
+        ],
+        "helpQueueSourceBody": [
+            "en": "Each queue row names the service or system the track came from, so a queue assembled from several sources stays readable.",
+            "de": "Jede Zeile in der Warteschlange benennt den Dienst oder das System, aus dem der Titel stammt, sodass eine aus mehreren Quellen zusammengestellte Warteschlange lesbar bleibt.",
+            "fr": "Chaque ligne de la file d'attente indique le service ou le système d'où provient la piste, afin qu'une file d'attente composée de plusieurs sources reste lisible.",
+            "nl": "Elke rij in de wachtrij vermeldt de dienst of het systeem waar het nummer vandaan komt, zodat een wachtrij die is samengesteld uit meerdere bronnen overzichtelijk blijft.",
+            "es": "Cada fila de la cola indica el servicio o sistema del que proviene la pista, para que una cola formada por varias fuentes siga siendo legible.",
+            "it": "Ogni riga della coda indica il servizio o il sistema da cui proviene la traccia, così una coda creata da più fonti rimane leggibile.",
+            "sv": "Varje kö-rad anger vilken tjänst eller vilket system spåret kom från, så att en kö som satts ihop från flera källor förblir läsbar.",
+            "nb": "Hver kø-rad angir tjenesten eller systemet sporet kom fra, slik at en kø satt sammen fra flere kilder forblir lesbar.",
+            "da": "Hver række i køen angiver den tjeneste eller det system, sporet kom fra, så en kø sammensat af flere kilder forbliver læsbar.",
+            "ja": "キューの各行には、トラックの取得元のサービスまたはシステム名が表示されるため、複数のソースから構成されたキューでも読みやすさが保たれます。",
+            "pt": "Cada linha da fila indica o serviço ou sistema de origem da faixa, para que uma fila montada a partir de várias fontes continue legível.",
+            "pl": "Każdy wiersz kolejki wskazuje usługę lub system, z którego pochodzi utwór, dzięki czemu kolejka złożona z wielu źródeł pozostaje czytelna.",
+            "zh-Hans": "每个队列行都会标明曲目的来源服务或系统，以便由多个来源组成的队列保持可读性。",
+        ],
+        "helpMoreServicesHeading": [
+            "en": "TIDAL, Suno and SomaFM",
+            "de": "TIDAL, Suno und SomaFM",
+            "fr": "TIDAL, Suno et SomaFM",
+            "nl": "TIDAL, Suno en SomaFM",
+            "es": "TIDAL, Suno y SomaFM",
+            "it": "TIDAL, Suno e SomaFM",
+            "sv": "TIDAL, Suno och SomaFM",
+            "nb": "TIDAL, Suno og SomaFM",
+            "da": "TIDAL, Suno og SomaFM",
+            "ja": "TIDAL、Suno、SomaFM",
+            "pt": "TIDAL, Suno e SomaFM",
+            "pl": "TIDAL, Suno i SomaFM",
+            "zh-Hans": "TIDAL、Suno和SomaFM",
+        ],
+        "helpMoreServicesBody": [
+            "en": "TIDAL browses and plays from a linked Sonos account. Suno has its own explore window for public songs and playlists. SomaFM streams without any account. Each is switched on in Settings → Music Services.",
+            "de": "TIDAL durchsucht und spielt Inhalte von einem verknüpften Sonos-Account ab. Suno verfügt über ein eigenes Entdecken-Fenster für öffentliche Songs und Playlists. SomaFM streamt ohne Account. Du kannst diese unter Einstellungen → Musikdienste aktivieren.",
+            "fr": "TIDAL parcourt et lit le contenu à partir d'un compte Sonos associé. Suno dispose de sa propre fenêtre d'exploration pour les morceaux et playlists publics. SomaFM diffuse du contenu sans nécessiter de compte. Chaque service peut être activé dans Réglages → Services musicaux.",
+            "nl": "TIDAL bladert en speelt af vanuit een gekoppeld Sonos-account. Suno heeft een eigen verkenningsvenster voor openbare nummers en afspeellijsten. SomaFM streamt zonder account. Je schakelt elke dienst in via Instellingen → Muziekdiensten.",
+            "es": "TIDAL explora y reproduce contenido desde una cuenta Sonos enlazada. Suno tiene su propia ventana de exploración para canciones y playlists públicas. SomaFM transmite sin necesidad de cuenta. Cada servicio se activa en Ajustes → Servicios de música.",
+            "it": "TIDAL sfoglia e riproduce i contenuti da un account Sonos collegato. Suno ha la sua finestra esplora per i brani e le playlist pubbliche. SomaFM trasmette senza bisogno di alcun account. Ognuno di essi si attiva in Impostazioni → Servizi musicali.",
+            "sv": "TIDAL bläddrar och spelar från ett länkat Sonos-konto. Suno har ett eget utforskarfönster för offentliga låtar och spellistor. SomaFM strömmar utan något konto. Varje tjänst slås på i Inställningar → Musiktjänster.",
+            "nb": "TIDAL blar gjennom og spiller av fra en tilknyttet Sonos-konto. Suno har sitt eget utforskervindu for offentlige sanger og spillelister. SomaFM strømmer uten konto. Hver av dem slås på i Innstillinger → Musikktjenester.",
+            "da": "TIDAL gennemser og afspiller fra en tilknyttet Sonos-konto. Suno har sit eget udforskningsvindue til offentlige sange og spillelister. SomaFM streamer uden nogen konto. Hver af dem slås til i Indstillinger → Musiktjenester.",
+            "ja": "TIDALは、リンクされたSonosアカウントからブラウズして再生します。Sunoには、公開された曲やプレイリスト用の独自の検索ウインドウがあります。SomaFMはアカウントなしでストリーミングします。各サービスは、設定 → ミュージックサービス でオンにできます。",
+            "pt": "O TIDAL navega e reproduz a partir de uma conta Sonos vinculada. O Suno tem sua própria janela de exploração para músicas e playlists públicas. O SomaFM faz streaming sem nenhuma conta. Cada serviço é ativado em Ajustes → Serviços de música.",
+            "pl": "TIDAL przegląda i odtwarza muzykę z połączonego konta Sonos. Suno posiada własne okno eksploracji publicznych utworów i list odtwarzania. SomaFM streamuje bez konieczności posiadania konta. Każdą z usług można włączyć w Ustawienia → Usługi muzyczne.",
+            "zh-Hans": "TIDAL可从已关联的Sonos帐户浏览并播放。Suno拥有独立的浏览窗口，用于探索公共歌曲和播放列表。SomaFM无需任何帐户即可流化。每项服务均在 设置 → 音乐服务 中开启。",
+        ],
+        "helpHistoryActionsBody": [
+            "en": "Right-click any history entry to play it now, play it next, or add it to the end of the queue. The room filter matches either the exact group or any group the room took part in.",
+            "de": "Klicke mit der rechten Maustaste auf einen Verlaufseintrag, um ihn sofort abzuspielen, als Nächstes abzuspielen oder ans Ende der Warteschlange anzufügen. Der Raumfilter entspricht entweder der exakten Gruppe oder einer beliebigen Gruppe, an der der Raum beteiligt war.",
+            "fr": "Faites un clic droit sur n'importe quelle entrée de l'historique pour la lire maintenant, la lire ensuite ou l'ajouter à la fin de la file d'attente. Le filtre par pièce correspond au groupe exact ou à tout groupe auquel la pièce a participé.",
+            "nl": "Klik met de rechtermuisknop op een geschiedenisvermelding om deze nu af te spelen, als volgende af te spelen of aan het einde van de wachtrij toe te voegen. Het kamerfilter komt overeen met de exacte groep of een groep waar de kamer deel van uitmaakte.",
+            "es": "Haz clic con el botón derecho en cualquier entrada del historial para reproducirla ahora, reproducirla a continuación o añadirla al final de la cola. El filtro de habitación coincide con el grupo exacto o con cualquier grupo del que la habitación formara parte.",
+            "it": "Fai clic con il tasto destro su qualsiasi voce della cronologia per riprodurla ora, riprodurla dopo o aggiungerla alla fine della coda. Il filtro della stanza corrisponde al gruppo esatto o a qualsiasi gruppo a cui la stanza ha preso parte.",
+            "sv": "Högerklicka på valfri historikpost för att spela den nu, spela den härnäst eller lägga till den i slutet av kön. Rumsfiltret matchar antingen den exakta gruppen eller valfri grupp som rummet deltog i.",
+            "nb": "Høyreklikk på en historikkoppføring for å spille den nå, spille den neste, eller legge den til på slutten av køen. Romfilteret samsvarer med enten den eksakte gruppen eller en hvilken som helst gruppe rommet var en del av.",
+            "da": "Højreklik på en historikpost for at afspille den nu, afspille den som det næste eller tilføje den til slutningen af køen. Rummets filter matcher enten den nøjagtige gruppe eller enhver gruppe, rummet var en del af.",
+            "ja": "履歴エントリを右クリックすると、今すぐ再生、次に再生、またはキューの最後に追加できます。ルームフィルタは、完全一致のグループ、またはそのルームが参加したグループのいずれかに一致します。",
+            "pt": "Clique com o botão direito em qualquer entrada do histórico para reproduzi-la agora, em seguida ou adicioná-la ao final da fila. O filtro de ambiente corresponde ao grupo exato ou a qualquer grupo do qual o ambiente fez parte.",
+            "pl": "Kliknij prawym przyciskiem myszy dowolną pozycję w historii, aby odtworzyć ją teraz, odtworzyć jako następną lub dodać na koniec kolejki. Filtr pokoju dopasowuje się do dokładnej grupy lub dowolnej grupy, której pokój był częścią.",
+            "zh-Hans": "右键点按任何历史记录条目，可选择立即播放、下一首播放或将其添加到队列末尾。房间过滤器将匹配完全相同的群组或该房间参与过的任何群组。",
+        ],
+        "helpWindowLifecycleBody": [
+            "en": "Closing the main window leaves Choragus running so playback keeps going and the menu bar item stays available. Press Command-0, or choose Choragus from the Window menu, to bring the window back.",
+            "de": "Wenn du das Hauptfenster schließt, wird Choragus weiterhin im Hintergrund ausgeführt, sodass die Wiedergabe fortgesetzt wird und das Menüleistenobjekt verfügbar bleibt. Drücke Command-0 oder wähle Choragus aus dem Fenster-Menü, um das Fenster wieder einzublenden.",
+            "fr": "La fermeture de la fenêtre principale laisse Choragus en cours d'exécution afin que la lecture se poursuive et que l'élément de la barre des menus reste disponible. Appuyez sur Command-0, ou choisissez Choragus dans le menu Fenêtre, pour ramener la fenêtre au premier plan.",
+            "nl": "Als je het hoofdvenster sluit, blijft Choragus actief zodat het afspelen doorgaat en het menubalkonderdeel beschikbaar blijft. Druk op Command-0 of kies Choragus in het Venster-menu om het venster weer te tonen.",
+            "es": "Cerrar la ventana principal mantiene Choragus en ejecución para que la reproducción continúe y el ítem de la barra de menús siga disponible. Pulsa Command-0, o selecciona Choragus en el menú Ventana, para volver a mostrar la ventana.",
+            "it": "La chiusura della finestra principale mantiene Choragus in esecuzione affinché la riproduzione continui e l'elemento della barra dei menu resti disponibile. Premi Command-0, o scegli Choragus dal menu Finestra, per richiamare la finestra.",
+            "sv": "Om du stänger huvudfönstret fortsätter Choragus att köras så att uppspelningen fortsätter och menyradsobjektet förblir tillgängligt. Tryck på Command-0, eller välj Choragus från Fönster-menyn, för att visa fönstret igen.",
+            "nb": "Å lukke hovedvinduet lar Choragus fortsette å kjøre slik at avspillingen fortsetter og menylinjeelementet forblir tilgjengelig. Trykk på Command-0, eller velg Choragus fra Vindu-menyen, for å hente frem vinduet igjen.",
+            "da": "Selvom du lukker hovedvinduet, kører Choragus fortsat, så afspilningen fortsætter, og menulinjeemnet forbliver tilgængeligt. Tryk på Command-0, eller vælg Choragus i menuen Vindue, for at hente vinduet frem igen.",
+            "ja": "メインウインドウを閉じてもChoragusは実行されたままになるため、再生は継続され、メニューバー項目も引き続き利用できます。Command-0を押すか、ウインドウメニューからChoragusを選択すると、ウインドウを再表示できます。",
+            "pt": "Fechar a janela principal mantém o Choragus em execução para que a reprodução continue e o item da barra de menus permaneça disponível. Pressione Command-0 ou escolha Choragus no menu Janela para trazer a janela de volta.",
+            "pl": "Zamknięcie głównego okna pozostawia Choragus uruchomionym, dzięki czemu odtwarzanie jest kontynuowane, a element paska menu pozostaje dostępny. Naciśnij Command-0 lub wybierz Choragus z menu Okno, aby przywrócić okno.",
+            "zh-Hans": "关闭主窗口后，Choragus仍会保持运行，因此播放将继续，且菜单栏项目保持可用。按Command-0，或从“窗口”菜单中选取Choragus，即可将窗口调回。",
+        ],
+        "helpVisualisationsHeading": [
+            "en": "Visualisations",
+            "de": "Visualisierungen",
+            "fr": "Visualisations",
+            "nl": "Visualisaties",
+            "es": "Visualizaciones",
+            "it": "Effetti visivi",
+            "sv": "Visualiseringar",
+            "nb": "Visualiseringer",
+            "da": "Visualiseringer",
+            "ja": "ビジュアライザ",
+            "pt": "Efeitos visuais",
+            "pl": "Wizualizacje",
+            "zh-Hans": "视觉效果",
+        ],
+        "helpVisualisationsBody": [
+            "en": "The Visualisations menu opens Back of the Club, a full-screen wall built from the album art of what is playing and what has played. Colour scheme, genre matching and lighting behaviour are set in Settings → Visualisations. It is a beta feature: layout and lighting change between releases.",
+            "de": "Das Menü „Visualisierungen“ öffnet Back of the Club, eine bildschirmfüllende Wand aus den Albumcovern der aktuell und zuvor gespielten Titel. Farbschema, Genre-Anpassung und Beleuchtungsverhalten stellst du unter Einstellungen → Visualisierungen ein. Es handelt sich um eine Beta-Funktion: Layout und Beleuchtung können sich zwischen Versionen ändern.",
+            "fr": "Le menu Visualisations ouvre Back of the Club, un mur en plein écran composé des pochettes d'albums de ce qui est en cours de lecture et de ce qui a été lu. Vous pouvez configurer le schéma de couleurs, la correspondance des genres et le comportement de l'éclairage dans Réglages → Visualisations. Il s'agit d'une fonctionnalité bêta : la disposition et l'éclairage peuvent changer entre les versions.",
+            "nl": "Het menu Visualisaties opent Back of the Club, een schermvullende muur opgebouwd uit de albumhoezen van wat er nu speelt en wat er is afgespeeld. Kleurenschema, genrematching en belichtingsgedrag stel je in via Instellingen → Visualisaties. Het is een bètafunctie: lay-out en belichting veranderen tussen releases.",
+            "es": "El menú Visualizaciones abre Back of the Club, un muro a pantalla completa construido con las portadas de los álbumes de lo que está sonando y lo que ha sonado. El esquema de colores, la coincidencia de géneros y el comportamiento de la iluminación los configuras en Ajustes → Visualizaciones. Es una función beta: el diseño y la iluminación cambian entre versiones.",
+            "it": "Il menu Effetti visivi apre Back of the Club, una parete a tutto schermo creata con le copertine degli album in riproduzione e di quelli già riprodotti. Configuri la combinazione di colori, la corrispondenza dei generi e il comportamento dell'illuminazione in Impostazioni → Effetti visivi. È una funzionalità beta: il layout e l'illuminazione cambiano da una versione all'altra.",
+            "sv": "Menyn Visualiseringar öppnar Back of the Club, en helskärmsvägg byggd av skivomslagen för det som spelas och det som har spelats. Du ställer in färgschema, genrematchning och belysningsbeteende i Inställningar → Visualiseringar. Det är en betafunktion: layout och belysning ändras mellan olika versioner.",
+            "nb": "Visualiseringer-menyen åpner Back of the Club, en fullskjermvegg bygget fra albumbildene til det som spilles og det som har blitt spilt. Du angir fargeskjema, sjangertilpasning og lysatferd under Innstillinger → Visualiseringer. Det er en betafunksjon: layout og belysning endres mellom ulike versjoner.",
+            "da": "Menuen Visualiseringer åbner Back of the Club, en fuldskærmsvæg bygget af albumcoverne fra det, der afspilles, og det, der er blevet afspillet. Du indstiller farvetema, genrematch og belysningsadfærd under Indstillinger → Visualiseringer. Det er en betafunktion: Layout og belysning ændres mellem udgivelser.",
+            "ja": "「ビジュアライザ」メニューからBack of the Clubを開きます。これは、現在再生中の曲やこれまでに再生した曲のアルバムアートから構築されるフルスクリーンの壁です。カラースキーム、ジャンルのマッチング、照明の動作は、「設定」→「ビジュアライザ」で設定します。これはベータ版の機能であり、レイアウトと照明はリリースごとに変更されます。",
+            "pt": "O menu Efeitos visuais abre o Back of the Club, uma parede em ecrã completo construída a partir das capas dos álbuns do que está a tocar e do que já tocou. Podes definir o esquema de cores, a correspondência de géneros e o comportamento da iluminação em Definições → Efeitos visuais. É uma funcionalidade beta: a disposição e a iluminação mudam entre versões.",
+            "pl": "Menu Wizualizacje otwiera Back of the Club, pełnoekranową ścianę zbudowaną z okładek albumów utworów aktualnie oraz wcześniej odtwarzanych. Schemat kolorów, dopasowywanie gatunków oraz zachowanie oświetlenia można ustawić w menu Ustawienia → Wizualizacje. Jest to funkcja w wersji beta: układ i oświetlenie zmieniają się w zależności od wydania.",
+            "zh-Hans": "“视觉效果”菜单会打开Back of the Club，这是一面由正在播放和已播放专辑的插图构成的全屏展示墙。你可以在“设置”→“视觉效果”中设置配色方案、类型匹配和灯光效果。这是一项测试版功能：布局和灯光效果会在不同版本间有所变化。",
+        ],
+        "helpCrossfadeSleepHeading": [
+            "en": "Crossfade and sleep timer",
+            "de": "Überblenden und Sleep-Timer",
+            "fr": "Fondu enchaîné et minuteur de mise en veille",
+            "nl": "Crossfade en slaaptimer",
+            "es": "Fundido cruzado y temporizador de reposo",
+            "it": "Dissolvenza incrociata e timer di stop",
+            "sv": "Tona över och insomningstimer",
+            "nb": "Overtoning og dvaletimer",
+            "da": "Overtoning og sleeptimer",
+            "ja": "クロスフェードとスリープタイマー",
+            "pt": "Transição e temporizador",
+            "pl": "Płynne przejścia i wyłącznik czasowy",
+            "zh-Hans": "交叉渐入渐出和睡眠计时器",
+        ],
+    ]
+
+    private static let translations22: [String: [String: String]] = [
+        "helpCrossfadeSleepBody": [
+            "en": "Crossfade blends the end of each track into the next and is toggled from the Now Playing controls; it applies to the group, not to Choragus, so other controllers see the same setting. Sleep stops playback after a chosen delay and can be cancelled at any time from the same button.",
+            "de": "Überblenden mischt das Ende jedes Titels in den nächsten und wird über die Now Playing-Steuerung umgeschaltet. Es gilt für die Gruppe, nicht für Choragus, sodass andere Controller dieselbe Einstellung sehen. Der Sleep-Timer stoppt die Wiedergabe nach einer gewählten Verzögerung und kann jederzeit über dieselbe Taste abgebrochen werden.",
+            "fr": "Le fondu enchaîné mélange la fin de chaque piste avec la suivante et s'active depuis les commandes Now Playing ; il s'applique au groupe, et non à Choragus, afin que les autres contrôleurs voient le même réglage. La mise en veille arrête la lecture après un délai choisi et vous pouvez l'annuler à tout moment depuis le même bouton.",
+            "nl": "Crossfade laat het einde van elk nummer overlopen in het volgende en schakel je in via de Now Playing-bediening; het is van toepassing op de groep, niet op Choragus, dus andere regelaars zien dezelfde instelling. De slaaptimer stopt het afspelen na een gekozen vertraging en kun je op elk moment annuleren via dezelfde knop.",
+            "es": "El fundido cruzado mezcla el final de cada pista con la siguiente y lo activas desde los controles de Now Playing; se aplica al grupo, no a Choragus, por lo que otros controladores ven el mismo ajuste. El temporizador de reposo detiene la reproducción tras un retraso elegido y lo puedes cancelar en cualquier momento desde el mismo botón.",
+            "it": "La dissolvenza incrociata unisce la fine di ogni brano al successivo e la attivi dai controlli di Now Playing; si applica al gruppo, non a Choragus, quindi gli altri controller vedono la stessa impostazione. Il timer di stop interrompe la riproduzione dopo un ritardo selezionato e puoi annullarlo in qualsiasi momento dallo stesso pulsante.",
+            "sv": "Tona över (Crossfade) blandar slutet av varje spår in i nästa och du växlar det från Now Playing-reglagen; det gäller för gruppen, inte Choragus, så andra kontroller visar samma inställning. Insomningstimern stoppar uppspelningen efter en vald fördröjning och du kan avbryta den när som helst från samma knapp.",
+            "nb": "Overtoning blander slutten av hvert spor inn i det neste, og du slår det av/på fra Now Playing-kontrollene. Det gjelder for gruppen, ikke for Choragus, slik at andre kontrollere ser den samme innstillingen. Dvaletimeren stopper avspillingen etter en valgt forsinkelse, og du kan avbryte den når som helst fra den samme knappen.",
+            "da": "Overtoning blander slutningen af hvert nummer ind i det næste og slås til/fra i Now Playing-betjeningspanelet. Det gælder for gruppen, ikke for Choragus, så andre controllere ser den samme indstilling. Sleeptimeren stopper afspilningen efter en valgt forsinkelse og kan til enhver tid annulleres med den samme knap.",
+            "ja": "クロスフェードは、各トラックの終わりを次のトラックにミックスします。Now Playingのコントロールから切り替えることができ、Choragusではなくグループに適用されるため、他のコントローラでも同じ設定が表示されます。スリープタイマーは指定した時間が経過すると再生を停止し、同じボタンからいつでもキャンセルできます。",
+            "pt": "A transição mistura o fim de cada faixa com a seguinte e é ativada nos controlos do Now Playing; aplica-se ao grupo e não ao Choragus, para que outros controladores vejam a mesma definição. O temporizador para a reprodução após um atraso escolhido e podes cancelá-lo a qualquer momento no mesmo botão.",
+            "pl": "Funkcja płynnych przejść miksuje końcówkę jednego utworu z początkiem następnego i jest przełączana w elementach sterujących Now Playing; dotyczy grupy, a nie aplikacji Choragus, dzięki czemu inne kontrolery widzą to samo ustawienie. Wyłącznik czasowy zatrzymuje odtwarzanie po wybranym czasie i może być anulowany w dowolnej chwili za pomocą tego samego przycisku.",
+            "zh-Hans": "交叉渐入渐出功能会将每首曲目的结尾与下一首的开头融合，可以在Now Playing控制中切换；该功能适用于群组，而非Choragus，因此其他控制器会看到相同的设置。睡眠计时器会在选定的延迟时间后停止播放，并随时可以通过同一按钮取消。",
+        ],
+        "helpAudioFormatBadgesBody": [
+            "en": "Now Playing labels the stream above the service name: a Dolby Atmos badge for spatial audio, the TV input format for HDMI sources, and container, bit depth and sample rate for everything else. Nothing is shown when the speaker reports no detail.",
+            "de": "Now Playing kennzeichnet den Stream über dem Dienstnamen: ein Dolby Atmos-Badge für 3D-Audio, das TV-Eingangsformat für HDMI-Quellen und Container, Bittiefe sowie Abtastrate für alles andere. Es wird nichts angezeigt, wenn der Lautsprecher keine Details meldet.",
+            "fr": "Now Playing indique le flux au-dessus du nom du service : un badge Dolby Atmos pour l'audio spatial, le format d'entrée TV pour les sources HDMI, et le conteneur, la profondeur de bits et la fréquence d'échantillonnage pour tout le reste. Rien ne s'affiche si l'enceinte ne fournit aucun détail.",
+            "nl": "Now Playing labelt de stream boven de naam van de voorziening: een Dolby Atmos-badge voor ruimtelijke audio, het TV-invoerformaat voor HDMI-bronnen en container, bitdiepte en samplefrequentie voor al het andere. Er wordt niets getoond wanneer de luidspreker geen details meldt.",
+            "es": "Now Playing etiqueta el flujo sobre el nombre del servicio: una insignia de Dolby Atmos para el audio espacial, el formato de entrada de TV para las fuentes HDMI, y el contenedor, la profundidad de bits y la frecuencia de muestreo para todo lo demás. No se muestra nada cuando el altavoz no reporta ningún detalle.",
+            "it": "Now Playing etichetta il flusso sopra il nome del servizio: un badge Dolby Atmos per l'audio spaziale, il formato di ingresso TV per le sorgenti HDMI e contenitore, profondità di bit e frequenza di campionamento per tutto il resto. Non appare nulla se l'altoparlante non riporta alcun dettaglio.",
+            "sv": "Now Playing märker strömmen ovanför tjänstens namn: en Dolby Atmos-bricka för rumsligt ljud, TV-inmatningsformatet för HDMI-källor samt behållare, bitdjup och samplingsfrekvens för allt annat. Ingenting visas när högtalaren inte rapporterar några detaljer.",
+            "nb": "Now Playing merker strømmen over tjenestenavnet: et Dolby Atmos-merke for romtilpasset lyd, TV-inndataformat for HDMI-kilder, og kontainer, bitdybde og samplingsfrekvens for alt annet. Ingenting vises når høyttaleren ikke rapporterer noen detaljer.",
+            "da": "Now Playing mærker streamen over tjenestens navn: et Dolby Atmos-mærke til rumlig lyd, TV-indgangsformatet til HDMI-kilder, og container, bitdybde og samplefrekvens til alt andet. Der vises intet, når højttaleren ikke rapporterer nogen detaljer.",
+            "ja": "Now Playingでは、サービス名の上にストリームのラベルが表示されます。空間オーディオにはDolby Atmosバッジ、HDMIソースにはTV入力フォーマット、その他すべてにはコンテナ、ビット深度、およびサンプルレートが表示されます。スピーカーから詳細が報告されない場合は何も表示されません。",
+            "pt": "O Now Playing identifica a emissão por cima do nome do serviço: um emblema Dolby Atmos para áudio espacial, o formato de entrada de TV para fontes HDMI e o contentor, profundidade de bits e taxa de amostragem para tudo o resto. Nada é mostrado quando o altifalante não reporta detalhes.",
+            "pl": "Now Playing oznacza strumień nad nazwą usługi: etykietą Dolby Atmos dla dźwięku przestrzennego, formatem wejścia TV dla źródeł HDMI oraz kontenerem, głębią bitową i częstotliwością próbkowania dla wszystkich innych. Nic nie jest wyświetlane, gdy głośnik nie podaje żadnych szczegółów.",
+            "zh-Hans": "Now Playing会在服务名称上方标记流媒体信息：空间音频会显示Dolby Atmos徽章，HDMI音源显示TV输入格式，其他所有内容则显示容器、位深度和采样率。如果扬声器未报告任何详细信息，则不显示任何内容。",
+        ],
+        "helpSurroundModeBody": [
+            "en": "For a home-theatre set, the EQ window's Surrounds tab switches music playback between Full — surrounds carry the full mix — and Ambient, where they add atmosphere only. TV and music levels are set separately.",
+            "de": "Für ein Heimkino-Set wechselt der Tab „Surrounds“ im EQ-Fenster die Musikwiedergabe zwischen „Voll“ — Surround-Lautsprecher geben den vollen Mix wieder — und „Ambient“, wo sie nur Atmosphäre hinzufügen. TV- und Musikpegel werden separat eingestellt.",
+            "fr": "Pour un ensemble home cinéma, l'onglet Surrounds de la fenêtre EQ bascule la lecture de la musique entre Complet — les enceintes surround diffusent le mixage complet — et Ambiant, où elles n'ajoutent que de l'atmosphère. Les niveaux TV et musique se règlent séparément.",
+            "nl": "Voor een thuisbioscoopset schakelt het tabblad Surrounds van het EQ-venster de muziekafspeling tussen Volledig — surrounds spelen de volledige mix — en Sfeer, waarbij ze alleen sfeer toevoegen. TV- en muziekniveaus stel je afzonderlijk in.",
+            "es": "Para un conjunto de cine en casa, la pestaña Surrounds de la ventana del EQ cambia la reproducción de música entre Completo — los altavoces envolventes reproducen toda la mezcla — y Ambiental, donde solo añaden atmósfera. Los niveles de TV y música los ajustas por separado.",
+            "it": "Per un set home theater, il pannello Surrounds della finestra EQ alterna la riproduzione musicale tra Completa — i surround riproducono l'intero mix — e Ambiente, in cui aggiungono solo atmosfera. I livelli della TV e della musica si impostano separatamente.",
+            "sv": "För en hemmabioanläggning växlar fliken Surrounds i EQ-fönstret musikuppspelningen mellan Full — surroundhögtalarna spelar hela mixen — och Ambient, där de bara lägger till atmosfär. Du ställer in TV- och musiknivåer separat.",
+            "nb": "For et hjemmekinoanlegg bytter Surrounds-fanen i EQ-vinduet musikkavspilling mellom Full — surroundhøyttalerne bærer hele miksen — og Ambient, hvor de bare legger til atmosfære. Du stiller inn TV- og musikknivåer separat.",
+            "da": "Til et hjemmebiografsystem skifter fanen Surrounds i EQ-vinduet musikafspilning mellem Fuld — baghøjttalerne afspiller hele mixet — og Ambient, hvor de kun tilføjer atmosfære. Du indstiller TV- og musikniveauer separat.",
+            "ja": "ホームシアターセットの場合、EQウィンドウの「Surrounds」タブで、音楽再生を「フル」（サラウンドがミックス全体を再生）と「アンビエント」（雰囲気のみを追加）の間で切り替えます。TVと音楽の音量は別々に設定します。",
+            "pt": "Para um sistema de cinema em casa, o separador Surrounds da janela do EQ alterna a reprodução de música entre Total — os surrounds reproduzem a mistura completa — e Ambiente, onde adicionam apenas atmosfera. Podes definir os níveis de TV e música separadamente.",
+            "pl": "W przypadku kina domowego karta Surrounds w oknie EQ przełącza odtwarzanie muzyki między trybem Pełnym — głośniki dźwięku przestrzennego odtwarzają pełny miks — a trybem Otoczenie, w którym dodają jedynie atmosferę. Poziomy głośności TV i muzyki ustawiane są oddzielnie.",
+            "zh-Hans": "对于家庭影院设备，EQ窗口的Surrounds标签页可在“完整”（环绕声播放完整混音）和“环境”（仅增加氛围感）之间切换音乐播放模式。TV和音乐的音量可以分别设置。",
+        ],
+        "helpIgnoreTVBody": [
+            "en": "Ignore TV / HDMI / Line-In in Settings hides those inputs, so a soundbar's television source never appears as something to play.",
+            "de": "„TV / HDMI / Line-In ignorieren“ in den Einstellungen blendet diese Eingänge aus, sodass die Fernsehquelle einer Soundbar nie als Wiedergabeoption erscheint.",
+            "fr": "L'option \"Ignorer TV / HDMI / Entrée ligne\" dans les Réglages masque ces entrées, de sorte que la source de la télévision d'une barre de son n'apparaît jamais comme un élément à lire.",
+            "nl": "\"Negeer TV / HDMI / Lijn-in\" in Instellingen verbergt deze invoer, zodat de televisiebron van een soundbar nooit verschijnt als iets om af te spelen.",
+            "es": "\"Ignorar TV / HDMI / Entrada de línea\" en Ajustes oculta esas entradas, para que la fuente de televisión de una barra de sonido nunca aparezca como algo para reproducir.",
+            "it": "\"Ignora TV / HDMI / Ingresso linea\" in Impostazioni nasconde quegli ingressi, in modo che la sorgente televisiva di una soundbar non appaia mai come opzione da riprodurre.",
+            "sv": "\"Ignorera TV / HDMI / Linjeingång\" i Inställningar döljer dessa ingångar, så en soundbars TV-källa aldrig visas som ett uppspelningsalternativ.",
+            "nb": "\"Ignorer TV / HDMI / Linjeinngang\" i Innstillinger skjuler disse inngangene, slik at lydplankens TV-kilde aldri vises som noe du kan spille av.",
+            "da": "\"Ignorer TV / HDMI / Linjeindgang\" under Indstillinger skjuler disse indgange, så en soundbars tv-kilde aldrig vises som en afspilningsmulighed.",
+            "ja": "「設定」の「TV / HDMI / ライン入力を無視」をオンにするとこれらの入力が非表示になるため、サウンドバーのテレビソースが再生可能な項目として表示されることはありません。",
+            "pt": "\"Ignorar TV / HDMI / Entrada de linha\" nas Definições oculta essas entradas, para que a fonte de televisão de uma barra de som nunca apareça como algo a reproduzir.",
+            "pl": "\"Ignoruj TV / HDMI / Wejście liniowe\" w Ustawieniach ukrywa te wejścia, dzięki czemu źródło telewizyjne soundbara nigdy nie pojawia się jako opcja do odtwarzania.",
+            "zh-Hans": "“设置”中的“忽略 TV / HDMI / 线路输入”会隐藏这些输入，这样条形音响的电视音源就永远不会显示为可播放项目。",
+        ],
+        "helpPresetsHeading": [
+            "en": "Presets",
+            "de": "Presets",
+            "fr": "Préréglages",
+            "nl": "Presets",
+            "es": "Preajustes",
+            "it": "Preset",
+            "sv": "Förinställningar",
+            "nb": "Forhåndsinnstillinger",
+            "da": "Forudindstillinger",
+            "ja": "プリセット",
+            "pt": "Predefinições",
+            "pl": "Presety",
+            "zh-Hans": "预设",
+        ],
+        "helpPresetsBody": [
+            "en": "A preset stores a group's membership and each speaker's volume, so a room arrangement can be recalled in one action. Save one from the speaker menu in the toolbar; the Preset Manager lets you apply, rename, edit or delete them. Home-theatre zones can optionally store their EQ — bass, treble, loudness, night mode, dialog enhancement and sub level — alongside the volumes.",
+            "de": "Ein Preset speichert die Gruppenzugehörigkeit und die Lautstärke jedes Lautsprechers, sodass du ein Raum-Setup mit einer Aktion abrufen kannst. Speichere eines über das Lautsprechermenü in der Symbolleiste; im Preset-Manager kannst du sie anwenden, umbenennen, bearbeiten oder löschen. Heimkino-Zonen können optional ihren EQ — Bass, Höhen, Loudness, Nachtmodus, Sprachverbesserung und Sub-Pegel — zusammen mit den Lautstärken speichern.",
+            "fr": "Un préréglage enregistre l'appartenance à un groupe et le volume de chaque enceinte, de sorte qu'une disposition de pièces puisse être rappelée en une seule action. Enregistrez-en un depuis le menu des enceintes dans la barre d'outils ; le gestionnaire de préréglages vous permet de les appliquer, renommer, modifier ou supprimer. Les zones de home cinéma peuvent enregistrer de manière optionnelle leur EQ — graves, aigus, loudness, mode nuit, amélioration vocale et niveau du caisson — avec les volumes.",
+            "nl": "Een preset bewaart de groepsleden en het volume van elke speaker, zodat je een kamerindeling met één actie kunt oproepen. Sla er een op via het speakermenu in de knoppenbalk; met de Presetbeheerder kun je ze toepassen, hernoemen, bewerken of verwijderen. Thuisbioscoopzones kunnen optioneel hun EQ — bas, treble, loudness, nachtmodus, spraakversterking en subniveau — opslaan naast de volumes.",
+            "es": "Un preajuste guarda los miembros de un grupo y el volumen de cada altavoz, para que puedas recuperar la configuración de una habitación con una sola acción. Guarda uno desde el menú del altavoz en la barra de herramientas; el Administrador de preajustes te permite aplicarlos, cambiarles el nombre, editarlos o eliminarlos. Las zonas de cine en casa pueden guardar opcionalmente su EQ (graves, agudos, sonoridad, modo nocturno, mejora de diálogos y nivel de sub) junto con los volúmenes.",
+            "it": "Un preset memorizza l'appartenenza a un gruppo e il volume di ciascuno speaker, così puoi richiamare la disposizione di una stanza con una sola azione. Salvane uno dal menu dello speaker nella barra degli strumenti; il Gestore preset ti consente di applicarli, rinominarli, modificarli o eliminarli. Le zone home theatre possono opzionalmente memorizzare il loro EQ (bassi, acuti, loudness, modalità notte, ottimizzazione del dialogo e livello sub) insieme ai volumi.",
+            "sv": "En förinställning sparar en grupps medlemskap och varje högtalares volym, så att du kan återkalla en rumsindelning med en enda åtgärd. Spara en från högtalarmenyn i verktygsfältet; i Förinställningshanteraren kan du tillämpa, byta namn på, redigera eller ta bort dem. Hemmabiozoner kan valfritt spara sin EQ – bas, diskant, loudness, nattläge, röstförstärkning och subnivå – tillsammans med volymerna.",
+            "nb": "En forhåndsinnstilling lagrer en gruppes medlemskap og hver høyttalers volum, slik at du kan hente frem et romoppsett med én handling. Lagre en fra høyttalermenyen i verktøylinjen; med Behandle forhåndsinnstillinger kan du bruke, gi nytt navn til, redigere eller slette dem. Hjemmekinosoner kan valgfritt lagre sin EQ – bass, diskant, loudness, nattmodus, taleforbedring og sub-nivå – sammen med volumene.",
+            "da": "En forudindstilling gemmer en gruppes medlemskab og hver højttalers lydstyrke, så du kan gendanne en rumopsætning med én handling. Gem en fra højttalermenuen på værktøjslinjen; Forudindstillingshåndtering giver dig mulighed for at anvende, omdøbe, redigere eller slette dem. Hjemmebiografzoner kan valgfrit gemme deres EQ – bas, diskant, loudness, nattilstand, taleforbedring og subniveau – sammen med lydstyrkerne.",
+            "ja": "プリセットにはグループのメンバーシップと各スピーカーの音量が保存され、ワンアクションで部屋の配置を呼び出すことができます。ツールバーのスピーカーメニューから保存できます。プリセットマネージャーを使用すると、適用、名前の変更、編集、または削除ができます。ホームシアターゾーンでは、音量と一緒にEQ（低音、高音、ラウドネス、ナイトモード、スピーチエンハンスメント、サブレベル）を任意に保存できます。",
+            "pt": "Uma predefinição guarda a pertença a um grupo e o volume de cada altifalante, para que possas recuperar uma disposição de divisão numa só ação. Guarda uma a partir do menu do altifalante na barra de ferramentas; o Gestor de predefinições permite-te aplicá-las, renomeá-las, editá-las ou eliminá-las. As zonas de cinema em casa podem opcionalmente guardar o seu EQ — graves, agudos, loudness, modo noturno, melhoria de diálogo e nível do sub — em conjunto com os volumes.",
+            "pl": "Preset zapisuje przynależność do grupy i głośność każdego głośnika, dzięki czemu możesz przywołać układ pomieszczenia jednym działaniem. Zapisz go z menu głośnika na pasku narzędzi; Menedżer presetów pozwala na ich zastosowanie, zmianę nazwy, edycję lub usunięcie. Strefy kina domowego mogą opcjonalnie zapisywać swój EQ — basy, tony wysokie, loudness, tryb nocny, wzmocnienie dialogów i poziom subwoofera — wraz z głośnością.",
+            "zh-Hans": "预设保存了组的成员关系和每个扬声器的音量，让你能一键调用房间布局。从工具栏的扬声器菜单中保存预设；“预设管理器”允许你应用、重命名、编辑或删除它们。家庭影院区域可以选择将它们的 EQ——低音、高音、响度、夜间模式、对话增强和低音炮电平——与音量一起保存。",
+        ],
+        "helpPlaylistManagementBody": [
+            "en": "Sonos playlists appear under Playlists in Browse. Right-click one to rename or delete it; changes are written to the Sonos system, so every controller sees them. Saved queues stored inside Choragus are managed separately, in the Queue Library window.",
+            "de": "Sonos-Playlists erscheinen unter Playlists in Durchsuchen. Klicke mit der rechten Maustaste auf eine, um sie umzubenennen oder zu löschen; Änderungen werden in das Sonos-System geschrieben, sodass jeder Controller sie sieht. In Choragus gespeicherte Warteschlangen werden separat im Fenster \"Warteschlangen-Mediathek\" verwaltet.",
+            "fr": "Les playlists Sonos apparaissent sous Playlists dans Parcourir. Faites un clic droit sur l'une d'elles pour la renommer ou la supprimer ; les modifications sont écrites dans le système Sonos, afin que chaque contrôleur les voie. Les files d'attente enregistrées dans Choragus sont gérées séparément, dans la fenêtre Bibliothèque de la file d'attente.",
+            "nl": "Sonos-afspeellijsten verschijnen onder Afspeellijsten in Bladeren. Klik er met de rechtermuisknop op om deze te hernoemen of te verwijderen; wijzigingen worden naar het Sonos-systeem geschreven, zodat elke controller ze ziet. Opgeslagen wachtrijen in Choragus worden afzonderlijk beheerd in het venster Wachtrijbibliotheek.",
+            "es": "Las listas de reproducción de Sonos aparecen en Listas de reproducción dentro de Explorar. Haz clic derecho en una para cambiarle el nombre o eliminarla; los cambios se guardan en el sistema Sonos para que todos los controladores los vean. Las colas guardadas dentro de Choragus se administran por separado en la ventana Biblioteca de colas.",
+            "it": "Le playlist Sonos appaiono sotto Playlist in Sfoglia. Fai clic con il tasto destro su una di esse per rinominarla o eliminarla; le modifiche vengono scritte nel sistema Sonos, in modo che ogni controller le veda. Le code salvate all'interno di Choragus sono gestite separatamente, nella finestra Libreria code.",
+            "sv": "Sonos-spellistor visas under Spellistor i Bläddra. Högerklicka på en för att byta namn på eller ta bort den; ändringar skrivs till Sonos-systemet så att alla kontroller ser dem. Sparade köer i Choragus hanteras separat i fönstret Köbibliotek.",
+            "nb": "Sonos-spillelister vises under Spillelister i Bla gjennom. Høyreklikk på en for å gi den nytt navn eller slette den; endringer skrives til Sonos-systemet, slik at hver kontroller ser dem. Lagrede køer i Choragus administreres separat, i Købibliotek-vinduet.",
+            "da": "Sonos-playlister vises under Playlister i Gennemse. Højreklik på en for at omdøbe eller slette den; ændringer skrives til Sonos-systemet, så alle controllere ser dem. Gemte køer lagret i Choragus administreres separat i vinduet Købibliotek.",
+            "ja": "Sonosプレイリストは「ブラウズ」の「プレイリスト」に表示されます。右クリックして名前の変更や削除を行うと、変更がSonosシステムに書き込まれ、すべてのコントローラーに反映されます。Choragus内に保存されたキューは、「キューライブラリ」ウィンドウで個別に管理されます。",
+            "pt": "As listas de reprodução Sonos aparecem em Listas de reprodução na secção Explorar. Clica com o botão direito numa delas para a renomear ou eliminar; as alterações são guardadas no sistema Sonos, pelo que todos os controladores as veem. As filas guardadas no Choragus são geridas separadamente, na janela Biblioteca de filas.",
+            "pl": "Playlisty Sonos pojawiają się w sekcji Playlisty w zakładce Przeglądaj. Kliknij prawym przyciskiem myszy, aby zmienić nazwę lub usunąć playlistę; zmiany są zapisywane w systemie Sonos, więc każdy kontroler je widzi. Zapisane kolejki w aplikacji Choragus są zarządzane oddzielnie, w oknie Biblioteka kolejek.",
+            "zh-Hans": "Sonos 播放列表出现在“浏览”中的“播放列表”下。右键点按可重命名或删除；更改将写入 Sonos 系统，因此每个控制器都能看到。存储在 Choragus 内的已保存队列在“队列资料库”窗口中单独管理。",
+        ],
+        "helpKaraokeSettingsBody": [
+            "en": "Settings → Display → Karaoke chooses how the popout animates lines: Classic scrolls them evenly, Dynamic scales and fades the active line. The karaoke window keeps its own light or dark appearance, independent of the rest of the app, because it is usually viewed from across the room.",
+            "de": "Unter Einstellungen → Anzeige → Karaoke wählst du, wie das Pop-up Zeilen animiert: Klassisch scrollt sie gleichmäßig, Dynamisch skaliert und blendet die aktive Zeile ein/aus. Das Karaoke-Fenster behält sein eigenes helles oder dunkles Erscheinungsbild, unabhängig vom Rest der App, da es meist von der anderen Seite des Raums betrachtet wird.",
+            "fr": "Réglages → Affichage → Karaoké vous permet de choisir comment le menu contextuel anime les lignes : Classique les fait défiler uniformément, Dynamique redimensionne et estompe la ligne active. La fenêtre de karaoké conserve sa propre apparence claire ou sombre, indépendante du reste de l'application, car elle est généralement regardée de l'autre bout de la pièce.",
+            "nl": "Met Instellingen → Weergave → Karaoke kies je hoe de pop-out regels animeert: Klassiek scrolt ze gelijkmatig, Dynamisch schaalt en vervaagt de actieve regel. Het karaokevenster behoudt zijn eigen lichte of donkere weergave, onafhankelijk van de rest van de app, omdat het meestal vanaf de andere kant van de kamer wordt bekeken.",
+            "es": "En Ajustes → Pantalla → Karaoke eliges cómo la ventana emergente anima las líneas: Clásico las desplaza uniformemente, Dinámico cambia el tamaño y desvanece la línea activa. La ventana de karaoke mantiene su propio aspecto claro u oscuro, independiente del resto de la app, porque normalmente se ve desde el otro lado de la habitación.",
+            "it": "Impostazioni → Schermo → Karaoke ti fa scegliere come il pop-out anima le linee: Classico le fa scorrere in modo uniforme, Dinamico ridimensiona e sfuma la linea attiva. La finestra karaoke mantiene il proprio aspetto chiaro o scuro, indipendente dal resto dell'app, perché di solito viene guardata dall'altra parte della stanza.",
+            "sv": "Inställningar → Skärm → Karaoke väljer hur popup-rutan animerar rader: Klassisk rullar dem jämnt, Dynamisk skalar och tonar den aktiva raden. Karaokefönstret behåller sitt eget ljusa eller mörka utseende, oberoende av resten av appen, eftersom det vanligtvis ses från andra sidan rummet.",
+            "nb": "Innstillinger → Skjerm → Karaoke velger hvordan popup-vinduet animerer linjer: Klassisk ruller dem jevnt, Dynamisk skalerer og toner den aktive linjen. Karaokevinduet beholder sitt eget lyse eller mørke utseende, uavhengig av resten av appen, siden det vanligvis ses fra den andre siden av rommet.",
+            "da": "Indstillinger → Skærm → Karaoke vælger, hvordan pop op-vinduet animerer linjer: Klassisk ruller dem jævnt, Dynamisk skalerer og fader den aktive linje. Karaoke-vinduet beholder sit eget lyse eller mørke udseende, uafhængigt af resten af appen, fordi det normalt ses fra den anden side af rummet.",
+            "ja": "「設定」→「ディスプレイ」→「カラオケ」で、ポップアウトでの行のアニメーション方法を選択します。「クラシック」は均等にスクロールし、「ダイナミック」はアクティブな行を拡大してフェードさせます。カラオケウィンドウは通常、部屋の反対側から見られるため、アプリの他の部分とは独立して、独自のライトまたはダークのアピアランスを維持します。",
+            "pt": "Definições → Ecrã → Karaoke permite-te escolher como a janela pop-out anima as linhas: Clássico desloca-as uniformemente, Dinâmico dimensiona e desvanece a linha ativa. A janela de karaoke mantém a sua própria aparência clara ou escura, independente do resto da app, porque costuma ser vista do outro lado da divisão.",
+            "pl": "Ustawienia → Wyświetlanie → Karaoke pozwala wybrać sposób animowania linii: Klasyczny przewija je równomiernie, Dynamiczny skaluje i zanika aktywną linię. Okno karaoke zachowuje własny jasny lub ciemny wygląd, niezależnie od reszty aplikacji, ponieważ zazwyczaj jest oglądane z drugiego końca pokoju.",
+            "zh-Hans": "设置 → 显示 → 卡拉OK 可选择弹出窗口的歌词动画方式：“经典”会均匀滚动，“动态”会缩放并淡入淡出当前行。卡拉OK 窗口保持自己的浅色或深色外观，独立于 App 的其余部分，因为它通常是从房间的另一端观看的。",
+        ],
+        "helpNetworkTabHeading": [
+            "en": "Network tab",
+            "de": "Tab \"Netzwerk\"",
+            "fr": "Onglet Réseau",
+            "nl": "Tabblad Netwerk",
+            "es": "Pestaña Red",
+            "it": "Pannello Rete",
+            "sv": "Fliken Nätverk",
+            "nb": "Nettverk-fanen",
+            "da": "Fanen Netværk",
+            "ja": "ネットワークタブ",
+            "pt": "Separador Rede",
+            "pl": "Karta Sieć",
+            "zh-Hans": "网络标签页",
+        ],
+        "helpNetworkTabBody": [
+            "en": "The Diagnostics window's Network tab reports each speaker's link: reachability, Wi-Fi band or wired, signal strength and HTTP round-trip time, with tiles summarising how many rooms are online and how many are on a good link. Counters are read cumulatively from each speaker, so the first reading after opening the tab looks high and settles as repeat samples arrive.",
+            "de": "Der Tab \"Netzwerk\" im Fenster \"Diagnose\" meldet die Verbindung jedes Lautsprechers: Erreichbarkeit, Wi-Fi-Band oder kabelgebunden, Signalstärke und HTTP-Umlaufzeit, mit Kacheln, die zusammenfassen, wie viele Räume online sind und wie viele eine gute Verbindung haben. Zähler werden kumulativ von jedem Lautsprecher ausgelesen, daher erscheint der erste Wert nach dem Öffnen des Tabs hoch und pendelt sich ein, wenn weitere Daten eintreffen.",
+            "fr": "L'onglet Réseau de la fenêtre Diagnostics indique la liaison de chaque enceinte : accessibilité, bande Wi-Fi ou filaire, force du signal et temps d'aller-retour HTTP, avec des vignettes résumant combien de pièces sont en ligne et combien ont une bonne liaison. Les compteurs sont lus cumulativement à partir de chaque enceinte, de sorte que la première lecture après l'ouverture de l'onglet semble élevée et se stabilise à mesure que de nouveaux échantillons arrivent.",
+            "nl": "Het tabblad Netwerk van het venster Diagnostiek rapporteert de verbinding van elke speaker: bereikbaarheid, Wi-Fi-band of bekabeld, signaalsterkte en HTTP-round-triptijd, met tegels die samenvatten hoeveel kamers online zijn en hoeveel een goede verbinding hebben. Tellers worden cumulatief uitgelezen vanaf elke speaker, dus de eerste lezing na het openen van het tabblad lijkt hoog en stabiliseert zodra herhaalde metingen binnenkomen.",
+            "es": "La pestaña Red de la ventana de Diagnóstico informa el enlace de cada altavoz: accesibilidad, banda Wi-Fi o por cable, intensidad de la señal y tiempo de ida y vuelta HTTP, con mosaicos que resumen cuántas habitaciones están en línea y cuántas tienen un buen enlace. Los contadores se leen de forma acumulativa de cada altavoz, por lo que la primera lectura al abrir la pestaña parece alta y se estabiliza a medida que llegan nuevas muestras.",
+            "it": "Il pannello Rete della finestra Diagnostica riporta il collegamento di ogni speaker: raggiungibilità, banda Wi-Fi o via cavo, potenza del segnale e tempo di andata e ritorno HTTP, con riquadri che riassumono quante stanze sono online e quante hanno un buon collegamento. I contatori vengono letti cumulativamente da ogni speaker, quindi la prima lettura dopo l'apertura del pannello sembra alta e si stabilizza all'arrivo di campioni ripetuti.",
+            "sv": "Fliken Nätverk i Diagnostikfönstret rapporterar varje högtalares länk: nåbarhet, Wi-Fi-band eller trådbunden, signalstyrka och HTTP-svarstid, med paneler som sammanfattar hur många rum som är online och hur många som har en bra länk. Räknare läses ackumulerat från varje högtalare, så den första läsningen efter att fliken öppnats ser hög ut och stabiliseras när upprepade prover anländer.",
+            "nb": "Nettverk-fanen i Diagnostikk-vinduet rapporterer hver høyttalers kobling: tilgjengelighet, Wi-Fi-bånd eller kablet, signalstyrke og HTTP-rundturstid, med fliser som oppsummerer hvor mange rom som er på nett og hvor mange som har en god kobling. Tellere leses kumulativt fra hver høyttaler, så den første avlesningen etter å ha åpnet fanen ser høy ut og stabiliserer seg når gjentatte prøver ankommer.",
+            "da": "Fanen Netværk i Diagnostik-vinduet rapporterer hver højttalers link: tilgængelighed, Wi-Fi-bånd eller kablet, signalstyrke og HTTP-rundturstid, med fliser, der opsummerer, hvor mange rum der er online, og hvor mange der har et godt link. Tællere læses kumulativt fra hver højttaler, så den første aflæsning efter at have åbnet fanen ser høj ud og stabiliserer sig, efterhånden som gentagne prøver ankommer.",
+            "ja": "「診断」ウィンドウの「ネットワーク」タブでは、各スピーカーのリンク（到達可能性、Wi-Fi帯域または有線、信号強度、HTTPラウンドトリップタイム）が報告され、オンラインの部屋数とリンクが良好な部屋数をまとめたタイルが表示されます。カウンターは各スピーカーから累積的に読み取られるため、タブを開いた後の最初の読み取り値は高く見えますが、サンプリングを繰り返すにつれて落ち着きます。",
+            "pt": "O separador Rede da janela de Diagnóstico indica a ligação de cada altifalante: acessibilidade, banda Wi-Fi ou com fios, força do sinal e tempo de ida e volta HTTP, com mosaicos que resumem quantas divisões estão online e quantas têm uma boa ligação. Os contadores são lidos de forma cumulativa de cada altifalante, de modo que a primeira leitura após abrir o separador parece alta e estabiliza à medida que chegam amostras repetidas.",
+            "pl": "Karta Sieć w oknie Diagnostyka raportuje połączenie każdego głośnika: osiągalność, pasmo Wi-Fi lub połączenie przewodowe, siłę sygnału i czas podróży w obie strony HTTP, z kafelkami podsumowującymi, ile pokoi jest online i ile ma dobre połączenie. Liczniki są odczytywane zbiorczo z każdego głośnika, więc pierwszy odczyt po otwarciu karty wydaje się wysoki i stabilizuje się w miarę napływania kolejnych próbek.",
+            "zh-Hans": "“诊断”窗口的“网络”标签页会报告每个扬声器的链路：可达性、Wi-Fi 频段或有线、信号强度和 HTTP 往返时间，其中的拼贴块总结了有多少房间在线以及有多少连接良好。计数器是从每个扬声器累积读取的，因此打开标签页后的首次读数看起来很高，并在收到重复样本后稳定下来。",
+        ],
+        "helpSunoBody": [
+            "en": "Suno has its own explore window for browsing and playing public songs and playlists. A suno.com song link can also be pasted directly into the browse panel to play it.",
+            "de": "Suno hat ein eigenes Entdecken-Fenster, um öffentliche Titel und Playlists zu durchsuchen und abzuspielen. Ein suno.com-Titellink kann auch direkt in das Durchsuchen-Panel eingefügt werden, um ihn abzuspielen.",
+            "fr": "Suno possède sa propre fenêtre d'exploration pour parcourir et lire des morceaux et playlists publics. Un lien de morceau suno.com peut également être collé directement dans le panneau de navigation pour le lire.",
+            "nl": "Suno heeft een eigen verkenningsvenster om openbare nummers en afspeellijsten te doorzoeken en af te spelen. Een suno.com link naar een nummer kan ook direct in het bladerpaneel worden geplakt om het af te spelen.",
+            "es": "Suno tiene su propia ventana de exploración para buscar y reproducir canciones y listas de reproducción públicas. También puedes pegar un enlace de canción de suno.com directamente en el panel de exploración para reproducirlo.",
+            "it": "Suno ha una propria finestra di esplorazione per sfogliare e riprodurre brani e playlist pubblici. Un link di un brano suno.com può anche essere incollato direttamente nel pannello di esplorazione per riprodurlo.",
+            "sv": "Suno har ett eget utforskarfönster för att bläddra och spela offentliga låtar och spellistor. En suno.com-låtlänk kan också klistras in direkt i bläddringspanelen för att spela upp den.",
+            "nb": "Suno har et eget utforskervindu for å bla gjennom og spille offentlige sanger og spillelister. En suno.com sanglenke kan også limes direkte inn i bla-panelet for å spille den.",
+            "da": "Suno har sit eget udforskningsvindue til at gennemse og afspille offentlige sange og playlister. Et suno.com-sanglink kan også indsættes direkte i gennemse-panelet for at afspille det.",
+            "ja": "Sunoには、公開されている曲やプレイリストをブラウズして再生するための独自の探索ウィンドウがあります。suno.comの曲リンクを直接ブラウズパネルに貼り付けて再生することもできます。",
+            "pt": "O Suno tem a sua própria janela de exploração para procurares e reproduzires músicas e listas de reprodução públicas. Um link de música suno.com também pode ser colado diretamente no painel de exploração para reproduzi-la.",
+            "pl": "Suno ma własne okno eksploracji do przeglądania i odtwarzania publicznych utworów i playlist. Link do utworu z suno.com można również wkleić bezpośrednio do panelu przeglądania, aby go odtworzyć.",
+            "zh-Hans": "Suno 拥有自己的探索窗口，用于浏览和播放公开的歌曲和播放列表。也可以将 suno.com 歌曲链接直接粘贴到浏览面板中播放。",
+        ],
+        "helpSupportHeading": [
+            "en": "Supporting Choragus",
+            "de": "Choragus unterstützen",
+            "fr": "Soutenir Choragus",
+            "nl": "Choragus steunen",
+            "es": "Apoyar a Choragus",
+            "it": "Supportare Choragus",
+            "sv": "Stöd Choragus",
+            "nb": "Støtt Choragus",
+            "da": "Støt Choragus",
+            "ja": "Choragusをサポートする",
+            "pt": "Apoiar o Choragus",
+            "pl": "Wsparcie Choragus",
+            "zh-Hans": "支持 Choragus",
+        ],
+        "helpSupportBody": [
+            "en": "Choragus is free and open source. Official builds carry a heart button in the toolbar offering ways to contribute; builds compiled from source have no such button and are in no way limited.",
+            "de": "Choragus ist kostenlos und Open Source. Offizielle Builds haben eine Herz-Taste in der Symbolleiste, die Möglichkeiten zum Beitragen bietet; aus dem Quellcode kompilierte Builds haben diese Taste nicht und sind in keiner Weise eingeschränkt.",
+            "fr": "Choragus est gratuit et open source. Les versions officielles comportent un bouton en forme de cœur dans la barre d'outils offrant des moyens de contribuer ; les versions compilées à partir du code source n'ont pas ce bouton et ne sont en aucun cas limitées.",
+            "nl": "Choragus is gratis en open source. Officiële builds hebben een hartjesknop in de knoppenbalk die manieren biedt om bij te dragen; builds gecompileerd uit broncode hebben zo'n knop niet en zijn op geen enkele manier beperkt.",
+            "es": "Choragus es gratuito y de código abierto. Las versiones oficiales llevan un botón de corazón en la barra de herramientas que ofrece formas de contribuir; las versiones compiladas desde el código fuente no tienen este botón y no están limitadas de ninguna manera.",
+            "it": "Choragus è gratuito e open source. Le build ufficiali hanno un pulsante a forma di cuore nella barra degli strumenti che offre modi per contribuire; le build compilate dal codice sorgente non hanno questo pulsante e non sono in alcun modo limitate.",
+            "sv": "Choragus är gratis och öppen källkod. Officiella versioner har en hjärtknapp i verktygsfältet som erbjuder sätt att bidra; versioner kompilerade från källkod har ingen sådan knapp och är inte begränsade på något sätt.",
+            "nb": "Choragus er gratis og åpen kildekode. Offisielle versjoner har en hjerteknapp i verktøylinjen med måter du kan bidra på; versjoner kompilert fra kildekode har ingen slik knapp og er på ingen måte begrenset.",
+            "da": "Choragus er gratis og open source. Officielle builds har en hjerteknap på værktøjslinjen, der tilbyder måder at bidrage på; builds kompileret fra kildekode har ingen sådan knap og er på ingen måde begrænsede.",
+            "ja": "Choragusは無料でオープンソースです。公式ビルドには、ツールバーに寄付の方法を提供するハートボタンがあります。ソースからコンパイルされたビルドにはそのようなボタンはなく、機能が制限されることも一切ありません。",
+            "pt": "O Choragus é gratuito e de código aberto. As versões oficiais contêm um botão em forma de coração na barra de ferramentas a oferecer formas de contribuir; as versões compiladas a partir do código-fonte não têm esse botão e não estão de forma alguma limitadas.",
+            "pl": "Choragus jest darmowy i open source. Oficjalne kompilacje mają przycisk w kształcie serca na pasku narzędzi, oferujący sposoby wsparcia; kompilacje ze źródła nie mają takiego przycisku i nie są w żaden sposób ograniczone.",
+            "zh-Hans": "Choragus 是免费开源的。官方版本在工具栏带有一个心形按钮，提供贡献途径；从源代码编译的版本没有该按钮，且没有任何限制。",
+        ],
+        "helpQueueLibrarySourcesBody": [
+            "en": "The Queue Library sidebar splits queues by where they came from: Choragus queues saved on this Mac, Sonos playlists read from the system, History snapshots taken automatically, and Smart queues that rebuild themselves — Most Played over the last 30 days, Recently Played, and Starred. All Sources shows everything together.",
+            "de": "Die Seitenleiste der Warteschlangenmediathek unterteilt Warteschlangen nach ihrer Herkunft: auf diesem Mac gesicherte Choragus-Warteschlangen, aus dem System gelesene Sonos-Playlists, automatisch erstellte Verlauf-Schnappschüsse und intelligente Warteschlangen, die sich selbst neu aufbauen — Meistgespielt in den letzten 30 Tagen, Zuletzt gespielt und Markiert. \"Alle Quellen\" zeigt alles zusammen an.",
+            "fr": "La barre latérale de la bibliothèque de files d'attente répartit les files d'attente selon leur origine : les files d'attente Choragus enregistrées sur ce Mac, les playlists Sonos lues à partir du système, les instantanés d'historique pris automatiquement et les files d'attente intelligentes qui se reconstruisent d'elles-mêmes — Les plus écoutés des 30 derniers jours, Récemment écoutés et Favoris. \"Toutes les sources\" affiche tout ensemble.",
+            "nl": "De navigatiekolom van de wachtrijbibliotheek verdeelt wachtrijen op basis van hun herkomst: Choragus-wachtrijen bewaard op deze Mac, Sonos-afspeellijsten gelezen uit het systeem, automatisch gemaakte geschiedenismomentopnamen en slimme wachtrijen die zichzelf opnieuw opbouwen — Meest afgespeeld in de afgelopen 30 dagen, Recent afgespeeld en Met ster. \"Alle bronnen\" toont alles bij elkaar.",
+            "es": "La barra lateral de la biblioteca de colas divide las colas según su procedencia: colas de Choragus guardadas en este Mac, playlists de Sonos leídas del sistema, instantáneas del historial tomadas automáticamente y colas inteligentes que se reconstruyen solas — Más reproducidas en los últimos 30 días, Reproducidas recientemente y Destacadas. \"Todas las fuentes\" muestra todo junto.",
+            "it": "La barra laterale della libreria delle code suddivide le code in base alla provenienza: code Choragus salvate su questo Mac, playlist Sonos lette dal sistema, istantanee della cronologia acquisite automaticamente e code smart che si ricostruiscono da sole — Più riprodotte negli ultimi 30 giorni, Riprodotti di recente e Preferite. \"Tutte le fonti\" mostra tutto insieme.",
+            "sv": "Sidofältet i köbiblioteket delar upp köer efter var de kommer ifrån: Choragus-köer sparade på den här Mac-datorn, Sonos-spellistor inlästa från systemet, historikögonblicksbilder som tas automatiskt och smarta köer som bygger om sig själva — Mest spelade de senaste 30 dagarna, Senast spelade och Stjärnmärkta. \"Alla källor\" visar allt tillsammans.",
+            "nb": "Sidepanelet i købiblioteket deler opp køer etter hvor de kommer fra: Choragus-køer lagret på denne Macen, Sonos-spillelister lest fra systemet, historikkøyeblikksbilder tatt automatisk og smarte køer som gjenoppbygges av seg selv — Mest spilt siste 30 dager, Sist spilt og Stjernemerket. \"Alle kilder\" viser alt sammen.",
+            "da": "Indholdsoversigten i købiblioteket opdeler køer efter deres oprindelse: Choragus-køer arkiveret på denne Mac, Sonos-playlister indlæst fra systemet, historikøjebliksbilleder taget automatisk og smarte køer, der genopbygges af sig selv — Mest afspillede de seneste 30 dage, Senest afspillede og Stjernemarkerede. \"Alle kilder\" viser alt samlet.",
+            "ja": "キューライブラリのサイドバーでは、キューが保存元ごとに分割されます。このMacに保存されたChoragusキュー、システムから読み込まれたSonosプレイリスト、自動的に作成された履歴スナップショット、および自動的に再構築されるスマートキュー（過去30日間で最も再生された項目、最近再生した項目、星付き）です。「すべてのソース」にはすべてがまとめて表示されます。",
+            "pt": "A barra lateral da biblioteca de filas divide as filas pela sua origem: filas Choragus guardadas neste Mac, playlists Sonos lidas do sistema, instantâneos de histórico criados automaticamente e filas inteligentes que se reconstroem sozinhas — Mais tocadas nos últimos 30 dias, Tocadas recentemente e Com estrela. \"Todas as fontes\" mostra tudo junto.",
+            "pl": "Pasek boczny biblioteki kolejek dzieli kolejki w zależności od ich pochodzenia: kolejki Choragus zachowane na tym Macu, playlisty Sonos wczytane z systemu, automatycznie tworzone zrzuty historii oraz inteligentne kolejki, które same się przebudowują — Najczęściej odtwarzane w ciągu ostatnich 30 dni, Ostatnio odtwarzane i Oznaczone gwiazdką. \"Wszystkie źródła\" pokazują wszystko razem.",
+            "zh-Hans": "队列资料库侧边栏按来源将队列分类：保存在此 Mac 上的 Choragus 队列、从系统读取的 Sonos 播放列表、自动获取的历史记录快照以及自动重建的智能队列 — 过去 30 天内播放最多、最近播放和星标。“所有来源”将显示所有内容。",
+        ],
+        "helpQueueLibraryOrganiseBody": [
+            "en": "Queues can be filed into folders and subfolders, and a queue can sit in more than one folder; removing it from one folder leaves the others alone. The view switches between artwork grid and list, and the filter field narrows by title. Select a queue to see its tracks, pick the room to play into, reorder by dragging, or drag a track onto another queue to copy it there.",
+            "de": "Warteschlangen können in Ordner und Unterordner abgelegt werden, und eine Warteschlange kann sich in mehr als einem Ordner befinden; wenn du sie aus einem Ordner entfernst, bleibt sie in den anderen erhalten. Die Ansicht wechselt zwischen Cover-Raster und Liste, und das Filterfeld schränkt die Anzeige nach Titel ein. Wähle eine Warteschlange aus, um ihre Titel zu sehen, bestimme den Raum für die Wiedergabe, ändere die Reihenfolge durch Ziehen, oder ziehe einen Titel auf eine andere Warteschlange, um ihn dorthin zu kopieren.",
+            "fr": "Les files d'attente peuvent être classées dans des dossiers et des sous-dossiers, et une file d'attente peut se trouver dans plusieurs dossiers ; si vous la supprimez d'un dossier, elle reste dans les autres. La présentation bascule entre la grille de pochettes et la liste, et le champ de filtre permet d'affiner par titre. Sélectionnez une file d'attente pour voir ses pistes, choisissez la pièce où la lire, réorganisez-la par glisser-déposer ou faites glisser une piste sur une autre file d'attente pour l'y copier.",
+            "nl": "Wachtrijen kunnen in mappen en submappen worden geplaatst, en een wachtrij kan zich in meerdere mappen bevinden; als je deze uit één map verwijdert, blijft deze in de andere mappen staan. De weergave schakelt tussen een raster met albumhoezen en een lijst, en met het filterveld kun je verfijnen op titel. Selecteer een wachtrij om de nummers te zien, kies de kamer om in af te spelen, verander de volgorde door te slepen of sleep een nummer naar een andere wachtrij om het daarheen te kopiëren.",
+            "es": "Las colas pueden archivarse en carpetas y subcarpetas, y una cola puede estar en más de una carpeta; si la eliminas de una, se mantendrá en las demás. La visualización cambia entre cuadrícula de carátulas y lista, y el campo de filtro acota por título. Selecciona una cola para ver sus pistas, elige la habitación en la que quieres reproducirla, reordénala arrastrando, o arrastra una pista a otra cola para copiarla allí.",
+            "it": "Le code possono essere archiviate in cartelle e sottocartelle, e una coda può risiedere in più di una cartella; rimuovendola da una cartella la lascerai nelle altre. La vista passa tra la griglia delle copertine e l'elenco, e il campo filtro restringe per titolo. Seleziona una coda per vederne i brani, scegli la stanza in cui riprodurla, riordina trascinando o trascina un brano su un'altra coda per copiarlo.",
+            "sv": "Köer kan sorteras i mappar och undermappar, och en kö kan ligga i mer än en mapp; om du tar bort den från en mapp påverkas inte de andra. Vyn växlar mellan rutnät med skivomslag och lista, och filterfältet avgränsar efter titel. Markera en kö för att se dess spår, välj rum att spela i, ändra ordning genom att dra, eller dra ett spår till en annan kö för att kopiera det dit.",
+            "nb": "Køer kan arkiveres i mapper og undermapper, og en kø kan ligge i mer enn én mappe; hvis du fjerner den fra én mappe, forblir den i de andre. Visningen bytter mellom rutenett med albumbilder og liste, og filterfeltet avgrenser etter tittel. Velg en kø for å se sporene, velg rommet du vil spille i, endre rekkefølge ved å dra, eller dra et spor til en annen kø for å kopiere det dit.",
+            "da": "Køer kan arkiveres i mapper og undermapper, og en kø kan ligge i mere end én mappe; fjerner du den fra én mappe, ændrer det ikke på de andre. Visningen skifter mellem gitter med albumbilleder og liste, og filterfeltet indsnævrer efter titel. Vælg en kø for at se dens spor, vælg det rum der skal afspilles i, skift rækkefølge ved at trække, eller træk et spor til en anden kø for at kopiere det dertil.",
+            "ja": "キューはフォルダやサブフォルダに整理でき、1つのキューを複数のフォルダに配置することも可能です。1つのフォルダから削除しても、他のフォルダにはそのまま残ります。表示はアートワークのグリッドとリストを切り替えることができ、フィルタフィールドでタイトルを絞り込めます。キューを選択してトラックを確認したり、再生する部屋を選んだり、ドラッグして並べ替えたりできます。また、トラックを別のキューにドラッグしてそこにコピーすることもできます。",
+            "pt": "As filas podem ser arrumadas em pastas e subpastas, e uma fila pode estar em mais do que uma pasta; ao removê-la de uma pasta, ela permanece nas outras. A vista alterna entre grelha de capas e lista, e o campo de filtro restringe por título. Seleciona uma fila para ver as suas faixas, escolhe a divisão onde reproduzir, reordena arrastrando, ou arrasta uma faixa para outra fila para copiá-la para lá.",
+            "pl": "Kolejki można umieszczać w folderach i podfolderach, a jedna kolejka może znajdować się w więcej niż jednym folderze; usunięcie jej z jednego nie wpływa na pozostałe. Widok można przełączać między siatką okładek a listą, a pole filtra pozwala zawęzić wyniki po tytule. Zaznacz kolejkę, aby zobaczyć jej utwory, wybierz pomieszczenie do odtwarzania, zmień kolejność, przeciągając, lub przeciągnij utwór do innej kolejki, aby go tam skopiować.",
+            "zh-Hans": "队列可归类到文件夹和子文件夹中，且一个队列可以位于多个文件夹中；将其从一个文件夹中移除不会影响其他文件夹。视图可在插图网格和列表之间切换，筛选栏可通过标题进行缩小范围。选择一个队列以查看其曲目，选取要播放的房间，通过拖移来重新排序，或将曲目拖移到另一个队列以将其拷贝到那里。",
+        ],
+        "helpQueueLibraryExportBody": [
+            "en": "A queue can be exported as M3U or CSV, duplicated, or cloned into a Choragus queue so a Sonos playlist can be edited without touching the original.",
+            "de": "Eine Warteschlange kann als M3U oder CSV exportiert, dupliziert oder in eine Choragus-Warteschlange geklont werden, sodass eine Sonos-Playlist bearbeitet werden kann, ohne das Original zu verändern.",
+            "fr": "Une file d'attente peut être exportée au format M3U ou CSV, dupliquée ou clonée dans une file d'attente Choragus pour qu'une playlist Sonos puisse être modifiée sans toucher à l'original.",
+            "nl": "Een wachtrij kan worden geëxporteerd als M3U of CSV, worden gedupliceerd of worden gekloond naar een Choragus-wachtrij, zodat een Sonos-afspeellijst kan worden bewerkt zonder het origineel te wijzigen.",
+            "es": "Una cola puede exportarse como M3U o CSV, duplicarse o clonarse en una cola de Choragus para poder editar una playlist de Sonos sin tocar la original.",
+            "it": "Una coda può essere esportata come M3U o CSV, duplicata o clonata in una coda Choragus in modo da poter modificare una playlist Sonos senza toccare l'originale.",
+            "sv": "En kö kan exporteras som M3U eller CSV, dupliceras eller klonas till en Choragus-kö så att en Sonos-spellista kan redigeras utan att originalet ändras.",
+            "nb": "En kø kan eksporteres som M3U eller CSV, dupliseres, eller klones til en Choragus-kø slik at en Sonos-spilleliste kan redigeres uten at originalen røres.",
+            "da": "En kø kan eksporteres som M3U eller CSV, dubleres eller klones til en Choragus-kø, så en Sonos-playliste kan redigeres uden at røre ved originalen.",
+            "ja": "キューはM3UまたはCSVとして書き出したり、複製したり、Choragusキューにクローン化したりできるため、オリジナルを変更せずにSonosプレイリストを編集できます。",
+            "pt": "Uma fila pode ser exportada como M3U ou CSV, duplicada ou clonada numa fila Choragus para que uma playlist Sonos possa ser editada sem alterar a original.",
+            "pl": "Kolejkę można wyeksportować jako M3U lub CSV, powielić lub sklonować do kolejki Choragus, dzięki czemu playlistę Sonos można edytować bez modyfikowania oryginału.",
+            "zh-Hans": "队列可导出为 M3U 或 CSV 格式、进行复制，或者克隆到 Choragus 队列，这样即可在不修改原播放列表的情况下编辑 Sonos 播放列表。",
+        ],
         "helpWelcome": [
             "en": "Welcome",
             "de": "Willkommen",
@@ -7644,7 +8586,7 @@ public enum L10n {
             "en": "Choragus is a native macOS controller for Sonos speakers. All control happens locally over your network \u{2014} no cloud account is required.",
             "de": "Choragus ist ein nativer macOS-Controller f\u{00FC}r Sonos-Lautsprecher. Die gesamte Steuerung erfolgt lokal \u{00FC}ber dein Netzwerk \u{2013} ein Cloud-Konto ist nicht erforderlich.",
             "fr": "Choragus est un contr\u{00F4}leur macOS natif pour les enceintes Sonos. Toutes les commandes se font localement sur votre r\u{00E9}seau \u{2014} aucun compte cloud n\u{2019}est requis.",
-            "nl": "Choragus is een native macOS-bedieningsapp voor Sonos-luidsprekers. Alle bediening gebeurt lokaal via je netwerk \u{2014} er is geen cloudaccount nodig.",
+            "nl": "Choragus is een native macOS-bedieningsapp voor Sonos-luidsprekers. Alle bediening gebeurt lokaal via je netwerk — er is geen cloudaccount nodig.",
             "es": "Choragus es un controlador nativo de macOS para altavoces Sonos. Todo el control se realiza localmente a trav\u{00E9}s de tu red, sin necesidad de cuenta en la nube.",
             "it": "Choragus \u{00E8} un controller nativo per macOS per altoparlanti Sonos. Tutto il controllo avviene localmente sulla tua rete: non \u{00E8} richiesto alcun account cloud.",
             "sv": "Choragus \u{00E4}r en inbyggd macOS-kontroll f\u{00F6}r Sonos-h\u{00F6}gtalare. All styrning sker lokalt via ditt n\u{00E4}tverk \u{2014} inget molnkonto kr\u{00E4}vs.",
@@ -7672,9 +8614,9 @@ public enum L10n {
         ],
         "helpBulletDiscovery": [
             "en": "Speakers on your local network are discovered automatically via SSDP and Bonjour (mDNS) — works on flat networks and on segmented VLANs where mDNS is reflected.",
-            "de": "Lautsprecher in Ihrem lokalen Netzwerk werden automatisch per SSDP und Bonjour (mDNS) erkannt — funktioniert in flachen Netzwerken und in segmentierten VLANs mit mDNS-Reflektion.",
+            "de": "Lautsprecher in deinem lokalen Netzwerk werden automatisch per SSDP und Bonjour (mDNS) erkannt — funktioniert in flachen Netzwerken und in segmentierten VLANs mit mDNS-Reflektion.",
             "fr": "Les enceintes de votre r\u{00E9}seau local sont d\u{00E9}tect\u{00E9}es automatiquement via SSDP et Bonjour (mDNS) \u{2014} fonctionne sur les r\u{00E9}seaux plats et sur les VLAN segment\u{00E9}s o\u{00F9} mDNS est refl\u{00E9}t\u{00E9}.",
-            "nl": "Luidsprekers op je lokale netwerk worden automatisch gedetecteerd via SSDP en Bonjour (mDNS) \u{2014} werkt op vlakke netwerken en op gesegmenteerde VLAN\u{2019}s waar mDNS gereflecteerd wordt.",
+            "nl": "Luidsprekers op je lokale netwerk worden automatisch gedetecteerd via SSDP en Bonjour (mDNS) — werkt op vlakke netwerken en op gesegmenteerde VLAN’s waar mDNS gereflecteerd wordt.",
             "es": "Los altavoces de tu red local se descubren autom\u{00E1}ticamente mediante SSDP y Bonjour (mDNS) \u{2014} funciona en redes planas y en VLAN segmentadas donde mDNS est\u{00E1} reflejado.",
             "it": "Gli altoparlanti nella tua rete locale vengono rilevati automaticamente tramite SSDP e Bonjour (mDNS) \u{2014} funziona su reti piatte e su VLAN segmentate dove mDNS \u{00E8} riflesso.",
             "sv": "H\u{00F6}gtalare i ditt lokala n\u{00E4}tverk uppt\u{00E4}cks automatiskt via SSDP och Bonjour (mDNS) \u{2014} fungerar p\u{00E5} platta n\u{00E4}tverk och p\u{00E5} segmenterade VLAN d\u{00E4}r mDNS reflekteras.",
@@ -7749,7 +8691,7 @@ public enum L10n {
             "en": "Make sure the Mac is on the same Wi-Fi network as the speakers. When the app asks for permission to access devices on the local network, grant it \u{2014} discovery will not work otherwise.",
             "de": "Stelle sicher, dass sich der Mac im selben WLAN wie die Lautsprecher befindet. Wenn die App die Berechtigung zum Zugriff auf Ger\u{00E4}te im lokalen Netzwerk anfordert, erteile sie \u{2014} andernfalls funktioniert die Erkennung nicht.",
             "fr": "Assurez-vous que le Mac est sur le m\u{00EA}me r\u{00E9}seau Wi-Fi que les enceintes. Lorsque l\u{2019}app demande l\u{2019}autorisation d\u{2019}acc\u{00E9}der aux appareils du r\u{00E9}seau local, accordez-la \u{2014} sinon la d\u{00E9}tection ne fonctionnera pas.",
-            "nl": "Zorg dat de Mac op hetzelfde Wi-Fi-netwerk zit als de luidsprekers. Verleen de app toestemming om apparaten op het lokale netwerk te benaderen \u{2014} anders werkt detectie niet.",
+            "nl": "Zorg dat de Mac op hetzelfde Wi-Fi-netwerk zit als de luidsprekers. Verleen de app toestemming om apparaten op het lokale netwerk te benaderen — anders werkt detectie niet.",
             "es": "Aseg\u{00FA}rate de que el Mac est\u{00E9} en la misma red Wi-Fi que los altavoces. Cuando la app pida permiso para acceder a dispositivos en la red local, conc\u{00E9}delo, de lo contrario la detecci\u{00F3}n no funcionar\u{00E1}.",
             "it": "Assicurati che il Mac sia sulla stessa rete Wi-Fi degli altoparlanti. Quando l\u{2019}app chiede l\u{2019}autorizzazione ad accedere ai dispositivi sulla rete locale, concedila \u{2014} altrimenti il rilevamento non funzioner\u{00E0}.",
             "sv": "S\u{00E4}kerst\u{00E4}ll att Macen \u{00E4}r p\u{00E5} samma Wi-Fi-n\u{00E4}tverk som h\u{00F6}gtalarna. N\u{00E4}r appen ber om tillst\u{00E5}nd att komma \u{00E5}t enheter p\u{00E5} det lokala n\u{00E4}tverket, bevilja det \u{2014} annars fungerar inte uppt\u{00E4}ckten.",
@@ -7871,7 +8813,7 @@ public enum L10n {
             "en": "The volume slider below the track adjusts the coordinator. When the group contains multiple speakers, enabling Proportional Group Volume in Settings keeps the relative volumes of each speaker intact when you drag the slider.",
             "de": "Der Lautst\u{00E4}rkeregler unter dem Titel steuert den Koordinator. Wenn die Gruppe mehrere Lautsprecher enth\u{00E4}lt, bleiben die relativen Lautst\u{00E4}rken aller Lautsprecher beim Ziehen erhalten, wenn du in den Einstellungen \u{201E}Proportionale Gruppenlautst\u{00E4}rke\u{201C} aktivierst.",
             "fr": "Le curseur de volume sous la piste ajuste le coordinateur. Lorsque le groupe contient plusieurs enceintes, activez \u{00AB}\u{00A0}Volume de groupe proportionnel\u{00A0}\u{00BB} dans les R\u{00E9}glages pour conserver les volumes relatifs de chaque enceinte lorsque vous d\u{00E9}placez le curseur.",
-            "nl": "De volumeschuif onder de track bedient de co\u{00F6}rdinator. Als de groep meerdere luidsprekers bevat, houdt \u{2018}Proportioneel groepsvolume\u{2019} in Instellingen de relatieve volumes intact terwijl je de schuif verplaatst.",
+            "nl": "De volumeschuif onder de track bedient de coördinator. Als de groep meerdere luidsprekers bevat, houdt ‘Proportioneel groepsvolume’ in Instellingen de relatieve volumes intact terwijl je de schuif verplaatst.",
             "es": "El deslizador de volumen debajo de la pista ajusta el coordinador. Cuando el grupo contiene varios altavoces, activar Volumen Proporcional de Grupo en Ajustes mantiene los vol\u{00FA}menes relativos de cada altavoz al arrastrar.",
             "it": "Il cursore del volume sotto la traccia regola il coordinatore. Quando il gruppo contiene pi\u{00F9} altoparlanti, attivando \u{201C}Volume di gruppo proporzionale\u{201D} in Impostazioni i volumi relativi di ogni altoparlante restano invariati quando trascini il cursore.",
             "sv": "Volymreglaget under sp\u{00E5}ret styr koordinatorn. Om gruppen inneh\u{00E5}ller flera h\u{00F6}gtalare beh\u{00E5}ller proportionell gruppvolym i Inst\u{00E4}llningar de relativa volymerna n\u{00E4}r du drar reglaget.",
@@ -7933,7 +8875,7 @@ public enum L10n {
             "en": "A group has one coordinator and zero or more members. All members play whatever the coordinator plays, in sync.",
             "de": "Eine Gruppe hat einen Koordinator und null oder mehr Mitglieder. Alle Mitglieder spielen synchron das wieder, was der Koordinator abspielt.",
             "fr": "Un groupe comporte un coordinateur et z\u{00E9}ro ou plusieurs membres. Tous les membres lisent de mani\u{00E8}re synchronis\u{00E9}e ce que lit le coordinateur.",
-            "nl": "Een groep heeft \u{00E9}\u{00E9}n co\u{00F6}rdinator en nul of meer leden. Alle leden spelen synchroon af wat de co\u{00F6}rdinator afspeelt.",
+            "nl": "Een groep heeft één coördinator en nul of meer leden. Alle leden spelen synchroon af wat de coördinator afspeelt.",
             "es": "Un grupo tiene un coordinador y cero o m\u{00E1}s miembros. Todos los miembros reproducen lo mismo que el coordinador, en sincron\u{00ED}a.",
             "it": "Un gruppo ha un coordinatore e zero o pi\u{00F9} membri. Tutti i membri riproducono ci\u{00F2} che riproduce il coordinatore, in sincronia.",
             "sv": "En grupp har en koordinator och noll eller fler medlemmar. Alla medlemmar spelar upp det koordinatorn spelar, synkroniserat.",
@@ -7944,11 +8886,14 @@ public enum L10n {
             "pl": "Grupa ma jednego koordynatora i zero lub wi\u{0119}cej cz\u{0142}onk\u{00F3}w. Wszyscy cz\u{0142}onkowie odtwarzaj\u{0105} to samo co koordynator, zsynchronizowane.",
             "zh-Hans": "\u{4E00}\u{4E2A}\u{7EC4}\u{6709}\u{4E00}\u{4E2A}\u{534F}\u{8C03}\u{5668}\u{548C}\u{96F6}\u{4E2A}\u{6216}\u{591A}\u{4E2A}\u{6210}\u{5458}\u{3002}\u{6240}\u{6709}\u{6210}\u{5458}\u{4E0E}\u{534F}\u{8C03}\u{5668}\u{540C}\u{6B65}\u{64AD}\u{653E}\u{76F8}\u{540C}\u{5185}\u{5BB9}\u{3002}",
         ],
+    ]
+
+    private static let translations23: [String: [String: String]] = [
         "helpBulletEditGroup": [
             "en": "Right-click a room \u{2192} Edit Group\u{2026} to assemble or disband a group with checkboxes.",
             "de": "Klicke mit der rechten Maustaste auf einen Raum \u{2192} \u{201E}Gruppe bearbeiten\u{2026}\u{201C}, um eine Gruppe mit Ank\u{00E4}stchen zusammenzustellen oder aufzul\u{00F6}sen.",
             "fr": "Cliquez avec le bouton droit sur une pi\u{00E8}ce \u{2192} Modifier le groupe\u{2026} pour composer ou dissoudre un groupe via des cases \u{00E0} cocher.",
-            "nl": "Klik met de rechtermuisknop op een ruimte \u{2192} Groep bewerken\u{2026} om met vinkjes een groep samen te stellen of op te heffen.",
+            "nl": "Klik met de rechtermuisknop op een ruimte → Groep bewerken… om met vinkjes een groep samen te stellen of op te heffen.",
             "es": "Haz clic derecho en una habitaci\u{00F3}n \u{2192} Editar grupo\u{2026} para crear o disolver un grupo con casillas.",
             "it": "Fai clic con il tasto destro su una stanza \u{2192} Modifica gruppo\u{2026} per comporre o sciogliere un gruppo con le caselle di spunta.",
             "sv": "H\u{00F6}gerklicka p\u{00E5} ett rum \u{2192} Redigera grupp\u{2026} f\u{00F6}r att skapa eller uppl\u{00F6}sa en grupp med kryssrutor.",
@@ -7963,7 +8908,7 @@ public enum L10n {
             "en": "Right-click a grouped room \u{2192} Ungroup All to split all members back into single-room groups.",
             "de": "Klicke mit der rechten Maustaste auf einen gruppierten Raum \u{2192} \u{201E}Alle aufl\u{00F6}sen\u{201C}, um alle Mitglieder wieder in Einzelraum-Gruppen aufzuteilen.",
             "fr": "Cliquez avec le bouton droit sur une pi\u{00E8}ce group\u{00E9}e \u{2192} D\u{00E9}grouper tout pour remettre tous les membres en groupes individuels.",
-            "nl": "Klik met de rechtermuisknop op een gegroepeerde ruimte \u{2192} Alles ontgroeperen om alle leden weer in losse ruimtes te splitsen.",
+            "nl": "Klik met de rechtermuisknop op een gegroepeerde ruimte → Alles ontgroeperen om alle leden weer in losse ruimtes te splitsen.",
             "es": "Haz clic derecho en una habitaci\u{00F3}n agrupada \u{2192} Desagrupar todo para dividir a los miembros en grupos de una sola habitaci\u{00F3}n.",
             "it": "Fai clic con il tasto destro su una stanza raggruppata \u{2192} Separa tutto per riportare i membri a gruppi da singola stanza.",
             "sv": "H\u{00F6}gerklicka p\u{00E5} ett grupperat rum \u{2192} Dela alla f\u{00F6}r att dela upp medlemmarna i enrumsgrupper igen.",
@@ -8008,7 +8953,7 @@ public enum L10n {
             "en": "Speakers paired as home-theater satellites or subwoofers are hidden from the sidebar as individual rows. Right-click the home-theater room and choose Home Theater EQ\u{2026} to tune channel levels.",
             "de": "Als Heimkino-Satelliten oder Subwoofer gepaarte Lautsprecher werden in der Seitenleiste nicht als einzelne Zeilen angezeigt. Klicke mit der rechten Maustaste auf den Heimkino-Raum und w\u{00E4}hle \u{201E}Heimkino-EQ\u{2026}\u{201C}, um die Kanalpegel anzupassen.",
             "fr": "Les enceintes associ\u{00E9}es comme satellites Home Theater ou caissons de basses n\u{2019}apparaissent pas comme lignes individuelles dans la barre lat\u{00E9}rale. Cliquez avec le bouton droit sur la pi\u{00E8}ce Home Theater et choisissez \u{00C9}galiseur Home Theater\u{2026} pour ajuster les niveaux des canaux.",
-            "nl": "Luidsprekers die als home theater-satellieten of subwoofers zijn gekoppeld, worden niet als losse rijen in de zijbalk getoond. Klik met de rechtermuisknop op de home theater-ruimte en kies Home Theater EQ\u{2026} om kanaalniveaus af te stellen.",
+            "nl": "Luidsprekers die als home theater-satellieten of subwoofers zijn gekoppeld, worden niet als losse rijen in de zijbalk getoond. Klik met de rechtermuisknop op de home theater-ruimte en kies Home Theater EQ… om kanaalniveaus af te stellen.",
             "es": "Los altavoces emparejados como sat\u{00E9}lites Home Theater o subwoofers se ocultan de la barra lateral como filas individuales. Haz clic derecho en la habitaci\u{00F3}n Home Theater y elige Ecualizador Home Theater\u{2026} para ajustar los niveles de canal.",
             "it": "Gli altoparlanti abbinati come satelliti home theater o subwoofer vengono nascosti dalla barra laterale come righe individuali. Fai clic con il tasto destro sulla stanza Home Theater e scegli Equalizzatore Home Theater\u{2026} per regolare i livelli dei canali.",
             "sv": "H\u{00F6}gtalare parade som hemmabio-satelliter eller subwoofers d\u{00F6}ljs fr\u{00E5}n sidof\u{00E4}ltet som separata rader. H\u{00F6}gerklicka p\u{00E5} hemmabio-rummet och v\u{00E4}lj Hemmabio-EQ\u{2026} f\u{00F6}r att st\u{00E4}lla in kanalniv\u{00E5}er.",
@@ -8040,7 +8985,7 @@ public enum L10n {
             "en": "Click the music-library button in the toolbar, or press \u{2318}B, to open the browser panel.",
             "de": "Klicke in der Symbolleiste auf die Schaltfl\u{00E4}che f\u{00FC}r die Musikbibliothek oder dr\u{00FC}cke \u{2318}B, um das Browser-Panel zu \u{00F6}ffnen.",
             "fr": "Cliquez sur le bouton de la biblioth\u{00E8}que musicale dans la barre d\u{2019}outils, ou appuyez sur \u{2318}B, pour ouvrir le panneau du navigateur.",
-            "nl": "Klik op de muziekbibliotheekknop in de werkbalk of druk op \u{2318}B om het browserpaneel te openen.",
+            "nl": "Klik op de muziekbibliotheekknop in de werkbalk of druk op ⌘B om het browserpaneel te openen.",
             "es": "Haz clic en el bot\u{00F3}n de biblioteca musical en la barra de herramientas, o pulsa \u{2318}B, para abrir el panel del explorador.",
             "it": "Fai clic sul pulsante della libreria musicale nella barra degli strumenti, oppure premi \u{2318}B, per aprire il pannello del browser.",
             "sv": "Klicka p\u{00E5} musikbiblioteksknappen i verktygsf\u{00E4}ltet, eller tryck \u{2318}B, f\u{00F6}r att \u{00F6}ppna bl\u{00E4}ddringspanelen.",
@@ -8067,25 +9012,25 @@ public enum L10n {
             "zh-Hans": "Sonos \u{6536}\u{85CF}\u{548C} Sonos \u{64AD}\u{653E}\u{5217}\u{8868}\u{663E}\u{793A}\u{5728}\u{9876}\u{90E8}\u{3002}",
         ],
         "helpBulletLibrary": [
-            "en": "The music library browses any indexed shares on the speaker.",
-            "de": "Die Musikbibliothek durchsucht alle indexierten Freigaben auf dem Lautsprecher.",
-            "fr": "La biblioth\u{00E8}que musicale parcourt tous les partages index\u{00E9}s sur l\u{2019}enceinte.",
-            "nl": "De muziekbibliotheek bladert door alle ge\u{00EF}ndexeerde shares op de luidspreker.",
-            "es": "La biblioteca musical explora cualquier recurso compartido indexado en el altavoz.",
-            "it": "La libreria musicale esplora eventuali condivisioni indicizzate sull\u{2019}altoparlante.",
-            "sv": "Musikbiblioteket bl\u{00E4}ddrar i alla indexerade utdelningar p\u{00E5} h\u{00F6}gtalaren.",
-            "nb": "Musikkbiblioteket blar gjennom alle indekserte delinger p\u{00E5} h\u{00F8}yttaleren.",
-            "da": "Musikbiblioteket gennemser alle indekserede delinger p\u{00E5} h\u{00F8}jttaleren.",
-            "ja": "\u{30DF}\u{30E5}\u{30FC}\u{30B8}\u{30C3}\u{30AF}\u{30E9}\u{30A4}\u{30D6}\u{30E9}\u{30EA}\u{3067}\u{306F}\u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}\u{4E0A}\u{306E}\u{30A4}\u{30F3}\u{30C7}\u{30C3}\u{30AF}\u{30B9}\u{6E08}\u{307F}\u{5171}\u{6709}\u{3092}\u{95B2}\u{89A7}\u{3067}\u{304D}\u{307E}\u{3059}\u{3002}",
-            "pt": "A biblioteca de m\u{00FA}sica navega em quaisquer compartilhamentos indexados na caixa.",
-            "pl": "Biblioteka muzyczna przegl\u{0105}da wszystkie zindeksowane zasoby udost\u{0119}pnione dla g\u{0142}o\u{015B}nika.",
-            "zh-Hans": "\u{97F3}\u{4E50}\u{5E93}\u{6D4F}\u{89C8}\u{97F3}\u{7BB1}\u{4E0A}\u{5DF2}\u{7D22}\u{5F15}\u{7684}\u{4EFB}\u{4F55}\u{5171}\u{4EAB}\u{5185}\u{5BB9}\u{3002}",
+            "en": "The music library browses any indexed shares on the speaker, tagged (S1) or (S2) when both Sonos systems are on the network.",
+            "de": "Die Musikmediathek durchsucht alle indizierten Freigaben auf dem Lautsprecher, die mit (S1) oder (S2) markiert sind, wenn sich beide Sonos-Systeme im Netzwerk befinden.",
+            "fr": "La bibliothèque musicale parcourt les partages indexés sur l'enceinte, balisés (S1) ou (S2) lorsque les deux systèmes Sonos sont sur le réseau.",
+            "nl": "De muziekbibliotheek doorzoekt alle geïndexeerde gedeelde mappen op de luidspreker, getagd als (S1) of (S2) wanneer beide Sonos-systemen zich in het netwerk bevinden.",
+            "es": "La biblioteca musical explora los recursos compartidos indexados en el altavoz, etiquetados como (S1) o (S2) cuando ambos sistemas Sonos están en la red.",
+            "it": "La libreria musicale sfoglia le condivisioni indicizzate sullo speaker, contrassegnate con (S1) o (S2) quando entrambi i sistemi Sonos sono presenti in rete.",
+            "sv": "Musikbiblioteket bläddrar i indexerade delningar på högtalaren, taggade som (S1) eller (S2) när båda Sonos-systemen finns i nätverket.",
+            "nb": "Musikkbiblioteket blar gjennom indekserte delinger på høyttaleren, tagget som (S1) eller (S2) når begge Sonos-systemer er på nettverket.",
+            "da": "Musikbiblioteket gennemser alle indekserede delinger på højttaleren, tagget som (S1) eller (S2), når begge Sonos-systemer er på netværket.",
+            "ja": "ミュージックライブラリはスピーカー上のインデックス付き共有をブラウズし、両方のSonosシステムがネットワーク上にある場合は(S1)または(S2)としてタグ付けされます。",
+            "pt": "A biblioteca de música navega por todos os compartilhamentos indexados no alto-falante, marcados como (S1) ou (S2) quando ambos os sistemas Sonos estão na rede.",
+            "pl": "Biblioteka muzyczna przegląda zindeksowane udziały na głośniku, oznaczone jako (S1) lub (S2), gdy oba systemy Sonos znajdują się w sieci.",
+            "zh-Hans": "音乐资料库会浏览扬声器上任何已建立索引的共享，当两个 Sonos 系统都在网络上时，将标记为 (S1) 或 (S2)。",
         ],
         "helpBulletServicesSection": [
             "en": "Enabled music services (set in Settings \u{2192} Services) show as additional sections.",
             "de": "Aktivierte Musikdienste (festgelegt in Einstellungen \u{2192} Dienste) werden als zus\u{00E4}tzliche Abschnitte angezeigt.",
             "fr": "Les services musicaux activ\u{00E9}s (d\u{00E9}finis dans R\u{00E9}glages \u{2192} Services) apparaissent comme sections suppl\u{00E9}mentaires.",
-            "nl": "Ingeschakelde muziekdiensten (in Instellingen \u{2192} Diensten) verschijnen als extra secties.",
+            "nl": "Ingeschakelde muziekdiensten (in Instellingen → Diensten) verschijnen als extra secties.",
             "es": "Los servicios de m\u{00FA}sica activados (en Ajustes \u{2192} Servicios) aparecen como secciones adicionales.",
             "it": "I servizi musicali attivati (da Impostazioni \u{2192} Servizi) compaiono come sezioni aggiuntive.",
             "sv": "Aktiverade musiktj\u{00E4}nster (ange i Inst\u{00E4}llningar \u{2192} Tj\u{00E4}nster) visas som ytterligare avsnitt.",
@@ -8130,7 +9075,7 @@ public enum L10n {
             "en": "Drag an item from the browser into the Play Queue panel (\u{2325}\u{2318}U) to enqueue, or click it to play immediately.",
             "de": "Ziehe ein Element aus dem Browser in das Wiedergabewarteschlangen-Panel (\u{2325}\u{2318}U), um es hinzuzuf\u{00FC}gen, oder klicke darauf, um es sofort abzuspielen.",
             "fr": "Faites glisser un \u{00E9}l\u{00E9}ment depuis le navigateur vers le panneau File d\u{2019}attente (\u{2325}\u{2318}U) pour l\u{2019}ajouter, ou cliquez pour lire imm\u{00E9}diatement.",
-            "nl": "Sleep een item vanuit de browser naar het paneel Afspeelwachtrij (\u{2325}\u{2318}U) om in de wachtrij te plaatsen, of klik om direct af te spelen.",
+            "nl": "Sleep een item vanuit de browser naar het paneel Afspeelwachtrij (⌥⌘U) om in de wachtrij te plaatsen, of klik om direct af te spelen.",
             "es": "Arrastra un elemento desde el explorador al panel Cola de reproducci\u{00F3}n (\u{2325}\u{2318}U) para a\u{00F1}adirlo, o haz clic para reproducir al instante.",
             "it": "Trascina un elemento dal browser nel pannello Coda di riproduzione (\u{2325}\u{2318}U) per aggiungerlo, oppure clicca per riprodurlo subito.",
             "sv": "Dra ett objekt fr\u{00E5}n bl\u{00E4}ddraren till panelen Spelk\u{00F6} (\u{2325}\u{2318}U) f\u{00F6}r att l\u{00E4}gga till, eller klicka f\u{00F6}r att spela direkt.",
@@ -8192,7 +9137,7 @@ public enum L10n {
             "en": "When only one system is present, no section headers are shown.",
             "de": "Ist nur ein System vorhanden, werden keine Abschnitts\u{00FC}berschriften angezeigt.",
             "fr": "Lorsqu\u{2019}un seul syst\u{00E8}me est pr\u{00E9}sent, aucun en-t\u{00EA}te de section n\u{2019}est affich\u{00E9}.",
-            "nl": "Als er maar \u{00E9}\u{00E9}n systeem aanwezig is, worden geen sectietitels getoond.",
+            "nl": "Als er maar één systeem aanwezig is, worden geen sectietitels getoond.",
             "es": "Cuando solo hay un sistema, no se muestran encabezados de secci\u{00F3}n.",
             "it": "Quando \u{00E8} presente un solo sistema, non vengono mostrate intestazioni di sezione.",
             "sv": "N\u{00E4}r bara ett system finns visas inga avsnittsrubriker.",
@@ -8269,7 +9214,7 @@ public enum L10n {
             "en": "Open Choragus \u{2192} Settings\u{2026} (\u{2318},) to configure the app.",
             "de": "\u{00D6}ffne Choragus \u{2192} Einstellungen\u{2026} (\u{2318},), um die App zu konfigurieren.",
             "fr": "Ouvrez Choragus \u{2192} R\u{00E9}glages\u{2026} (\u{2318},) pour configurer l\u{2019}app.",
-            "nl": "Open Choragus \u{2192} Instellingen\u{2026} (\u{2318},) om de app te configureren.",
+            "nl": "Open Choragus → Instellingen… (⌘,) om de app te configureren.",
             "es": "Abre Choragus \u{2192} Ajustes\u{2026} (\u{2318},) para configurar la app.",
             "it": "Apri Choragus \u{2192} Impostazioni\u{2026} (\u{2318},) per configurare l\u{2019}app.",
             "sv": "\u{00D6}ppna Choragus \u{2192} Inst\u{00E4}llningar\u{2026} (\u{2318},) f\u{00F6}r att konfigurera appen.",
@@ -8314,7 +9259,7 @@ public enum L10n {
             "en": "Communication mode: event-driven (default, efficient) or legacy polling (compatibility fallback).",
             "de": "Kommunikationsmodus: ereignisgesteuert (Standard, effizient) oder klassisches Polling (Kompatibilit\u{00E4}ts-Fallback).",
             "fr": "Mode de communication\u{00A0}: pilot\u{00E9} par \u{00E9}v\u{00E9}nements (par d\u{00E9}faut, efficace) ou interrogation classique (repli de compatibilit\u{00E9}).",
-            "nl": "Communicatiemodus: event-gedreven (standaard, effici\u{00EB}nt) of klassieke polling (compatibiliteitsfallback).",
+            "nl": "Communicatiemodus: event-gedreven (standaard, efficiënt) of klassieke polling (compatibiliteitsfallback).",
             "es": "Modo de comunicaci\u{00F3}n: por eventos (predeterminado, eficiente) o sondeo cl\u{00E1}sico (alternativa de compatibilidad).",
             "it": "Modalit\u{00E0} di comunicazione: basata su eventi (predefinita, efficiente) o polling legacy (fallback di compatibilit\u{00E0}).",
             "sv": "Kommunikationsl\u{00E4}ge: h\u{00E4}ndelsestyrd (standard, effektiv) eller klassisk polling (kompatibilitetsreserv).",
@@ -8325,6 +9270,9 @@ public enum L10n {
             "pl": "Tryb komunikacji: oparty na zdarzeniach (domy\u{015B}lny, wydajny) lub klasyczne odpytywanie (awaryjny dla zgodno\u{015B}ci).",
             "zh-Hans": "\u{901A}\u{4FE1}\u{6A21}\u{5F0F}\u{FF1A}\u{4E8B}\u{4EF6}\u{9A71}\u{52A8}\u{FF08}\u{9ED8}\u{8BA4}\u{3001}\u{9AD8}\u{6548}\u{FF09}\u{6216}\u{4F20}\u{7EDF}\u{8F6E}\u{8BE2}\u{FF08}\u{517C}\u{5BB9}\u{56DE}\u{9000}\u{FF09}\u{3002}",
         ],
+    ]
+
+    private static let translations24: [String: [String: String]] = [
         "helpBulletQuickStart": [
             "en": "Quick Start: shows cached speakers instantly on launch while live discovery runs in the background.",
             "de": "Schnellstart: Zeigt beim Start sofort gespeicherte Lautsprecher an, w\u{00E4}hrend die Live-Erkennung im Hintergrund l\u{00E4}uft.",
@@ -8374,7 +9322,7 @@ public enum L10n {
             "en": "Enable play history in Settings to record tracks played over time. The Listening Stats window (\u{21E7}\u{2318}S) shows top tracks, stations, albums, listening streaks, and starred tracks.",
             "de": "Aktiviere den Wiedergabeverlauf in den Einstellungen, um gespielte Titel aufzuzeichnen. Das Fenster \u{201E}H\u{00F6}rstatistiken\u{201C} (\u{21E7}\u{2318}S) zeigt Top-Titel, Sender, Alben, H\u{00F6}r-Serien und markierte Titel.",
             "fr": "Activez l\u{2019}historique de lecture dans les R\u{00E9}glages pour enregistrer les pistes \u{00E9}cout\u{00E9}es au fil du temps. La fen\u{00EA}tre Statistiques d\u{2019}\u{00E9}coute (\u{21E7}\u{2318}S) affiche les meilleurs titres, stations, albums, s\u{00E9}ries d\u{2019}\u{00E9}coute et pistes favorites.",
-            "nl": "Schakel afspeelgeschiedenis in bij Instellingen om nummers na verloop van tijd vast te leggen. Het venster Luisterstatistieken (\u{21E7}\u{2318}S) toont toptracks, zenders, albums, luisterreeksen en tracks met ster.",
+            "nl": "Schakel afspeelgeschiedenis in bij Instellingen om nummers na verloop van tijd vast te leggen. Het venster Luisterstatistieken (⇧⌘S) toont toptracks, zenders, albums, luisterreeksen en tracks met ster.",
             "es": "Activa el historial de reproducci\u{00F3}n en Ajustes para registrar las pistas reproducidas. La ventana Estad\u{00ED}sticas de escucha (\u{21E7}\u{2318}S) muestra pistas, emisoras, \u{00E1}lbumes, rachas de escucha y pistas destacadas.",
             "it": "Attiva la cronologia di riproduzione nelle Impostazioni per registrare i brani nel tempo. La finestra Statistiche di ascolto (\u{21E7}\u{2318}S) mostra brani, stazioni, album, sequenze di ascolto e brani preferiti.",
             "sv": "Aktivera uppspelningshistorik i Inst\u{00E4}llningar f\u{00F6}r att registrera sp\u{00E5}r \u{00F6}ver tid. F\u{00F6}nstret Lyssningsstatistik (\u{21E7}\u{2318}S) visar toppsp\u{00E5}r, stationer, album, lyssningssvit och stj\u{00E4}rnm\u{00E4}rkta sp\u{00E5}r.",
@@ -8706,6 +9654,9 @@ public enum L10n {
             "pl": "\u{015A}r./dzie\u{0144}",
             "zh-Hans": "\u{5747}/\u{65E5}",
         ],
+    ]
+
+    private static let translations25: [String: [String: String]] = [
         "statAlbums": [
             "en": "Albums",
             "de": "Alben",
@@ -8905,7 +9856,7 @@ public enum L10n {
             "en": "Search tracks, artists, albums\u{2026}",
             "de": "Titel, K\u{00FC}nstler, Alben suchen\u{2026}",
             "fr": "Rechercher titres, artistes, albums\u{2026}",
-            "nl": "Zoek nummers, artiesten, albums\u{2026}",
+            "nl": "Zoek nummers, artiesten, albums…",
             "es": "Buscar pistas, artistas, \u{00E1}lbumes\u{2026}",
             "it": "Cerca brani, artisti, album\u{2026}",
             "sv": "S\u{00F6}k sp\u{00E5}r, artister, album\u{2026}",
@@ -9018,6 +9969,9 @@ public enum L10n {
             "pl": "Cofnij o 30\u{00A0}sekund",
             "zh-Hans": "\u{540E}\u{9000} 30 \u{79D2}",
         ],
+    ]
+
+    private static let translations26: [String: [String: String]] = [
         "skipForward30": [
             "en": "Skip forward 30 seconds",
             "de": "30 Sekunden vorspringen",
@@ -9098,7 +10052,7 @@ public enum L10n {
         ],
         "editGroupEllipsis": [
             "en": "Edit Group\u{2026}", "de": "Gruppe bearbeiten\u{2026}",
-            "fr": "Modifier le groupe\u{2026}", "nl": "Groep bewerken\u{2026}",
+            "fr": "Modifier le groupe\u{2026}", "nl": "Groep bewerken…",
             "es": "Editar grupo\u{2026}", "it": "Modifica gruppo\u{2026}",
             "sv": "Redigera grupp\u{2026}", "nb": "Rediger gruppe\u{2026}",
             "da": "Rediger gruppe\u{2026}",
@@ -9108,7 +10062,7 @@ public enum L10n {
         ],
         "homeTheaterEQEllipsis": [
             "en": "Home Theater EQ\u{2026}", "de": "Heimkino-EQ\u{2026}",
-            "fr": "\u{00C9}galiseur Home Theater\u{2026}", "nl": "Home Theater EQ\u{2026}",
+            "fr": "\u{00C9}galiseur Home Theater\u{2026}", "nl": "Home Theater EQ…",
             "es": "Ecualizador Home Theater\u{2026}",
             "it": "Equalizzatore Home Theater\u{2026}",
             "sv": "Hemmabio-EQ\u{2026}", "nb": "Hjemmekino-EQ\u{2026}",
@@ -9255,6 +10209,9 @@ public enum L10n {
             "pl": "Regulacja ustawienia",
             "zh-Hans": "\u{4F4D}\u{7F6E}\u{8C03}\u{6574}",
         ],
+    ]
+
+    private static let translations27: [String: [String: String]] = [
         "surroundsOn": [
             "en": "Surrounds On", "de": "Surround ein",
             "fr": "Ambiophoniques actifs", "nl": "Surrounds aan",
@@ -9478,6 +10435,9 @@ public enum L10n {
         ],
 
         // MARK: - Preset editor
+    ]
+
+    private static let translations28: [String: [String: String]] = [
         "editPreset": [
             "en": "Edit Preset", "de": "Voreinstellung bearbeiten",
             "fr": "Modifier le pr\u{00E9}r\u{00E9}glage",
@@ -9584,7 +10544,7 @@ public enum L10n {
         ],
         "coordinatorLabel": [
             "en": "Coordinator", "de": "Koordinator",
-            "fr": "Coordinateur", "nl": "Co\u{00F6}rdinator",
+            "fr": "Coordinateur", "nl": "Coördinator",
             "es": "Coordinador", "it": "Coordinatore",
             "sv": "Koordinator", "nb": "Koordinator",
             "da": "Koordinator",
@@ -9654,7 +10614,7 @@ public enum L10n {
         "searchAppleMusicPlaceholder": [
             "en": "Search Apple Music\u{2026}", "de": "Apple Music suchen\u{2026}",
             "fr": "Rechercher dans Apple Music\u{2026}",
-            "nl": "Zoeken in Apple Music\u{2026}",
+            "nl": "Zoeken in Apple Music…",
             "es": "Buscar en Apple Music\u{2026}",
             "it": "Cerca in Apple Music\u{2026}",
             "sv": "S\u{00F6}k i Apple Music\u{2026}",
@@ -9668,7 +10628,7 @@ public enum L10n {
         "searchStationsPlaceholder": [
             "en": "Search stations\u{2026}", "de": "Sender suchen\u{2026}",
             "fr": "Rechercher des stations\u{2026}",
-            "nl": "Zenders zoeken\u{2026}",
+            "nl": "Zenders zoeken…",
             "es": "Buscar emisoras\u{2026}",
             "it": "Cerca stazioni\u{2026}",
             "sv": "S\u{00F6}k kanaler\u{2026}",
@@ -9724,7 +10684,7 @@ public enum L10n {
         ],
         "searchServicePlaceholderFormat": [
             "en": "Search %@\u{2026}", "de": "%@ durchsuchen\u{2026}",
-            "fr": "Rechercher dans %@\u{2026}", "nl": "Zoeken in %@\u{2026}",
+            "fr": "Rechercher dans %@\u{2026}", "nl": "Zoeken in %@…",
             "es": "Buscar en %@\u{2026}", "it": "Cerca in %@\u{2026}",
             "sv": "S\u{00F6}k i %@\u{2026}", "nb": "S\u{00F8}k i %@\u{2026}",
             "da": "S\u{00F8}g i %@\u{2026}",
@@ -9735,8 +10695,8 @@ public enum L10n {
         "confirmDeleteItemFormat": [
             "en": "Are you sure you want to delete \u{201C}%@\u{201D}?",
             "de": "M\u{00F6}chtest du \u{201E}%@\u{201C} wirklich l\u{00F6}schen?",
-            "fr": "\u{00CA}tes-vous s\u{00FB}r de vouloir supprimer \u{00AB}\u{00A0}%@\u{00A0}\u{00BB}\u{00A0}?",
-            "nl": "Weet je zeker dat je \u{201C}%@\u{201D} wilt verwijderen?",
+            "fr": "Êtes-vous sûr de vouloir supprimer « %@ » ?",
+            "nl": "Weet je zeker dat je “%@” wilt verwijderen?",
             "es": "\u{00BF}Seguro que quieres eliminar \u{201C}%@\u{201D}?",
             "it": "Sei sicuro di voler eliminare \u{201C}%@\u{201D}?",
             "sv": "\u{00C4}r du s\u{00E4}ker p\u{00E5} att du vill radera \u{201D}%@\u{201D}?",
@@ -9777,6 +10737,9 @@ public enum L10n {
             "ja": "\u{30BF}\u{30A4}\u{30C8}\u{30EB}", "pt": "T\u{00ED}tulo",
             "pl": "Tytu\u{0142}", "zh-Hans": "\u{6807}\u{9898}",
         ],
+    ]
+
+    private static let translations29: [String: [String: String]] = [
         "albumFieldLabel": [
             "en": "Album", "de": "Album", "fr": "Album",
             "nl": "Album", "es": "\u{00C1}lbum", "it": "Album",
@@ -9829,7 +10792,7 @@ public enum L10n {
         "shufflingEllipsis": [
             "en": "Shuffling\u{2026}", "de": "Mische\u{2026}",
             "fr": "M\u{00E9}lange en cours\u{2026}",
-            "nl": "Schudden\u{2026}",
+            "nl": "Schudden…",
             "es": "Mezclando\u{2026}",
             "it": "Mescolamento in corso\u{2026}",
             "sv": "Blandar\u{2026}", "nb": "Blander\u{2026}",
@@ -9841,7 +10804,7 @@ public enum L10n {
         "addingToQueueEllipsis": [
             "en": "Adding to queue\u{2026}", "de": "Zur Warteschlange hinzugef\u{00FC}gt\u{2026}",
             "fr": "Ajout \u{00E0} la file d\u{2019}attente\u{2026}",
-            "nl": "Toevoegen aan wachtrij\u{2026}",
+            "nl": "Toevoegen aan wachtrij…",
             "es": "A\u{00F1}adiendo a la cola\u{2026}",
             "it": "Aggiunta alla coda\u{2026}",
             "sv": "L\u{00E4}gger till i k\u{00F6}n\u{2026}",
@@ -9855,7 +10818,7 @@ public enum L10n {
         "loadingQueueEllipsis": [
             "en": "Loading queue\u{2026}", "de": "Warteschlange wird geladen\u{2026}",
             "fr": "Chargement de la file d\u{2019}attente\u{2026}",
-            "nl": "Wachtrij laden\u{2026}",
+            "nl": "Wachtrij laden…",
             "es": "Cargando cola\u{2026}",
             "it": "Caricamento coda\u{2026}",
             "sv": "L\u{00E4}ser in k\u{00F6}\u{2026}",
@@ -9899,7 +10862,7 @@ public enum L10n {
         "copyTrackDetails": [
             "en": "Copy Track Details", "de": "Titeldetails kopieren",
             "fr": "Copier les d\u{00E9}tails de la piste",
-            "nl": "Trackgegevens kopi\u{00EB}ren",
+            "nl": "Trackgegevens kopiëren",
             "es": "Copiar detalles de la pista",
             "it": "Copia dettagli del brano",
             "sv": "Kopiera sp\u{00E5}rdetaljer",
@@ -9912,7 +10875,7 @@ public enum L10n {
         ],
         "copyTitle": [
             "en": "Copy Title", "de": "Titel kopieren",
-            "fr": "Copier le titre", "nl": "Titel kopi\u{00EB}ren",
+            "fr": "Copier le titre", "nl": "Titel kopiëren",
             "es": "Copiar t\u{00ED}tulo", "it": "Copia titolo",
             "sv": "Kopiera titel", "nb": "Kopier tittel",
             "da": "Kopier titel",
@@ -9923,7 +10886,7 @@ public enum L10n {
         "copyArtist": [
             "en": "Copy Artist", "de": "K\u{00FC}nstler kopieren",
             "fr": "Copier l\u{2019}artiste",
-            "nl": "Artiest kopi\u{00EB}ren",
+            "nl": "Artiest kopiëren",
             "es": "Copiar artista",
             "it": "Copia artista", "sv": "Kopiera artist",
             "nb": "Kopier artist", "da": "Kopier kunstner",
@@ -9935,7 +10898,7 @@ public enum L10n {
             "en": "Filter by \u{201C}%@\u{201D}",
             "de": "Nach \u{201E}%@\u{201C} filtern",
             "fr": "Filtrer par \u{00AB}\u{00A0}%@\u{00A0}\u{00BB}",
-            "nl": "Filter op \u{201C}%@\u{201D}",
+            "nl": "Filter op “%@”",
             "es": "Filtrar por \u{201C}%@\u{201D}",
             "it": "Filtra per \u{201C}%@\u{201D}",
             "sv": "Filtrera efter \u{201D}%@\u{201D}",
@@ -10081,6 +11044,99 @@ public enum L10n {
         // MARK: v4.0 inline string localization
         // ========================
 
+        "keyboardControls": [
+            "en": "Keyboard Controls",
+            "de": "Tastatursteuerung",
+            "fr": "Commandes du clavier",
+            "nl": "Toetsenbordbediening",
+            "es": "Controles del teclado",
+            "it": "Controlli da tastiera",
+            "sv": "Tangentbordskontroller",
+            "nb": "Tastaturkontroller",
+            "da": "Tastaturkontroller",
+            "ja": "\u{30AD}\u{30FC}\u{30DC}\u{30FC}\u{30C9}\u{64CD}\u{4F5C}",
+            "pt": "Controlos do teclado",
+            "pl": "Sterowanie klawiatur\u{0105}",
+            "zh-Hans": "\u{952E}\u{76D8}\u{63A7}\u{5236}",
+        ],
+        "mediaKeysEnabled": [
+            "en": "Media keys control playback",
+            "de": "Medientasten steuern die Wiedergabe",
+            "fr": "Les touches multim\u{00E9}dia contr\u{00F4}lent la lecture",
+            "nl": "Mediatoetsen bedienen het afspelen",
+            "es": "Las teclas multimedia controlan la reproducci\u{00F3}n",
+            "it": "I tasti multimediali controllano la riproduzione",
+            "sv": "Mediatangenter styr uppspelningen",
+            "nb": "Medietaster styrer avspillingen",
+            "da": "Medietaster styrer afspilningen",
+            "ja": "\u{30E1}\u{30C7}\u{30A3}\u{30A2}\u{30AD}\u{30FC}\u{3067}\u{518D}\u{751F}\u{3092}\u{5236}\u{5FA1}",
+            "pt": "As teclas de multim\u{00E9}dia controlam a reprodu\u{00E7}\u{00E3}o",
+            "pl": "Klawisze multimedialne steruj\u{0105} odtwarzaniem",
+            "zh-Hans": "\u{5A92}\u{4F53}\u{6309}\u{952E}\u{63A7}\u{5236}\u{64AD}\u{653E}",
+        ],
+    ]
+
+    private static let translations30: [String: [String: String]] = [
+        "mediaKeysEnabledHint": [
+            "en": "Play, pause and skip from the keyboard media row. Bluetooth headphones and car units can send the same commands, which can start playback unexpectedly. Turn this off to hand the keys back to other apps.",
+            "de": "Wiedergabe, Pause und Überspringen über die Medientastenreihe. Bluetooth-Kopfhörer und Autoradios senden dieselben Befehle und können die Wiedergabe unerwartet starten. Deaktiviere diese Option, um die Tasten an andere Apps zu übergeben.",
+            "fr": "Lecture, pause et saut depuis la rang\u{00E9}e multim\u{00E9}dia du clavier. Les casques Bluetooth et les autoradios envoient les m\u{00EA}mes commandes et peuvent d\u{00E9}marrer la lecture de mani\u{00E8}re inattendue. D\u{00E9}sactivez cette option pour rendre les touches aux autres applications.",
+            "nl": "Afspelen, pauzeren en overslaan via de mediarij van het toetsenbord. Bluetooth-koptelefoons en autosystemen sturen dezelfde opdrachten en kunnen het afspelen onverwacht starten. Schakel dit uit om de toetsen aan andere apps terug te geven.",
+            "es": "Reproduce, pausa y salta desde la fila multimedia del teclado. Los auriculares Bluetooth y los equipos de coche env\u{00ED}an los mismos comandos y pueden iniciar la reproducci\u{00F3}n de forma inesperada. Desact\u{00ED}valo para devolver las teclas a otras apps.",
+            "it": "Riproduci, metti in pausa e salta dalla fila multimediale della tastiera. Le cuffie Bluetooth e gli impianti dell\u{2019}auto inviano gli stessi comandi e possono avviare la riproduzione in modo imprevisto. Disattiva per restituire i tasti alle altre app.",
+            "sv": "Spela, pausa och hoppa fr\u{00E5}n tangentbordets mediarad. Bluetooth-h\u{00F6}rlurar och bilstereo skickar samma kommandon och kan starta uppspelning ov\u{00E4}ntat. St\u{00E4}ng av f\u{00F6}r att l\u{00E4}mna tillbaka tangenterna till andra appar.",
+            "nb": "Spill av, pause og hopp fra tastaturets medierad. Bluetooth-hodetelefoner og bilanlegg sender de samme kommandoene og kan starte avspilling uventet. Sl\u{00E5} av for \u{00E5} gi tastene tilbake til andre apper.",
+            "da": "Afspil, s\u{00E6}t p\u{00E5} pause og spring over fra tastaturets medier\u{00E6}kke. Bluetooth-h\u{00F8}retelefoner og bilanl\u{00E6}g sender de samme kommandoer og kan starte afspilning uventet. Sl\u{00E5} fra for at give tasterne tilbage til andre apps.",
+            "ja": "\u{30AD}\u{30FC}\u{30DC}\u{30FC}\u{30C9}\u{306E}\u{30E1}\u{30C7}\u{30A3}\u{30A2}\u{30AD}\u{30FC}\u{3067}\u{518D}\u{751F}\u{30FB}\u{4E00}\u{6642}\u{505C}\u{6B62}\u{30FB}\u{30B9}\u{30AD}\u{30C3}\u{30D7}\u{3092}\u{884C}\u{3044}\u{307E}\u{3059}\u{3002}Bluetooth\u{30D8}\u{30C3}\u{30C9}\u{30D5}\u{30A9}\u{30F3}\u{3084}\u{30AB}\u{30FC}\u{30AA}\u{30FC}\u{30C7}\u{30A3}\u{30AA}\u{3082}\u{540C}\u{3058}\u{30B3}\u{30DE}\u{30F3}\u{30C9}\u{3092}\u{9001}\u{4FE1}\u{3057}\u{3001}\u{610F}\u{56F3}\u{3057}\u{306A}\u{3044}\u{518D}\u{751F}\u{958B}\u{59CB}\u{306E}\u{539F}\u{56E0}\u{306B}\u{306A}\u{308A}\u{307E}\u{3059}\u{3002}\u{30AA}\u{30D5}\u{306B}\u{3059}\u{308B}\u{3068}\u{4ED6}\u{306E}\u{30A2}\u{30D7}\u{30EA}\u{306B}\u{30AD}\u{30FC}\u{3092}\u{8FD4}\u{3057}\u{307E}\u{3059}\u{3002}",
+            "pt": "Reproduz, pausa e avan\u{00E7}a a partir da fila de teclas de multim\u{00E9}dia. Auscultadores Bluetooth e sistemas de autom\u{00F3}vel enviam os mesmos comandos e podem iniciar a reprodu\u{00E7}\u{00E3}o inesperadamente. Desative para devolver as teclas a outras aplica\u{00E7}\u{00F5}es.",
+            "pl": "Odtwarzanie, pauza i pomijanie za pomoc\u{0105} klawiszy multimedialnych. S\u{0142}uchawki Bluetooth i zestawy samochodowe wysy\u{0142}aj\u{0105} te same polecenia i mog\u{0105} nieoczekiwanie rozpocz\u{0105}\u{0107} odtwarzanie. Wy\u{0142}\u{0105}cz, aby odda\u{0107} klawisze innym aplikacjom.",
+            "zh-Hans": "\u{4F7F}\u{7528}\u{952E}\u{76D8}\u{5A92}\u{4F53}\u{952E}\u{64AD}\u{653E}\u{3001}\u{6682}\u{505C}\u{548C}\u{5207}\u{6B4C}\u{3002}\u{84DD}\u{7259}\u{8033}\u{673A}\u{548C}\u{8F66}\u{8F7D}\u{8BBE}\u{5907}\u{4F1A}\u{53D1}\u{9001}\u{76F8}\u{540C}\u{7684}\u{547D}\u{4EE4}\u{FF0C}\u{53EF}\u{80FD}\u{610F}\u{5916}\u{5F00}\u{59CB}\u{64AD}\u{653E}\u{3002}\u{5173}\u{95ED}\u{540E}\u{5A92}\u{4F53}\u{952E}\u{4EA4}\u{7ED9}\u{5176}\u{4ED6}\u{5E94}\u{7528}\u{3002}",
+        ],
+        "librarySharesHeader": [
+            "en": "Music Library Shares",
+            "de": "Musikbibliothek-Freigaben",
+            "fr": "Partages de la bibliothèque musicale",
+            "nl": "Gedeelde muziekmappen",
+            "es": "Carpetas compartidas de la biblioteca",
+            "it": "Condivisioni della libreria musicale",
+            "sv": "Musikbibliotekets delningar",
+            "nb": "Musikkbibliotek-delinger",
+            "da": "Musikbibliotekets delinger",
+            "ja": "音楽ライブラリの共有",
+            "pt": "Partilhas da biblioteca de música",
+            "pl": "Udostępnienia biblioteki muzycznej",
+            "zh-Hans": "音乐库共享",
+        ],
+        "libraryShareHint": [
+            "en": "Folders each Sonos system indexes as local music. Add or remove them in the Sonos app.",
+            "de": "Ordner, die jedes Sonos-System als lokale Musik indiziert. Füge sie in der Sonos-App hinzu oder entferne sie dort.",
+            "fr": "Dossiers que chaque système Sonos indexe comme musique locale. Ajoutez-les ou supprimez-les dans l’app Sonos.",
+            "nl": "Mappen die elk Sonos-systeem indexeert als lokale muziek. Toevoegen of verwijderen doe je in de Sonos-app.",
+            "es": "Carpetas que cada sistema Sonos indexa como música local. Añádelas o elimínalas en la app de Sonos.",
+            "it": "Cartelle che ogni sistema Sonos indicizza come musica locale. Aggiungile o rimuovile nell’app Sonos.",
+            "sv": "Mappar som varje Sonos-system indexerar som lokal musik. Lägg till eller ta bort dem i Sonos-appen.",
+            "nb": "Mapper hvert Sonos-system indekserer som lokal musikk. Legg til eller fjern dem i Sonos-appen.",
+            "da": "Mapper, hvert Sonos-system indekserer som lokal musik. Tilføj eller fjern dem i Sonos-appen.",
+            "ja": "各 Sonos システムがローカル音楽としてインデックスするフォルダ。追加・削除は Sonos アプリで行います。",
+            "pt": "Pastas que cada sistema Sonos indexa como música local. Adicione ou remova na app Sonos.",
+            "pl": "Foldery indeksowane przez każdy system Sonos jako muzyka lokalna. Dodawaj i usuwaj je w aplikacji Sonos.",
+            "zh-Hans": "每个 Sonos 系统都会将这些文件夹作为本地音乐进行索引。请在 Sonos 应用中添加或移除。",
+        ],
+        "noLibrarySharesConfigured": [
+            "en": "No shares configured.",
+            "de": "Keine Freigaben konfiguriert.",
+            "fr": "Aucun partage configuré.",
+            "nl": "Geen gedeelde mappen geconfigureerd.",
+            "es": "No hay carpetas compartidas configuradas.",
+            "it": "Nessuna condivisione configurata.",
+            "sv": "Inga delningar konfigurerade.",
+            "nb": "Ingen delinger konfigurert.",
+            "da": "Ingen delinger konfigureret.",
+            "ja": "共有が設定されていません。",
+            "pt": "Nenhuma partilha configurada.",
+            "pl": "Nie skonfigurowano udostępnień.",
+            "zh-Hans": "未配置共享。",
+        ],
         "mouseControls": [
             "en": "Mouse Controls",
             "de": "Maussteuerung",
@@ -10113,9 +11169,9 @@ public enum L10n {
         ],
         "scrollWheelAdjustsVolumeHint": [
             "en": "Scroll the mouse wheel over Now Playing to change the group's volume.",
-            "de": "Scrollen Sie das Mausrad \u{00FC}ber „Aktuell l\u{00E4}uft\", um die Lautst\u{00E4}rke der Gruppe zu \u{00E4}ndern.",
+            "de": "Scrolle das Mausrad über „Aktuell läuft\\\", um die Lautstärke der Gruppe zu ändern.",
             "fr": "Faites d\u{00E9}filer la molette sur \u{00AB}\u{00A0}Lecture en cours\u{00A0}\u{00BB} pour modifier le volume du groupe.",
-            "nl": "Scroll het muiswiel over \u{2018}Speelt nu\u{2019} om het volume van de groep te wijzigen.",
+            "nl": "Scroll het muiswiel over ‘Speelt nu’ om het volume van de groep te wijzigen.",
             "es": "Desliza la rueda del rat\u{00F3}n sobre \u{00AB}Reproduciendo\u{00BB} para cambiar el volumen del grupo.",
             "it": "Scorri la rotella del mouse sopra \u{00AB}In riproduzione\u{00BB} per cambiare il volume del gruppo.",
             "sv": "Rulla mushjulet \u{00F6}ver Spelas nu f\u{00F6}r att \u{00E4}ndra gruppens volym.",
@@ -10143,9 +11199,9 @@ public enum L10n {
         ],
         "middleClickTogglesMuteHint": [
             "en": "Click the scroll wheel over Now Playing to mute or unmute the group.",
-            "de": "Klicken Sie das Scrollrad \u{00FC}ber „Aktuell l\u{00E4}uft\", um die Gruppe stummzuschalten oder wieder zu aktivieren.",
+            "de": "Klicke das Scrollrad über „Aktuell läuft\\\", um die Gruppe stummzuschalten oder wieder zu aktivieren.",
             "fr": "Cliquez sur la molette au-dessus de \u{00AB}\u{00A0}Lecture en cours\u{00A0}\u{00BB} pour couper ou r\u{00E9}activer le son du groupe.",
-            "nl": "Klik op het scrollwiel over \u{2018}Speelt nu\u{2019} om de groep te dempen of dempen op te heffen.",
+            "nl": "Klik op het scrollwiel over ‘Speelt nu’ om de groep te dempen of dempen op te heffen.",
             "es": "Haz clic en la rueda de desplazamiento sobre \u{00AB}Reproduciendo\u{00BB} para silenciar o reactivar el grupo.",
             "it": "Fai clic con la rotella sopra \u{00AB}In riproduzione\u{00BB} per attivare o disattivare l\u{2019}audio del gruppo.",
             "sv": "Klicka p\u{00E5} mushjulet \u{00F6}ver Spelas nu f\u{00F6}r att tysta eller \u{00E5}terst\u{00E4}lla ljudet f\u{00F6}r gruppen.",
@@ -10173,7 +11229,7 @@ public enum L10n {
         ],
         "firstTimeHereSetupSteps": [
             "en": "First time here? 4 steps to get your services working.",
-            "de": "Zum ersten Mal hier? 4 Schritte, damit Ihre Dienste funktionieren.",
+            "de": "Zum ersten Mal hier? 4 Schritte, damit deine Dienste funktionieren.",
             "fr": "Premi\u{00E8}re visite ? 4 \u{00E9}tapes pour faire fonctionner vos services.",
             "nl": "Eerste keer hier? 4 stappen om je diensten werkend te krijgen.",
             "es": "\u{00BF}Primera vez aqu\u{00ED}? 4 pasos para que tus servicios funcionen.",
@@ -10188,9 +11244,9 @@ public enum L10n {
         ],
         "checkingSonosHousehold": [
             "en": "Checking your Sonos household\u{2026}",
-            "de": "Ihr Sonos-Haushalt wird gepr\u{00FC}ft\u{2026}",
+            "de": "Dein Sonos-Haushalt wird geprüft…",
             "fr": "V\u{00E9}rification de votre foyer Sonos\u{2026}",
-            "nl": "Je Sonos-huishouden wordt gecontroleerd\u{2026}",
+            "nl": "Je Sonos-huishouden wordt gecontroleerd…",
             "es": "Comprobando tu hogar Sonos\u{2026}",
             "it": "Verifica del tuo sistema Sonos\u{2026}",
             "sv": "Kontrollerar ditt Sonos-hush\u{00E5}ll\u{2026}",
@@ -10205,7 +11261,7 @@ public enum L10n {
             "en": "No services connected yet \u{2014} expand below to set one up.",
             "de": "Noch keine Dienste verbunden \u{2014} unten erweitern, um einen einzurichten.",
             "fr": "Aucun service connect\u{00E9} pour le moment \u{2014} d\u{00E9}veloppez ci-dessous pour en configurer un.",
-            "nl": "Nog geen diensten verbonden \u{2014} klap hieronder uit om er \u{00E9}\u{00E9}n in te stellen.",
+            "nl": "Nog geen diensten verbonden — klap hieronder uit om er één in te stellen.",
             "es": "A\u{00FA}n no hay servicios conectados \u{2014} expande abajo para configurar uno.",
             "it": "Nessun servizio ancora collegato \u{2014} espandi sotto per configurarne uno.",
             "sv": "Inga tj\u{00E4}nster anslutna \u{00E4}nnu \u{2014} expandera nedan f\u{00F6}r att st\u{00E4}lla in en.",
@@ -10220,7 +11276,7 @@ public enum L10n {
             "en": "Available \u{2014} tap Connect to authenticate, or toggle on for search-only services (Apple Music search, TuneIn, Calm Radio, Sonos Radio).",
             "de": "Verf\u{00FC}gbar \u{2014} auf Verbinden tippen, um sich zu authentifizieren, oder f\u{00FC}r Such-Dienste aktivieren (Apple Music-Suche, TuneIn, Calm Radio, Sonos Radio).",
             "fr": "Disponible \u{2014} touchez Connecter pour vous authentifier, ou activez pour les services de recherche uniquement (recherche Apple Music, TuneIn, Calm Radio, Sonos Radio).",
-            "nl": "Beschikbaar \u{2014} tik op Verbind om te authenticeren, of zet aan voor alleen-zoeken-diensten (Apple Music-zoeken, TuneIn, Calm Radio, Sonos Radio).",
+            "nl": "Beschikbaar — tik op Verbind om te authenticeren, of zet aan voor alleen-zoeken-diensten (Apple Music-zoeken, TuneIn, Calm Radio, Sonos Radio).",
             "es": "Disponible \u{2014} toca Conectar para autenticarte, o activa para servicios solo de b\u{00FA}squeda (b\u{00FA}squeda en Apple Music, TuneIn, Calm Radio, Sonos Radio).",
             "it": "Disponibile \u{2014} tocca Connetti per autenticarti, oppure attiva per i servizi di sola ricerca (ricerca Apple Music, TuneIn, Calm Radio, Sonos Radio).",
             "sv": "Tillg\u{00E4}nglig \u{2014} tryck p\u{00E5} Anslut f\u{00F6}r att autentisera, eller sl\u{00E5} p\u{00E5} f\u{00F6}r endast s\u{00F6}k-tj\u{00E4}nster (Apple Music-s\u{00F6}k, TuneIn, Calm Radio, Sonos Radio).",
@@ -10233,9 +11289,9 @@ public enum L10n {
         ],
         "legendUntested": [
             "en": "Untested \u{2014} we don't know if this service works through Choragus yet. Tap Connect to try; please report success or failure on GitHub so we can mark it as confirmed working.",
-            "de": "Ungetestet \u{2014} wir wissen noch nicht, ob dieser Dienst \u{00FC}ber Choragus funktioniert. Auf Verbinden tippen, um es zu versuchen; bitte melden Sie Erfolg oder Misserfolg auf GitHub, damit wir ihn als best\u{00E4}tigt funktionierend markieren k\u{00F6}nnen.",
+            "de": "Ungetestet — wir wissen noch nicht, ob dieser Dienst über Choragus funktioniert. Auf Verbinden tippen, um es zu versuchen; bitte melde Erfolg oder Misserfolg auf GitHub, damit wir ihn als bestätigt funktionierend markieren können.",
             "fr": "Non test\u{00E9} \u{2014} nous ne savons pas encore si ce service fonctionne avec Choragus. Touchez Connecter pour essayer ; signalez le r\u{00E9}sultat sur GitHub afin que nous puissions le marquer comme confirm\u{00E9}.",
-            "nl": "Niet getest \u{2014} we weten nog niet of deze dienst werkt via Choragus. Tik op Verbind om het te proberen; meld succes of mislukking op GitHub zodat we het als bevestigd werkend kunnen markeren.",
+            "nl": "Niet getest — we weten nog niet of deze dienst werkt via Choragus. Tik op Verbind om het te proberen; meld succes of mislukking op GitHub zodat we het als bevestigd werkend kunnen markeren.",
             "es": "Sin probar \u{2014} a\u{00FA}n no sabemos si este servicio funciona con Choragus. Toca Conectar para intentarlo; informa del resultado en GitHub para que podamos marcarlo como confirmado.",
             "it": "Non testato \u{2014} non sappiamo ancora se questo servizio funziona tramite Choragus. Tocca Connetti per provare; segnala l\u{2019}esito su GitHub cos\u{00EC} possiamo contrassegnarlo come confermato funzionante.",
             "sv": "Otestad \u{2014} vi vet inte \u{00E4}nnu om denna tj\u{00E4}nst fungerar genom Choragus. Tryck p\u{00E5} Anslut f\u{00F6}r att f\u{00F6}rs\u{00F6}ka; rapportera resultatet p\u{00E5} GitHub s\u{00E5} vi kan markera den som bekr\u{00E4}ftat fungerande.",
@@ -10248,9 +11304,9 @@ public enum L10n {
         ],
         "legendUnavailable": [
             "en": "Unavailable \u{2014} the service provider doesn't allow third-party apps like Choragus to authenticate. Use the official Sonos app for these.",
-            "de": "Nicht verf\u{00FC}gbar \u{2014} der Dienstanbieter erlaubt es Drittanbieter-Apps wie Choragus nicht, sich zu authentifizieren. Verwenden Sie hierf\u{00FC}r die offizielle Sonos-App.",
+            "de": "Nicht verfügbar — der Dienstanbieter erlaubt es Drittanbieter-Apps wie Choragus nicht, sich zu authentifizieren. Verwende hierfür die offizielle Sonos-App.",
             "fr": "Indisponible \u{2014} le fournisseur du service n\u{2019}autorise pas les applications tierces comme Choragus \u{00E0} s\u{2019}authentifier. Utilisez l\u{2019}application Sonos officielle pour ceux-ci.",
-            "nl": "Niet beschikbaar \u{2014} de dienstaanbieder staat niet toe dat externe apps zoals Choragus authenticeren. Gebruik hiervoor de offici\u{00EB}le Sonos-app.",
+            "nl": "Niet beschikbaar — de dienstaanbieder staat niet toe dat externe apps zoals Choragus authenticeren. Gebruik hiervoor de officiële Sonos-app.",
             "es": "No disponible \u{2014} el proveedor del servicio no permite que apps de terceros como Choragus se autentiquen. Usa la app oficial de Sonos para estos.",
             "it": "Non disponibile \u{2014} il fornitore del servizio non consente alle app di terze parti come Choragus di autenticarsi. Per questi usa l\u{2019}app Sonos ufficiale.",
             "sv": "Otillg\u{00E4}nglig \u{2014} tj\u{00E4}nsteleverant\u{00F6}ren till\u{00E5}ter inte att tredjepartsappar som Choragus autentiserar. Anv\u{00E4}nd den officiella Sonos-appen f\u{00F6}r dessa.",
@@ -10278,9 +11334,9 @@ public enum L10n {
         ],
         "playAnySongAndFavoriteFormat": [
             "en": "Open the official Sonos app, play any %@ song, and tap the heart to save it as a Favorite. The dot turns green within a minute.",
-            "de": "\u{00D6}ffnen Sie die offizielle Sonos-App, spielen Sie einen beliebigen %@-Titel ab und tippen Sie auf das Herz, um ihn als Favorit zu speichern. Der Punkt wird innerhalb einer Minute gr\u{00FC}n.",
+            "de": "Öffne die offizielle Sonos-App, spiele einen beliebigen %@-Titel ab und tippe auf das Herz, um ihn als Favorit zu speichern. Der Punkt wird innerhalb einer Minute grün.",
             "fr": "Ouvrez l\u{2019}application Sonos officielle, lancez un titre %@ et touchez le c\u{0153}ur pour l\u{2019}ajouter aux favoris. Le point devient vert en moins d\u{2019}une minute.",
-            "nl": "Open de offici\u{00EB}le Sonos-app, speel een %@-nummer af en tik op het hartje om het als favoriet op te slaan. De stip wordt binnen een minuut groen.",
+            "nl": "Open de officiële Sonos-app, speel een %@-nummer af en tik op het hartje om het als favoriet op te slaan. De stip wordt binnen een minuut groen.",
             "es": "Abre la app oficial de Sonos, reproduce cualquier canci\u{00F3}n de %@ y toca el coraz\u{00F3}n para guardarla como Favorita. El punto se pone verde en menos de un minuto.",
             "it": "Apri l\u{2019}app Sonos ufficiale, riproduci un brano di %@ e tocca il cuore per salvarlo nei Preferiti. Il puntino diventa verde entro un minuto.",
             "sv": "\u{00D6}ppna den officiella Sonos-appen, spela en %@-l\u{00E5}t och tryck p\u{00E5} hj\u{00E4}rtat f\u{00F6}r att spara den som favorit. Pricken blir gr\u{00F6}n inom en minut.",
@@ -10308,9 +11364,9 @@ public enum L10n {
         ],
         "plexRelayReturnedNoItems": [
             "en": "Plex's relay returned no items either \u{2014} your Plex server may be sleeping.",
-            "de": "Auch der Plex-Relay lieferte keine Elemente \u{2014} Ihr Plex-Server schl\u{00E4}ft m\u{00F6}glicherweise.",
+            "de": "Auch der Plex-Relay lieferte keine Elemente — dein Plex-Server schläft möglicherweise.",
             "fr": "Le relais Plex n\u{2019}a renvoy\u{00E9} aucun \u{00E9}l\u{00E9}ment non plus \u{2014} votre serveur Plex est peut-\u{00EA}tre en veille.",
-            "nl": "De Plex-relay leverde ook geen items op \u{2014} je Plex-server slaapt mogelijk.",
+            "nl": "De Plex-relay leverde ook geen items op — je Plex-server slaapt mogelijk.",
             "es": "El relay de Plex tampoco devolvi\u{00F3} elementos \u{2014} tu servidor Plex puede estar en reposo.",
             "it": "Anche il relay di Plex non ha restituito elementi \u{2014} il tuo server Plex potrebbe essere in stand-by.",
             "sv": "Plex-rel\u{00E4}n returnerade inte heller n\u{00E5}gra objekt \u{2014} din Plex-server kanske sover.",
@@ -10359,9 +11415,9 @@ public enum L10n {
         ],
         "localNetworkAccessMessage": [
             "en": "macOS is blocking Choragus from reaching your Sonos speakers.\n\nTurn Choragus ON under System Settings \u{2192} Privacy & Security \u{2192} Local Network, then quit and relaunch the app.",
-            "de": "macOS blockiert Choragus daran, Ihre Sonos-Lautsprecher zu erreichen.\n\nAktivieren Sie Choragus unter Systemeinstellungen \u{2192} Datenschutz & Sicherheit \u{2192} Lokales Netzwerk und beenden Sie die App, dann starten Sie sie neu.",
+            "de": "macOS blockiert Choragus daran, deine Sonos-Lautsprecher zu erreichen.\\n\\nAktiviere Choragus unter Systemeinstellungen → Datenschutz & Sicherheit → Lokales Netzwerk und beende die App, dann starte sie neu.",
             "fr": "macOS emp\u{00EA}che Choragus d\u{2019}atteindre vos enceintes Sonos.\n\nActivez Choragus dans R\u{00E9}glages syst\u{00E8}me \u{2192} Confidentialit\u{00E9} et s\u{00E9}curit\u{00E9} \u{2192} R\u{00E9}seau local, puis quittez et relancez l\u{2019}application.",
-            "nl": "macOS blokkeert Choragus van het bereiken van je Sonos-speakers.\n\nZet Choragus AAN onder Systeeminstellingen \u{2192} Privacy en beveiliging \u{2192} Lokaal netwerk, sluit de app af en start opnieuw.",
+            "nl": "macOS blokkeert Choragus van het bereiken van je Sonos-speakers.\n\nZet Choragus AAN onder Systeeminstellingen → Privacy en beveiliging → Lokaal netwerk, sluit de app af en start opnieuw.",
             "es": "macOS impide que Choragus llegue a tus altavoces Sonos.\n\nActiva Choragus en Ajustes del Sistema \u{2192} Privacidad y seguridad \u{2192} Red local, sal de la app y vu\u{00E9}lvela a abrir.",
             "it": "macOS sta impedendo a Choragus di raggiungere i tuoi diffusori Sonos.\n\nAttiva Choragus in Impostazioni di Sistema \u{2192} Privacy e Sicurezza \u{2192} Rete locale, quindi chiudi e riavvia l\u{2019}app.",
             "sv": "macOS blockerar Choragus fr\u{00E5}n att n\u{00E5} dina Sonos-h\u{00F6}gtalare.\n\nSl\u{00E5} P\u{00C5} Choragus under Systeminst\u{00E4}llningar \u{2192} Integritet och s\u{00E4}kerhet \u{2192} Lokalt n\u{00E4}tverk, avsluta och starta om appen.",
@@ -10389,6 +11445,9 @@ public enum L10n {
         ],
 
         // About box
+    ]
+
+    private static let translations31: [String: [String: String]] = [
         "aboutWindowTitle": [
             "en": "About Choragus", "de": "\u{00DC}ber Choragus",
             "fr": "\u{00C0} propos de Choragus", "nl": "Over Choragus",
@@ -10417,7 +11476,7 @@ public enum L10n {
             "en": "The leader of the chorus \u{2014} the citizen who funded and conducted the dramatic chorus in classical Athens.",
             "de": "Der Anf\u{00FC}hrer des Chors \u{2014} der B\u{00FC}rger, der den dramatischen Chor im klassischen Athen finanzierte und leitete.",
             "fr": "Le chef du ch\u{0153}ur \u{2014} le citoyen qui finan\u{00E7}ait et dirigeait le ch\u{0153}ur dramatique dans l\u{2019}Ath\u{00E8}nes classique.",
-            "nl": "De leider van het koor \u{2014} de burger die het dramatische koor in het klassieke Athene financierde en leidde.",
+            "nl": "De leider van het koor — de burger die het dramatische koor in het klassieke Athene financierde en leidde.",
             "es": "El l\u{00ED}der del coro \u{2014} el ciudadano que financiaba y dirig\u{00ED}a el coro dram\u{00E1}tico en la Atenas cl\u{00E1}sica.",
             "it": "Il capo del coro \u{2014} il cittadino che finanziava e dirigeva il coro drammatico nell\u{2019}Atene classica.",
             "sv": "K\u{00F6}rens ledare \u{2014} medborgaren som finansierade och ledde den dramatiska k\u{00F6}ren i det klassiska Aten.",
@@ -10432,7 +11491,7 @@ public enum L10n {
             "en": "One conductor. Many voices. One chorus.",
             "de": "Ein Dirigent. Viele Stimmen. Ein Chor.",
             "fr": "Un chef. Plusieurs voix. Un seul ch\u{0153}ur.",
-            "nl": "\u{00C9}\u{00E9}n dirigent. Vele stemmen. \u{00C9}\u{00E9}n koor.",
+            "nl": "Één dirigent. Vele stemmen. Één koor.",
             "es": "Un director. Muchas voces. Un coro.",
             "it": "Un direttore. Molte voci. Un solo coro.",
             "sv": "En dirigent. M\u{00E5}nga r\u{00F6}ster. En k\u{00F6}r.",
@@ -10521,7 +11580,7 @@ public enum L10n {
             "en": "Looking up lyrics\u{2026}",
             "de": "Liedtext wird gesucht\u{2026}",
             "fr": "Recherche des paroles\u{2026}",
-            "nl": "Songtekst wordt opgezocht\u{2026}",
+            "nl": "Songtekst wordt opgezocht…",
             "es": "Buscando la letra\u{2026}",
             "it": "Ricerca del testo\u{2026}",
             "sv": "S\u{00F6}ker s\u{00E5}ngtext\u{2026}",
@@ -10590,7 +11649,7 @@ public enum L10n {
             "en": "Loading info\u{2026}",
             "de": "Informationen werden geladen\u{2026}",
             "fr": "Chargement des informations\u{2026}",
-            "nl": "Informatie wordt geladen\u{2026}",
+            "nl": "Informatie wordt geladen…",
             "es": "Cargando informaci\u{00F3}n\u{2026}",
             "it": "Caricamento informazioni\u{2026}",
             "sv": "Laddar information\u{2026}",
@@ -10663,7 +11722,7 @@ public enum L10n {
         ],
         "noPreviousPlaysInHistory": [
             "en": "No previous plays of this track in your Choragus history.",
-            "de": "Keine fr\u{00FC}heren Wiedergaben dieses Titels in Ihrem Choragus-Verlauf.",
+            "de": "Keine früheren Wiedergaben dieses Titels in deinem Choragus-Verlauf.",
             "fr": "Aucune lecture pr\u{00E9}c\u{00E9}dente de ce titre dans votre historique Choragus.",
             "nl": "Geen eerdere weergaven van dit nummer in je Choragus-geschiedenis.",
             "es": "No hay reproducciones previas de esta pista en tu historial de Choragus.",
@@ -10733,6 +11792,9 @@ public enum L10n {
         ],
 
         // Context panel tabs
+    ]
+
+    private static let translations32: [String: [String: String]] = [
         "tabLyrics": [
             "en": "Lyrics", "de": "Liedtext",
             "fr": "Paroles", "nl": "Songtekst",
@@ -10877,7 +11939,7 @@ public enum L10n {
             "en": "Visualisations\u{2026}",
             "de": "Visualisierungen\u{2026}",
             "fr": "Visualisations\u{2026}",
-            "nl": "Visualisaties\u{2026}",
+            "nl": "Visualisaties…",
             "es": "Visualizaciones\u{2026}",
             "it": "Visualizzazioni\u{2026}",
             "sv": "Visualiseringar\u{2026}",
@@ -10967,7 +12029,7 @@ public enum L10n {
             "en": "Dynamic scales the active line up and dims neighbours. Classic holds every visible line at one size so the readout matches a traditional karaoke screen — only opacity marks the active row.",
             "de": "\u{201E}Dynamisch\u{201C} vergr\u{00F6}\u{00DF}ert die aktive Zeile und blendet benachbarte Zeilen ab. \u{201E}Klassisch\u{201C} h\u{00E4}lt jede sichtbare Zeile auf einer Gr\u{00F6}\u{00DF}e wie auf einem traditionellen Karaoke-Bildschirm \u{2014} nur die Deckkraft markiert die aktive Zeile.",
             "fr": "\u{00AB}\u{00A0}Dynamique\u{00A0}\u{00BB} agrandit la ligne active et att\u{00E9}nue les voisines. \u{00AB}\u{00A0}Classique\u{00A0}\u{00BB} maintient chaque ligne visible \u{00E0} la m\u{00EA}me taille, comme un \u{00E9}cran de karaok\u{00E9} traditionnel\u{00A0}; seule l\u{2019}opacit\u{00E9} marque la ligne active.",
-            "nl": "Dynamisch vergroot de actieve regel en dimt de buren. Klassiek houdt elke zichtbare regel op \u{00E9}\u{00E9}n grootte zoals een traditioneel karaokescherm \u{2014} alleen de dekking markeert de actieve regel.",
+            "nl": "Dynamisch vergroot de actieve regel en dimt de buren. Klassiek houdt elke zichtbare regel op één grootte zoals een traditioneel karaokescherm — alleen de dekking markeert de actieve regel.",
             "es": "\u{201C}Din\u{00E1}mico\u{201D} aumenta la l\u{00ED}nea activa y atenu\u{00E1} las vecinas. \u{201C}Cl\u{00E1}sico\u{201D} mantiene cada l\u{00ED}nea visible al mismo tama\u{00F1}o, como una pantalla de karaoke tradicional; solo la opacidad marca la l\u{00ED}nea activa.",
             "it": "\u{201C}Dinamico\u{201D} ingrandisce la riga attiva e attenua le vicine. \u{201C}Classico\u{201D} mantiene ogni riga visibile alla stessa dimensione, come uno schermo karaoke tradizionale; solo l\u{2019}opacit\u{00E0} segna la riga attiva.",
             "sv": "Dynamiskt f\u{00F6}rstorar den aktiva raden och d\u{00E4}mpar grannraderna. Klassiskt h\u{00E5}ller varje synlig rad i en storlek som en traditionell karaokesk\u{00E4}rm \u{2014} bara opaciteten markerar den aktiva raden.",
@@ -11023,6 +12085,21 @@ public enum L10n {
             "pl": "Dolby Atmos",
             "zh-Hans": "Dolby Atmos",
         ],
+        "audioFormatLossless": [
+            "en": "Lossless",
+            "de": "Verlustfrei",
+            "fr": "Sans perte",
+            "nl": "Verliesvrij",
+            "es": "Sin p\u{00E9}rdida",
+            "it": "Senza perdita",
+            "sv": "F\u{00F6}rlustfri",
+            "nb": "Tapsfri",
+            "da": "Tabsfri",
+            "ja": "\u{30ED}\u{30B9}\u{30EC}\u{30B9}",
+            "pt": "Sem perdas",
+            "pl": "Bezstratny",
+            "zh-Hans": "\u{65E0}\u{635F}",
+        ],
         "tvAudioStereoPCM": [
             "en": "Stereo PCM",
             "de": "Stereo-PCM",
@@ -11038,35 +12115,98 @@ public enum L10n {
             "pl": "Stereo PCM",
             "zh-Hans": "\u{7ACB}\u{4F53}\u{58F0} PCM",
         ],
-        "tvAudioMultichannelPCM": [
-            "en": "Multichannel PCM",
-            "de": "Mehrkanal-PCM",
-            "fr": "PCM multicanal",
-            "nl": "Meerkanaals PCM",
-            "es": "PCM multicanal",
-            "it": "PCM multicanale",
-            "sv": "Flerkanals-PCM",
-            "nb": "Flerkanals-PCM",
-            "da": "Flerkanals-PCM",
-            "ja": "\u{30DE}\u{30EB}\u{30C1}\u{30C1}\u{30E3}\u{30F3}\u{30CD}\u{30EB} PCM",
-            "pt": "PCM multicanal",
-            "pl": "Wielokana\u{0142}owy PCM",
-            "zh-Hans": "\u{591A}\u{58F0}\u{9053} PCM",
+        "tvAudioMultichannelPCM51": [
+            "en": "Multichannel PCM 5.1",
+            "de": "Mehrkanal-PCM 5.1",
+            "fr": "PCM multicanal 5.1",
+            "nl": "Meerkanaals PCM 5.1",
+            "es": "PCM multicanal 5.1",
+            "it": "PCM multicanale 5.1",
+            "sv": "Flerkanals-PCM 5.1",
+            "nb": "Flerkanals-PCM 5.1",
+            "da": "Flerkanals-PCM 5.1",
+            "ja": "\u{30DE}\u{30EB}\u{30C1}\u{30C1}\u{30E3}\u{30F3}\u{30CD}\u{30EB} PCM 5.1",
+            "pt": "PCM multicanal 5.1",
+            "pl": "Wielokana\u{0142}owy PCM 5.1",
+            "zh-Hans": "\u{591A}\u{58F0}\u{9053} PCM 5.1",
         ],
-        "tvAudioDolbyDigital": [
-            "en": "Dolby Digital",
-            "de": "Dolby Digital",
-            "fr": "Dolby Digital",
-            "nl": "Dolby Digital",
-            "es": "Dolby Digital",
-            "it": "Dolby Digital",
-            "sv": "Dolby Digital",
-            "nb": "Dolby Digital",
-            "da": "Dolby Digital",
-            "ja": "Dolby Digital",
-            "pt": "Dolby Digital",
-            "pl": "Dolby Digital",
-            "zh-Hans": "Dolby Digital",
+    ]
+
+    private static let translations33: [String: [String: String]] = [
+        "tvAudioMultichannelPCM71": [
+            "en": "Multichannel PCM 7.1",
+            "de": "Mehrkanal-PCM 7.1",
+            "fr": "PCM multicanal 7.1",
+            "nl": "Meerkanaals PCM 7.1",
+            "es": "PCM multicanal 7.1",
+            "it": "PCM multicanale 7.1",
+            "sv": "Flerkanals-PCM 7.1",
+            "nb": "Flerkanals-PCM 7.1",
+            "da": "Flerkanals-PCM 7.1",
+            "ja": "\u{30DE}\u{30EB}\u{30C1}\u{30C1}\u{30E3}\u{30F3}\u{30CD}\u{30EB} PCM 7.1",
+            "pt": "PCM multicanal 7.1",
+            "pl": "Wielokana\u{0142}owy PCM 7.1",
+            "zh-Hans": "\u{591A}\u{58F0}\u{9053} PCM 7.1",
+        ],
+        "tvAudioDolbyDigital51": [
+            "en": "Dolby Digital 5.1",
+            "de": "Dolby Digital 5.1",
+            "fr": "Dolby Digital 5.1",
+            "nl": "Dolby Digital 5.1",
+            "es": "Dolby Digital 5.1",
+            "it": "Dolby Digital 5.1",
+            "sv": "Dolby Digital 5.1",
+            "nb": "Dolby Digital 5.1",
+            "da": "Dolby Digital 5.1",
+            "ja": "Dolby Digital 5.1",
+            "pt": "Dolby Digital 5.1",
+            "pl": "Dolby Digital 5.1",
+            "zh-Hans": "Dolby Digital 5.1",
+        ],
+        "tvAudioDolbyDigitalPlus71": [
+            "en": "Dolby Digital Plus 7.1",
+            "de": "Dolby Digital Plus 7.1",
+            "fr": "Dolby Digital Plus 7.1",
+            "nl": "Dolby Digital Plus 7.1",
+            "es": "Dolby Digital Plus 7.1",
+            "it": "Dolby Digital Plus 7.1",
+            "sv": "Dolby Digital Plus 7.1",
+            "nb": "Dolby Digital Plus 7.1",
+            "da": "Dolby Digital Plus 7.1",
+            "ja": "Dolby Digital Plus 7.1",
+            "pt": "Dolby Digital Plus 7.1",
+            "pl": "Dolby Digital Plus 7.1",
+            "zh-Hans": "Dolby Digital Plus 7.1",
+        ],
+        "tvAudioDolbyAtmosTrueHD71": [
+            "en": "Dolby Atmos (TrueHD 7.1)",
+            "de": "Dolby Atmos (TrueHD 7.1)",
+            "fr": "Dolby Atmos (TrueHD 7.1)",
+            "nl": "Dolby Atmos (TrueHD 7.1)",
+            "es": "Dolby Atmos (TrueHD 7.1)",
+            "it": "Dolby Atmos (TrueHD 7.1)",
+            "sv": "Dolby Atmos (TrueHD 7.1)",
+            "nb": "Dolby Atmos (TrueHD 7.1)",
+            "da": "Dolby Atmos (TrueHD 7.1)",
+            "ja": "Dolby Atmos (TrueHD 7.1)",
+            "pt": "Dolby Atmos (TrueHD 7.1)",
+            "pl": "Dolby Atmos (TrueHD 7.1)",
+            "zh-Hans": "Dolby Atmos (TrueHD 7.1)",
+        ],
+        "tvAudioDTSSurround51": [
+            "en": "DTS Surround 5.1",
+            "de": "DTS Surround 5.1",
+            "fr": "DTS Surround 5.1",
+            "nl": "DTS Surround 5.1",
+            "es": "DTS Surround 5.1",
+            "it": "DTS Surround 5.1",
+            "sv": "DTS Surround 5.1",
+            "nb": "DTS Surround 5.1",
+            "da": "DTS Surround 5.1",
+            "ja": "DTS Surround 5.1",
+            "pt": "DTS Surround 5.1",
+            "pl": "DTS Surround 5.1",
+            "zh-Hans": "DTS Surround 5.1",
         ],
         "diagnostics": [
             "en": "Diagnostics",
@@ -11282,7 +12422,7 @@ public enum L10n {
             "en": "Save Bundle\u{2026}",
             "de": "Bundle sichern\u{2026}",
             "fr": "Enregistrer le lot\u{2026}",
-            "nl": "Pakket bewaren\u{2026}",
+            "nl": "Pakket bewaren…",
             "es": "Guardar paquete\u{2026}",
             "it": "Salva pacchetto\u{2026}",
             "sv": "Spara paket\u{2026}",
@@ -11297,7 +12437,7 @@ public enum L10n {
             "en": "Save Encrypted Log File\u{2026}",
             "de": "Verschl\u{fc}sselte Logdatei sichern\u{2026}",
             "fr": "Enregistrer le journal chiffr\u{e9}\u{2026}",
-            "nl": "Versleuteld logbestand bewaren\u{2026}",
+            "nl": "Versleuteld logbestand bewaren…",
             "es": "Guardar archivo de registro cifrado\u{2026}",
             "it": "Salva file di log cifrato\u{2026}",
             "sv": "Spara krypterad loggfil\u{2026}",
@@ -11312,7 +12452,7 @@ public enum L10n {
             "en": "Writes an encrypted diagnostic bundle to a location you choose. The bundle is opaque to anyone except the maintainer — share it directly with them.",
             "de": "Schreibt ein verschl\u{fc}sseltes Diagnose-Bundle an einen Ort deiner Wahl. Das Bundle ist f\u{fc}r alle au\u{df}er dem Betreuer undurchsichtig \u{2014} teile es direkt mit ihm.",
             "fr": "\u{c9}crit un lot de diagnostic chiffr\u{e9} \u{e0} l\u{2019}emplacement de votre choix. Le lot est opaque pour tous sauf le mainteneur \u{2014} partagez-le directement avec lui.",
-            "nl": "Schrijft een versleuteld diagnostisch pakket naar een door u gekozen locatie. Het pakket is ondoorzichtig voor iedereen behalve de beheerder \u{2014} deel het rechtstreeks met hem.",
+            "nl": "Schrijft een versleuteld diagnostisch pakket naar een door jou gekozen locatie. Het pakket is ondoorzichtig voor iedereen behalve de beheerder — deel het rechtstreeks met hem.",
             "es": "Escribe un paquete de diagn\u{f3}stico cifrado en la ubicaci\u{f3}n que elijas. El paquete es opaco para cualquiera excepto el responsable \u{2014} comp\u{e1}rtelo directamente con \u{e9}l.",
             "it": "Scrive un pacchetto diagnostico cifrato in una posizione a tua scelta. Il pacchetto \u{e8} opaco per chiunque tranne il manutentore \u{2014} condividilo direttamente con lui.",
             "sv": "Skriver ett krypterat diagnospaket till en plats du v\u{e4}ljer. Paketet \u{e4}r ogenomskinligt f\u{f6}r alla utom underh\u{e5}llaren \u{2014} dela det direkt med honom.",
@@ -11368,11 +12508,14 @@ public enum L10n {
             "pl": "Jak zgłosić błąd",
             "zh-Hans": "如何报告问题",
         ],
+    ]
+
+    private static let translations34: [String: [String: String]] = [
         "diagHelpBody": [
             "en": "Reproduce the problem so a fresh error row appears in the Log tab. Pick the rows you want to include (or leave nothing selected to send all) and click \u{201C}Report Bug (encrypted)\u{201D}. A preview shows exactly what will be shared; on confirm, Choragus writes an encrypted bundle file to your Downloads folder, opens GitHub Issues with the title and body pre-filled, and reveals the bundle in Finder so you can drag it into the comment.\n\nThe bundle is opaque to GitHub itself \u{2014} auth tokens are stripped at the source, the rest is encrypted with the maintainer\u{2019}s public key. Right-click any row for Copy Row (redacted) or Copy Row (with payload); Copy All and Save Bundle export the list as plain text.\n\nThe Live Events tab shows raw UPnP traffic from your speakers in real time \u{2014} useful when investigating why a control feels unresponsive.\n\nA free GitHub account is required to submit on GitHub (anonymous issues aren\u{2019}t accepted).",
             "de": "Reproduziere das Problem, damit eine neue Fehlerzeile im Log-Tab erscheint. W\u{e4}hle die Zeilen aus, die du einschlie\u{df}en m\u{f6}chtest (oder lasse nichts ausgew\u{e4}hlt, um alles zu senden), und klicke auf \u{201E}Fehler melden (verschl\u{fc}sselt)\u{201C}. Eine Vorschau zeigt genau, was geteilt wird; nach Best\u{e4}tigung schreibt Choragus eine verschl\u{fc}sselte Bundle-Datei in deinen Downloads-Ordner, \u{f6}ffnet GitHub Issues mit vorausgef\u{fc}lltem Titel und Text und zeigt die Datei im Finder, damit du sie in den Kommentar ziehen kannst.\n\nDas Bundle ist f\u{fc}r GitHub selbst undurchsichtig \u{2014} Auth-Token werden an der Quelle entfernt, der Rest wird mit dem \u{f6}ffentlichen Schl\u{fc}ssel des Betreuers verschl\u{fc}sselt. Rechtsklick auf eine Zeile f\u{fc}r Zeile kopieren (anonymisiert) oder Zeile kopieren (mit Inhalt); Alle kopieren und Bundle sichern exportieren die Liste als Klartext.\n\nDer Tab \u{201E}Live-Ereignisse\u{201C} zeigt rohen UPnP-Verkehr von deinen Lautsprechern in Echtzeit \u{2014} n\u{fc}tzlich, wenn du untersuchst, warum eine Steuerung tr\u{e4}ge wirkt.\n\nF\u{fc}r das Senden auf GitHub ist ein kostenloses GitHub-Konto erforderlich (anonyme Issues werden nicht akzeptiert).",
             "fr": "Reproduisez le probl\u{e8}me pour qu\u{2019}une nouvelle ligne d\u{2019}erreur apparaisse dans l\u{2019}onglet Journal. S\u{e9}lectionnez les lignes \u{e0} inclure (ou ne s\u{e9}lectionnez rien pour tout envoyer) et cliquez sur \u{00AB} Signaler un bug (chiffr\u{e9}) \u{00BB}. Un aper\u{e7}u montre exactement ce qui sera partag\u{e9} ; apr\u{e8}s confirmation, Choragus \u{e9}crit un fichier de lot chiffr\u{e9} dans votre dossier T\u{e9}l\u{e9}chargements, ouvre GitHub Issues avec le titre et le corps pr\u{e9}-remplis, et r\u{e9}v\u{e8}le le fichier dans le Finder pour que vous le glissiez dans le commentaire.\n\nLe lot est opaque pour GitHub lui-m\u{ea}me \u{2014} les jetons d\u{2019}authentification sont retir\u{e9}s \u{e0} la source, le reste est chiffr\u{e9} avec la cl\u{e9} publique du mainteneur. Clic droit sur une ligne pour Copier la ligne (anonymis\u{e9}e) ou Copier la ligne (avec contenu) ; Tout copier et Enregistrer le lot exportent la liste en texte clair.\n\nL\u{2019}onglet \u{c9}v\u{e9}nements en direct affiche le trafic UPnP brut de vos enceintes en temps r\u{e9}el \u{2014} utile pour comprendre pourquoi une commande para\u{ee}t lente.\n\nUn compte GitHub gratuit est requis pour soumettre sur GitHub (les tickets anonymes ne sont pas accept\u{e9}s).",
-            "nl": "Reproduceer het probleem zodat een nieuwe foutregel in het tabblad Log verschijnt. Selecteer de rijen die je wilt opnemen (of laat niets geselecteerd om alles te sturen) en klik op \u{2018}Bug melden (versleuteld)\u{2019}. Een voorbeeld toont precies wat er wordt gedeeld; na bevestigen schrijft Choragus een versleuteld pakket-bestand naar je Downloads-map, opent GitHub Issues met titel en tekst vooraf ingevuld, en toont het bestand in Finder zodat je het in de opmerking kunt slepen.\n\nHet pakket is ondoorzichtig voor GitHub zelf \u{2014} auth-tokens worden bij de bron verwijderd, de rest wordt versleuteld met de openbare sleutel van de beheerder. Rechtsklik op een rij voor Rij kopi\u{eb}ren (geanonimiseerd) of Rij kopi\u{eb}ren (met inhoud); Alles kopi\u{eb}ren en Bundle opslaan exporteren de lijst als platte tekst.\n\nHet tabblad Live-gebeurtenissen toont ruw UPnP-verkeer van je speakers in realtime \u{2014} handig wanneer je onderzoekt waarom een bediening traag aanvoelt.\n\nEen gratis GitHub-account is vereist om op GitHub te melden (anonieme issues worden niet geaccepteerd).",
+            "nl": "Reproduceer het probleem zodat een nieuwe foutregel in het tabblad Log verschijnt. Selecteer de rijen die je wilt opnemen (of laat niets geselecteerd om alles te sturen) en klik op ‘Bug melden (versleuteld)’. Een voorbeeld toont precies wat er wordt gedeeld; na bevestigen schrijft Choragus een versleuteld pakket-bestand naar je Downloads-map, opent GitHub Issues met titel en tekst vooraf ingevuld, en toont het bestand in Finder zodat je het in de opmerking kunt slepen.\\n\\nHet pakket is ondoorzichtig voor GitHub zelf — auth-tokens worden bij de bron verwijderd, de rest wordt versleuteld met de openbare sleutel van de beheerder. Rechtsklik op een rij voor Rij kopiëren (geanonimiseerd) of Rij kopiëren (met inhoud); Alles kopiëren en Bundle opslaan exporteren de lijst als platte tekst.\\n\\nHet tabblad Live-gebeurtenissen toont ruw UPnP-verkeer van je speakers in realtime — handig wanneer je onderzoekt waarom een bediening traag aanvoelt.\\n\\nEen gratis GitHub-account is vereist om op GitHub te melden (anonieme issues worden niet geaccepteerd).",
             "es": "Reproduce el problema para que aparezca una nueva fila de error en la pesta\u{f1}a Registro. Selecciona las filas que quieras incluir (o no selecciones nada para enviar todo) y pulsa \u{00AB}Informar bug (cifrado)\u{00BB}. Una vista previa muestra exactamente lo que se compartir\u{e1}; al confirmar, Choragus escribe un archivo de paquete cifrado en tu carpeta Descargas, abre GitHub Issues con el t\u{ed}tulo y el cuerpo prerrellenos y muestra el archivo en Finder para que lo arrastres al comentario.\n\nEl paquete es opaco para GitHub mismo \u{2014} los tokens de autenticaci\u{f3}n se eliminan en el origen, el resto se cifra con la clave p\u{fa}blica del responsable. Clic derecho en una fila para Copiar fila (redactada) o Copiar fila (con contenido); Copiar todo y Guardar paquete exportan la lista como texto plano.\n\nLa pesta\u{f1}a Eventos en vivo muestra tr\u{e1}fico UPnP en bruto de tus altavoces en tiempo real \u{2014} \u{fa}til para investigar por qu\u{e9} un control parece lento.\n\nSe requiere una cuenta gratuita de GitHub para enviar en GitHub (no se aceptan incidencias an\u{f3}nimas).",
             "it": "Riproduci il problema in modo che compaia una nuova riga di errore nella scheda Registro. Seleziona le righe da includere (oppure non selezionare nulla per inviare tutto) e fai clic su \u{00AB}Segnala bug (cifrato)\u{00BB}. Un\u{2019}anteprima mostra esattamente cosa verr\u{e0} condiviso; alla conferma, Choragus scrive un file di pacchetto cifrato nella cartella Download, apre GitHub Issues con titolo e corpo precompilati e mostra il file nel Finder cos\u{ec} puoi trascinarlo nel commento.\n\nIl pacchetto \u{e8} opaco per GitHub stesso \u{2014} i token di autenticazione vengono rimossi alla fonte, il resto viene cifrato con la chiave pubblica del manutentore. Clic destro su una riga per Copia riga (anonimizzata) o Copia riga (con contenuto); Copia tutto e Salva pacchetto esportano la lista come testo semplice.\n\nLa scheda Eventi dal vivo mostra il traffico UPnP grezzo dai diffusori in tempo reale \u{2014} utile per capire perch\u{e9} un controllo sembra lento.\n\n\u{c8} richiesto un account GitHub gratuito per inviare su GitHub (gli issue anonimi non sono accettati).",
             "sv": "\u{c5}terskapa problemet s\u{e5} att en ny felrad visas i fliken Logg. V\u{e4}lj raderna du vill inkludera (eller l\u{e5}t inget vara markerat f\u{f6}r att skicka allt) och klicka p\u{e5} \u{201D}Rapportera bug (krypterad)\u{201D}. En f\u{f6}rhandsgranskning visar exakt vad som kommer att delas; vid bekr\u{e4}ftelse skriver Choragus en krypterad paketfil till din Nedladdningar-mapp, \u{f6}ppnar GitHub Issues med titel och brodtext f\u{f6}rifyllda och visar filen i Finder s\u{e5} att du kan dra den till kommentaren.\n\nPaketet \u{e4}r ogenomskinligt f\u{f6}r GitHub sj\u{e4}lv \u{2014} autentiseringstokens tas bort vid k\u{e4}llan, resten krypteras med underh\u{e5}llarens publika nyckel. H\u{f6}gerklicka p\u{e5} en rad f\u{f6}r Kopiera rad (anonymiserad) eller Kopiera rad (med inneh\u{e5}ll); Kopiera alla och Spara paket exporterar listan som vanlig text.\n\nFliken Live-h\u{e4}ndelser visar r\u{e5} UPnP-trafik fr\u{e5}n dina h\u{f6}gtalare i realtid \u{2014} anv\u{e4}ndbart n\u{e4}r du unders\u{f6}ker varf\u{f6}r en kontroll k\u{e4}nns tr\u{f6}g.\n\nEtt kostnadsfritt GitHub-konto kr\u{e4}vs f\u{f6}r att skicka p\u{e5} GitHub (anonyma \u{e4}renden godtas inte).",
@@ -11432,7 +12575,7 @@ public enum L10n {
             "en": "Copy Row (with payload)",
             "de": "Zeile kopieren (mit Inhalt)",
             "fr": "Copier la ligne (avec contenu)",
-            "nl": "Rij kopi\u{eb}ren (met inhoud)",
+            "nl": "Rij kopiëren (met inhoud)",
             "es": "Copiar fila (con contenido)",
             "it": "Copia riga (con contenuto)",
             "sv": "Kopiera rad (med inneh\u{e5}ll)",
@@ -11447,7 +12590,7 @@ public enum L10n {
             "en": "Copy %d Rows (with payload)",
             "de": "%d Zeilen kopieren (mit Inhalt)",
             "fr": "Copier %d lignes (avec contenu)",
-            "nl": "%d rijen kopi\u{eb}ren (met inhoud)",
+            "nl": "%d rijen kopiëren (met inhoud)",
             "es": "Copiar %d filas (con contenido)",
             "it": "Copia %d righe (con contenuto)",
             "sv": "Kopiera %d rader (med inneh\u{e5}ll)",
@@ -11462,7 +12605,7 @@ public enum L10n {
             "en": "Copies the row with LAN IPs, paths, and device IDs intact. Auth tokens are still removed (they were never persisted). For local debugging or sharing through a trusted channel.",
             "de": "Kopiert die Zeile mit LAN-IPs, Pfaden und Ger\u{e4}te-IDs. Auth-Token werden weiterhin entfernt (sie werden nie gespeichert). F\u{fc}r lokale Fehlersuche oder Weitergabe \u{fc}ber einen vertrauensw\u{fc}rdigen Kanal.",
             "fr": "Copie la ligne avec les IP LAN, chemins et identifiants d\u{2019}appareil intacts. Les jetons d\u{2019}auth sont toujours retir\u{e9}s (ils ne sont jamais stock\u{e9}s). Pour le d\u{e9}bogage local ou un partage via un canal de confiance.",
-            "nl": "Kopieert de rij met LAN-IP\u{2019}s, paden en apparaat-ID\u{2019}s intact. Auth-tokens worden nog steeds verwijderd (ze worden nooit opgeslagen). Voor lokale foutopsporing of delen via een vertrouwd kanaal.",
+            "nl": "Kopieert de rij met LAN-IP’s, paden en apparaat-ID’s intact. Auth-tokens worden nog steeds verwijderd (ze worden nooit opgeslagen). Voor lokale foutopsporing of delen via een vertrouwd kanaal.",
             "es": "Copia la fila con IP de LAN, rutas e identificadores de dispositivo intactos. Los tokens de autenticaci\u{f3}n se eliminan (nunca se guardan). Para depuraci\u{f3}n local o compartir por un canal de confianza.",
             "it": "Copia la riga con IP della LAN, percorsi e ID dispositivo intatti. I token di autenticazione vengono comunque rimossi (non vengono mai salvati). Per debug locale o condivisione tramite un canale fidato.",
             "sv": "Kopierar raden med LAN-IP, s\u{f6}kv\u{e4}gar och enhets-ID intakta. Autentiseringstokens tas fortfarande bort (de sparas aldrig). F\u{f6}r lokal fels\u{f6}kning eller delning via en betrodd kanal.",
@@ -11521,8 +12664,8 @@ public enum L10n {
         "softwareUpdatesBetaSection": [
             "en": "Beta Channel",
             "de": "Beta-Kanal",
-            "fr": "Canal b\u{ea}ta",
-            "nl": "B\u{e8}takanaal",
+            "fr": "Canal bêta",
+            "nl": "Bètakanaal",
             "es": "Canal beta",
             "it": "Canale beta",
             "sv": "Betakanal",
@@ -11536,8 +12679,8 @@ public enum L10n {
         "softwareUpdatesBetaOptIn": [
             "en": "Receive beta updates",
             "de": "Beta-Updates empfangen",
-            "fr": "Recevoir les mises \u{e0} jour b\u{ea}ta",
-            "nl": "B\u{e8}ta-updates ontvangen",
+            "fr": "Recevoir les mises à jour bêta",
+            "nl": "Bèta-updates ontvangen",
             "es": "Recibir actualizaciones beta",
             "it": "Ricevi aggiornamenti beta",
             "sv": "Ta emot betauppdateringar",
@@ -11550,9 +12693,9 @@ public enum L10n {
         ],
         "softwareUpdatesBetaWarning": [
             "en": "Beta releases are pre-release builds. They may be unstable, lose data, or break features that work in the stable release. Don\u{2019}t enable this on your only Mac. To leave the beta channel, turn this off — you\u{2019}ll stay on the latest beta you installed until the next stable release catches up.",
-            "de": "Beta-Versionen sind Vorab-Builds. Sie k\u{f6}nnen instabil sein, Daten verlieren oder Funktionen besch\u{e4}digen, die in der stabilen Version funktionieren. Aktiviere dies nicht auf deinem einzigen Mac. Zum Verlassen des Beta-Kanals deaktivieren — du bleibst auf der zuletzt installierten Beta, bis das n\u{e4}chste stabile Release aufgeholt hat.",
-            "fr": "Les versions b\u{ea}ta sont des builds en pr\u{e9}-publication. Elles peuvent \u{ea}tre instables, perdre des donn\u{e9}es ou casser des fonctionnalit\u{e9}s qui fonctionnent dans la version stable. N\u{2019}activez pas ceci sur votre seul Mac. Pour quitter le canal b\u{ea}ta, d\u{e9}sactivez-le — vous resterez sur la derni\u{e8}re b\u{ea}ta install\u{e9}e jusqu\u{2019}\u{e0} ce que la prochaine version stable rattrape.",
-            "nl": "B\u{e8}taversies zijn pre-release builds. Ze kunnen onstabiel zijn, gegevens verliezen of functies breken die wel werken in de stabiele release. Schakel dit niet in op je enige Mac. Om het b\u{e8}takanaal te verlaten, schakel dit uit — je blijft op de laatste b\u{e8}ta die je hebt ge\u{ef}nstalleerd tot de volgende stabiele versie inhaalt.",
+            "de": "Beta-Versionen sind Vorab-Builds. Sie können instabil sein, Daten verlieren oder Funktionen beschädigen, die in der stabilen Version funktionieren. Aktiviere dies nicht auf deinem einzigen Mac. Zum Verlassen des Beta-Kanals deaktivieren — du bleibst auf der zuletzt installierten Beta, bis das nächste stabile Release aufgeholt hat.",
+            "fr": "Les versions bêta sont des builds en pré-publication. Elles peuvent être instables, perdre des données ou casser des fonctionnalités qui fonctionnent dans la version stable. N’activez pas ceci sur votre seul Mac. Pour quitter le canal bêta, désactivez-le — vous resterez sur la dernière bêta installée jusqu’à ce que la prochaine version stable rattrape.",
+            "nl": "Bètaversies zijn pre-release builds. Ze kunnen onstabiel zijn, gegevens verliezen of functies breken die wel werken in de stabiele release. Schakel dit niet in op je enige Mac. Om het bètakanaal te verlaten, schakel dit uit — je blijft op de laatste bèta die je hebt geïnstalleerd tot de volgende stabiele versie inhaalt.",
             "es": "Las versiones beta son compilaciones previas. Pueden ser inestables, perder datos o romper funciones que funcionan en la versi\u{f3}n estable. No lo actives en tu \u{fa}nica Mac. Para salir del canal beta, des\u{e1}ctivalo — permanecer\u{e1}s en la \u{fa}ltima beta instalada hasta que la pr\u{f3}xima versi\u{f3}n estable la alcance.",
             "it": "Le versioni beta sono build di pre-rilascio. Possono essere instabili, perdere dati o rompere funzionalit\u{e0} che funzionano nella versione stabile. Non attivarlo sull\u{2019}unico Mac che hai. Per lasciare il canale beta, disattivalo — rimarrai sull\u{2019}ultima beta installata fino a quando la prossima versione stabile la raggiunger\u{e0}.",
             "sv": "Betaversioner \u{e4}r f\u{f6}rhandsbyggen. De kan vara instabila, f\u{f6}rlora data eller bryta funktioner som fungerar i den stabila versionen. Aktivera inte detta p\u{e5} din enda Mac. F\u{f6}r att l\u{e4}mna betakanalen, st\u{e4}ng av detta — du stannar p\u{e5} den senaste betan du installerade tills n\u{e4}sta stabila version kommer ikapp.",
@@ -11587,7 +12730,7 @@ public enum L10n {
             "en": "Open the About window",
             "de": "\u{00DC}ber-Fenster \u{00F6}ffnen",
             "fr": "Ouvrir la fen\u{00EA}tre \u{00AB}\u{00A0}\u{00C0} propos\u{00A0}\u{00BB}",
-            "nl": "Venster \u{2018}Over\u{2019} openen",
+            "nl": "Venster ‘Over’ openen",
             "es": "Abrir la ventana \u{00AB}Acerca de\u{00BB}",
             "it": "Apri la finestra \u{201C}Informazioni\u{201D}",
             "sv": "\u{00D6}ppna f\u{00F6}nstret Om",
@@ -11662,7 +12805,7 @@ public enum L10n {
             "en": "Writes an encrypted bundle to your Downloads folder and opens GitHub\u{2019}s private security advisory form. Drag the file into the Description field. Use this for token-leakage, sandbox, or code-execution-class issues.",
             "de": "Schreibt ein verschl\u{fc}sseltes Paket in deinen Downloads-Ordner und \u{f6}ffnet das private Sicherheitshinweis-Formular von GitHub. Ziehe die Datei in das Beschreibungsfeld. F\u{fc}r Token-Leck-, Sandbox- oder Code-Ausf\u{fc}hrungs-Probleme.",
             "fr": "\u{c9}crit un lot chiffr\u{e9} dans T\u{e9}l\u{e9}chargements et ouvre le formulaire d\u{2019}avis de s\u{e9}curit\u{e9} priv\u{e9} de GitHub. Glissez le fichier dans le champ Description. Pour les fuites de jeton, le sandbox, l\u{2019}ex\u{e9}cution de code.",
-            "nl": "Schrijft een versleuteld pakket naar Downloads en opent het priv\u{e9} beveiligingsadviesformulier van GitHub. Sleep het bestand in het beschrijvingsveld. Voor token-lekken, sandbox- of code-uitvoeringsproblemen.",
+            "nl": "Schrijft een versleuteld pakket naar Downloads en opent het privé beveiligingsadviesformulier van GitHub. Sleep het bestand in het beschrijvingsveld. Voor token-lekken, sandbox- of code-uitvoeringsproblemen.",
             "es": "Escribe un paquete cifrado en Descargas y abre el formulario privado de avisos de seguridad de GitHub. Arrastra el archivo al campo Descripci\u{f3}n. Para fugas de token, sandbox o ejecuci\u{f3}n de c\u{f3}digo.",
             "it": "Scrive un pacchetto cifrato in Download e apre il modulo privato di avviso di sicurezza di GitHub. Trascina il file nel campo Descrizione. Per problemi di fuga di token, sandbox o esecuzione di codice.",
             "sv": "Skriver ett krypterat paket till Nedladdningar och \u{f6}ppnar GitHubs privata s\u{e4}kerhetsformul\u{e4}r. Dra filen till f\u{e4}ltet Beskrivning. F\u{f6}r token-l\u{e4}ckage-, sandbox- eller kodexekveringsproblem.",
@@ -11737,7 +12880,7 @@ public enum L10n {
             "en": "Substituted: %d tokens, %d LAN IPs, %d paths.",
             "de": "Ersetzt: %d Token, %d LAN-IPs, %d Pfade.",
             "fr": "Substitu\u{e9}s\u{a0}: %d jetons, %d IP LAN, %d chemins.",
-            "nl": "Vervangen: %d tokens, %d LAN-IP\u{2019}s, %d paden.",
+            "nl": "Vervangen: %d tokens, %d LAN-IP’s, %d paden.",
             "es": "Sustituidos: %d tokens, %d IP LAN, %d rutas.",
             "it": "Sostituiti: %d token, %d IP LAN, %d percorsi.",
             "sv": "Ersatta: %d tokens, %d LAN-IP:er, %d s\u{f6}kv\u{e4}gar.",
@@ -11748,6 +12891,9 @@ public enum L10n {
             "pl": "Zast\u{105}piono: %d token\u{f3}w, %d adres\u{f3}w IP LAN, %d \u{15b}cie\u{17c}ek.",
             "zh-Hans": "已替换: %d 个令牌、%d 个 LAN IP、%d 个路径。",
         ],
+    ]
+
+    private static let translations35: [String: [String: String]] = [
         "diagTabLog": [
             "en": "Log",
             "de": "Protokoll",
@@ -11778,6 +12924,400 @@ public enum L10n {
             "pl": "Zdarzenia na \u{17c}ywo",
             "zh-Hans": "实时事件",
         ],
+        "diagTabSpeakers": [
+            "en": "Speakers", "de": "Lautsprecher", "fr": "Enceintes", "nl": "Luidsprekers",
+            "es": "Altavoces", "it": "Altoparlanti", "sv": "H\u{f6}gtalare", "nb": "H\u{f8}yttalere",
+            "da": "H\u{f8}jttalere", "ja": "スピーカー", "pt": "Colunas", "pl": "G\u{142}o\u{15b}niki",
+            "zh-Hans": "扬声器",
+        ],
+        "diagSpeakerColumnModel": [
+            "en": "Model", "de": "Modell", "fr": "Mod\u{e8}le", "nl": "Model",
+            "es": "Modelo", "it": "Modello", "sv": "Modell", "nb": "Modell",
+            "da": "Model", "ja": "モデル", "pt": "Modelo", "pl": "Model",
+            "zh-Hans": "型号",
+        ],
+        "diagTabNetwork": [
+            "en": "Network", "de": "Netzwerk", "fr": "R\u{e9}seau", "nl": "Netwerk",
+            "es": "Red", "it": "Rete", "sv": "N\u{e4}tverk", "nb": "Nettverk",
+            "da": "Netv\u{e6}rk", "ja": "ネットワーク", "pt": "Rede", "pl": "Sie\u{107}",
+            "zh-Hans": "网络",
+        ],
+        "diagTabHealth": [
+            "en": "Speaker Health", "de": "Lautsprecherstatus", "fr": "Sant\u{e9} des enceintes", "nl": "Luidsprekerstatus",
+            "es": "Estado de altavoces", "it": "Stato altoparlanti", "sv": "H\u{f6}gtalarh\u{e4}lsa", "nb": "H\u{f8}yttalerstatus",
+            "da": "H\u{f8}jttalerstatus", "ja": "スピーカー状態", "pt": "Estado das colunas", "pl": "Stan g\u{142}o\u{15b}nik\u{f3}w",
+            "zh-Hans": "扬声器健康",
+        ],
+        "diagTabMatrix": [
+            "en": "Signal Matrix", "de": "Signalmatrix", "fr": "Matrice de signal", "nl": "Signaalmatrix",
+            "es": "Matriz de se\u{f1}al", "it": "Matrice del segnale", "sv": "Signalmatris", "nb": "Signalmatrise",
+            "da": "Signalmatrix", "ja": "信号マトリクス", "pt": "Matriz de sinal", "pl": "Macierz sygna\u{142}u",
+            "zh-Hans": "信号矩阵",
+        ],
+        "diagHealthBanner": [
+            "en": "Data is read directly from each speaker. Green means normal, orange means worth checking, red means the speaker needs attention. Click a column header to sort.",
+            "de": "Die Daten werden direkt von jedem Lautsprecher gelesen. Gr\u{fc}n bedeutet normal, Orange bedeutet pr\u{fc}fenswert, Rot bedeutet Handlungsbedarf. Zum Sortieren auf eine Spalten\u{fc}berschrift klicken.",
+            "fr": "Les donn\u{e9}es sont lues directement depuis chaque enceinte. Vert : normal ; orange : \u{e0} v\u{e9}rifier ; rouge : intervention n\u{e9}cessaire. Cliquez sur un en-t\u{ea}te de colonne pour trier.",
+            "nl": "Gegevens worden rechtstreeks van elke luidspreker gelezen. Groen is normaal, oranje is het controleren waard, rood vraagt aandacht. Klik op een kolomkop om te sorteren.",
+            "es": "Los datos se leen directamente de cada altavoz. Verde: normal; naranja: conviene revisar; rojo: requiere atenci\u{f3}n. Haga clic en un encabezado de columna para ordenar.",
+            "it": "I dati vengono letti direttamente da ogni altoparlante. Verde: normale; arancione: da controllare; rosso: richiede attenzione. Fare clic su un'intestazione di colonna per ordinare.",
+            "sv": "Data l\u{e4}ses direkt fr\u{e5}n varje h\u{f6}gtalare. Gr\u{f6}nt \u{e4}r normalt, orange \u{e4}r v\u{e4}rt att kontrollera, r\u{f6}tt beh\u{f6}ver \u{e5}tg\u{e4}rd. Klicka p\u{e5} en kolumnrubrik f\u{f6}r att sortera.",
+            "nb": "Data leses direkte fra hver h\u{f8}yttaler. Gr\u{f8}nt er normalt, oransje b\u{f8}r sjekkes, r\u{f8}dt trenger oppf\u{f8}lging. Klikk p\u{e5} en kolonneoverskrift for \u{e5} sortere.",
+            "da": "Data l\u{e6}ses direkte fra hver h\u{f8}jttaler. Gr\u{f8}n er normal, orange b\u{f8}r tjekkes, r\u{f8}d kr\u{e6}ver handling. Klik p\u{e5} en kolonneoverskrift for at sortere.",
+            "ja": "データは各スピーカーから直接読み取ります。緑は正常、オレンジは要確認、赤は対応が必要です。列見出しをクリックすると並べ替えできます。",
+            "pt": "Os dados s\u{e3}o lidos diretamente de cada coluna. Verde: normal; laranja: vale verificar; vermelho: requer aten\u{e7}\u{e3}o. Clique num cabe\u{e7}alho de coluna para ordenar.",
+            "pl": "Dane s\u{105} odczytywane bezpo\u{15b}rednio z ka\u{17c}dego g\u{142}o\u{15b}nika. Zielony: normalnie; pomara\u{144}czowy: warto sprawdzi\u{107}; czerwony: wymaga uwagi. Kliknij nag\u{142}\u{f3}wek kolumny, aby sortowa\u{107}.",
+            "zh-Hans": "数据直接从每台扬声器读取。绿色表示正常，橙色表示值得检查，红色表示需要处理。点击列标题可排序。",
+        ],
+        "diagMatrixBannerWifiMode": [
+            "en": "SonosNet is disabled on this system — speakers connect through your Wi-Fi, so there is no speaker-to-speaker mesh matrix. This grid shows each speaker's Wi-Fi link health instead.",
+            "de": "SonosNet ist auf diesem System deaktiviert — die Lautsprecher verbinden sich \u{fc}ber das WLAN, daher gibt es keine Mesh-Matrix zwischen Lautsprechern. Dieses Raster zeigt stattdessen die WLAN-Verbindungsqualit\u{e4}t jedes Lautsprechers.",
+            "fr": "SonosNet est d\u{e9}sactiv\u{e9} sur ce syst\u{e8}me — les enceintes passent par le Wi-Fi, il n'existe donc pas de matrice maill\u{e9}e entre enceintes. Cette grille montre \u{e0} la place la qualit\u{e9} du lien Wi-Fi de chaque enceinte.",
+            "nl": "SonosNet is op dit systeem uitgeschakeld — luidsprekers verbinden via wifi, dus er is geen mesh-matrix tussen luidsprekers. Dit raster toont in plaats daarvan de wifi-verbindingskwaliteit per luidspreker.",
+            "es": "SonosNet est\u{e1} desactivado en este sistema: los altavoces se conectan por Wi-Fi, por lo que no existe matriz de malla entre altavoces. Esta cuadr\u{ed}cula muestra en su lugar la salud del enlace Wi-Fi de cada altavoz.",
+            "it": "SonosNet \u{e8} disattivato su questo sistema: gli altoparlanti si collegano tramite Wi-Fi, quindi non esiste una matrice mesh tra altoparlanti. Questa griglia mostra invece la qualit\u{e0} del collegamento Wi-Fi di ogni altoparlante.",
+            "sv": "SonosNet \u{e4}r inaktiverat p\u{e5} det h\u{e4}r systemet — h\u{f6}gtalarna ansluter via Wi-Fi, s\u{e5} det finns ingen mesh-matris mellan h\u{f6}gtalare. Rutn\u{e4}tet visar i st\u{e4}llet varje h\u{f6}gtalares Wi-Fi-l\u{e4}nkh\u{e4}lsa.",
+            "nb": "SonosNet er deaktivert p\u{e5} dette systemet — h\u{f8}yttalerne kobler til via Wi-Fi, s\u{e5} det finnes ingen mesh-matrise mellom h\u{f8}yttalere. Rutenettet viser i stedet Wi-Fi-koblingens tilstand for hver h\u{f8}yttaler.",
+            "da": "SonosNet er deaktiveret p\u{e5} dette system — h\u{f8}jttalerne forbinder via Wi-Fi, s\u{e5} der findes ingen mesh-matrix mellem h\u{f8}jttalere. Gitteret viser i stedet hver h\u{f8}jttalers Wi-Fi-forbindelsestilstand.",
+            "ja": "このシステムでは SonosNet が無効です。スピーカーは Wi-Fi 経由で接続するため、スピーカー間メッシュマトリクスは存在しません。代わりに各スピーカーの Wi-Fi リンク状態を表示します。",
+            "pt": "O SonosNet est\u{e1} desativado neste sistema — as colunas ligam-se por Wi-Fi, pelo que n\u{e3}o existe matriz mesh entre colunas. Esta grelha mostra, em vez disso, a sa\u{fa}de da liga\u{e7}\u{e3}o Wi-Fi de cada coluna.",
+            "pl": "SonosNet jest wy\u{142}\u{105}czony w tym systemie — g\u{142}o\u{15b}niki \u{142}\u{105}cz\u{105} si\u{119} przez Wi-Fi, wi\u{119}c nie istnieje macierz mesh mi\u{119}dzy g\u{142}o\u{15b}nikami. Siatka pokazuje zamiast tego stan \u{142}\u{105}cza Wi-Fi ka\u{17c}dego g\u{142}o\u{15b}nika.",
+            "zh-Hans": "此系统已禁用 SonosNet——扬声器通过 Wi-Fi 连接，因此不存在扬声器间网状矩阵。此网格改为显示每台扬声器的 Wi-Fi 链路健康状况。",
+        ],
+        "diagFilterRooms": [
+            "en": "Filter rooms…", "de": "R\u{e4}ume filtern…", "fr": "Filtrer les pi\u{e8}ces…", "nl": "Kamers filteren…",
+            "es": "Filtrar habitaciones…", "it": "Filtra stanze…", "sv": "Filtrera rum…", "nb": "Filtrer rom…",
+            "da": "Filtrer rum…", "ja": "部屋を絞り込む…", "pt": "Filtrar divis\u{f5}es…", "pl": "Filtruj pokoje…",
+            "zh-Hans": "筛选房间…",
+        ],
+        "diagColumnStatus": [
+            "en": "Status", "de": "Status", "fr": "\u{c9}tat", "nl": "Status",
+            "es": "Estado", "it": "Stato", "sv": "Status", "nb": "Status",
+            "da": "Status", "ja": "状態", "pt": "Estado", "pl": "Stan",
+            "zh-Hans": "状态",
+        ],
+        "diagColumnSerial": [
+            "en": "Serial", "de": "Seriennummer", "fr": "N\u{b0} de s\u{e9}rie", "nl": "Serienummer",
+            "es": "N\u{ba} de serie", "it": "Seriale", "sv": "Serienummer", "nb": "Serienummer",
+            "da": "Serienummer", "ja": "シリアル", "pt": "N\u{ba} de s\u{e9}rie", "pl": "Numer seryjny",
+            "zh-Hans": "序列号",
+        ],
+        "diagColumnHardware": [
+            "en": "Hardware", "de": "Hardware", "fr": "Mat\u{e9}riel", "nl": "Hardware",
+            "es": "Hardware", "it": "Hardware", "sv": "H\u{e5}rdvara", "nb": "Maskinvare",
+            "da": "Hardware", "ja": "ハードウェア", "pt": "Hardware", "pl": "Sprz\u{119}t",
+            "zh-Hans": "硬件",
+        ],
+        "diagColumnInterference": [
+            "en": "Interference", "de": "St\u{f6}rungen", "fr": "Interf\u{e9}rences", "nl": "Interferentie",
+            "es": "Interferencias", "it": "Interferenze", "sv": "St\u{f6}rningar", "nb": "Interferens",
+            "da": "Interferens", "ja": "干渉", "pt": "Interfer\u{ea}ncia", "pl": "Zak\u{142}\u{f3}cenia",
+            "zh-Hans": "干扰",
+        ],
+        "diagStatusOK": [
+            "en": "OK", "de": "OK", "fr": "OK", "nl": "OK",
+            "es": "OK", "it": "OK", "sv": "OK", "nb": "OK",
+            "da": "OK", "ja": "正常", "pt": "OK", "pl": "OK",
+            "zh-Hans": "正常",
+        ],
+        "diagStatusCheckWifi": [
+            "en": "Check Wi-Fi", "de": "WLAN pr\u{fc}fen", "fr": "V\u{e9}rifier le Wi-Fi", "nl": "Controleer wifi",
+            "es": "Revisar Wi-Fi", "it": "Controlla Wi-Fi", "sv": "Kontrollera Wi-Fi", "nb": "Sjekk Wi-Fi",
+            "da": "Tjek Wi-Fi", "ja": "Wi-Fi 要確認", "pt": "Verificar Wi-Fi", "pl": "Sprawd\u{17a} Wi-Fi",
+            "zh-Hans": "检查 Wi-Fi",
+        ],
+        "diagStatusOffline": [
+            "en": "Offline", "de": "Offline", "fr": "Hors ligne", "nl": "Offline",
+            "es": "Sin conexi\u{f3}n", "it": "Offline", "sv": "Offline", "nb": "Frakoblet",
+            "da": "Offline", "ja": "オフライン", "pt": "Offline", "pl": "Offline",
+            "zh-Hans": "离线",
+        ],
+        "diagLegendNormal": [
+            "en": "Normal", "de": "Normal", "fr": "Normal", "nl": "Normaal",
+            "es": "Normal", "it": "Normale", "sv": "Normalt", "nb": "Normalt",
+            "da": "Normal", "ja": "正常", "pt": "Normal", "pl": "Normalny",
+            "zh-Hans": "正常",
+        ],
+        "diagLegendAttention": [
+            "en": "Worth checking", "de": "Pr\u{fc}fenswert", "fr": "\u{c0} v\u{e9}rifier", "nl": "Controleren",
+            "es": "Conviene revisar", "it": "Da controllare", "sv": "V\u{e4}rt att kontrollera", "nb": "B\u{f8}r sjekkes",
+            "da": "B\u{f8}r tjekkes", "ja": "要確認", "pt": "Vale verificar", "pl": "Warto sprawdzi\u{107}",
+            "zh-Hans": "值得检查",
+        ],
+        "diagLegendProblem": [
+            "en": "Problem", "de": "Problem", "fr": "Probl\u{e8}me", "nl": "Probleem",
+            "es": "Problema", "it": "Problema", "sv": "Problem", "nb": "Problem",
+            "da": "Problem", "ja": "問題", "pt": "Problema", "pl": "Problem",
+            "zh-Hans": "问题",
+        ],
+        "diagLegendNoData": [
+            "en": "No data", "de": "Keine Daten", "fr": "Pas de donn\u{e9}es", "nl": "Geen gegevens",
+            "es": "Sin datos", "it": "Nessun dato", "sv": "Inga data", "nb": "Ingen data",
+            "da": "Ingen data", "ja": "データなし", "pt": "Sem dados", "pl": "Brak danych",
+            "zh-Hans": "无数据",
+        ],
+        "diagTileOnline": [
+            "en": "Online", "de": "Online", "fr": "En ligne", "nl": "Online",
+            "es": "En l\u{ed}nea", "it": "Online", "sv": "Online", "nb": "Tilkoblet",
+            "da": "Online", "ja": "オンライン", "pt": "Online", "pl": "Online",
+            "zh-Hans": "在线",
+        ],
+        "diagTileGoodLink": [
+            "en": "Strong connection", "de": "Stabile Verbindung", "fr": "Connexion solide", "nl": "Sterke verbinding",
+            "es": "Conexi\u{f3}n s\u{f3}lida", "it": "Connessione solida", "sv": "Stark anslutning", "nb": "Sterk tilkobling",
+            "da": "St\u{e6}rk forbindelse", "ja": "良好な接続", "pt": "Liga\u{e7}\u{e3}o forte", "pl": "Silne po\u{142}\u{105}czenie",
+            "zh-Hans": "连接良好",
+        ],
+        "diagTileAlerts": [
+            "en": "Alerts", "de": "Warnungen", "fr": "Alertes", "nl": "Meldingen",
+            "es": "Alertas", "it": "Avvisi", "sv": "Varningar", "nb": "Varsler",
+            "da": "Advarsler", "ja": "警告", "pt": "Alertas", "pl": "Alerty",
+            "zh-Hans": "警报",
+        ],
+        "diagTileMedianLatency": [
+            "en": "Median latency", "de": "Mediane Latenz", "fr": "Latence m\u{e9}diane", "nl": "Mediane latentie",
+            "es": "Latencia mediana", "it": "Latenza mediana", "sv": "Medianlatens", "nb": "Median latens",
+            "da": "Medianlatens", "ja": "レイテンシ中央値", "pt": "Lat\u{ea}ncia mediana", "pl": "Mediana op\u{f3}\u{17a}nienia",
+            "zh-Hans": "延迟中位数",
+        ],
+    ]
+
+    private static let translations36: [String: [String: String]] = [
+        "supportSheetTitle": [
+            "en": "Feel like supporting the project?",
+            "de": "Lust, das Projekt zu unterstützen?",
+            "fr": "Envie de soutenir le projet ?",
+            "nl": "Zin om het project te steunen?",
+            "es": "¿Te apetece apoyar el proyecto?",
+            "it": "Ti va di sostenere il progetto?",
+            "sv": "Vill du stödja projektet?",
+            "nb": "Har du lyst til å støtte prosjektet?",
+            "da": "Har du lyst til at støtte projektet?",
+            "ja": "プロジェクトを支援しませんか？",
+            "pt": "Apetece-lhe apoiar o projeto?",
+            "pl": "Masz ochotę wesprzeć projekt?",
+            "zh-Hans": "想支持这个项目吗？",
+        ],
+        "supportBlurb": [
+            "en": "Choragus is free and open source, and stays that way. If it has earned a place in your setup, you can put something toward its development — a coffee, or a bitcoin or two ;) Or not. Either way, thanks for using it.",
+            "de": "Choragus ist frei und quelloffen und bleibt es auch. Wenn es einen Platz in deinem Setup verdient hat, kannst du etwas zur Entwicklung beitragen — einen Kaffee oder ein, zwei Bitcoin ;) Oder auch nicht. So oder so: danke für die Nutzung!",
+            "fr": "Choragus est libre et open source, et le restera. S’il a gagné sa place dans votre installation, vous pouvez contribuer à son développement — un café, ou un bitcoin ou deux ;) Ou pas. Dans tous les cas, merci d’utiliser Choragus.",
+            "nl": "Choragus is gratis en open source, en dat blijft zo. Als het een plek in je setup heeft verdiend, kun je iets bijdragen aan de ontwikkeling — een koffie, of een bitcoin of twee ;) Of niet. Hoe dan ook, bedankt voor het gebruik.",
+            "es": "Choragus es gratuito y de código abierto, y seguirá siéndolo. Si se ha ganado un sitio en tu equipo, puedes aportar algo a su desarrollo: un café, o un bitcoin o dos ;) O no. En cualquier caso, gracias por usarlo.",
+            "it": "Choragus è gratuito e open source, e resta così. Se si è guadagnato un posto nel tuo impianto, puoi contribuire al suo sviluppo — un caffè, o un bitcoin o due ;) Oppure no. In ogni caso, grazie per l'utilizzo.",
+            "sv": "Choragus är gratis och öppen källkod, och förblir så. Om det har förtjänat en plats i din anläggning kan du bidra till utvecklingen — en kaffe, eller en bitcoin eller två ;) Eller inte. Tack för att du använder det ändå.",
+            "nb": "Choragus er gratis og åpen kildekode, og forblir det. Har det fortjent en plass i oppsettet ditt, kan du bidra til utviklingen — en kaffe, eller en bitcoin eller to ;) Eller la være. Uansett, takk for at du bruker det.",
+            "da": "Choragus er gratis og open source og forbliver det. Hvis det har fortjent en plads i din opsætning, kan du bidrage til udviklingen — en kop kaffe eller en bitcoin eller to ;) Eller lad være. Tak, fordi du bruger det.",
+            "ja": "Choragus は無料のオープンソースで、これからもそのままです。あなたの環境で役に立っているなら、開発への支援もできます — コーヒー1杯、あるいはビットコインを1〜2枚 ;) もちろん不要です。どちらでも、使っていただきありがとうございます。",
+            "pt": "O Choragus é gratuito e de código aberto, e assim continua. Se conquistou um lugar na sua configuração, pode contribuir para o desenvolvimento — um café, ou um bitcoin ou dois ;) Ou não. De qualquer forma, obrigado por usá-lo.",
+            "pl": "Choragus jest darmowy i otwartoźródłowy — i taki pozostanie. Jeśli zasłużył na miejsce w Twoim zestawie, możesz wesprzeć jego rozwój: kawa albo bitcoin lub dwa ;) Albo nie. Tak czy inaczej, dzięki za korzystanie.",
+            "zh-Hans": "Choragus 是免费开源的，而且会一直如此。如果它在你的系统里派上了用场，可以为开发出一份力——一杯咖啡，或者一两个比特币 ;) 不出也没关系。无论如何，感谢使用。",
+        ],
+        "bitcoin": [
+            "en": "Bitcoin",
+            "de": "Bitcoin",
+            "fr": "Bitcoin",
+            "nl": "Bitcoin",
+            "es": "Bitcoin",
+            "it": "Bitcoin",
+            "sv": "Bitcoin",
+            "nb": "Bitcoin",
+            "da": "Bitcoin",
+            "ja": "Bitcoin",
+            "pt": "Bitcoin",
+            "pl": "Bitcoin",
+            "zh-Hans": "Bitcoin",
+        ],
+        "supportOnKofi": [
+            "en": "Ko-fi",
+            "de": "Ko-fi",
+            "fr": "Ko-fi",
+            "nl": "Ko-fi",
+            "es": "Ko-fi",
+            "it": "Ko-fi",
+            "sv": "Ko-fi",
+            "nb": "Ko-fi",
+            "da": "Ko-fi",
+            "ja": "Ko-fi",
+            "pt": "Ko-fi",
+            "pl": "Ko-fi",
+            "zh-Hans": "Ko-fi",
+        ],
+        "copyBitcoinAddress": [
+            "en": "Copy Bitcoin Address",
+            "de": "Bitcoin-Adresse kopieren",
+            "fr": "Copier l’adresse Bitcoin",
+            "nl": "Bitcoin-adres kopiëren",
+            "es": "Copiar dirección de Bitcoin",
+            "it": "Copia indirizzo Bitcoin",
+            "sv": "Kopiera Bitcoin-adress",
+            "nb": "Kopier Bitcoin-adresse",
+            "da": "Kopiér Bitcoin-adresse",
+            "ja": "Bitcoin アドレスをコピー",
+            "pt": "Copiar endereço Bitcoin",
+            "pl": "Kopiuj adres Bitcoin",
+            "zh-Hans": "复制比特币地址",
+        ],
+        "supportProject": [
+            "en": "Support the project", "de": "Projekt unterst\u{fc}tzen", "fr": "Soutenir le projet", "nl": "Steun het project",
+            "es": "Apoyar el proyecto", "it": "Sostieni il progetto", "sv": "St\u{f6}d projektet", "nb": "St\u{f8}tt prosjektet",
+            "da": "St\u{f8}t projektet", "ja": "プロジェクトを支援", "pt": "Apoiar o projeto", "pl": "Wesprzyj projekt",
+            "zh-Hans": "支持本项目",
+        ],
+        "diagGroupByRoom": [
+            "en": "Group by room", "de": "Nach Raum gruppieren", "fr": "Grouper par pi\u{e8}ce", "nl": "Groeperen per kamer",
+            "es": "Agrupar por habitaci\u{f3}n", "it": "Raggruppa per stanza", "sv": "Gruppera per rum", "nb": "Grupper etter rom",
+            "da": "Grupp\u{e9}r efter rum", "ja": "部屋ごとにまとめる", "pt": "Agrupar por divis\u{e3}o", "pl": "Grupuj wed\u{142}ug pokoju",
+            "zh-Hans": "按房间分组",
+        ],
+        "diagConnHomeTheater": [
+            "en": "Soundbar link", "de": "Soundbar-Verbindung", "fr": "Liaison barre de son", "nl": "Soundbar-verbinding",
+            "es": "Enlace de barra de sonido", "it": "Collegamento soundbar", "sv": "Soundbar-l\u{e4}nk", "nb": "Lydplanke-kobling",
+            "da": "Soundbar-forbindelse", "ja": "サウンドバー接続", "pt": "Liga\u{e7}\u{e3}o \u{e0} soundbar", "pl": "\u{141}\u{105}cze soundbara",
+            "zh-Hans": "回音壁链路",
+        ],
+        "diagNetworkColumnConnection": [
+            "en": "Connection", "de": "Verbindung", "fr": "Connexion", "nl": "Verbinding",
+            "es": "Conexi\u{f3}n", "it": "Connessione", "sv": "Anslutning", "nb": "Tilkobling",
+            "da": "Forbindelse", "ja": "接続", "pt": "Liga\u{e7}\u{e3}o", "pl": "Po\u{142}\u{105}czenie",
+            "zh-Hans": "连接",
+        ],
+        "diagNetworkColumnLatency": [
+            "en": "Latency", "de": "Latenz", "fr": "Latence", "nl": "Latentie",
+            "es": "Latencia", "it": "Latenza", "sv": "Latens", "nb": "Latens",
+            "da": "Latenstid", "ja": "レイテンシ", "pt": "Lat\u{ea}ncia", "pl": "Opóźnienie",
+            "zh-Hans": "延迟",
+        ],
+        "diagNetworkColumnNoise": [
+            "en": "Noise", "de": "Rauschen", "fr": "Bruit", "nl": "Ruis",
+            "es": "Ruido", "it": "Rumore", "sv": "Brus", "nb": "St\u{f8}y",
+            "da": "St\u{f8}j", "ja": "ノイズ", "pt": "Ru\u{ed}do", "pl": "Szum",
+            "zh-Hans": "噪声",
+        ],
+        "diagNetworkColumnPhyErrors": [
+            "en": "PHY errors", "de": "PHY-Fehler", "fr": "Erreurs PHY", "nl": "PHY-fouten",
+            "es": "Errores PHY", "it": "Errori PHY", "sv": "PHY-fel", "nb": "PHY-feil",
+            "da": "PHY-fejl", "ja": "PHYエラー", "pt": "Erros PHY", "pl": "B\u{142}\u{119}dy PHY",
+            "zh-Hans": "PHY 错误",
+        ],
+        "diagNetworkUnreachable": [
+            "en": "unreachable", "de": "nicht erreichbar", "fr": "injoignable", "nl": "onbereikbaar",
+            "es": "inaccesible", "it": "irraggiungibile", "sv": "on\u{e5}bar", "nb": "utilgjengelig",
+            "da": "utilg\u{e6}ngelig", "ja": "到達不能", "pt": "inacess\u{ed}vel", "pl": "nieosi\u{105}galny",
+            "zh-Hans": "无法访问",
+        ],
+        "diagNetworkUpdatedFormat": [
+            "en": "Updated %@", "de": "Aktualisiert %@", "fr": "Mis \u{e0} jour %@", "nl": "Bijgewerkt %@",
+            "es": "Actualizado %@", "it": "Aggiornato %@", "sv": "Uppdaterad %@", "nb": "Oppdatert %@",
+            "da": "Opdateret %@", "ja": "更新 %@", "pt": "Atualizado %@", "pl": "Zaktualizowano %@",
+            "zh-Hans": "已更新 %@",
+        ],
+        "diagNetworkHealthReachableFormat": [
+            "en": "%d of %d speakers responding on port 1400",
+            "de": "%d von %d Lautsprechern antworten auf Port 1400",
+            "fr": "%d enceintes sur %d r\u{e9}pondent sur le port 1400",
+            "nl": "%d van %d luidsprekers reageren op poort 1400",
+            "es": "%d de %d altavoces responden en el puerto 1400",
+            "it": "%d altoparlanti su %d rispondono sulla porta 1400",
+            "sv": "%d av %d h\u{f6}gtalare svarar p\u{e5} port 1400",
+            "nb": "%d av %d h\u{f8}yttalere svarer p\u{e5} port 1400",
+            "da": "%d af %d h\u{f8}jttalere svarer p\u{e5} port 1400",
+            "ja": "%d/%d 台のスピーカーがポート 1400 で応答",
+            "pt": "%d de %d colunas a responder na porta 1400",
+            "pl": "%d z %d g\u{142}o\u{15b}nik\u{f3}w odpowiada na porcie 1400",
+            "zh-Hans": "%d/%d 台扬声器在端口 1400 上响应",
+        ],
+        "diagNetworkHealth24Format": [
+            "en": "%d speakers on 2.4 GHz",
+            "de": "%d Lautsprecher auf 2,4 GHz",
+            "fr": "%d enceintes en 2,4 GHz",
+            "nl": "%d luidsprekers op 2,4 GHz",
+            "es": "%d altavoces en 2,4 GHz",
+            "it": "%d altoparlanti su 2,4 GHz",
+            "sv": "%d h\u{f6}gtalare p\u{e5} 2,4 GHz",
+            "nb": "%d h\u{f8}yttalere p\u{e5} 2,4 GHz",
+            "da": "%d h\u{f8}jttalere p\u{e5} 2,4 GHz",
+            "ja": "2.4 GHz のスピーカー: %d 台",
+            "pt": "%d colunas em 2,4 GHz",
+            "pl": "%d g\u{142}o\u{15b}nik\u{f3}w na 2,4 GHz",
+            "zh-Hans": "2.4 GHz 上的扬声器：%d 台",
+        ],
+        "diagNetworkHealthSlowFormat": [
+            "en": "%d speakers above 150 ms",
+            "de": "%d Lautsprecher \u{fc}ber 150 ms",
+            "fr": "%d enceintes au-dessus de 150 ms",
+            "nl": "%d luidsprekers boven 150 ms",
+            "es": "%d altavoces por encima de 150 ms",
+            "it": "%d altoparlanti oltre 150 ms",
+            "sv": "%d h\u{f6}gtalare \u{f6}ver 150 ms",
+            "nb": "%d h\u{f8}yttalere over 150 ms",
+            "da": "%d h\u{f8}jttalere over 150 ms",
+            "ja": "150 ms 超のスピーカー: %d 台",
+            "pt": "%d colunas acima de 150 ms",
+            "pl": "%d g\u{142}o\u{15b}nik\u{f3}w powy\u{17c}ej 150 ms",
+            "zh-Hans": "超过 150 ms 的扬声器：%d 台",
+        ],
+        "diagSpeakerColumnIP": [
+            "en": "IP Address", "de": "IP-Adresse", "fr": "Adresse IP", "nl": "IP-adres",
+            "es": "Direcci\u{f3}n IP", "it": "Indirizzo IP", "sv": "IP-adress", "nb": "IP-adresse",
+            "da": "IP-adresse", "ja": "IPアドレス", "pt": "Endere\u{e7}o IP", "pl": "Adres IP",
+            "zh-Hans": "IP 地址",
+        ],
+        "diagSpeakerColumnFirmware": [
+            "en": "Firmware", "de": "Firmware", "fr": "Micrologiciel", "nl": "Firmware",
+            "es": "Firmware", "it": "Firmware", "sv": "Firmware", "nb": "Fastvare",
+            "da": "Firmware", "ja": "ファームウェア", "pt": "Firmware", "pl": "Oprogramowanie",
+            "zh-Hans": "固件",
+        ],
+        "diagSpeakerColumnRole": [
+            "en": "Role", "de": "Rolle", "fr": "R\u{f4}le", "nl": "Rol",
+            "es": "Rol", "it": "Ruolo", "sv": "Roll", "nb": "Rolle",
+            "da": "Rolle", "ja": "役割", "pt": "Fun\u{e7}\u{e3}o", "pl": "Rola",
+            "zh-Hans": "角色",
+        ],
+        "diagSpeakerColumnEvents": [
+            "en": "Events", "de": "Ereignisse", "fr": "\u{c9}v\u{e9}nements", "nl": "Gebeurtenissen",
+            "es": "Eventos", "it": "Eventi", "sv": "H\u{e4}ndelser", "nb": "Hendelser",
+            "da": "H\u{e6}ndelser", "ja": "イベント", "pt": "Eventos", "pl": "Zdarzenia",
+            "zh-Hans": "事件",
+        ],
+        "diagSpeakerRoleMember": [
+            "en": "Member", "de": "Mitglied", "fr": "Membre", "nl": "Lid",
+            "es": "Miembro", "it": "Membro", "sv": "Medlem", "nb": "Medlem",
+            "da": "Medlem", "ja": "メンバー", "pt": "Membro", "pl": "Cz\u{142}onek",
+            "zh-Hans": "成员",
+        ],
+        "diagSpeakersEmpty": [
+            "en": "No speakers discovered yet.",
+            "de": "Noch keine Lautsprecher gefunden.",
+            "fr": "Aucune enceinte d\u{e9}tect\u{e9}e pour l'instant.",
+            "nl": "Nog geen luidsprekers gevonden.",
+            "es": "A\u{fa}n no se han detectado altavoces.",
+            "it": "Nessun altoparlante rilevato finora.",
+            "sv": "Inga h\u{f6}gtalare hittade \u{e4}nnu.",
+            "nb": "Ingen h\u{f8}yttalere funnet enn\u{e5}.",
+            "da": "Ingen h\u{f8}jttalere fundet endnu.",
+            "ja": "スピーカーはまだ見つかっていません。",
+            "pt": "Ainda n\u{e3}o foram encontradas colunas.",
+            "pl": "Nie wykryto jeszcze g\u{142}o\u{15b}nik\u{f3}w.",
+            "zh-Hans": "尚未发现扬声器。",
+        ],
+        "diagSpeakerCallbackLabel": [
+            "en": "Event callback:", "de": "Ereignis-Callback:", "fr": "Rappel d'\u{e9}v\u{e9}nement :",
+            "nl": "Gebeurtenis-callback:", "es": "Callback de eventos:", "it": "Callback eventi:",
+            "sv": "H\u{e4}ndelse-callback:", "nb": "Hendelses-callback:", "da": "H\u{e6}ndelses-callback:",
+            "ja": "イベントコールバック:", "pt": "Callback de eventos:", "pl": "Callback zdarze\u{144}:",
+            "zh-Hans": "事件回调：",
+        ],
+        "diagSpeakersCountFormat": [
+            "en": "%d speakers", "de": "%d Lautsprecher", "fr": "%d enceintes", "nl": "%d luidsprekers",
+            "es": "%d altavoces", "it": "%d altoparlanti", "sv": "%d h\u{f6}gtalare", "nb": "%d h\u{f8}yttalere",
+            "da": "%d h\u{f8}jttalere", "ja": "スピーカー%d台", "pt": "%d colunas", "pl": "%d g\u{142}o\u{15b}nik\u{f3}w",
+            "zh-Hans": "%d 个扬声器",
+        ],
+    ]
+
+    private static let translations37: [String: [String: String]] = [
         "liveEventsPause": [
             "en": "Pause", "de": "Pause", "fr": "Pause", "nl": "Pauze",
             "es": "Pausa", "it": "Pausa", "sv": "Paus", "nb": "Pause",
@@ -11849,7 +13389,7 @@ public enum L10n {
             "en": "Waiting for events from the speakers\u{2026}",
             "de": "Warten auf Ereignisse von den Lautsprechern\u{2026}",
             "fr": "En attente d\u{2019}\u{e9}v\u{e9}nements des enceintes\u{2026}",
-            "nl": "Wachten op gebeurtenissen van de speakers\u{2026}",
+            "nl": "Wachten op gebeurtenissen van de speakers…",
             "es": "Esperando eventos de los altavoces\u{2026}",
             "it": "In attesa di eventi dai diffusori\u{2026}",
             "sv": "V\u{e4}ntar p\u{e5} h\u{e4}ndelser fr\u{e5}n h\u{f6}gtalarna\u{2026}",
@@ -11932,7 +13472,7 @@ public enum L10n {
         "listeningRidges": [
             "en": "Listening Ridges",
             "de": "H\u{00F6}rgrate",
-            "fr": "Cr\u{00EA}tes d\u{2019}\u{00E9}coute",
+            "fr": "Crêtes d’écoute",
             "nl": "Luisterruggen",
             "es": "Crestas de escucha",
             "it": "Creste d\u{2019}ascolto",
@@ -12073,7 +13613,7 @@ public enum L10n {
             "en": "Search your Plex library\u{2026}",
             "de": "Plex-Bibliothek durchsuchen\u{2026}",
             "fr": "Rechercher dans votre biblioth\u{00E8}que Plex\u{2026}",
-            "nl": "Zoek in je Plex-bibliotheek\u{2026}",
+            "nl": "Zoek in je Plex-bibliotheek…",
             "es": "Busca en tu biblioteca Plex\u{2026}",
             "it": "Cerca nella tua libreria Plex\u{2026}",
             "sv": "S\u{00F6}k i ditt Plex-bibliotek\u{2026}",
@@ -12084,6 +13624,9 @@ public enum L10n {
             "pl": "Szukaj w bibliotece Plex\u{2026}",
             "zh-Hans": "\u{641C}\u{7D22}\u{60A8}\u{7684} Plex \u{5E93}\u{2026}",
         ],
+    ]
+
+    private static let translations38: [String: [String: String]] = [
         "nothingHere": [
             "en": "Nothing here.",
             "de": "Hier ist nichts.",
@@ -12143,9 +13686,9 @@ public enum L10n {
         ],
         "connectsToPlexDirectlyDescription": [
             "en": "Choragus connects to your Plex server directly \u{2014} no Sonos relay. You'll only need to do this once.",
-            "de": "Choragus verbindet sich direkt mit Ihrem Plex-Server \u{2014} ohne Sonos-Relay. Sie m\u{00FC}ssen dies nur einmal tun.",
+            "de": "Choragus verbindet sich direkt mit deinem Plex-Server — ohne Sonos-Relay. Du musst dies nur einmal tun.",
             "fr": "Choragus se connecte directement \u{00E0} votre serveur Plex \u{2014} sans relais Sonos. Vous ne devez le faire qu\u{2019}une fois.",
-            "nl": "Choragus verbindt direct met je Plex-server \u{2014} geen Sonos-relay. Je hoeft dit maar \u{00E9}\u{00E9}n keer te doen.",
+            "nl": "Choragus verbindt direct met je Plex-server — geen Sonos-relay. Je hoeft dit maar één keer te doen.",
             "es": "Choragus se conecta directamente con tu servidor Plex \u{2014} sin relay de Sonos. Solo tienes que hacerlo una vez.",
             "it": "Choragus si connette direttamente al server Plex \u{2014} senza relay Sonos. Devi farlo solo una volta.",
             "sv": "Choragus ansluter direkt till din Plex-server \u{2014} inget Sonos-rel\u{00E4}. Du beh\u{00F6}ver bara g\u{00F6}ra detta en g\u{00E5}ng.",
@@ -12158,9 +13701,9 @@ public enum L10n {
         ],
         "clickBelowToOpenPlex": [
             "en": "Click below to open Plex in your browser. Sign in if needed, then tap Allow. The code is embedded in the link \u{2014} there's nothing to type.",
-            "de": "Klicken Sie unten, um Plex in Ihrem Browser zu \u{00F6}ffnen. Melden Sie sich bei Bedarf an und tippen Sie auf Zulassen. Der Code ist im Link enthalten \u{2014} es muss nichts eingegeben werden.",
+            "de": "Klicke unten, um Plex in deinem Browser zu öffnen. Melde dich bei Bedarf an und tippe auf Zulassen. Der Code ist im Link enthalten — es muss nichts eingegeben werden.",
             "fr": "Cliquez ci-dessous pour ouvrir Plex dans votre navigateur. Connectez-vous si n\u{00E9}cessaire, puis touchez Autoriser. Le code est int\u{00E9}gr\u{00E9} au lien \u{2014} rien \u{00E0} saisir.",
-            "nl": "Klik hieronder om Plex in je browser te openen. Log indien nodig in en tik op Toestaan. De code zit in de link \u{2014} je hoeft niets te typen.",
+            "nl": "Klik hieronder om Plex in je browser te openen. Log indien nodig in en tik op Toestaan. De code zit in de link — je hoeft niets te typen.",
             "es": "Haz clic abajo para abrir Plex en tu navegador. Inicia sesi\u{00F3}n si es necesario y toca Permitir. El c\u{00F3}digo est\u{00E1} incluido en el enlace \u{2014} no tienes que escribir nada.",
             "it": "Fai clic sotto per aprire Plex nel browser. Accedi se necessario, poi tocca Consenti. Il codice \u{00E8} incluso nel link \u{2014} non c\u{2019}\u{00E8} nulla da digitare.",
             "sv": "Klicka nedan f\u{00F6}r att \u{00F6}ppna Plex i webbl\u{00E4}saren. Logga in om det beh\u{00F6}vs och tryck p\u{00E5} Till\u{00E5}t. Koden \u{00E4}r inb\u{00E4}ddad i l\u{00E4}nken \u{2014} inget att skriva.",
@@ -12173,9 +13716,9 @@ public enum L10n {
         ],
         "waitingForPlexTvAuthorization": [
             "en": "Waiting for you to authorize on plex.tv\u{2026}",
-            "de": "Warten auf Ihre Autorisierung auf plex.tv\u{2026}",
+            "de": "Warten auf deine Autorisierung auf plex.tv…",
             "fr": "En attente de votre autorisation sur plex.tv\u{2026}",
-            "nl": "Wachten op je autorisatie op plex.tv\u{2026}",
+            "nl": "Wachten op je autorisatie op plex.tv…",
             "es": "Esperando a que autorices en plex.tv\u{2026}",
             "it": "In attesa della tua autorizzazione su plex.tv\u{2026}",
             "sv": "V\u{00E4}ntar p\u{00E5} att du auktoriserar p\u{00E5} plex.tv\u{2026}",
@@ -12190,7 +13733,7 @@ public enum L10n {
             "en": "Asking plex.tv for a sign-in code\u{2026}",
             "de": "Anmelde-Code von plex.tv wird angefordert\u{2026}",
             "fr": "Demande d\u{2019}un code de connexion \u{00E0} plex.tv\u{2026}",
-            "nl": "Inlogcode aanvragen bij plex.tv\u{2026}",
+            "nl": "Inlogcode aanvragen bij plex.tv…",
             "es": "Solicitando un c\u{00F3}digo de inicio a plex.tv\u{2026}",
             "it": "Richiesta del codice di accesso a plex.tv\u{2026}",
             "sv": "Beg\u{00E4}r en inloggningskod fr\u{00E5}n plex.tv\u{2026}",
@@ -12265,7 +13808,7 @@ public enum L10n {
             "en": "Each ridge = one top track. Height = plays per day. Newest finds at top, peaks bloom on binge days.",
             "de": "Jeder Grat = ein Top-Titel. H\u{00F6}he = Wiedergaben pro Tag. Neueste Entdeckungen oben, Spitzen entstehen an Binge-Tagen.",
             "fr": "Chaque cr\u{00EA}te = un titre populaire. Hauteur = lectures par jour. Les nouveaut\u{00E9}s en haut, les pics fleurissent les jours d\u{2019}\u{00E9}coute intense.",
-            "nl": "Elke rug = \u{00E9}\u{00E9}n topnummer. Hoogte = afspelingen per dag. Nieuwste vondsten bovenaan, pieken bloeien op binge-dagen.",
+            "nl": "Elke rug = één topnummer. Hoogte = afspelingen per dag. Nieuwste vondsten bovenaan, pieken bloeien op binge-dagen.",
             "es": "Cada cresta = una pista destacada. Altura = reproducciones por d\u{00ED}a. Los hallazgos m\u{00E1}s recientes arriba, los picos florecen en d\u{00ED}as de maratones.",
             "it": "Ogni cresta = un brano in classifica. Altezza = riproduzioni al giorno. Le scoperte pi\u{00F9} recenti in alto, i picchi sbocciano nei giorni di binge.",
             "sv": "Varje r\u{00E4}nd = en topp-l\u{00E5}t. H\u{00F6}jd = uppspelningar per dag. Nyaste fynd \u{00F6}verst, toppar blommar p\u{00E5} bingedagar.",
@@ -12279,8 +13822,8 @@ public enum L10n {
         "buildingRidges": [
             "en": "Building ridges\u{2026}",
             "de": "Grate werden gebaut\u{2026}",
-            "fr": "Construction des cr\u{00EA}tes\u{2026}",
-            "nl": "Ruggen worden gebouwd\u{2026}",
+            "fr": "Construction des crêtes…",
+            "nl": "Ruggen worden gebouwd…",
             "es": "Construyendo crestas\u{2026}",
             "it": "Creazione delle creste\u{2026}",
             "sv": "Bygger r\u{00E4}nder\u{2026}",
@@ -12308,9 +13851,9 @@ public enum L10n {
         ],
         "discoveryComfortDescription": [
             "en": "Each star = one week. X = % from top-3 artists. Y = % from artists you hadn't heard in 30 days. Trail = your taste path through time.",
-            "de": "Jeder Stern = eine Woche. X = % von den Top-3-K\u{00FC}nstlern. Y = % von K\u{00FC}nstlern, die Sie 30 Tage lang nicht geh\u{00F6}rt haben. Spur = Ihr Geschmackspfad durch die Zeit.",
+            "de": "Jeder Stern = eine Woche. X = % von den Top-3-Künstlern. Y = % von Künstlern, die du 30 Tage lang nicht gehört hast. Spur = dein Geschmackspfad durch die Zeit.",
             "fr": "Chaque \u{00E9}toile = une semaine. X = % des 3 artistes les plus \u{00E9}cout\u{00E9}s. Y = % d\u{2019}artistes non entendus depuis 30 jours. Sentier = votre parcours de go\u{00FB}ts dans le temps.",
-            "nl": "Elke ster = \u{00E9}\u{00E9}n week. X = % van de top-3 artiesten. Y = % van artiesten die je 30 dagen niet had gehoord. Spoor = je smaakpad door de tijd.",
+            "nl": "Elke ster = één week. X = % van de top-3 artiesten. Y = % van artiesten die je 30 dagen niet had gehoord. Spoor = je smaakpad door de tijd.",
             "es": "Cada estrella = una semana. X = % de los 3 artistas top. Y = % de artistas que no escuchabas hac\u{00ED}a 30 d\u{00ED}as. Estela = tu camino de gustos en el tiempo.",
             "it": "Ogni stella = una settimana. X = % dai primi 3 artisti. Y = % da artisti non ascoltati da 30 giorni. Scia = il tuo percorso di gusti nel tempo.",
             "sv": "Varje stj\u{00E4}rna = en vecka. X = % fr\u{00E5}n topp-3-artister. Y = % fr\u{00E5}n artister du inte h\u{00F6}rt p\u{00E5} 30 dagar. Sp\u{00E5}r = din smakv\u{00E4}g genom tiden.",
@@ -12325,7 +13868,7 @@ public enum L10n {
             "en": "Need at least a few weeks of history\u{2026}",
             "de": "Mindestens einige Wochen Verlauf erforderlich\u{2026}",
             "fr": "Au moins quelques semaines d\u{2019}historique sont n\u{00E9}cessaires\u{2026}",
-            "nl": "Minimaal een paar weken geschiedenis nodig\u{2026}",
+            "nl": "Minimaal een paar weken geschiedenis nodig…",
             "es": "Se necesitan al menos unas semanas de historial\u{2026}",
             "it": "Servono almeno alcune settimane di cronologia\u{2026}",
             "sv": "Beh\u{00F6}ver minst n\u{00E5}gra veckors historik\u{2026}",
@@ -12338,7 +13881,7 @@ public enum L10n {
         ],
         "axisComfort": [
             "en": "comfort \u{2192}", "de": "Komfort \u{2192}",
-            "fr": "confort \u{2192}", "nl": "comfort \u{2192}",
+            "fr": "confort \u{2192}", "nl": "comfort →",
             "es": "comodidad \u{2192}", "it": "comfort \u{2192}",
             "sv": "komfort \u{2192}", "nb": "komfort \u{2192}", "da": "komfort \u{2192}",
             "ja": "\u{5FEB}\u{9069} \u{2192}",
@@ -12347,7 +13890,7 @@ public enum L10n {
         ],
         "axisDiscovery": [
             "en": "discovery \u{2191}", "de": "Entdeckung \u{2191}",
-            "fr": "d\u{00E9}couverte \u{2191}", "nl": "ontdekking \u{2191}",
+            "fr": "d\u{00E9}couverte \u{2191}", "nl": "ontdekking ↑",
             "es": "descubrimiento \u{2191}", "it": "scoperta \u{2191}",
             "sv": "uppt\u{00E4}ckt \u{2191}", "nb": "oppdagelse \u{2191}", "da": "opdagelse \u{2191}",
             "ja": "\u{767A}\u{898B} \u{2191}",
@@ -12398,9 +13941,9 @@ public enum L10n {
         ],
         "albumConstellationsDescription": [
             "en": "Each ring = one album. Stars = its tracks. Brightness = plays. Stars light up in the order you first played them.",
-            "de": "Jeder Ring = ein Album. Sterne = seine Titel. Helligkeit = Wiedergaben. Sterne leuchten in der Reihenfolge auf, in der Sie sie zuerst gespielt haben.",
+            "de": "Jeder Ring = ein Album. Sterne = seine Titel. Helligkeit = Wiedergaben. Sterne leuchten in der Reihenfolge auf, in der du sie zuerst gespielt hast.",
             "fr": "Chaque anneau = un album. Les \u{00E9}toiles = ses pistes. Luminosit\u{00E9} = lectures. Les \u{00E9}toiles s\u{2019}allument dans l\u{2019}ordre o\u{00F9} vous les avez \u{00E9}cout\u{00E9}es.",
-            "nl": "Elke ring = \u{00E9}\u{00E9}n album. Sterren = de nummers. Helderheid = afspelingen. Sterren lichten op in de volgorde waarin je ze eerst hebt afgespeeld.",
+            "nl": "Elke ring = één album. Sterren = de nummers. Helderheid = afspelingen. Sterren lichten op in de volgorde waarin je ze eerst hebt afgespeeld.",
             "es": "Cada anillo = un \u{00E1}lbum. Estrellas = sus pistas. Brillo = reproducciones. Las estrellas se iluminan en el orden en que las reproduciste primero.",
             "it": "Ogni anello = un album. Stelle = i suoi brani. Luminosit\u{00E0} = riproduzioni. Le stelle si accendono nell\u{2019}ordine in cui le hai ascoltate per primo.",
             "sv": "Varje ring = ett album. Stj\u{00E4}rnor = dess l\u{00E5}tar. Ljusstyrka = uppspelningar. Stj\u{00E4}rnor t\u{00E4}nds i den ordning du f\u{00F6}rst spelade dem.",
@@ -12411,11 +13954,14 @@ public enum L10n {
             "pl": "Ka\u{017C}dy pier\u{015B}cie\u{0144} = jeden album. Gwiazdy = jego utwory. Jasno\u{015B}\u{0107} = odtworzenia. Gwiazdy zapalaj\u{0105} si\u{0119} w kolejno\u{015B}ci pierwszego odtworzenia.",
             "zh-Hans": "\u{6BCF}\u{4E2A}\u{73AF} = \u{4E00}\u{5F20}\u{4E13}\u{8F91}\u{3002}\u{661F}\u{661F} = \u{4E13}\u{8F91}\u{4E2D}\u{7684}\u{66F2}\u{76EE}\u{3002}\u{4EAE}\u{5EA6} = \u{64AD}\u{653E}\u{6B21}\u{6570}\u{3002}\u{661F}\u{661F}\u{6309}\u{60A8}\u{9996}\u{6B21}\u{64AD}\u{653E}\u{7684}\u{987A}\u{5E8F}\u{4F9D}\u{6B21}\u{70B9}\u{4EAE}\u{3002}",
         ],
+    ]
+
+    private static let translations39: [String: [String: String]] = [
         "buildingConstellations": [
             "en": "Building constellations\u{2026}",
             "de": "Konstellationen werden gebaut\u{2026}",
             "fr": "Construction des constellations\u{2026}",
-            "nl": "Constellaties worden gebouwd\u{2026}",
+            "nl": "Constellaties worden gebouwd…",
             "es": "Construyendo constelaciones\u{2026}",
             "it": "Creazione delle costellazioni\u{2026}",
             "sv": "Bygger konstellationer\u{2026}",
@@ -12428,7 +13974,7 @@ public enum L10n {
         ],
         "listeningFingerprintDescription": [
             "en": "Your signature: peak hour (hand), services (inner ring), top artists (outer wedges), weekend balance (background), starred days (rim glints).",
-            "de": "Ihre Signatur: Spitzenstunde (Zeiger), Dienste (innerer Ring), Top-K\u{00FC}nstler (\u{00E4}u\u{00DF}ere Keile), Wochenend-Balance (Hintergrund), markierte Tage (Rand-Funkeln).",
+            "de": "Deine Signatur: Spitzenstunde (Zeiger), Dienste (innerer Ring), Top-Künstler (äußere Keile), Wochenend-Balance (Hintergrund), markierte Tage (Rand-Funkeln).",
             "fr": "Votre signature : heure de pointe (aiguille), services (anneau int\u{00E9}rieur), artistes principaux (segments ext\u{00E9}rieurs), \u{00E9}quilibre week-end (arri\u{00E8}re-plan), jours marqu\u{00E9}s (lueurs du bord).",
             "nl": "Jouw signatuur: piektijd (wijzer), diensten (binnenste ring), topartiesten (buitenste segmenten), weekendbalans (achtergrond), gemarkeerde dagen (randglinsters).",
             "es": "Tu firma: hora pico (manecilla), servicios (anillo interior), artistas top (cu\u{00F1}as exteriores), balance del fin de semana (fondo), d\u{00ED}as destacados (destellos del borde).",
@@ -12445,7 +13991,7 @@ public enum L10n {
             "en": "Building fingerprint\u{2026}",
             "de": "Fingerabdruck wird gebaut\u{2026}",
             "fr": "Construction de l\u{2019}empreinte\u{2026}",
-            "nl": "Vingerafdruk wordt gebouwd\u{2026}",
+            "nl": "Vingerafdruk wordt gebouwd…",
             "es": "Construyendo huella\u{2026}",
             "it": "Creazione dell\u{2019}impronta\u{2026}",
             "sv": "Bygger fingeravtryck\u{2026}",
@@ -12505,7 +14051,7 @@ public enum L10n {
             "en": "Top artists \u{2194} rooms. Arcs thicken as co-plays accumulate.",
             "de": "Top-K\u{00FC}nstler \u{2194} R\u{00E4}ume. B\u{00F6}gen werden dicker, wenn sich gemeinsame Wiedergaben ansammeln.",
             "fr": "Artistes principaux \u{2194} pi\u{00E8}ces. Les arcs s\u{2019}\u{00E9}paississent \u{00E0} mesure que les co-lectures s\u{2019}accumulent.",
-            "nl": "Topartiesten \u{2194} kamers. Bogen worden dikker naarmate co-afspelingen toenemen.",
+            "nl": "Topartiesten ↔ kamers. Bogen worden dikker naarmate co-afspelingen toenemen.",
             "es": "Artistas top \u{2194} habitaciones. Los arcos se engrosan a medida que se acumulan las reproducciones conjuntas.",
             "it": "Artisti top \u{2194} stanze. Gli archi si ispessiscono con l\u{2019}accumularsi delle co-riproduzioni.",
             "sv": "Topp-artister \u{2194} rum. B\u{00E5}gar f\u{00F6}rtjockas n\u{00E4}r samuppspelningar ackumuleras.",
@@ -12535,7 +14081,7 @@ public enum L10n {
             "en": "Waiting for data\u{2026}",
             "de": "Warten auf Daten\u{2026}",
             "fr": "En attente de donn\u{00E9}es\u{2026}",
-            "nl": "Wachten op gegevens\u{2026}",
+            "nl": "Wachten op gegevens…",
             "es": "Esperando datos\u{2026}",
             "it": "In attesa dei dati\u{2026}",
             "sv": "V\u{00E4}ntar p\u{00E5} data\u{2026}",
@@ -12550,7 +14096,7 @@ public enum L10n {
             "en": "Each cell = one day. Brighter = more listening time.",
             "de": "Jede Zelle = ein Tag. Heller = mehr H\u{00F6}rzeit.",
             "fr": "Chaque cellule = un jour. Plus lumineux = plus de temps d\u{2019}\u{00E9}coute.",
-            "nl": "Elke cel = \u{00E9}\u{00E9}n dag. Helderder = meer luistertijd.",
+            "nl": "Elke cel = één dag. Helderder = meer luistertijd.",
             "es": "Cada celda = un d\u{00ED}a. M\u{00E1}s brillante = m\u{00E1}s tiempo de escucha.",
             "it": "Ogni cella = un giorno. Pi\u{00F9} luminoso = pi\u{00F9} tempo di ascolto.",
             "sv": "Varje cell = en dag. Ljusare = mer lyssningstid.",
@@ -12565,7 +14111,7 @@ public enum L10n {
             "en": "Time spirals outward. Each dot = one play, coloured by service.",
             "de": "Die Zeit windet sich nach au\u{00DF}en. Jeder Punkt = eine Wiedergabe, nach Dienst eingef\u{00E4}rbt.",
             "fr": "Le temps spirale vers l\u{2019}ext\u{00E9}rieur. Chaque point = une lecture, color\u{00E9}e par service.",
-            "nl": "De tijd spiraalt naar buiten. Elke stip = \u{00E9}\u{00E9}n weergave, gekleurd per dienst.",
+            "nl": "De tijd spiraalt naar buiten. Elke stip = één weergave, gekleurd per dienst.",
             "es": "El tiempo se enrolla hacia fuera. Cada punto = una reproducci\u{00F3}n, coloreado por servicio.",
             "it": "Il tempo si avvolge a spirale verso l\u{2019}esterno. Ogni punto = una riproduzione, colorata per servizio.",
             "sv": "Tiden spiralar ut\u{00E5}t. Varje prick = en uppspelning, f\u{00E4}rgad per tj\u{00E4}nst.",
@@ -12602,7 +14148,7 @@ public enum L10n {
         ],
         "slimesDescription": [
             "en": "Slimes replay your actual listening order through top artists. Colour = service. Dense edges = artist pairs you chain.",
-            "de": "Schleime spielen Ihre tats\u{00E4}chliche H\u{00F6}rreihenfolge durch Top-K\u{00FC}nstler ab. Farbe = Dienst. Dichte Kanten = K\u{00FC}nstlerpaare, die Sie verkn\u{00FC}pfen.",
+            "de": "Schleime spielen deine tatsächliche Hörreihenfolge durch Top-Künstler ab. Farbe = Dienst. Dichte Kanten = Künstlerpaare, die du verknüpfst.",
             "fr": "Les \u{00AB}\u{00A0}slimes\u{00A0}\u{00BB} rejouent votre ordre d\u{2019}\u{00E9}coute r\u{00E9}el \u{00E0} travers les artistes principaux. Couleur = service. Bords denses = paires d\u{2019}artistes que vous encha\u{00EE}nez.",
             "nl": "Slijmen spelen je werkelijke luistervolgorde door topartiesten af. Kleur = dienst. Dichte randen = artiestenparen die je aaneenrijgt.",
             "es": "Los limos reproducen tu orden real de escucha a trav\u{00E9}s de los artistas top. Color = servicio. Aristas densas = pares de artistas que encadenas.",
@@ -12619,7 +14165,7 @@ public enum L10n {
             "en": "Poincar\u{00E9} disk: services (inner) \u{2192} top artists (outer rim).",
             "de": "Poincar\u{00E9}-Scheibe: Dienste (innen) \u{2192} Top-K\u{00FC}nstler (\u{00E4}u\u{00DF}erer Rand).",
             "fr": "Disque de Poincar\u{00E9} : services (int\u{00E9}rieur) \u{2192} artistes principaux (bord ext\u{00E9}rieur).",
-            "nl": "Poincar\u{00E9}-schijf: diensten (binnen) \u{2192} topartiesten (buitenste rand).",
+            "nl": "Poincaré-schijf: diensten (binnen) → topartiesten (buitenste rand).",
             "es": "Disco de Poincar\u{00E9}: servicios (interior) \u{2192} artistas top (borde exterior).",
             "it": "Disco di Poincar\u{00E9}: servizi (interno) \u{2192} artisti top (bordo esterno).",
             "sv": "Poincar\u{00E9}-skiva: tj\u{00E4}nster (inre) \u{2192} topp-artister (yttre kant).",
@@ -12634,7 +14180,7 @@ public enum L10n {
             "en": "Additively-weighted Voronoi cells. Area \u{221D} play count.",
             "de": "Additiv gewichtete Voronoi-Zellen. Fl\u{00E4}che \u{221D} Wiedergabeanzahl.",
             "fr": "Cellules de Voronoi pond\u{00E9}r\u{00E9}es additivement. Aire \u{221D} nombre de lectures.",
-            "nl": "Additief gewogen Voronoi-cellen. Oppervlakte \u{221D} afspeelaantal.",
+            "nl": "Additief gewogen Voronoi-cellen. Oppervlakte ∝ afspeelaantal.",
             "es": "Celdas de Voronoi ponderadas aditivamente. \u{00C1}rea \u{221D} n\u{00FA}mero de reproducciones.",
             "it": "Celle di Voronoi pesate additivamente. Area \u{221D} numero di riproduzioni.",
             "sv": "Additivt viktade Voronoi-celler. Yta \u{221D} antalet uppspelningar.",
@@ -12664,7 +14210,7 @@ public enum L10n {
             "en": "Gray-Scott reaction-diffusion seeded by hour × weekday listening density.",
             "de": "Gray-Scott-Reaktions-Diffusion, ges\u{00E4}t durch Stunde × Wochentag H\u{00F6}rdichte.",
             "fr": "Diffusion-r\u{00E9}action de Gray-Scott initialis\u{00E9}e par la densit\u{00E9} d\u{2019}\u{00E9}coute heure × jour de la semaine.",
-            "nl": "Gray-Scott reactie-diffusie ge\u{00EB}nitieerd door uur × weekdag luisterdichtheid.",
+            "nl": "Gray-Scott reactie-diffusie geënitieerd door uur × weekdag luisterdichtheid.",
             "es": "Reacci\u{00F3}n-difusi\u{00F3}n Gray-Scott sembrada por densidad de escucha hora × d\u{00ED}a de la semana.",
             "it": "Reazione-diffusione di Gray-Scott seminata da densit\u{00E0} di ascolto ora × giorno della settimana.",
             "sv": "Gray-Scott reaktion-diffusion s\u{00E5}dd av timme × veckodag-lyssningst\u{00E4}thet.",
@@ -12679,7 +14225,7 @@ public enum L10n {
             "en": "Seeding\u{2026}",
             "de": "Saat\u{2026}",
             "fr": "Ensemencement\u{2026}",
-            "nl": "Zaaien\u{2026}",
+            "nl": "Zaaien…",
             "es": "Sembrando\u{2026}",
             "it": "Seminatura\u{2026}",
             "sv": "S\u{00E5}r\u{2026}",
@@ -12694,7 +14240,7 @@ public enum L10n {
             "en": "Particles drift along rotated gradient of hour × weekday listening density.",
             "de": "Partikel driften entlang des rotierten Gradienten der Stunde × Wochentag H\u{00F6}rdichte.",
             "fr": "Les particules d\u{00E9}rivent le long du gradient pivot\u{00E9} de la densit\u{00E9} d\u{2019}\u{00E9}coute heure × jour de la semaine.",
-            "nl": "Deeltjes drijven langs de gedraaide gradi\u{00EB}nt van uur × weekdag luisterdichtheid.",
+            "nl": "Deeltjes drijven langs de gedraaide gradiënt van uur × weekdag luisterdichtheid.",
             "es": "Las part\u{00ED}culas derivan a lo largo del gradiente rotado de la densidad de escucha hora × d\u{00ED}a de la semana.",
             "it": "Le particelle si muovono lungo il gradiente ruotato della densit\u{00E0} di ascolto ora × giorno della settimana.",
             "sv": "Partiklar driver l\u{00E4}ngs roterad gradient av timme × veckodag-lyssningst\u{00E4}thet.",
@@ -12708,8 +14254,8 @@ public enum L10n {
         "mapperDescription": [
             "en": "Mapper: hour-bin cover \u{2192} artist-overlap graph. Edges = shared artists.",
             "de": "Mapper: Stunden-Bin-Cover \u{2192} K\u{00FC}nstler-\u{00DC}berlappungsgraph. Kanten = gemeinsame K\u{00FC}nstler.",
-            "fr": "Mapper : cover heure-bin \u{2192} graphe de chevauchement d\u{2019}artistes. Ar\u{00EA}tes = artistes partag\u{00E9}s.",
-            "nl": "Mapper: uur-bin-overdekking \u{2192} artiest-overlapgrafiek. Randen = gedeelde artiesten.",
+            "fr": "Mapper : cover heure-bin → graphe de chevauchement d’artistes. Arêtes = artistes partagés.",
+            "nl": "Mapper: uur-bin-overdekking → artiest-overlapgrafiek. Randen = gedeelde artiesten.",
             "es": "Mapper: cobertura por bins de hora \u{2192} grafo de solapamiento de artistas. Aristas = artistas compartidos.",
             "it": "Mapper: copertura a bin orari \u{2192} grafo di sovrapposizione artisti. Bordi = artisti condivisi.",
             "sv": "Mapper: timme-bin-t\u{00E4}ckning \u{2192} artist\u{00F6}verlappsgraf. Kanter = delade artister.",
@@ -12733,7 +14279,7 @@ public enum L10n {
             "en": "Loading Calm Radio\u{2026}",
             "de": "Calm Radio wird geladen\u{2026}",
             "fr": "Chargement de Calm Radio\u{2026}",
-            "nl": "Calm Radio wordt geladen\u{2026}",
+            "nl": "Calm Radio wordt geladen…",
             "es": "Cargando Calm Radio\u{2026}",
             "it": "Caricamento di Calm Radio\u{2026}",
             "sv": "Laddar Calm Radio\u{2026}",
@@ -12748,7 +14294,7 @@ public enum L10n {
             "en": "Loading Plex\u{2026}",
             "de": "Plex wird geladen\u{2026}",
             "fr": "Chargement de Plex\u{2026}",
-            "nl": "Plex wordt geladen\u{2026}",
+            "nl": "Plex wordt geladen…",
             "es": "Cargando Plex\u{2026}",
             "it": "Caricamento di Plex\u{2026}",
             "sv": "Laddar Plex\u{2026}",
@@ -12768,6 +14314,9 @@ public enum L10n {
             "pt": "Exportar", "pl": "Eksportuj",
             "zh-Hans": "\u{5BFC}\u{51FA}",
         ],
+    ]
+
+    private static let translations40: [String: [String: String]] = [
         "deleteShownFormat": [
             "en": "Delete %d Shown",
             "de": "%d Angezeigte l\u{00F6}schen",
@@ -12883,7 +14432,7 @@ public enum L10n {
             "en": "Choragus was previously named SonosController. The bundle identifier moved to com.choragus.app and the Keychain service follows; existing Last.fm and music-service authentications need to be re-linked once after upgrading. The codebase, maintainer, and source repository are otherwise unchanged.",
             "de": "Choragus hie\u{00DF} fr\u{00FC}her SonosController. Die Bundle-ID wurde auf com.choragus.app umgestellt und der Schl\u{00FC}sselbund folgt; bestehende Last.fm- und Musikdienst-Anmeldungen m\u{00FC}ssen nach dem Update einmal neu verkn\u{00FC}pft werden. Codebasis, Betreuer und Quell-Repository bleiben unver\u{00E4}ndert.",
             "fr": "Choragus s\u{2019}appelait auparavant SonosController. L\u{2019}identifiant de bundle est devenu com.choragus.app et le trousseau suit\u{00A0}; les authentifications Last.fm et services de musique existantes doivent \u{00EA}tre relink\u{00E9}es une fois apr\u{00E8}s la mise \u{00E0} jour. La base de code, le mainteneur et le r\u{00E9}f\u{00E9}rentiel source sont par ailleurs inchang\u{00E9}s.",
-            "nl": "Choragus heette voorheen SonosController. De bundle-id is verplaatst naar com.choragus.app en de sleutelhanger volgt; bestaande Last.fm- en muziekservice-authenticaties moeten na de upgrade \u{00E9}\u{00E9}n keer opnieuw worden gekoppeld. De codebasis, beheerder en broncode-repository zijn verder ongewijzigd.",
+            "nl": "Choragus heette voorheen SonosController. De bundle-id is verplaatst naar com.choragus.app en de sleutelhanger volgt; bestaande Last.fm- en muziekservice-authenticaties moeten na de upgrade één keer opnieuw worden gekoppeld. De codebasis, beheerder en broncode-repository zijn verder ongewijzigd.",
             "es": "Choragus se llamaba anteriormente SonosController. El identificador del paquete se ha movido a com.choragus.app y el llavero sigue ese cambio; las autenticaciones existentes de Last.fm y servicios de m\u{00FA}sica deben volver a vincularse una vez tras actualizar. El c\u{00F3}digo, el mantenedor y el repositorio de origen no han cambiado.",
             "it": "Choragus si chiamava in precedenza SonosController. L\u{2019}identificatore del bundle \u{00E8} passato a com.choragus.app e il portachiavi segue; le autenticazioni esistenti di Last.fm e dei servizi musicali devono essere ricollegate una volta dopo l\u{2019}aggiornamento. La codebase, il manutentore e il repository sorgente sono per il resto invariati.",
             "sv": "Choragus hette tidigare SonosController. Paket-ID:t har flyttats till com.choragus.app och nyckelringen f\u{00F6}ljer; befintliga Last.fm- och musiktj\u{00E4}nstautentiseringar m\u{00E5}ste l\u{00E4}nkas om en g\u{00E5}ng efter uppgradering. Kodbasen, underh\u{00E5}llaren och k\u{00E4}llkodsf\u{00F6}rr\u{00E5}det \u{00E4}r i \u{00F6}vrigt of\u{00F6}r\u{00E4}ndrade.",
@@ -12922,7 +14471,7 @@ public enum L10n {
             "en": "Below the speaker volumes a tabbed panel offers Lyrics, About, and History for the current track. The panel is collapsible — click the chevron on the divider to hide or show it.",
             "de": "Unter den Lautst\u{00E4}rken bietet ein Tab-Panel Liedtext, Info und Verlauf des aktuellen Titels. Das Panel ist einklappbar \u{2014} klicke auf den Pfeil im Trennstrich, um es ein- oder auszublenden.",
             "fr": "Sous les volumes d\u{2019}enceintes, un panneau \u{00E0} onglets propose Paroles, \u{00C0} propos et Historique du morceau en cours. Le panneau est repliable \u{2014} cliquez sur le chevron du s\u{00E9}parateur pour le masquer ou l\u{2019}afficher.",
-            "nl": "Onder de speakervolumes biedt een tabbladpaneel Songtekst, Info en Geschiedenis voor het huidige nummer. Het paneel is inklapbaar \u{2014} klik op de chevron op de scheidingslijn om het te verbergen of tonen.",
+            "nl": "Onder de speakervolumes biedt een tabbladpaneel Songtekst, Info en Geschiedenis voor het huidige nummer. Het paneel is inklapbaar — klik op de chevron op de scheidingslijn om het te verbergen of tonen.",
             "es": "Debajo de los vol\u{00FA}menes de los altavoces, un panel con pesta\u{00F1}as ofrece Letra, Informaci\u{00F3}n e Historial de la pista actual. El panel se puede contraer \u{2014} haz clic en el chevron del divisor para ocultarlo o mostrarlo.",
             "it": "Sotto i volumi dei diffusori, un pannello a schede offre Testo, Info e Cronologia del brano in corso. Il pannello \u{00E8} comprimibile \u{2014} fai clic sul chevron del divisore per nasconderlo o mostrarlo.",
             "sv": "Under h\u{00F6}gtalarvolymerna erbjuder en flikpanel S\u{00E5}ngtext, Info och Historik f\u{00F6}r aktuellt sp\u{00E5}r. Panelen kan f\u{00E4}llas in \u{2014} klicka p\u{00E5} chevronen p\u{00E5} avgr\u{00E4}nsaren f\u{00F6}r att d\u{00F6}lja eller visa den.",
@@ -12991,7 +14540,7 @@ public enum L10n {
             "en": "Use the −10 / −5 / −1 / +1 / +5 / +10 buttons to nudge synced-lyric timing per track. The offset persists across plays of the same track.",
             "de": "Mit den Tasten \u{2212}10 / \u{2212}5 / \u{2212}1 / +1 / +5 / +10 verschiebst du das Timing der synchronisierten Liedtexte pro Titel. Der Versatz bleibt zwischen Wiedergaben desselben Titels erhalten.",
             "fr": "Utilisez les boutons \u{2212}10 / \u{2212}5 / \u{2212}1 / +1 / +5 / +10 pour ajuster le timing des paroles synchronis\u{00E9}es par morceau. Le d\u{00E9}calage est conserv\u{00E9} entre les lectures du m\u{00EA}me titre.",
-            "nl": "Gebruik de knoppen \u{2212}10 / \u{2212}5 / \u{2212}1 / +1 / +5 / +10 om de timing van gesynchroniseerde songteksten per nummer bij te stellen. De offset blijft bewaard tussen weergaven van hetzelfde nummer.",
+            "nl": "Gebruik de knoppen −10 / −5 / −1 / +1 / +5 / +10 om de timing van gesynchroniseerde songteksten per nummer bij te stellen. De offset blijft bewaard tussen weergaven van hetzelfde nummer.",
             "es": "Usa los botones \u{2212}10 / \u{2212}5 / \u{2212}1 / +1 / +5 / +10 para ajustar la sincronizaci\u{00F3}n de la letra por pista. El desfase se conserva entre reproducciones de la misma pista.",
             "it": "Usa i pulsanti \u{2212}10 / \u{2212}5 / \u{2212}1 / +1 / +5 / +10 per regolare il timing del testo sincronizzato per traccia. L\u{2019}offset si conserva tra le riproduzioni dello stesso brano.",
             "sv": "Anv\u{00E4}nd knapparna \u{2212}10 / \u{2212}5 / \u{2212}1 / +1 / +5 / +10 f\u{00F6}r att justera tajmingen p\u{00E5} synkade s\u{00E5}ngtexter per sp\u{00E5}r. F\u{00F6}rskjutningen sparas mellan uppspelningar av samma sp\u{00E5}r.",
@@ -13022,7 +14571,7 @@ public enum L10n {
             "en": "Click the popout button at the top-right of the Lyrics tab to open a separate, resizable karaoke window. The window shows the same synced lyrics at much larger size — readable from across a room — and follows the group it was opened for. Open it again from a different group's Now Playing view to switch which room the karaoke tracks.",
             "de": "Klicke auf die Popout-Taste oben rechts im Tab \u{201E}Liedtext\u{201C}, um ein separates, größenveränderbares Karaoke-Fenster zu öffnen. Das Fenster zeigt dieselben synchronisierten Liedtexte in viel größerer Schrift \u{2014} aus dem Raum lesbar \u{2014} und folgt der Gruppe, für die es geöffnet wurde. Öffne es erneut aus der \u{201E}Aktuelle Wiedergabe\u{201C} einer anderen Gruppe, um den Raum zu wechseln, dem das Karaoke folgt.",
             "fr": "Cliquez sur le bouton détacher en haut à droite de l\u{2019}onglet Paroles pour ouvrir une fenêtre karaoké séparée et redimensionnable. La fenêtre affiche les mêmes paroles synchronisées en bien plus grand \u{2014} lisible à travers la pièce \u{2014} et suit le groupe pour lequel elle a été ouverte. Rouvrez-la depuis la vue Lecture en cours d\u{2019}un autre groupe pour changer la pièce suivie.",
-            "nl": "Klik op de popout-knop rechtsboven in het tabblad Songtekst om een apart, in grootte aanpasbaar karaokevenster te openen. Het venster toont dezelfde gesynchroniseerde songtekst veel groter \u{2014} leesbaar van de andere kant van de kamer \u{2014} en volgt de groep waarvoor het is geopend. Open het opnieuw vanuit de Speelt-nu-weergave van een andere groep om te wisselen welke kamer de karaoke volgt.",
+            "nl": "Klik op de popout-knop rechtsboven in het tabblad Songtekst om een apart, in grootte aanpasbaar karaokevenster te openen. Het venster toont dezelfde gesynchroniseerde songtekst veel groter — leesbaar van de andere kant van de kamer — en volgt de groep waarvoor het is geopend. Open het opnieuw vanuit de Speelt-nu-weergave van een andere groep om te wisselen welke kamer de karaoke volgt.",
             "es": "Pulsa el botón de ventana flotante arriba a la derecha de la pestaña Letra para abrir una ventana karaoke independiente y redimensionable. La ventana muestra la misma letra sincronizada en un tamaño mucho mayor \u{2014} legible desde el otro lado de la habitación \u{2014} y sigue al grupo para el que se abrió. Vuelve a abrirla desde la vista En reproducción de otro grupo para cambiar la habitación seguida.",
             "it": "Fai clic sul pulsante di distacco in alto a destra nella scheda Testo per aprire una finestra karaoke separata e ridimensionabile. La finestra mostra lo stesso testo sincronizzato a dimensioni molto maggiori \u{2014} leggibile dall\u{2019}altro capo della stanza \u{2014} e segue il gruppo per cui è stata aperta. Riaprila dalla vista In riproduzione di un altro gruppo per cambiare la stanza seguita.",
             "sv": "Klicka på popout-knappen uppe till höger i fliken Sångtext för att öppna ett separat, storleksändringsbart karaokefönster. Fönstret visar samma synkade sångtexter mycket större \u{2014} läsbart från andra sidan rummet \u{2014} och följer den grupp det öppnades för. Öppna det igen från Spelas nu i en annan grupp för att byta vilket rum karaoken följer.",
@@ -13067,7 +14616,7 @@ public enum L10n {
             "en": "Choragus quietly captures errors and unusual events as they happen \u{2014} UPnP faults from your speakers, network failures, music-service errors. The Diagnostics window shows the recent log so you can see what went wrong and report it without dredging through Console.app.",
             "de": "Choragus erfasst Fehler und ungewöhnliche Ereignisse im Hintergrund \u{2014} UPnP-Fehler von deinen Lautsprechern, Netzwerkfehler, Musikdienst-Fehler. Das Diagnose-Fenster zeigt das aktuelle Protokoll, sodass du sehen kannst, was schiefgelaufen ist, und es melden kannst, ohne dich durch Console.app zu wühlen.",
             "fr": "Choragus capture discrètement les erreurs et événements inhabituels au moment où ils se produisent \u{2014} pannes UPnP de vos enceintes, défaillances réseau, erreurs de service musical. La fenêtre Diagnostic affiche le journal récent pour vous permettre de voir ce qui s\u{2019}est mal passé et de le signaler sans fouiller dans Console.app.",
-            "nl": "Choragus verzamelt stilletjes fouten en ongebruikelijke gebeurtenissen op het moment dat ze gebeuren \u{2014} UPnP-fouten van je luidsprekers, netwerkstoringen, fouten van muziekdiensten. Het Diagnostiek-venster toont het recente logboek zodat je kunt zien wat er misging en dit kunt melden zonder Console.app door te spitten.",
+            "nl": "Choragus verzamelt stilletjes fouten en ongebruikelijke gebeurtenissen op het moment dat ze gebeuren — UPnP-fouten van je luidsprekers, netwerkstoringen, fouten van muziekdiensten. Het Diagnostiek-venster toont het recente logboek zodat je kunt zien wat er misging en dit kunt melden zonder Console.app door te spitten.",
             "es": "Choragus captura discretamente errores y eventos inusuales a medida que ocurren \u{2014} fallos UPnP de tus altavoces, fallos de red, errores de servicios de música. La ventana Diagnóstico muestra el registro reciente para que veas qué falló y lo informes sin tener que rebuscar en Consola.app.",
             "it": "Choragus acquisisce silenziosamente gli errori e gli eventi insoliti man mano che si verificano \u{2014} guasti UPnP dei tuoi diffusori, errori di rete, errori dei servizi musicali. La finestra Diagnostica mostra il registro recente per vedere cosa è andato storto e segnalarlo senza dover frugare in Console.app.",
             "sv": "Choragus fångar diskret upp fel och ovanliga händelser när de inträffar \u{2014} UPnP-fel från dina högtalare, nätverksfel, musiktjänstfel. Diagnostik-fönstret visar den senaste loggen så att du kan se vad som gick fel och rapportera det utan att gräva i Konsol.app.",
@@ -13093,20 +14642,23 @@ public enum L10n {
             "pl": "Otwieranie okna Diagnostyka",
             "zh-Hans": "打开诊断窗口",
         ],
+    ]
+
+    private static let translations41: [String: [String: String]] = [
         "helpDiagnosticsOpeningBody": [
-            "en": "Click the bug icon in the toolbar (top-right of the main window). If you\u{2019}ve hidden the icon in Settings \u{2192} Display, diagnostics still capture in the background \u{2014} they\u{2019}re just not surfaced via the toolbar.",
-            "de": "Klicke auf das Käfer-Symbol in der Symbolleiste (oben rechts im Hauptfenster). Wenn du das Symbol unter Einstellungen \u{2192} Darstellung ausgeblendet hast, werden Diagnosen weiterhin im Hintergrund erfasst \u{2014} sie sind nur nicht über die Symbolleiste erreichbar.",
-            "fr": "Cliquez sur l\u{2019}icône bug dans la barre d\u{2019}outils (en haut à droite de la fenêtre principale). Si vous avez masqué l\u{2019}icône dans Réglages \u{2192} Affichage, les diagnostics continuent d\u{2019}être capturés en arrière-plan \u{2014} ils ne sont simplement plus accessibles via la barre d\u{2019}outils.",
-            "nl": "Klik op het bug-pictogram in de werkbalk (rechtsboven in het hoofdvenster). Als je het pictogram hebt verborgen in Instellingen \u{2192} Weergave, blijft diagnostiek op de achtergrond verzameld worden \u{2014} alleen niet bereikbaar via de werkbalk.",
-            "es": "Pulsa el icono de bug en la barra de herramientas (arriba a la derecha de la ventana principal). Si has ocultado el icono en Ajustes \u{2192} Pantalla, el diagnóstico se sigue capturando en segundo plano \u{2014} simplemente no aparece en la barra de herramientas.",
-            "it": "Fai clic sull\u{2019}icona del bug nella barra strumenti (in alto a destra della finestra principale). Se hai nascosto l\u{2019}icona in Impostazioni \u{2192} Aspetto, la diagnostica continua ad essere acquisita in background \u{2014} semplicemente non è raggiungibile dalla barra strumenti.",
-            "sv": "Klicka på buggikonen i verktygsfältet (uppe till höger i huvudfönstret). Om du har dolt ikonen i Inställningar \u{2192} Skärm fångas diagnostik fortfarande i bakgrunden \u{2014} den når dig bara inte via verktygsfältet.",
-            "nb": "Klikk på feilikonet i verktøylinjen (øverst til høyre i hovedvinduet). Hvis du har skjult ikonet i Innstillinger \u{2192} Skjerm, fanges diagnostikk fortsatt i bakgrunnen \u{2014} den vises bare ikke via verktøylinjen.",
-            "da": "Klik på bug-ikonet i værktøjslinjen (øverst til højre i hovedvinduet). Hvis du har skjult ikonet i Indstillinger \u{2192} Skærm, registreres diagnostik stadig i baggrunden \u{2014} den vises bare ikke via værktøjslinjen.",
-            "ja": "ツールバーのバグアイコン（メインウインドウの右上）をクリックします。「設定 \u{2192} 表示」でアイコンを非表示にしている場合でも、診断はバックグラウンドで引き続き記録されます \u{2014} ツールバーから表示されないだけです。",
-            "pt": "Clique no ícone de bug na barra de ferramentas (canto superior direito da janela principal). Se ocultou o ícone em Definições \u{2192} Aparência, o diagnóstico continua a ser capturado em segundo plano \u{2014} apenas não é acessível através da barra de ferramentas.",
-            "pl": "Kliknij ikonę robaka na pasku narzędzi (prawy górny róg głównego okna). Jeśli ukryto ikonę w Ustawieniach \u{2192} Wygląd, diagnostyka jest nadal rejestrowana w tle \u{2014} po prostu nie jest dostępna z paska narzędzi.",
-            "zh-Hans": "点按工具栏中的虫子图标（主窗口右上角）。如果您在\u{201C}设置\u{2192}显示\u{201D}中隐藏了图标，诊断仍在后台记录\u{2014}\u{2014}只是不再通过工具栏显示。",
+            "en": "Click the activity icon in the toolbar (top-right of the main window). If you've hidden the icon in Settings → Display, diagnostics still capture in the background — they're just not surfaced via the toolbar.",
+            "de": "Klicke auf das Aktivitätssymbol in der Symbolleiste (oben rechts im Hauptfenster). Wenn du das Symbol unter Einstellungen → Darstellung ausgeblendet hast, werden Diagnosedaten weiterhin im Hintergrund erfasst — sie werden nur nicht über die Symbolleiste angezeigt.",
+            "fr": "Cliquez sur l'icône d'activité dans la barre d'outils (en haut à droite de la fenêtre principale). Si vous avez masqué l'icône dans Réglages → Affichage, les diagnostics continuent d'être capturés en arrière-plan — ils ne sont tout simplement pas affichés via la barre d'outils.",
+            "nl": "Klik op het activiteitssymbool in de knoppenbalk (rechtsboven in het hoofdvenster). Als je het symbool hebt verborgen in Instellingen → Weergave, worden diagnostische gegevens nog steeds op de achtergrond vastgelegd — ze worden alleen niet getoond via de knoppenbalk.",
+            "es": "Haz clic en el icono de actividad en la barra de herramientas (arriba a la derecha de la ventana principal). Si has ocultado el icono en Ajustes → Visualización, los diagnósticos se seguirán capturando en segundo plano — simplemente no se mostrarán a través de la barra de herramientas.",
+            "it": "Fai clic sull'icona dell'attività nella barra degli strumenti (in alto a destra nella finestra principale). Se hai nascosto l'icona in Impostazioni → Aspetto, la diagnostica continuerà a essere acquisita in background — semplicemente non sarà visibile tramite la barra degli strumenti.",
+            "sv": "Klicka på aktivitetsikonen i verktygsfältet (längst upp till höger i huvudfönstret). Om du har dolt ikonen under Inställningar → Visning registreras diagnostik fortfarande i bakgrunden — den visas bara inte via verktygsfältet.",
+            "nb": "Klikk på aktivitetsikonet i verktøylinjen (øverst til høyre i hovedvinduet). Hvis du har skjult ikonet under Innstillinger → Visning, samles diagnostikk fortsatt i bakgrunnen — den vises bare ikke via verktøylinjen.",
+            "da": "Klik på aktivitetsikonet på værktøjslinjen (øverst til højre i hovedvinduet). Hvis du har skjult ikonet i Indstillinger → Visning, indsamles diagnosticering stadig i baggrunden — den vises bare ikke via værktøjslinjen.",
+            "ja": "ツールバー（メインウインドウの右上）にあるアクティビティアイコンをクリックします。「設定」→「表示」でアイコンを非表示にしている場合でも、診断はバックグラウンドで引き続き取得されます（ツールバーに表示されなくなるだけです）。",
+            "pt": "Clica no ícone de atividade na barra de ferramentas (canto superior direito da janela principal). Se ocultaste o ícone em Ajustes → Exibição, os diagnósticos ainda serão capturados em segundo plano — eles apenas não ficarão visíveis pela barra de ferramentas.",
+            "pl": "Kliknij ikonę aktywności na pasku narzędzi (w prawym górnym rogu okna głównego). Jeśli ikona została ukryta w sekcji Ustawienia → Wyświetlanie, dane diagnostyczne nadal są rejestrowane w tle — po prostu nie są widoczne na pasku narzędzi.",
+            "zh-Hans": "点按工具栏（主窗口右上角）中的活动图标。如果在“设置”→“显示”中隐藏了该图标，诊断信息仍会在后台捕获 — 只是不会通过工具栏显示出来。",
         ],
         "helpDiagnosticsReportingHeading": [
             "en": "Reporting a bug",
@@ -13127,7 +14679,7 @@ public enum L10n {
             "en": "Reproduce the issue, then in the Diagnostics window: select the relevant rows (or leave nothing selected to send all), and click Report on GitHub. A pre-filled GitHub issue opens in your browser. Add a description and submit. Or right-click a row \u{2192} Copy Row, or click Copy All, to paste the bundle into email, a forum, or chat. A free GitHub account is required to submit on GitHub (anonymous issues aren\u{2019}t accepted).",
             "de": "Reproduziere das Problem, wähle dann im Diagnose-Fenster die relevanten Zeilen aus (oder lasse nichts ausgewählt, um alles zu senden) und klicke auf \u{201E}Auf GitHub melden\u{201C}. Ein vorausgefülltes GitHub-Issue öffnet sich im Browser. Füge eine Beschreibung hinzu und sende es ab. Oder per Rechtsklick auf eine Zeile \u{2192} Zeile kopieren, oder Alle kopieren, um das Bundle in E-Mail, Forum oder Chat einzufügen. Für das Senden auf GitHub ist ein kostenloses GitHub-Konto erforderlich (anonyme Issues werden nicht akzeptiert).",
             "fr": "Reproduisez le problème, puis dans la fenêtre Diagnostic : sélectionnez les lignes pertinentes (ou ne sélectionnez rien pour tout envoyer) et cliquez sur Signaler sur GitHub. Un ticket GitHub pré-rempli s\u{2019}ouvre dans votre navigateur. Ajoutez une description et envoyez. Ou clic droit sur une ligne \u{2192} Copier la ligne, ou cliquez sur Tout copier, pour coller le lot dans un e-mail, un forum ou un chat. Un compte GitHub gratuit est requis pour soumettre sur GitHub (les tickets anonymes ne sont pas acceptés).",
-            "nl": "Reproduceer het probleem, en kies in het Diagnostiek-venster: selecteer de relevante rijen (of laat niets geselecteerd om alles te sturen) en klik op Melden op GitHub. Een vooraf ingevuld GitHub-issue opent in je browser. Voeg een beschrijving toe en verstuur. Of rechtsklik op een rij \u{2192} Rij kopiëren, of klik Alles kopiëren, om het pakket in een e-mail, forum of chat te plakken. Een gratis GitHub-account is vereist om op GitHub te melden (anonieme issues worden niet geaccepteerd).",
+            "nl": "Reproduceer het probleem, en kies in het Diagnostiek-venster: selecteer de relevante rijen (of laat niets geselecteerd om alles te sturen) en klik op Melden op GitHub. Een vooraf ingevuld GitHub-issue opent in je browser. Voeg een beschrijving toe en verstuur. Of rechtsklik op een rij → Rij kopiëren, of klik Alles kopiëren, om het pakket in een e-mail, forum of chat te plakken. Een gratis GitHub-account is vereist om op GitHub te melden (anonieme issues worden niet geaccepteerd).",
             "es": "Reproduce el problema y, en la ventana Diagnóstico: selecciona las filas relevantes (o no selecciones nada para enviar todo) y pulsa Informar en GitHub. Se abre una incidencia GitHub prerrellena en tu navegador. Añade una descripción y envíala. O clic derecho en una fila \u{2192} Copiar fila, o pulsa Copiar todo, para pegar el paquete en correo, foro o chat. Se requiere una cuenta gratuita de GitHub para enviar en GitHub (no se aceptan incidencias anónimas).",
             "it": "Riproduci il problema, poi nella finestra Diagnostica: seleziona le righe pertinenti (o non selezionare nulla per inviare tutto) e fai clic su Segnala su GitHub. Si apre un issue GitHub precompilato nel browser. Aggiungi una descrizione e invia. Oppure clic destro su una riga \u{2192} Copia riga, o fai clic su Copia tutto, per incollare il pacchetto in e-mail, forum o chat. È richiesto un account GitHub gratuito per inviare su GitHub (gli issue anonimi non sono accettati).",
             "sv": "Återskapa problemet, sedan i Diagnostik-fönstret: markera de relevanta raderna (eller lämna inget markerat för att skicka allt) och klicka på Rapportera på GitHub. Ett förifyllt GitHub-ärende öppnas i din webbläsare. Lägg till en beskrivning och skicka. Eller högerklicka på en rad \u{2192} Kopiera rad, eller klicka Kopiera alla, för att klistra in paketet i e-post, forum eller chatt. Ett kostnadsfritt GitHub-konto krävs för att skicka på GitHub (anonyma ärenden godtas inte).",
@@ -13157,7 +14709,7 @@ public enum L10n {
             "en": "Before any diagnostic event reaches storage, Choragus scrubs personally identifying information: home directory paths become \u{201C}~\u{201D}, LAN IP addresses become \u{201C}<lan-ip>\u{201D}, Sonos device IDs are masked, music-service account bindings (`sn=`) are blanked, and any OAuth tokens or API keys are removed. Track titles and artist names are kept \u{2014} this is a music app and they\u{2019}re useful for reproducing playback issues.",
             "de": "Bevor ein Diagnose-Ereignis gespeichert wird, entfernt Choragus persönlich identifizierende Informationen: Home-Verzeichnis-Pfade werden zu \u{201E}~\u{201C}, LAN-IP-Adressen zu \u{201E}<lan-ip>\u{201C}, Sonos-Geräte-IDs werden maskiert, Musikdienst-Konto-Bindungen (`sn=`) werden geleert, und OAuth-Token oder API-Schlüssel werden entfernt. Titel und Interpreten bleiben erhalten \u{2014} das ist eine Musik-App und diese Daten helfen bei der Reproduktion von Wiedergabe-Problemen.",
             "fr": "Avant qu\u{2019}un événement diagnostique n\u{2019}atteigne le stockage, Choragus retire les informations identifiantes : les chemins du dossier personnel deviennent \u{00AB} ~ \u{00BB}, les adresses IP du réseau local deviennent \u{00AB} <lan-ip> \u{00BB}, les identifiants des appareils Sonos sont masqués, les liaisons de compte de service musical (`sn=`) sont vidées, et tout jeton OAuth ou clé API est retiré. Les titres des morceaux et les noms d\u{2019}artistes sont conservés \u{2014} c\u{2019}est une app musicale et ils sont utiles pour reproduire les problèmes de lecture.",
-            "nl": "Voordat een diagnose-event de opslag bereikt, schoont Choragus persoonlijk identificerende informatie op: thuismappad wordt \u{201C}~\u{201D}, LAN-IP-adressen worden \u{201C}<lan-ip>\u{201D}, Sonos-apparaat-ID\u{2019}s worden gemaskeerd, muziekdienst-accountkoppelingen (`sn=`) worden leeggemaakt en alle OAuth-tokens of API-sleutels worden verwijderd. Tracktitels en artiestnamen blijven behouden \u{2014} dit is een muziek-app en deze zijn nuttig om afspeelproblemen te reproduceren.",
+            "nl": "Voordat een diagnose-event de opslag bereikt, schoont Choragus persoonlijk identificerende informatie op: thuismappad wordt “~”, LAN-IP-adressen worden “<lan-ip>”, Sonos-apparaat-ID’s worden gemaskeerd, muziekdienst-accountkoppelingen (`sn=`) worden leeggemaakt en alle OAuth-tokens of API-sleutels worden verwijderd. Tracktitels en artiestnamen blijven behouden — dit is een muziek-app en deze zijn nuttig om afspeelproblemen te reproduceren.",
             "es": "Antes de que un evento de diagnóstico llegue al almacenamiento, Choragus elimina la información personal identificable: las rutas del directorio personal se convierten en \u{201C}~\u{201D}, las direcciones IP de la LAN en \u{201C}<lan-ip>\u{201D}, los identificadores de dispositivos Sonos se enmascaran, los enlaces de cuenta de servicio musical (`sn=`) se vacían, y se eliminan los tokens OAuth o claves de API. Se conservan los títulos de pista y los nombres de artistas \u{2014} es una app musical y resultan útiles para reproducir problemas de reproducción.",
             "it": "Prima che un evento diagnostico raggiunga la memoria, Choragus elimina le informazioni personali identificative: i percorsi della cartella Inizio diventano \u{201C}~\u{201D}, gli indirizzi IP della LAN diventano \u{201C}<lan-ip>\u{201D}, gli ID dei dispositivi Sonos vengono mascherati, le associazioni di account dei servizi musicali (`sn=`) vengono svuotate, e tutti i token OAuth o chiavi API vengono rimossi. I titoli dei brani e i nomi degli artisti sono conservati \u{2014} è un\u{2019}app musicale e sono utili per riprodurre i problemi di riproduzione.",
             "sv": "Innan en diagnostikhändelse når lagringen rensar Choragus bort personligt identifierande information: hemkatalogers sökvägar blir \u{201C}~\u{201D}, LAN-IP-adresser blir \u{201C}<lan-ip>\u{201D}, Sonos-enhets-ID:n maskeras, musiktjänstkontobindningar (`sn=`) töms, och alla OAuth-token eller API-nycklar tas bort. Spårtitlar och artistnamn behålls \u{2014} det här är en musikapp och de är användbara för att återskapa uppspelningsproblem.",
@@ -13188,7 +14740,7 @@ public enum L10n {
             "en": "The Live Events tab in the Diagnostics window shows raw UPnP traffic from your Sonos speakers as it arrives \u{2014} volume and mute changes, transport state, queue updates, topology changes. Each row shows the timestamp, the event type (RC for RenderingControl, AVT for AVTransport, TOPO for topology), the speaker, and a one-line summary. Click a row to expand the raw NOTIFY XML. Useful when investigating why a control feels unresponsive: if the event arrives at the speaker but Choragus reacts late, the Live Events tab will show that. Pause freezes the display while events keep buffering; resume reveals them.",
             "de": "Der Tab \u{201E}Live-Ereignisse\u{201C} im Diagnose-Fenster zeigt den rohen UPnP-Verkehr von deinen Sonos-Lautsprechern in Echtzeit \u{2014} Lautst\u{e4}rke- und Stummschalt\u{e4}nderungen, Transportzustand, Warteschlangen-Updates, Topologie\u{e4}nderungen. Jede Zeile zeigt Zeitstempel, Ereignistyp (RC f\u{fc}r RenderingControl, AVT f\u{fc}r AVTransport, TOPO f\u{fc}r Topologie), Lautsprecher und eine einzeilige Zusammenfassung. Klick eine Zeile an, um die rohe NOTIFY-XML zu sehen. N\u{fc}tzlich, wenn eine Steuerung tr\u{e4}ge wirkt: kommt das Ereignis am Lautsprecher an, reagiert Choragus aber zu sp\u{e4}t, zeigt der Tab das. Pause friert die Anzeige ein, w\u{e4}hrend Ereignisse weiter gepuffert werden; Fortsetzen enth\u{fc}llt sie.",
             "fr": "L\u{2019}onglet \u{c9}v\u{e9}nements en direct de la fen\u{ea}tre Diagnostics affiche le trafic UPnP brut de vos enceintes Sonos en temps r\u{e9}el \u{2014} changements de volume et de mise en sourdine, \u{e9}tat du transport, mises \u{e0} jour de la file, changements de topologie. Chaque ligne affiche l\u{2019}horodatage, le type d\u{2019}\u{e9}v\u{e9}nement (RC pour RenderingControl, AVT pour AVTransport, TOPO pour topologie), l\u{2019}enceinte et un r\u{e9}sum\u{e9} d\u{2019}une ligne. Cliquez sur une ligne pour d\u{e9}velopper le XML NOTIFY brut. Utile pour investiguer pourquoi une commande para\u{ee}t lente : si l\u{2019}\u{e9}v\u{e9}nement arrive \u{e0} l\u{2019}enceinte mais que Choragus r\u{e9}agit en retard, l\u{2019}onglet le montrera. Pause fige l\u{2019}affichage pendant que les \u{e9}v\u{e9}nements continuent \u{e0} \u{ea}tre bufferis\u{e9}s ; Reprendre les r\u{e9}v\u{e8}le.",
-            "nl": "Het tabblad Live-gebeurtenissen in het Diagnostics-venster toont het ruwe UPnP-verkeer van je Sonos-speakers terwijl het binnenkomt \u{2014} volume- en demp-wijzigingen, transportstatus, wachtrij-updates, topologiewijzigingen. Elke rij toont tijdstempel, event-type (RC voor RenderingControl, AVT voor AVTransport, TOPO voor topologie), speaker en een samenvatting van \u{e9}\u{e9}n regel. Klik op een rij om de ruwe NOTIFY-XML uit te vouwen. Nuttig om te onderzoeken waarom een bediening traag aanvoelt: als de gebeurtenis bij de speaker aankomt maar Choragus laat reageert, laat het tabblad dat zien. Pauze bevriest de weergave terwijl gebeurtenissen blijven worden gebufferd; Hervatten onthult ze.",
+            "nl": "Het tabblad Live-gebeurtenissen in het Diagnostics-venster toont het ruwe UPnP-verkeer van je Sonos-speakers terwijl het binnenkomt — volume- en demp-wijzigingen, transportstatus, wachtrij-updates, topologiewijzigingen. Elke rij toont tijdstempel, event-type (RC voor RenderingControl, AVT voor AVTransport, TOPO voor topologie), speaker en een samenvatting van één regel. Klik op een rij om de ruwe NOTIFY-XML uit te vouwen. Nuttig om te onderzoeken waarom een bediening traag aanvoelt: als de gebeurtenis bij de speaker aankomt maar Choragus laat reageert, laat het tabblad dat zien. Pauze bevriest de weergave terwijl gebeurtenissen blijven worden gebufferd; Hervatten onthult ze.",
             "es": "La pesta\u{f1}a Eventos en vivo de la ventana Diagn\u{f3}stico muestra el tr\u{e1}fico UPnP en bruto de tus altavoces Sonos en tiempo real \u{2014} cambios de volumen y silencio, estado del transporte, actualizaciones de cola, cambios de topolog\u{ed}a. Cada fila muestra marca de tiempo, tipo de evento (RC para RenderingControl, AVT para AVTransport, TOPO para topolog\u{ed}a), altavoz y un resumen de una l\u{ed}nea. Haz clic en una fila para expandir el XML NOTIFY en bruto. \u{da}til para investigar por qu\u{e9} un control se siente lento: si el evento llega al altavoz pero Choragus reacciona tarde, la pesta\u{f1}a lo mostrar\u{e1}. Pausar congela la visualizaci\u{f3}n mientras los eventos siguen siendo almacenados; Reanudar los revela.",
             "it": "La scheda Eventi dal vivo nella finestra Diagnostica mostra il traffico UPnP grezzo dai tuoi diffusori Sonos in tempo reale \u{2014} modifiche di volume e mute, stato del trasporto, aggiornamenti della coda, modifiche di topologia. Ogni riga mostra timestamp, tipo di evento (RC per RenderingControl, AVT per AVTransport, TOPO per topologia), diffusore e un riepilogo di una riga. Clicca una riga per espandere l\u{2019}XML NOTIFY grezzo. Utile per investigare perch\u{e9} un controllo sembra lento: se l\u{2019}evento arriva al diffusore ma Choragus reagisce in ritardo, la scheda lo mostrer\u{e0}. Pausa congela la visualizzazione mentre gli eventi continuano a essere bufferizzati; Riprendi li rivela.",
             "sv": "Fliken Live-h\u{e4}ndelser i Diagnostik-f\u{f6}nstret visar r\u{e5} UPnP-trafik fr\u{e5}n dina Sonos-h\u{f6}gtalare i realtid \u{2014} volym- och tystna-\u{e4}ndringar, transportstatus, k\u{f6}uppdateringar, topologi\u{e4}ndringar. Varje rad visar tidsst\u{e4}mpel, h\u{e4}ndelsetyp (RC f\u{f6}r RenderingControl, AVT f\u{f6}r AVTransport, TOPO f\u{f6}r topologi), h\u{f6}gtalare och en sammanfattning p\u{e5} en rad. Klicka p\u{e5} en rad f\u{f6}r att expandera den r\u{e5}a NOTIFY-XML. Anv\u{e4}ndbart n\u{e4}r du unders\u{f6}ker varf\u{f6}r en kontroll k\u{e4}nns tr\u{f6}g: om h\u{e4}ndelsen n\u{e5}r h\u{f6}gtalaren men Choragus reagerar sent visar fliken det. Paus fryser visningen medan h\u{e4}ndelser forts\u{e4}tter buffras; \u{c5}teruppta avsl\u{f6}jar dem.",
@@ -13218,7 +14770,7 @@ public enum L10n {
             "en": "When the build supports it, the Diagnostics footer shows a Report Bug (encrypted) button. Click it to: (1) preview the bundle that will be sent in a sheet that highlights what was redacted; (2) on confirm, write a Choragus-Bug-Bundle-*.choragus-bundle.log file to your Downloads folder, reveal it in Finder, and open the GitHub Issues form with title and body pre-filled. Drag the file from Finder into the comment to attach \u{2014} the trailing .log suffix is just there so GitHub accepts the upload without a manual rename; the file is the encrypted bundle, not a plain log. The bundle is wrapped with the maintainer\u{2019}s public key (Curve25519 + ChaChaPoly), so only the maintainer can read it \u{2014} GitHub itself, your network, and any caching proxy see only opaque ciphertext.",
             "de": "Wenn der Build dies unterst\u{fc}tzt, zeigt die Diagnose-Fu\u{df}leiste eine Schaltfl\u{e4}che \u{201E}Fehler melden (verschl\u{fc}sselt)\u{201C}. Klick sie an, um: (1) das zu sendende Paket in einer Vorschau anzuzeigen, die hervorhebt, was geschw\u{e4}rzt wurde; (2) nach Best\u{e4}tigung eine Datei Choragus-Bug-Bundle-*.choragus-bundle in deinen Downloads-Ordner zu schreiben, sie im Finder anzuzeigen und das GitHub-Issues-Formular mit vorausgef\u{fc}lltem Titel und Text zu \u{f6}ffnen. Zieh die Datei aus dem Finder in den Kommentar, um sie anzuh\u{e4}ngen. Das Paket wird mit dem \u{f6}ffentlichen Schl\u{fc}ssel des Betreuers verpackt (Curve25519 + ChaChaPoly), sodass nur der Betreuer es lesen kann \u{2014} GitHub selbst, dein Netzwerk und jeder Cache-Proxy sehen nur undurchsichtigen Chiffretext.",
             "fr": "Quand la version le permet, le pied de page Diagnostics affiche un bouton Signaler un bug (chiffr\u{e9}). Cliquez-le pour : (1) pr\u{e9}visualiser le lot qui sera envoy\u{e9} dans une feuille qui met en \u{e9}vidence ce qui a \u{e9}t\u{e9} masqu\u{e9} ; (2) apr\u{e8}s confirmation, \u{e9}crire un fichier Choragus-Bug-Bundle-*.choragus-bundle dans votre dossier T\u{e9}l\u{e9}chargements, le r\u{e9}v\u{e9}ler dans le Finder et ouvrir le formulaire GitHub Issues avec titre et corps pr\u{e9}-remplis. Glissez le fichier depuis le Finder dans le commentaire pour l\u{2019}attacher. Le lot est chiffr\u{e9} avec la cl\u{e9} publique du mainteneur (Curve25519 + ChaChaPoly), donc seul le mainteneur peut le lire \u{2014} GitHub lui-m\u{ea}me, votre r\u{e9}seau et tout proxy de cache ne voient qu\u{2019}un chiffr\u{e9} opaque.",
-            "nl": "Wanneer de build het ondersteunt, toont de Diagnostics-voettekst een knop Bug melden (versleuteld). Klik erop om: (1) het te verzenden pakket te bekijken in een venster dat aangeeft wat is geredigeerd; (2) na bevestiging een Choragus-Bug-Bundle-*.choragus-bundle bestand naar je Downloads-map te schrijven, het in Finder te tonen en het GitHub Issues-formulier te openen met vooraf ingevulde titel en tekst. Sleep het bestand vanuit Finder in de opmerking om het bij te voegen. Het pakket is versleuteld met de openbare sleutel van de beheerder (Curve25519 + ChaChaPoly), dus alleen de beheerder kan het lezen \u{2014} GitHub zelf, je netwerk en elke caching-proxy zien alleen ondoorzichtige versleutelde tekst.",
+            "nl": "Wanneer de build het ondersteunt, toont de Diagnostics-voettekst een knop Bug melden (versleuteld). Klik erop om: (1) het te verzenden pakket te bekijken in een venster dat aangeeft wat is geredigeerd; (2) na bevestiging een Choragus-Bug-Bundle-*.choragus-bundle bestand naar je Downloads-map te schrijven, het in Finder te tonen en het GitHub Issues-formulier te openen met vooraf ingevulde titel en tekst. Sleep het bestand vanuit Finder in de opmerking om het bij te voegen. Het pakket is versleuteld met de openbare sleutel van de beheerder (Curve25519 + ChaChaPoly), dus alleen de beheerder kan het lezen — GitHub zelf, je netwerk en elke caching-proxy zien alleen ondoorzichtige versleutelde tekst.",
             "es": "Cuando la compilaci\u{f3}n lo admite, el pie de la ventana Diagn\u{f3}stico muestra un bot\u{f3}n Informar bug (cifrado). Haz clic para: (1) previsualizar el paquete que se enviar\u{e1} en una hoja que resalta lo que se ha redactado; (2) tras confirmar, escribir un archivo Choragus-Bug-Bundle-*.choragus-bundle en tu carpeta Descargas, mostrarlo en Finder y abrir el formulario de GitHub Issues con t\u{ed}tulo y cuerpo prerrellenos. Arrastra el archivo desde Finder al comentario para adjuntarlo. El paquete est\u{e1} cifrado con la clave p\u{fa}blica del responsable (Curve25519 + ChaChaPoly), as\u{ed} que solo el responsable puede leerlo \u{2014} GitHub mismo, tu red y cualquier proxy de cach\u{e9} ven solo texto cifrado opaco.",
             "it": "Quando la build lo supporta, il pi\u{e8} di pagina di Diagnostica mostra un pulsante Segnala bug (cifrato). Cliccalo per: (1) vedere un\u{2019}anteprima del pacchetto che sar\u{e0} inviato in un foglio che evidenzia ci\u{f2} che \u{e8} stato anonimizzato; (2) dopo la conferma, scrivere un file Choragus-Bug-Bundle-*.choragus-bundle nella cartella Download, mostrarlo nel Finder e aprire il modulo GitHub Issues con titolo e corpo precompilati. Trascina il file dal Finder nel commento per allegarlo. Il pacchetto \u{e8} cifrato con la chiave pubblica del manutentore (Curve25519 + ChaChaPoly), quindi solo il manutentore pu\u{f2} leggerlo \u{2014} GitHub stesso, la tua rete e qualsiasi proxy di cache vedono solo testo cifrato opaco.",
             "sv": "N\u{e4}r byggnaden st\u{f6}der det visar Diagnostik-sidfoten en knapp Rapportera bug (krypterad). Klicka f\u{f6}r att: (1) f\u{f6}rhandsgranska paketet som kommer att skickas i ett ark som markerar vad som maskerats; (2) efter bekr\u{e4}ftelse, skriva en Choragus-Bug-Bundle-*.choragus-bundle-fil till din Nedladdningar-mapp, visa den i Finder och \u{f6}ppna GitHub Issues-formul\u{e4}ret med titel och brodtext f\u{f6}rifyllda. Dra filen fr\u{e5}n Finder till kommentaren f\u{f6}r att bifoga den. Paketet \u{e4}r krypterat med underh\u{e5}llarens publika nyckel (Curve25519 + ChaChaPoly), s\u{e5} bara underh\u{e5}llaren kan l\u{e4}sa det \u{2014} GitHub sj\u{e4}lv, ditt n\u{e4}tverk och eventuella cache-proxyer ser bara ogenomskinlig krypterad text.",
@@ -13248,7 +14800,7 @@ public enum L10n {
             "en": "Settings has its own Software Updates tab when Choragus was built with auto-update support. The tab has three controls: an automatic-check toggle, an automatic-download toggle (only meaningful when auto-check is on), and a manual Check Now button with a last-checked timestamp. Updates are signed with the maintainer\u{2019}s EdDSA key and verified before install \u{2014} a tampered or impersonated update is rejected.",
             "de": "Die Einstellungen haben einen eigenen Tab \u{201E}Software-Updates\u{201C}, wenn Choragus mit Auto-Update-Unterst\u{fc}tzung gebaut wurde. Der Tab hat drei Bedienelemente: einen Schalter f\u{fc}r automatische Pr\u{fc}fung, einen Schalter f\u{fc}r automatischen Download (nur wirksam wenn Auto-Pr\u{fc}fung aktiv) und eine manuelle \u{201E}Jetzt pr\u{fc}fen\u{201C}-Schaltfl\u{e4}che mit Zeitstempel der letzten Pr\u{fc}fung. Updates sind mit dem EdDSA-Schl\u{fc}ssel des Betreuers signiert und werden vor der Installation verifiziert \u{2014} ein manipuliertes oder vorget\u{e4}uschtes Update wird abgelehnt.",
             "fr": "Les R\u{e9}glages ont leur propre onglet Mises \u{e0} jour quand Choragus a \u{e9}t\u{e9} compil\u{e9} avec le support des mises \u{e0} jour automatiques. L\u{2019}onglet a trois contr\u{f4}les : un commutateur de v\u{e9}rification automatique, un commutateur de t\u{e9}l\u{e9}chargement automatique (utile seulement quand l\u{2019}auto-v\u{e9}rification est activ\u{e9}e), et un bouton manuel V\u{e9}rifier maintenant avec un horodatage de la derni\u{e8}re v\u{e9}rification. Les mises \u{e0} jour sont sign\u{e9}es avec la cl\u{e9} EdDSA du mainteneur et v\u{e9}rifi\u{e9}es avant installation \u{2014} une mise \u{e0} jour modifi\u{e9}e ou usurp\u{e9}e est rejet\u{e9}e.",
-            "nl": "Instellingen heeft een eigen tabblad Software-updates wanneer Choragus is gebouwd met auto-update-ondersteuning. Het tabblad heeft drie bedieningen: een automatische-controle schakelaar, een automatische-download schakelaar (alleen zinvol wanneer auto-controle aan staat), en een handmatige Nu controleren-knop met tijdstempel van laatste controle. Updates worden ondertekend met de EdDSA-sleutel van de beheerder en geverifieerd voor installatie \u{2014} een gemanipuleerde of nagebootste update wordt geweigerd.",
+            "nl": "Instellingen heeft een eigen tabblad Software-updates wanneer Choragus is gebouwd met auto-update-ondersteuning. Het tabblad heeft drie bedieningen: een automatische-controle schakelaar, een automatische-download schakelaar (alleen zinvol wanneer auto-controle aan staat), en een handmatige Nu controleren-knop met tijdstempel van laatste controle. Updates worden ondertekend met de EdDSA-sleutel van de beheerder en geverifieerd voor installatie — een gemanipuleerde of nagebootste update wordt geweigerd.",
             "es": "Ajustes tiene su propia pesta\u{f1}a Actualizaciones de software cuando Choragus se compil\u{f3} con soporte para actualizaciones autom\u{e1}ticas. La pesta\u{f1}a tiene tres controles: un interruptor de comprobaci\u{f3}n autom\u{e1}tica, un interruptor de descarga autom\u{e1}tica (solo significativo cuando la comprobaci\u{f3}n autom\u{e1}tica est\u{e1} activa), y un bot\u{f3}n manual Comprobar ahora con marca de tiempo de la \u{fa}ltima comprobaci\u{f3}n. Las actualizaciones est\u{e1}n firmadas con la clave EdDSA del responsable y verificadas antes de la instalaci\u{f3}n \u{2014} una actualizaci\u{f3}n manipulada o suplantada se rechaza.",
             "it": "Le Impostazioni hanno la propria scheda Aggiornamenti software quando Choragus \u{e8} stato compilato con supporto per gli aggiornamenti automatici. La scheda ha tre controlli: un interruttore di controllo automatico, un interruttore di download automatico (utile solo quando il controllo automatico \u{e8} attivo), e un pulsante manuale Verifica ora con timestamp dell\u{2019}ultimo controllo. Gli aggiornamenti sono firmati con la chiave EdDSA del manutentore e verificati prima dell\u{2019}installazione \u{2014} un aggiornamento manomesso o impersonato viene rifiutato.",
             "sv": "Inst\u{e4}llningar har sin egen flik Programuppdateringar n\u{e4}r Choragus byggdes med st\u{f6}d f\u{f6}r automatiska uppdateringar. Fliken har tre kontroller: en automatisk-kontroll-omkopplare, en automatisk-nedladdning-omkopplare (endast meningsfull n\u{e4}r automatisk kontroll \u{e4}r p\u{e5}), och en manuell Kontrollera nu-knapp med tidsst\u{e4}mpel f\u{f6}r senaste kontrollen. Uppdateringar signeras med underh\u{e5}llarens EdDSA-nyckel och verifieras f\u{f6}re installation \u{2014} en manipulerad eller imiterad uppdatering avvisas.",
@@ -13262,8 +14814,8 @@ public enum L10n {
         "helpBetaChannelHeading": [
             "en": "Beta channel",
             "de": "Beta-Kanal",
-            "fr": "Canal b\u{ea}ta",
-            "nl": "B\u{e8}takanaal",
+            "fr": "Canal bêta",
+            "nl": "Bètakanaal",
             "es": "Canal beta",
             "it": "Canale beta",
             "sv": "Betakanal",
@@ -13277,8 +14829,8 @@ public enum L10n {
         "helpBetaChannelBody": [
             "en": "The Software Updates tab also has a Beta Channel section with an opt-in toggle. When on, Choragus will offer pre-release builds tagged for the beta channel alongside the regular stable releases. Beta builds may be unstable, lose data, or break features that work in stable \u{2014} don\u{2019}t enable this on a Mac you depend on. To leave the channel, turn the toggle off; you stay on the latest beta you installed until the next stable release catches up.",
             "de": "Der Tab \u{201E}Software-Updates\u{201C} hat auch einen Abschnitt Beta-Kanal mit einem Opt-in-Schalter. Wenn aktiv, bietet Choragus Vorab-Builds, die f\u{fc}r den Beta-Kanal markiert sind, zusammen mit den regul\u{e4}ren stabilen Releases an. Beta-Builds k\u{f6}nnen instabil sein, Daten verlieren oder Funktionen besch\u{e4}digen, die in der stabilen Version funktionieren \u{2014} aktiviere dies nicht auf einem Mac, von dem du abh\u{e4}ngig bist. Zum Verlassen des Kanals deaktiviere den Schalter; du bleibst auf der zuletzt installierten Beta, bis das n\u{e4}chste stabile Release aufgeholt hat.",
-            "fr": "L\u{2019}onglet Mises \u{e0} jour a aussi une section Canal b\u{ea}ta avec un commutateur d\u{2019}adh\u{e9}sion. Quand activ\u{e9}, Choragus proposera les versions de pr\u{e9}-publication marqu\u{e9}es pour le canal b\u{ea}ta en plus des publications stables r\u{e9}guli\u{e8}res. Les versions b\u{ea}ta peuvent \u{ea}tre instables, perdre des donn\u{e9}es ou casser des fonctionnalit\u{e9}s qui marchent en version stable \u{2014} ne l\u{2019}activez pas sur un Mac dont vous d\u{e9}pendez. Pour quitter le canal, d\u{e9}sactivez le commutateur ; vous restez sur la derni\u{e8}re b\u{ea}ta install\u{e9}e jusqu\u{2019}\u{e0} ce que la prochaine publication stable rattrape.",
-            "nl": "Het tabblad Software-updates heeft ook een sectie B\u{e8}takanaal met een opt-in schakelaar. Indien ingeschakeld biedt Choragus pre-release builds met de b\u{e8}ta-tag aan naast de reguliere stabiele releases. B\u{e8}ta-builds kunnen onstabiel zijn, gegevens verliezen of functies breken die wel werken in stable \u{2014} schakel dit niet in op een Mac waar je afhankelijk van bent. Om het kanaal te verlaten, schakel de schakelaar uit; je blijft op de laatste b\u{e8}ta die je hebt ge\u{ef}nstalleerd totdat de volgende stabiele release inhaalt.",
+            "fr": "L’onglet Mises à jour a aussi une section Canal bêta avec un commutateur d’adhésion. Quand activé, Choragus proposera les versions de pré-publication marquées pour le canal bêta en plus des publications stables régulières. Les versions bêta peuvent être instables, perdre des données ou casser des fonctionnalités qui marchent en version stable — ne l’activez pas sur un Mac dont vous dépendez. Pour quitter le canal, désactivez le commutateur ; vous restez sur la dernière bêta installée jusqu’à ce que la prochaine publication stable rattrape.",
+            "nl": "Het tabblad Software-updates heeft ook een sectie Bètakanaal met een opt-in schakelaar. Indien ingeschakeld biedt Choragus pre-release builds met de bèta-tag aan naast de reguliere stabiele releases. Bèta-builds kunnen onstabiel zijn, gegevens verliezen of functies breken die wel werken in stable — schakel dit niet in op een Mac waar je afhankelijk van bent. Om het kanaal te verlaten, schakel de schakelaar uit; je blijft op de laatste bèta die je hebt geïnstalleerd totdat de volgende stabiele release inhaalt.",
             "es": "La pesta\u{f1}a Actualizaciones de software tambi\u{e9}n tiene una secci\u{f3}n Canal beta con un interruptor de activaci\u{f3}n. Cuando est\u{e1} activo, Choragus ofrece compilaciones previas etiquetadas para el canal beta junto con las versiones estables regulares. Las compilaciones beta pueden ser inestables, perder datos o romper funciones que funcionan en la versi\u{f3}n estable \u{2014} no lo actives en una Mac de la que dependes. Para salir del canal, apaga el interruptor; permanecer\u{e1}s en la \u{fa}ltima beta instalada hasta que la siguiente versi\u{f3}n estable la alcance.",
             "it": "La scheda Aggiornamenti software ha anche una sezione Canale beta con un interruttore di adesione. Quando attivo, Choragus offre build di pre-rilascio etichettate per il canale beta insieme alle versioni stabili regolari. Le build beta possono essere instabili, perdere dati o rompere funzionalit\u{e0} che funzionano nella versione stabile \u{2014} non attivarlo su un Mac da cui dipendi. Per lasciare il canale, disattiva l\u{2019}interruttore; rimarrai sull\u{2019}ultima beta installata fino a quando la prossima versione stabile la raggiunger\u{e0}.",
             "sv": "Fliken Programuppdateringar har ocks\u{e5} en sektion Betakanal med en aktiveringsomkopplare. N\u{e4}r p\u{e5} kommer Choragus erbjuda f\u{f6}rhandsutgivningar taggade f\u{f6}r betakanalen tillsammans med ordinarie stabila utgivningar. Betabyggen kan vara instabila, f\u{f6}rlora data eller bryta funktioner som fungerar i stabil \u{2014} aktivera inte detta p\u{e5} en Mac du \u{e4}r beroende av. F\u{f6}r att l\u{e4}mna kanalen, st\u{e4}ng av omkopplaren; du stannar p\u{e5} den senaste betan du installerade tills n\u{e4}sta stabila utgivning kommer ikapp.",
@@ -13292,8 +14844,8 @@ public enum L10n {
         "helpBulletSoftwareUpdates": [
             "en": "Software Updates: automatic check + download toggles, manual Check Now, beta channel opt-in",
             "de": "Software-Updates: automatische Pr\u{fc}fung + Download-Schalter, manuelle Pr\u{fc}fung, Beta-Kanal-Opt-in",
-            "fr": "Mises \u{e0} jour : commutateurs v\u{e9}rification + t\u{e9}l\u{e9}chargement automatiques, V\u{e9}rifier maintenant manuel, adh\u{e9}sion canal b\u{ea}ta",
-            "nl": "Software-updates: automatische controle + download-schakelaars, handmatige Nu controleren, b\u{e8}takanaal opt-in",
+            "fr": "Mises à jour : commutateurs vérification + téléchargement automatiques, Vérifier maintenant manuel, adhésion canal bêta",
+            "nl": "Software-updates: automatische controle + download-schakelaars, handmatige Nu controleren, bètakanaal opt-in",
             "es": "Actualizaciones de software: interruptores de comprobaci\u{f3}n + descarga autom\u{e1}ticas, Comprobar ahora manual, activaci\u{f3}n del canal beta",
             "it": "Aggiornamenti software: interruttori di controllo + download automatici, Verifica ora manuale, adesione al canale beta",
             "sv": "Programuppdateringar: automatisk-kontroll + nedladdnings-omkopplare, manuell Kontrollera nu, betakanal-aktivering",
@@ -13318,7 +14870,7 @@ public enum L10n {
             "en": "Artist bio, photo, tags, and similar artists from Wikipedia, MusicBrainz, and Last.fm — all in your app language. Album release date and tracklist when available. Right-click to refresh metadata; click the artist photo to enlarge; click the Wikipedia link to open the article in your browser.",
             "de": "Interpretenbiografie, Foto, Tags und \u{00E4}hnliche K\u{00FC}nstler aus Wikipedia, MusicBrainz und Last.fm \u{2014} alles in deiner App-Sprache. Albumerscheinungsdatum und Tracklist, sofern verf\u{00FC}gbar. Rechtsklick zum Aktualisieren der Metadaten; Klick auf das Foto zum Vergr\u{00F6}\u{00DF}ern; Klick auf den Wikipedia-Link \u{00F6}ffnet den Artikel im Browser.",
             "fr": "Biographie d\u{2019}artiste, photo, tags et artistes similaires depuis Wikip\u{00E9}dia, MusicBrainz et Last.fm \u{2014} tout dans la langue de l\u{2019}application. Date de sortie de l\u{2019}album et tracklist si disponibles. Clic droit pour rafra\u{00EE}chir les m\u{00E9}tadonn\u{00E9}es ; clic sur la photo pour agrandir ; clic sur le lien Wikip\u{00E9}dia pour ouvrir l\u{2019}article dans votre navigateur.",
-            "nl": "Artiestbio, foto, tags en vergelijkbare artiesten uit Wikipedia, MusicBrainz en Last.fm \u{2014} alles in je app-taal. Album-releasedatum en tracklijst indien beschikbaar. Rechterklik om metadata te vernieuwen; klik op de foto om te vergroten; klik op de Wikipedia-link om het artikel in je browser te openen.",
+            "nl": "Artiestbio, foto, tags en vergelijkbare artiesten uit Wikipedia, MusicBrainz en Last.fm — alles in je app-taal. Album-releasedatum en tracklijst indien beschikbaar. Rechterklik om metadata te vernieuwen; klik op de foto om te vergroten; klik op de Wikipedia-link om het artikel in je browser te openen.",
             "es": "Biograf\u{00ED}a, foto, etiquetas y artistas similares desde Wikipedia, MusicBrainz y Last.fm \u{2014} todo en el idioma de la app. Fecha de lanzamiento del \u{00E1}lbum y lista de pistas cuando est\u{00E9}n disponibles. Clic derecho para actualizar los metadatos; clic en la foto para ampliar; clic en el enlace de Wikipedia para abrir el art\u{00ED}culo en tu navegador.",
             "it": "Biografia, foto, tag e artisti simili da Wikipedia, MusicBrainz e Last.fm \u{2014} tutto nella lingua dell\u{2019}app. Data di pubblicazione dell\u{2019}album e tracklist quando disponibili. Clic destro per aggiornare i metadati; clic sulla foto per ingrandire; clic sul link a Wikipedia per aprire l\u{2019}articolo nel browser.",
             "sv": "Artistbiografi, foto, taggar och liknande artister fr\u{00E5}n Wikipedia, MusicBrainz och Last.fm \u{2014} allt p\u{00E5} ditt appspr\u{00E5}k. Albumets utgivningsdatum och sp\u{00E5}rlista n\u{00E4}r det g\u{00E5}r. H\u{00F6}gerklicka f\u{00F6}r att uppdatera metadata; klicka p\u{00E5} fotot f\u{00F6}r att f\u{00F6}rstora; klicka p\u{00E5} Wikipedia-l\u{00E4}nken f\u{00F6}r att \u{00F6}ppna artikeln i webbl\u{00E4}saren.",
@@ -13342,7 +14894,7 @@ public enum L10n {
             "en": "Local play count for the current track in your Choragus history — total plays, rooms it played in, last-played time, and the most recent twenty plays. Reads from the play-history database; nothing leaves your machine.",
             "de": "Lokale Wiedergabez\u{00E4}hler f\u{00FC}r den aktuellen Titel in deinem Choragus-Verlauf \u{2014} Gesamtwiedergaben, R\u{00E4}ume, in denen er lief, letzter Wiedergabezeitpunkt und die letzten zwanzig Wiedergaben. Liest aus der Verlauf-Datenbank; nichts verl\u{00E4}sst deinen Rechner.",
             "fr": "Nombre de lectures local du morceau dans votre historique Choragus \u{2014} total des lectures, pi\u{00E8}ces o\u{00F9} il a \u{00E9}t\u{00E9} jou\u{00E9}, derni\u{00E8}re lecture et les vingt lectures les plus r\u{00E9}centes. Lu depuis la base d\u{2019}historique ; rien ne quitte votre machine.",
-            "nl": "Lokale afspeelstand voor het huidige nummer in je Choragus-geschiedenis \u{2014} totaal afspelingen, kamers waarin het speelde, laatst-gespeelde tijd en de twintig meest recente afspelingen. Gelezen uit de afspeelgeschiedenis-database; niets verlaat je machine.",
+            "nl": "Lokale afspeelstand voor het huidige nummer in je Choragus-geschiedenis — totaal afspelingen, kamers waarin het speelde, laatst-gespeelde tijd en de twintig meest recente afspelingen. Gelezen uit de afspeelgeschiedenis-database; niets verlaat je machine.",
             "es": "Conteo local de reproducciones para la pista actual en tu historial de Choragus \u{2014} reproducciones totales, habitaciones donde son\u{00F3}, hora de la \u{00FA}ltima reproducci\u{00F3}n y las veinte m\u{00E1}s recientes. Se lee de la base de datos del historial; nada sale de tu m\u{00E1}quina.",
             "it": "Conteggio di riproduzioni locale per il brano corrente nella cronologia di Choragus \u{2014} totale riproduzioni, stanze in cui \u{00E8} stato suonato, ultimo ascolto e le venti pi\u{00F9} recenti. Letto dal database della cronologia; nulla lascia la tua macchina.",
             "sv": "Lokal uppspelningsr\u{00E4}knare f\u{00F6}r aktuellt sp\u{00E5}r i din Choragus-historik \u{2014} totala uppspelningar, rum d\u{00E4}r det spelats, senast-spelad-tid och de tjugo senaste uppspelningarna. L\u{00E4}ses fr\u{00E5}n historikdatabasen; inget l\u{00E4}mnar din maskin.",
@@ -13381,7 +14933,7 @@ public enum L10n {
             "en": "Recently Played gathers radio stations and tracks the speakers have streamed lately, with metadata enriched on demand.",
             "de": "\u{201E}K\u{00FC}rzlich gespielt\u{201C} sammelt Radiosender und Titel, die die Lautsprecher zuletzt abgespielt haben, mit Metadatenanreicherung auf Anforderung.",
             "fr": "\u{00AB}\u{00A0}Lus r\u{00E9}cemment\u{00A0}\u{00BB} regroupe stations de radio et morceaux que les enceintes ont diffus\u{00E9}s r\u{00E9}cemment, avec enrichissement des m\u{00E9}tadonn\u{00E9}es \u{00E0} la demande.",
-            "nl": "\u{201C}Recent afgespeeld\u{201D} verzamelt radiozenders en nummers die de luidsprekers recent hebben gestreamd, met metadata die op aanvraag wordt verrijkt.",
+            "nl": "“Recent afgespeeld” verzamelt radiozenders en nummers die de luidsprekers recent hebben gestreamd, met metadata die op aanvraag wordt verrijkt.",
             "es": "\u{201C}Reproducidos recientemente\u{201D} re\u{00FA}ne emisoras de radio y pistas que los altavoces han transmitido \u{00FA}ltimamente, con metadatos enriquecidos a demanda.",
             "it": "\u{201C}Riprodotti di recente\u{201D} raccoglie stazioni radio e brani che i diffusori hanno trasmesso di recente, con metadati arricchiti su richiesta.",
             "sv": "\u{201D}Nyligen spelade\u{201D} samlar radiokanaler och sp\u{00E5}r som h\u{00F6}gtalarna nyligen str\u{00F6}mmat, med metadata som berikas vid behov.",
@@ -13396,7 +14948,7 @@ public enum L10n {
             "en": "Line-In sources lets you switch supported speakers (Beam, Arc, Connect, Port, Five) to their physical TV or AUX input.",
             "de": "\u{201E}Line-In-Quellen\u{201C} schaltet unterst\u{00FC}tzte Lautsprecher (Beam, Arc, Connect, Port, Five) auf ihren physischen TV- oder AUX-Eingang.",
             "fr": "\u{00AB}\u{00A0}Sources Line-In\u{00A0}\u{00BB} permet de basculer les enceintes prises en charge (Beam, Arc, Connect, Port, Five) sur leur entr\u{00E9}e physique TV ou AUX.",
-            "nl": "Met \u{201C}Line-in-bronnen\u{201D} kun je ondersteunde luidsprekers (Beam, Arc, Connect, Port, Five) overschakelen naar hun fysieke TV- of AUX-ingang.",
+            "nl": "Met “Line-in-bronnen” kun je ondersteunde luidsprekers (Beam, Arc, Connect, Port, Five) overschakelen naar hun fysieke TV- of AUX-ingang.",
             "es": "\u{201C}Fuentes Line-In\u{201D} cambia los altavoces compatibles (Beam, Arc, Connect, Port, Five) a su entrada f\u{00ED}sica de TV o AUX.",
             "it": "\u{201C}Sorgenti Line-In\u{201D} commuta i diffusori supportati (Beam, Arc, Connect, Port, Five) sul loro ingresso fisico TV o AUX.",
             "sv": "\u{201D}Line-in-k\u{00E4}llor\u{201D} v\u{00E4}xlar st\u{00F6}dda h\u{00F6}gtalare (Beam, Arc, Connect, Port, Five) till deras fysiska TV- eller AUX-ing\u{00E5}ng.",
@@ -13421,7 +14973,7 @@ public enum L10n {
             "en": "Search Apple Music by track, artist, or album. Tap an artist to drill into their full discography (defaults to newest-first); tap an album for its tracklist. The sort picker offers Relevance, Newest, Oldest, Title, and Artist on every level. Searches are storefront-aware — region follows your Apple ID.",
             "de": "Apple Music nach Titel, Interpret oder Album durchsuchen. Tippe einen Interpreten an, um seine vollst\u{00E4}ndige Diskografie zu \u{00F6}ffnen (standardm\u{00E4}\u{00DF}ig nach Neuestem sortiert); tippe ein Album an, um die Titelliste anzuzeigen. Die Sortierauswahl bietet Relevanz, Neueste, \u{00C4}lteste, Titel und Interpret auf jeder Ebene. Suchen sind storefront-bewusst \u{2014} die Region folgt deiner Apple-ID.",
             "fr": "Recherchez Apple Music par titre, artiste ou album. Touchez un artiste pour explorer toute sa discographie (par d\u{00E9}faut, du plus r\u{00E9}cent au plus ancien)\u{00A0}; touchez un album pour voir la liste des morceaux. Le s\u{00E9}lecteur de tri propose Pertinence, Plus r\u{00E9}cent, Plus ancien, Titre et Artiste \u{00E0} chaque niveau. Les recherches respectent la boutique \u{2014} la r\u{00E9}gion suit votre identifiant Apple.",
-            "nl": "Zoek in Apple Music op nummer, artiest of album. Tik een artiest aan om de volledige discografie te openen (standaard nieuwste-eerst); tik een album voor de tracklijst. De sorteerkiezer biedt Relevantie, Nieuwste, Oudste, Titel en Artiest op elk niveau. Zoekopdrachten zijn winkelbewust \u{2014} de regio volgt je Apple ID.",
+            "nl": "Zoek in Apple Music op nummer, artiest of album. Tik een artiest aan om de volledige discografie te openen (standaard nieuwste-eerst); tik een album voor de tracklijst. De sorteerkiezer biedt Relevantie, Nieuwste, Oudste, Titel en Artiest op elk niveau. Zoekopdrachten zijn winkelbewust — de regio volgt je Apple ID.",
             "es": "Busca Apple Music por pista, artista o \u{00E1}lbum. Toca un artista para abrir toda su discograf\u{00ED}a (por defecto, m\u{00E1}s reciente primero); toca un \u{00E1}lbum para ver su lista de pistas. El selector de orden ofrece Relevancia, M\u{00E1}s reciente, M\u{00E1}s antiguo, T\u{00ED}tulo y Artista en cada nivel. Las b\u{00FA}squedas son conscientes del storefront \u{2014} la regi\u{00F3}n sigue tu Apple ID.",
             "it": "Cerca su Apple Music per brano, artista o album. Tocca un artista per aprirne la discografia completa (predefinito: pi\u{00F9} recente prima); tocca un album per la tracklist. Il selettore di ordinamento offre Pertinenza, Pi\u{00F9} recente, Pi\u{00F9} vecchio, Titolo e Artista a ogni livello. Le ricerche tengono conto dello store \u{2014} la regione segue il tuo Apple ID.",
             "sv": "S\u{00F6}k i Apple Music p\u{00E5} sp\u{00E5}r, artist eller album. Tryck p\u{00E5} en artist f\u{00F6}r att \u{00F6}ppna hela diskografin (standard: nyaste f\u{00F6}rst); tryck p\u{00E5} ett album f\u{00F6}r dess sp\u{00E5}rlista. Sorteringsv\u{00E4}ljaren erbjuder Relevans, Nyaste, \u{00C4}ldsta, Titel och Artist p\u{00E5} varje niv\u{00E5}. S\u{00F6}kningar \u{00E4}r storefront-medvetna \u{2014} regionen f\u{00F6}ljer ditt Apple-ID.",
@@ -13441,11 +14993,14 @@ public enum L10n {
             "pt": "Plex (Direto vs Cloud)", "pl": "Plex (Bezpo\u{015B}redni vs Chmura)",
             "zh-Hans": "Plex（\u{76F4}\u{8FDE} \u{4E0E} \u{4E91}\u{7AEF}）",
         ],
+    ]
+
+    private static let translations42: [String: [String: String]] = [
         "helpPlexBody": [
             "en": "Choragus offers two Plex paths. Plex – Local connects to your Plex Media Server directly via a PIN flow on plex.tv — no Sonos household needed. Plex – Cloud routes through Sonos's SMAPI relay if you've linked Plex in the Sonos app. Direct is more reliable when your PMS is awake; Cloud falls back when direct fails.",
             "de": "Choragus bietet zwei Plex-Pfade. Plex \u{2013} Lokal verbindet sich \u{00FC}ber den PIN-Ablauf auf plex.tv direkt mit deinem Plex Media Server \u{2014} kein Sonos-Haushalt n\u{00F6}tig. Plex \u{2013} Cloud nutzt das SMAPI-Relay von Sonos, sofern du Plex in der Sonos-App verkn\u{00FC}pft hast. Direkt ist zuverl\u{00E4}ssiger, wenn dein PMS aktiv ist; Cloud springt ein, wenn Direkt fehlschl\u{00E4}gt.",
             "fr": "Choragus propose deux chemins Plex. Plex \u{2013} Local se connecte directement \u{00E0} votre Plex Media Server via le flux PIN sur plex.tv \u{2014} aucun foyer Sonos requis. Plex \u{2013} Cloud passe par le relais SMAPI de Sonos si vous avez li\u{00E9} Plex dans l\u{2019}application Sonos. Direct est plus fiable quand votre PMS est r\u{00E9}veill\u{00E9}\u{00A0}; Cloud prend le relais quand Direct \u{00E9}choue.",
-            "nl": "Choragus biedt twee Plex-paden. Plex \u{2013} Lokaal maakt direct verbinding met je Plex Media Server via de PIN-stroom op plex.tv \u{2014} geen Sonos-huishouden vereist. Plex \u{2013} Cloud loopt via Sonos\u{2019} SMAPI-relay als je Plex hebt gekoppeld in de Sonos-app. Direct is betrouwbaarder als je PMS wakker is; Cloud springt in als Direct faalt.",
+            "nl": "Choragus biedt twee Plex-paden. Plex – Lokaal maakt direct verbinding met je Plex Media Server via de PIN-stroom op plex.tv — geen Sonos-huishouden vereist. Plex – Cloud loopt via Sonos’ SMAPI-relay als je Plex hebt gekoppeld in de Sonos-app. Direct is betrouwbaarder als je PMS wakker is; Cloud springt in als Direct faalt.",
             "es": "Choragus ofrece dos rutas para Plex. Plex \u{2013} Local conecta con tu Plex Media Server directamente mediante el flujo PIN en plex.tv \u{2014} sin necesidad de hogar Sonos. Plex \u{2013} Cloud pasa por el relay SMAPI de Sonos si has vinculado Plex en la app de Sonos. Directo es m\u{00E1}s fiable cuando tu PMS est\u{00E1} despierto; Cloud act\u{00FA}a de respaldo cuando Directo falla.",
             "it": "Choragus offre due percorsi per Plex. Plex \u{2013} Locale si connette direttamente al tuo Plex Media Server tramite il flusso PIN su plex.tv \u{2014} nessun sistema Sonos richiesto. Plex \u{2013} Cloud passa attraverso il relay SMAPI di Sonos se hai collegato Plex nell\u{2019}app Sonos. Diretto \u{00E8} pi\u{00F9} affidabile quando il tuo PMS \u{00E8} attivo; Cloud subentra quando Diretto fallisce.",
             "sv": "Choragus erbjuder tv\u{00E5} v\u{00E4}gar f\u{00F6}r Plex. Plex \u{2013} Lokal ansluter direkt till din Plex Media Server via PIN-fl\u{00F6}det p\u{00E5} plex.tv \u{2014} inget Sonos-hush\u{00E5}ll beh\u{00F6}vs. Plex \u{2013} Cloud g\u{00E5}r via Sonos SMAPI-rel\u{00E4} om du har l\u{00E4}nkat Plex i Sonos-appen. Direkt \u{00E4}r p\u{00E5}litligare n\u{00E4}r din PMS \u{00E4}r vaken; Cloud tar \u{00F6}ver n\u{00E4}r Direkt misslyckas.",
@@ -13478,7 +15033,7 @@ public enum L10n {
             "en": "Settings → Music Services lists every service Sonos knows about for your household, plus a few pinned services Choragus surfaces unconditionally (Plex Local, Apple Music, TuneIn, Calm Radio, Sonos Radio, Pandora). Each row carries a coloured status dot and a Connect button when applicable.",
             "de": "Einstellungen \u{2192} Musikdienste listet alle Dienste auf, die Sonos f\u{00FC}r deinen Haushalt kennt, sowie einige fest angeheftete Dienste, die Choragus immer anzeigt (Plex Local, Apple Music, TuneIn, Calm Radio, Sonos Radio, Pandora). Jede Zeile tr\u{00E4}gt einen farbigen Statuspunkt und gegebenenfalls eine Verbinden-Schaltfl\u{00E4}che.",
             "fr": "R\u{00E9}glages \u{2192} Services de musique liste tous les services connus de Sonos pour votre foyer, ainsi que quelques services \u{00E9}pingl\u{00E9}s que Choragus affiche en permanence (Plex Local, Apple Music, TuneIn, Calm Radio, Sonos Radio, Pandora). Chaque ligne porte une pastille de statut color\u{00E9}e et un bouton Connecter selon le cas.",
-            "nl": "Instellingen \u{2192} Muziekdiensten toont elke dienst die Sonos kent voor je huishouden, plus enkele vastgemaakte diensten die Choragus altijd toont (Plex Local, Apple Music, TuneIn, Calm Radio, Sonos Radio, Pandora). Elke rij heeft een gekleurde statusstip en, indien van toepassing, een Verbinden-knop.",
+            "nl": "Instellingen → Muziekdiensten toont elke dienst die Sonos kent voor je huishouden, plus enkele vastgemaakte diensten die Choragus altijd toont (Plex Local, Apple Music, TuneIn, Calm Radio, Sonos Radio, Pandora). Elke rij heeft een gekleurde statusstip en, indien van toepassing, een Verbinden-knop.",
             "es": "Ajustes \u{2192} Servicios de m\u{00FA}sica lista todos los servicios que Sonos conoce para tu hogar, m\u{00E1}s algunos fijos que Choragus muestra siempre (Plex Local, Apple Music, TuneIn, Calm Radio, Sonos Radio, Pandora). Cada fila lleva un punto de estado coloreado y un bot\u{00F3}n Conectar cuando corresponde.",
             "it": "Impostazioni \u{2192} Servizi musicali elenca ogni servizio noto a Sonos per il tuo sistema, pi\u{00F9} alcuni servizi fissati che Choragus mostra sempre (Plex Local, Apple Music, TuneIn, Calm Radio, Sonos Radio, Pandora). Ogni riga ha un puntino di stato colorato e, quando applicabile, un pulsante Connetti.",
             "sv": "Inst\u{00E4}llningar \u{2192} Musiktj\u{00E4}nster listar varje tj\u{00E4}nst som Sonos k\u{00E4}nner till f\u{00F6}r ditt hush\u{00E5}ll, plus n\u{00E5}gra fastn\u{00E5}lade tj\u{00E4}nster som Choragus alltid visar (Plex Local, Apple Music, TuneIn, Calm Radio, Sonos Radio, Pandora). Varje rad har en f\u{00E4}rgad statusprick och en Anslut-knapp d\u{00E4}r det \u{00E4}r relevant.",
@@ -13518,7 +15073,7 @@ public enum L10n {
             "en": "Blue — confirmed working through Choragus (Spotify, Plex, Audible) or available as a search-only toggle (Apple Music, TuneIn, Calm Radio, Sonos Radio).",
             "de": "Blau \u{2014} best\u{00E4}tigt funktionierend in Choragus (Spotify, Plex, Audible) oder als reine Such-Umschaltung verf\u{00FC}gbar (Apple Music, TuneIn, Calm Radio, Sonos Radio).",
             "fr": "Bleu \u{2014} confirm\u{00E9} fonctionnel via Choragus (Spotify, Plex, Audible) ou disponible comme bascule de recherche uniquement (Apple Music, TuneIn, Calm Radio, Sonos Radio).",
-            "nl": "Blauw \u{2014} bevestigd werkend via Choragus (Spotify, Plex, Audible) of beschikbaar als alleen-zoeken toggle (Apple Music, TuneIn, Calm Radio, Sonos Radio).",
+            "nl": "Blauw — bevestigd werkend via Choragus (Spotify, Plex, Audible) of beschikbaar als alleen-zoeken toggle (Apple Music, TuneIn, Calm Radio, Sonos Radio).",
             "es": "Azul \u{2014} confirmado funcionando a trav\u{00E9}s de Choragus (Spotify, Plex, Audible) o disponible como interruptor solo-de-b\u{00FA}squeda (Apple Music, TuneIn, Calm Radio, Sonos Radio).",
             "it": "Blu \u{2014} confermato funzionante tramite Choragus (Spotify, Plex, Audible) o disponibile come interruttore di sola ricerca (Apple Music, TuneIn, Calm Radio, Sonos Radio).",
             "sv": "Bl\u{00E5} \u{2014} bekr\u{00E4}ftat fungerande genom Choragus (Spotify, Plex, Audible) eller tillg\u{00E4}nglig som endast-s\u{00F6}k-omkopplare (Apple Music, TuneIn, Calm Radio, Sonos Radio).",
@@ -13533,7 +15088,7 @@ public enum L10n {
             "en": "Green — authenticated and ready to play. The service is linked, the token is valid, and at least one Sonos Favorite has surfaced an account-serial number for it.",
             "de": "Gr\u{00FC}n \u{2014} authentifiziert und bereit zum Abspielen. Der Dienst ist verkn\u{00FC}pft, das Token ist g\u{00FC}ltig und mindestens ein Sonos-Favorit hat eine Kontoserialnummer dazu geliefert.",
             "fr": "Vert \u{2014} authentifi\u{00E9} et pr\u{00EA}t \u{00E0} lire. Le service est li\u{00E9}, le jeton est valide et au moins un favori Sonos a fourni un num\u{00E9}ro de s\u{00E9}rie de compte.",
-            "nl": "Groen \u{2014} geauthenticeerd en klaar om af te spelen. De dienst is gekoppeld, het token is geldig en ten minste \u{00E9}\u{00E9}n Sonos-favoriet heeft een account-serienummer opgeleverd.",
+            "nl": "Groen — geauthenticeerd en klaar om af te spelen. De dienst is gekoppeld, het token is geldig en ten minste één Sonos-favoriet heeft een account-serienummer opgeleverd.",
             "es": "Verde \u{2014} autenticado y listo para reproducir. El servicio est\u{00E1} vinculado, el token es v\u{00E1}lido y al menos un Favorito Sonos ha aportado un n\u{00FA}mero de serie de cuenta.",
             "it": "Verde \u{2014} autenticato e pronto a riprodurre. Il servizio \u{00E8} collegato, il token \u{00E8} valido e almeno un Preferito Sonos ha fornito un numero di serie dell\u{2019}account.",
             "sv": "Gr\u{00F6}n \u{2014} autentiserad och redo att spela. Tj\u{00E4}nsten \u{00E4}r l\u{00E4}nkad, token \u{00E4}r giltig och minst en Sonos-favorit har avsl\u{00F6}jat ett kontoserienummer.",
@@ -13548,7 +15103,7 @@ public enum L10n {
             "en": "Yellow — untested. Choragus doesn't yet know whether the service authenticates from third-party clients. Tap Connect and report the result on GitHub.",
             "de": "Gelb \u{2014} ungetestet. Choragus wei\u{00DF} noch nicht, ob sich der Dienst von Drittanbieter-Clients aus authentifiziert. Tippe auf Verbinden und melde das Ergebnis auf GitHub.",
             "fr": "Jaune \u{2014} non test\u{00E9}. Choragus ne sait pas encore si le service s\u{2019}authentifie depuis des clients tiers. Touchez Connecter et signalez le r\u{00E9}sultat sur GitHub.",
-            "nl": "Geel \u{2014} niet getest. Choragus weet nog niet of de dienst authenticeert vanaf externe clients. Tik op Verbind en meld het resultaat op GitHub.",
+            "nl": "Geel — niet getest. Choragus weet nog niet of de dienst authenticeert vanaf externe clients. Tik op Verbind en meld het resultaat op GitHub.",
             "es": "Amarillo \u{2014} sin probar. Choragus a\u{00FA}n no sabe si el servicio se autentica desde clientes de terceros. Toca Conectar e informa el resultado en GitHub.",
             "it": "Giallo \u{2014} non testato. Choragus non sa ancora se il servizio si autentica da client di terze parti. Tocca Connetti e segnala il risultato su GitHub.",
             "sv": "Gul \u{2014} otestad. Choragus vet \u{00E4}nnu inte om tj\u{00E4}nsten autentiserar fr\u{00E5}n tredjepartsklienter. Tryck p\u{00E5} Anslut och rapportera resultatet p\u{00E5} GitHub.",
@@ -13563,7 +15118,7 @@ public enum L10n {
             "en": "Red — provider blocks third-party authentication (Amazon Music, YouTube Music, SoundCloud). Use the official Sonos app for these.",
             "de": "Rot \u{2014} Anbieter blockiert die Authentifizierung von Drittanbieter-Clients (Amazon Music, YouTube Music, SoundCloud). Verwende daf\u{00FC}r die offizielle Sonos-App.",
             "fr": "Rouge \u{2014} le fournisseur bloque l\u{2019}authentification tierce (Amazon Music, YouTube Music, SoundCloud). Utilisez l\u{2019}application Sonos officielle pour ceux-ci.",
-            "nl": "Rood \u{2014} aanbieder blokkeert externe authenticatie (Amazon Music, YouTube Music, SoundCloud). Gebruik hiervoor de offici\u{00EB}le Sonos-app.",
+            "nl": "Rood — aanbieder blokkeert externe authenticatie (Amazon Music, YouTube Music, SoundCloud). Gebruik hiervoor de officiële Sonos-app.",
             "es": "Rojo \u{2014} el proveedor bloquea la autenticaci\u{00F3}n de terceros (Amazon Music, YouTube Music, SoundCloud). Usa la app oficial de Sonos para estos.",
             "it": "Rosso \u{2014} il fornitore blocca l\u{2019}autenticazione di terze parti (Amazon Music, YouTube Music, SoundCloud). Per questi usa l\u{2019}app Sonos ufficiale.",
             "sv": "R\u{00F6}d \u{2014} leverant\u{00F6}ren blockerar tredjepartsautentisering (Amazon Music, YouTube Music, SoundCloud). Anv\u{00E4}nd den officiella Sonos-appen f\u{00F6}r dessa.",
@@ -13578,7 +15133,7 @@ public enum L10n {
             "en": "Gray — service exists in the Sonos catalogue but isn't linked to your household. Add it via the official Sonos app first; it'll surface here automatically.",
             "de": "Grau \u{2014} Dienst ist im Sonos-Katalog vorhanden, aber nicht mit deinem Haushalt verkn\u{00FC}pft. F\u{00FC}ge ihn zuerst \u{00FC}ber die offizielle Sonos-App hinzu; er erscheint dann hier automatisch.",
             "fr": "Gris \u{2014} le service existe dans le catalogue Sonos mais n\u{2019}est pas li\u{00E9} \u{00E0} votre foyer. Ajoutez-le d\u{2019}abord via l\u{2019}application Sonos officielle\u{00A0}; il appara\u{00EE}tra ici automatiquement.",
-            "nl": "Grijs \u{2014} dienst bestaat in de Sonos-catalogus maar is niet gekoppeld aan je huishouden. Voeg hem eerst toe via de offici\u{00EB}le Sonos-app; hij verschijnt hier dan automatisch.",
+            "nl": "Grijs — dienst bestaat in de Sonos-catalogus maar is niet gekoppeld aan je huishouden. Voeg hem eerst toe via de officiële Sonos-app; hij verschijnt hier dan automatisch.",
             "es": "Gris \u{2014} el servicio existe en el cat\u{00E1}logo de Sonos pero no est\u{00E1} vinculado a tu hogar. A\u{00F1}\u{00E1}delo primero mediante la app oficial de Sonos; aparecer\u{00E1} aqu\u{00ED} autom\u{00E1}ticamente.",
             "it": "Grigio \u{2014} il servizio esiste nel catalogo Sonos ma non \u{00E8} collegato al tuo sistema. Aggiungilo prima tramite l\u{2019}app Sonos ufficiale; apparir\u{00E0} qui automaticamente.",
             "sv": "Gr\u{00E5} \u{2014} tj\u{00E4}nsten finns i Sonos-katalogen men \u{00E4}r inte l\u{00E4}nkad till ditt hush\u{00E5}ll. L\u{00E4}gg till den f\u{00F6}rst via den officiella Sonos-appen; den dyker upp h\u{00E4}r automatiskt.",
@@ -13602,7 +15157,7 @@ public enum L10n {
             "en": "Tap Connect on a blue or yellow row to start the AppLink OAuth flow — Choragus opens the provider's authorization page in your browser; sign in there and the row turns green. For services that need a Sonos Favorite to surface their account-serial number, the row stays orange (\"add a favourite to finish setup\") until you've added one in the official Sonos app.",
             "de": "Tippe in einer blauen oder gelben Zeile auf Verbinden, um den AppLink-OAuth-Vorgang zu starten \u{2014} Choragus \u{00F6}ffnet die Autorisierungsseite des Anbieters in deinem Browser; melde dich dort an, dann wird die Zeile gr\u{00FC}n. F\u{00FC}r Dienste, die einen Sonos-Favoriten ben\u{00F6}tigen, um ihre Konto-Seriennummer zu liefern, bleibt die Zeile orange (\u{201E}Favorit hinzuf\u{00FC}gen, um die Einrichtung abzuschlie\u{00DF}en\u{201C}), bis du einen in der offiziellen Sonos-App hinzugef\u{00FC}gt hast.",
             "fr": "Touchez Connecter sur une ligne bleue ou jaune pour lancer le flux OAuth AppLink \u{2014} Choragus ouvre la page d\u{2019}autorisation du fournisseur dans votre navigateur ; identifiez-vous et la ligne passe au vert. Pour les services qui ont besoin d\u{2019}un favori Sonos pour faire appara\u{00EE}tre leur num\u{00E9}ro de s\u{00E9}rie de compte, la ligne reste orange (\u{00AB}\u{00A0}ajoutez un favori pour finir la configuration\u{00A0}\u{00BB}) tant que vous n\u{2019}en avez pas ajout\u{00E9} un dans l\u{2019}application Sonos officielle.",
-            "nl": "Tik op Verbind in een blauwe of gele rij om de AppLink-OAuth-stroom te starten \u{2014} Choragus opent de autorisatiepagina van de aanbieder in je browser; log daar in en de rij wordt groen. Voor diensten die een Sonos-favoriet nodig hebben om hun account-serienummer op te leveren, blijft de rij oranje (\u{201C}voeg een favoriet toe om de installatie te voltooien\u{201D}) totdat je er een hebt toegevoegd in de offici\u{00EB}le Sonos-app.",
+            "nl": "Tik op Verbind in een blauwe of gele rij om de AppLink-OAuth-stroom te starten — Choragus opent de autorisatiepagina van de aanbieder in je browser; log daar in en de rij wordt groen. Voor diensten die een Sonos-favoriet nodig hebben om hun account-serienummer op te leveren, blijft de rij oranje (“voeg een favoriet toe om de installatie te voltooien”) totdat je er een hebt toegevoegd in de officiële Sonos-app.",
             "es": "Toca Conectar en una fila azul o amarilla para iniciar el flujo OAuth de AppLink \u{2014} Choragus abre la p\u{00E1}gina de autorizaci\u{00F3}n del proveedor en tu navegador; inicia sesi\u{00F3}n all\u{00ED} y la fila se pondr\u{00E1} verde. Para servicios que necesitan un Favorito Sonos para aportar su n\u{00FA}mero de serie de cuenta, la fila permanece naranja (\u{201C}a\u{00F1}ade un favorito para finalizar la configuraci\u{00F3}n\u{201D}) hasta que a\u{00F1}adas uno en la app oficial de Sonos.",
             "it": "Tocca Connetti su una riga blu o gialla per avviare il flusso OAuth AppLink \u{2014} Choragus apre la pagina di autorizzazione del fornitore nel browser; accedi e la riga diventa verde. Per i servizi che hanno bisogno di un Preferito Sonos per esporre il loro numero di serie dell\u{2019}account, la riga rimane arancione (\u{201C}aggiungi un preferito per terminare la configurazione\u{201D}) finch\u{00E9} non ne aggiungi uno nell\u{2019}app Sonos ufficiale.",
             "sv": "Tryck p\u{00E5} Anslut p\u{00E5} en bl\u{00E5} eller gul rad f\u{00F6}r att starta AppLink-OAuth-fl\u{00F6}det \u{2014} Choragus \u{00F6}ppnar leverant\u{00F6}rens autentiseringssida i webbl\u{00E4}saren; logga in d\u{00E4}r och raden blir gr\u{00F6}n. F\u{00F6}r tj\u{00E4}nster som beh\u{00F6}ver en Sonos-favorit f\u{00F6}r att avsl\u{00F6}ja sitt kontoserienummer f\u{00F6}rblir raden orange (\u{201D}l\u{00E4}gg till en favorit f\u{00F6}r att slutf\u{00F6}ra inst\u{00E4}llningen\u{201D}) tills du l\u{00E4}gger till en i den officiella Sonos-appen.",
@@ -13623,23 +15178,23 @@ public enum L10n {
             "zh-Hans": "\u{670D}\u{52A1}\u{5907}\u{6CE8}",
         ],
         "helpServiceNotesBody": [
-            "en": "Apple Music is search-only via iTunes Search; playback still uses Sonos Favorites under the hood. Pandora is US-only as of 2026 and currently untested through Choragus. Audible is confirmed working. Plex Direct (PIN flow) is independent of any Sonos household; Plex Cloud needs Plex linked in the Sonos app.",
-            "de": "Apple Music ist nur Such-Funktion \u{00FC}ber iTunes Search; die Wiedergabe nutzt weiterhin Sonos-Favoriten im Hintergrund. Pandora ist Stand 2026 nur US-verf\u{00FC}gbar und derzeit in Choragus ungetestet. Audible ist best\u{00E4}tigt funktionierend. Plex Direct (PIN-Flow) ist unabh\u{00E4}ngig von jedem Sonos-Haushalt; Plex Cloud setzt voraus, dass Plex in der Sonos-App verkn\u{00FC}pft ist.",
-            "fr": "Apple Music est uniquement en mode recherche via iTunes Search ; la lecture utilise toujours les favoris Sonos en coulisses. Pandora est r\u{00E9}serv\u{00E9} aux \u{00C9}tats-Unis depuis 2026 et n\u{2019}est actuellement pas test\u{00E9} via Choragus. Audible est confirm\u{00E9} fonctionnel. Plex Direct (flux PIN) est ind\u{00E9}pendant de tout foyer Sonos\u{00A0}; Plex Cloud n\u{00E9}cessite que Plex soit li\u{00E9} dans l\u{2019}application Sonos.",
-            "nl": "Apple Music is alleen-zoeken via iTunes Search; afspelen gebeurt onder de motorkap nog steeds via Sonos-favorieten. Pandora is sinds 2026 alleen-VS en momenteel niet getest in Choragus. Audible is bevestigd werkend. Plex Direct (PIN-stroom) staat los van een Sonos-huishouden; Plex Cloud vereist dat Plex in de Sonos-app is gekoppeld.",
-            "es": "Apple Music es solo de b\u{00FA}squeda mediante iTunes Search; la reproducci\u{00F3}n usa Sonos Favoritos por debajo. Pandora es solo EE. UU. desde 2026 y actualmente no est\u{00E1} probado a trav\u{00E9}s de Choragus. Audible est\u{00E1} confirmado funcionando. Plex Directo (flujo PIN) es independiente de cualquier hogar Sonos; Plex Cloud requiere que Plex est\u{00E9} vinculado en la app Sonos.",
-            "it": "Apple Music \u{00E8} solo ricerca tramite iTunes Search; la riproduzione usa i Preferiti Sonos sotto il cofano. Pandora dal 2026 \u{00E8} disponibile solo negli Stati Uniti e attualmente non testato tramite Choragus. Audible \u{00E8} confermato funzionante. Plex Direct (flusso PIN) \u{00E8} indipendente da qualsiasi sistema Sonos; Plex Cloud richiede che Plex sia collegato nell\u{2019}app Sonos.",
-            "sv": "Apple Music \u{00E4}r endast s\u{00F6}k via iTunes Search; uppspelning anv\u{00E4}nder fortfarande Sonos-favoriter bakom kulisserna. Pandora \u{00E4}r US-only fr\u{00E5}n 2026 och f\u{00F6}r n\u{00E4}rvarande otestad i Choragus. Audible \u{00E4}r bekr\u{00E4}ftat fungerande. Plex Direct (PIN-fl\u{00F6}de) \u{00E4}r oberoende av Sonos-hush\u{00E5}ll; Plex Cloud kr\u{00E4}ver att Plex \u{00E4}r l\u{00E4}nkat i Sonos-appen.",
-            "nb": "Apple Music er kun s\u{00F8}k via iTunes Search; avspilling bruker fortsatt Sonos-favoritter bak kulissene. Pandora er bare USA fra 2026 og foreløpig utestet via Choragus. Audible er bekreftet fungerende. Plex Direct (PIN-flyt) er uavhengig av Sonos-husholdning; Plex Cloud krever at Plex er knyttet til Sonos-appen.",
-            "da": "Apple Music er kun s\u{00F8}gning via iTunes Search; afspilning bruger stadig Sonos-favoritter under motorhjelmen. Pandora er kun USA fra 2026 og er aktuelt utestet via Choragus. Audible er bekr\u{00E6}ftet virkende. Plex Direct (PIN-fl\u{00F8}de) er uafh\u{00E6}ngigt af Sonos-husstand; Plex Cloud kr\u{00E6}ver, at Plex er tilknyttet Sonos-appen.",
-            "ja": "Apple Music \u{306F} iTunes Search \u{306B}\u{3088}\u{308B}\u{691C}\u{7D22}\u{306E}\u{307F}\u{3067}\u{3001}\u{518D}\u{751F}\u{306F}\u{5185}\u{90E8}\u{7684}\u{306B} Sonos \u{30D5}\u{30A1}\u{30D9}\u{30EA}\u{30C3}\u{30C8}\u{3092}\u{4F7F}\u{7528}\u{3057}\u{307E}\u{3059}\u{3002}Pandora \u{306F} 2026 \u{5E74}\u{73FE}\u{5728}\u{7C73}\u{56FD}\u{306E}\u{307F}\u{3067}\u{3001}Choragus \u{3067}\u{306F}\u{307E}\u{3060}\u{30C6}\u{30B9}\u{30C8}\u{3055}\u{308C}\u{3066}\u{3044}\u{307E}\u{305B}\u{3093}\u{3002}Audible \u{306F}\u{52D5}\u{4F5C}\u{78BA}\u{8A8D}\u{6E08}\u{307F}\u{3067}\u{3059}\u{3002}Plex Direct（PIN \u{30D5}\u{30ED}\u{30FC}）\u{306F} Sonos \u{30DB}\u{30FC}\u{30E0}\u{306B}\u{4F9D}\u{5B58}\u{305B}\u{305A}\u{52D5}\u{4F5C}\u{3057}\u{307E}\u{3059}\u{3002}Plex Cloud \u{306F} Sonos \u{30A2}\u{30D7}\u{30EA}\u{3067} Plex \u{304C}\u{30EA}\u{30F3}\u{30AF}\u{3055}\u{308C}\u{3066}\u{3044}\u{308B}\u{5FC5}\u{8981}\u{304C}\u{3042}\u{308A}\u{307E}\u{3059}\u{3002}",
-            "pt": "Apple Music \u{00E9} apenas pesquisa via iTunes Search; a reprodu\u{00E7}\u{00E3}o ainda usa os Favoritos Sonos por baixo. Pandora \u{00E9} apenas EUA desde 2026 e atualmente n\u{00E3}o foi testado atrav\u{00E9}s do Choragus. Audible est\u{00E1} confirmado a funcionar. Plex Direto (fluxo PIN) \u{00E9} independente de qualquer agregado Sonos; Plex Cloud requer que o Plex esteja associado na app Sonos.",
-            "pl": "Apple Music dzia\u{0142}a tylko jako wyszukiwanie przez iTunes Search; odtwarzanie nadal korzysta z Sonos Favorites. Pandora od 2026 jest dost\u{0119}pna tylko w USA i obecnie nieprzetestowana przez Choragus. Audible jest potwierdzone jako dzia\u{0142}aj\u{0105}ce. Plex Direct (przep\u{0142}yw PIN) jest niezale\u{017C}ny od jakiegokolwiek domu Sonos; Plex Cloud wymaga po\u{0142}\u{0105}czenia Plex w aplikacji Sonos.",
-            "zh-Hans": "Apple Music \u{4EC5}\u{901A}\u{8FC7} iTunes Search \u{63D0}\u{4F9B}\u{641C}\u{7D22}；\u{64AD}\u{653E}\u{4ECD}\u{901A}\u{8FC7} Sonos \u{6536}\u{85CF}\u{8FDB}\u{884C}\u{3002}\u{622A}\u{81F3} 2026 \u{5E74}\u{FF0C}Pandora \u{4EC5}\u{9650}\u{7F8E}\u{56FD}\u{4F7F}\u{7528}\u{4E14}\u{5728} Choragus \u{4E2D}\u{5C1A}\u{672A}\u{6D4B}\u{8BD5}\u{3002}Audible \u{5DF2}\u{786E}\u{8BA4}\u{53EF}\u{7528}\u{3002}Plex \u{76F4}\u{8FDE}（PIN \u{6D41}\u{7A0B}）\u{72EC}\u{7ACB}\u{4E8E} Sonos \u{5BB6}\u{5EAD}；Plex \u{4E91}\u{7AEF}\u{9700}\u{5728} Sonos \u{5E94}\u{7528}\u{4E2D}\u{5173}\u{8054} Plex\u{3002}",
+            "en": "Apple Music search uses the iTunes Search catalogue; connecting Apple Music in Settings adds your own library and playlists through MusicKit. Pandora is US-only as of 2026 and currently untested through Choragus. Audible is confirmed working. Plex Direct (PIN flow) is independent of any Sonos household; Plex Cloud needs Plex linked in the Sonos app.",
+            "de": "Die Apple Music-Suche verwendet den iTunes Search-Katalog; wenn du Apple Music in den Einstellungen verbindest, werden deine eigene Mediathek und Playlists über MusicKit hinzugefügt. Pandora ist ab 2026 nur in den USA verfügbar und derzeit nicht mit Choragus getestet. Audible funktioniert erwiesenermaßen. Plex Direct (PIN-Ablauf) ist unabhängig von einem Sonos-Haushalt; für Plex Cloud muss Plex in der Sonos-App verknüpft sein.",
+            "fr": "La recherche Apple Music utilise le catalogue iTunes Search ; la connexion d'Apple Music dans les Réglages ajoute votre propre bibliothèque et vos playlists via MusicKit. Pandora est exclusif aux États-Unis à partir de 2026 et n'est actuellement pas testé via Choragus. Le fonctionnement d'Audible est confirmé. Plex Direct (flux PIN) est indépendant de tout foyer Sonos ; Plex Cloud nécessite que Plex soit associé dans l'app Sonos.",
+            "nl": "De zoekfunctie van Apple Music gebruikt de iTunes Search-catalogus; door Apple Music te koppelen in Instellingen, worden je eigen bibliotheek en afspeellijsten via MusicKit toegevoegd. Pandora is vanaf 2026 uitsluitend in de VS beschikbaar en is momenteel ongetest via Choragus. Het is bevestigd dat Audible werkt. Plex Direct (PIN-procedure) staat los van een Sonos-huishouden; voor Plex Cloud moet Plex in de Sonos-app zijn gekoppeld.",
+            "es": "La búsqueda de Apple Music utiliza el catálogo de iTunes Search; al conectar Apple Music en los Ajustes, se añaden tu propia biblioteca y tus listas de reproducción a través de MusicKit. A partir de 2026, Pandora solo estará disponible en EE. UU. y actualmente no se ha probado a través de Choragus. Está confirmado que Audible funciona. Plex Direct (flujo con PIN) es independiente de cualquier hogar Sonos; Plex Cloud requiere que Plex esté vinculado en la app Sonos.",
+            "it": "La ricerca di Apple Music utilizza il catalogo iTunes Search; collegando Apple Music in Impostazioni, la tua libreria e le tue playlist vengono aggiunte tramite MusicKit. A partire dal 2026 Pandora è disponibile solo negli Stati Uniti e al momento non è testato tramite Choragus. Il funzionamento di Audible è confermato. Plex Direct (flusso PIN) è indipendente da qualsiasi sistema Sonos domestico; Plex Cloud richiede che Plex sia collegato nell'app Sonos.",
+            "sv": "Apple Music-sökning använder iTunes Search-katalogen. Om du ansluter Apple Music i Inställningar läggs ditt eget bibliotek och dina spellistor till via MusicKit. Pandora är endast tillgängligt i USA från och med 2026 och har för närvarande inte testats via Choragus. Audible har bekräftats fungera. Plex Direct (PIN-flöde) är oberoende av ett Sonos-hushåll. För Plex Cloud måste Plex vara länkat i Sonos-appen.",
+            "nb": "Apple Music-søk bruker iTunes Search-katalogen; hvis du kobler til Apple Music i Innstillinger, legges ditt eget bibliotek og egne spillelister til via MusicKit. Pandora er bare tilgjengelig i USA fra og med 2026 og er for øyeblikket ikke testet gjennom Choragus. Det er bekreftet at Audible fungerer. Plex Direct (PIN-flyt) er uavhengig av Sonos-husholdninger; Plex Cloud krever at Plex er koblet til i Sonos-appen.",
+            "da": "Apple Music-søgning bruger iTunes Search-kataloget. Hvis du forbinder Apple Music i Indstillinger, tilføjes dit eget bibliotek og dine playlister via MusicKit. Pandora er kun tilgængelig i USA fra og med 2026 og er i øjeblikket ikke testet gennem Choragus. Det er bekræftet, at Audible virker. Plex Direct (PIN-flow) er uafhængigt af en Sonos-husholdning; Plex Cloud kræver, at Plex er knyttet til i Sonos-appen.",
+            "ja": "Apple Musicの検索ではiTunes Searchカタログが使用されます。「設定」でApple Musicを接続すると、MusicKitを通じてご自身のライブラリやプレイリストが追加されます。Pandoraは2026年以降米国限定であり、現在Choragusを介したテストは行われていません。Audibleは動作が確認されています。Plex Direct（PINフロー）はSonosのシステムとは独立しています。Plex Cloudを使用するには、Sonosアプリ内でPlexをリンクする必要があります。",
+            "pt": "A busca do Apple Music usa o catálogo do iTunes Search; conectar o Apple Music em Ajustes adiciona sua própria biblioteca e playlists através do MusicKit. O Pandora é exclusivo dos EUA a partir de 2026 e atualmente não foi testado no Choragus. O funcionamento do Audible está confirmado. O Plex Direct (fluxo via PIN) é independente de qualquer residência Sonos; o Plex Cloud exige que o Plex esteja vinculado no app Sonos.",
+            "pl": "Wyszukiwanie w Apple Music korzysta z katalogu iTunes Search; połączenie Apple Music w sekcji Ustawienia dodaje własną bibliotekę i playlisty poprzez MusicKit. Od 2026 roku usługa Pandora będzie dostępna wyłącznie w USA i obecnie nie została przetestowana z aplikacją Choragus. Potwierdzono działanie usługi Audible. Plex Direct (proces logowania PIN) działa niezależnie od domowego systemu Sonos; Plex Cloud wymaga połączenia Plex w aplikacji Sonos.",
+            "zh-Hans": "Apple Music 搜索使用 iTunes Search 目录；在“设置”中连接 Apple Music 可通过 MusicKit 添加您自己的资料库和播放列表。从 2026 年起 Pandora 将仅限美国可用，目前尚未通过 Choragus 进行测试。已确认 Audible 运行正常。Plex Direct（PIN 验证流程）独立于任何 Sonos 家庭系统；Plex Cloud 需要在 Sonos App 中关联 Plex。",
         ],
         "helpBulletColors": [
             "en": "Colors: customise the accent dot, the playing-zone indicator, and the inactive-zone indicator independently.",
-            "de": "Farben: Passen Sie den Akzent-Punkt, den Indikator f\u{00FC}r die spielende Zone und den Indikator f\u{00FC}r inaktive Zonen unabh\u{00E4}ngig voneinander an.",
+            "de": "Farben: Passe den Akzent-Punkt, den Indikator für die spielende Zone und den Indikator für inaktive Zonen unabhängig voneinander an.",
             "fr": "Couleurs\u{00A0}: personnalisez ind\u{00E9}pendamment la pastille d\u{2019}accent, l\u{2019}indicateur de zone en lecture et l\u{2019}indicateur de zone inactive.",
             "nl": "Kleuren: pas de accentstip, de indicator voor de spelende zone en de indicator voor inactieve zones onafhankelijk aan.",
             "es": "Colores: personaliza el punto de acento, el indicador de zona en reproducci\u{00F3}n y el indicador de zona inactiva de forma independiente.",
@@ -13654,9 +15209,9 @@ public enum L10n {
         ],
         "helpBulletLanguage": [
             "en": "Language: pick from 13 supported locales \u{2014} UI text, Wikipedia bios, and Last.fm bios all follow your selection.",
-            "de": "Sprache: W\u{00E4}hlen Sie aus 13 unterst\u{00FC}tzten Sprachen \u{2014} UI-Texte, Wikipedia-Biografien und Last.fm-Biografien folgen Ihrer Auswahl.",
+            "de": "Sprache: Wähle aus 13 unterstützten Sprachen — UI-Texte, Wikipedia-Biografien und Last.fm-Biografien folgen deiner Auswahl.",
             "fr": "Langue\u{00A0}: choisissez parmi 13 locales prises en charge \u{2014} le texte de l\u{2019}interface, les biographies Wikip\u{00E9}dia et les biographies Last.fm suivent votre s\u{00E9}lection.",
-            "nl": "Taal: kies uit 13 ondersteunde locales \u{2014} UI-tekst, Wikipedia-biografie\u{00EB}n en Last.fm-biografie\u{00EB}n volgen je keuze.",
+            "nl": "Taal: kies uit 13 ondersteunde locales — UI-tekst, Wikipedia-biografieën en Last.fm-biografieën volgen je keuze.",
             "es": "Idioma: elige entre 13 idiomas admitidos \u{2014} el texto de la IU, las biograf\u{00ED}as de Wikipedia y las biograf\u{00ED}as de Last.fm siguen tu selecci\u{00F3}n.",
             "it": "Lingua: scegli tra 13 lingue supportate \u{2014} testo dell\u{2019}interfaccia, biografie di Wikipedia e di Last.fm seguono la tua selezione.",
             "sv": "Spr\u{00E5}k: v\u{00E4}lj bland 13 spr\u{00E5}k \u{2014} UI-text, Wikipedia-biografier och Last.fm-biografier f\u{00F6}ljer ditt val.",
@@ -13669,7 +15224,7 @@ public enum L10n {
         ],
         "helpBulletMouseControls": [
             "en": "Mouse: scroll the wheel over Now Playing to change volume; middle-click to mute or unmute the group.",
-            "de": "Maus: Scrollen Sie das Mausrad \u{00FC}ber \u{201E}Jetzt l\u{00E4}uft\u{201C}, um die Lautst\u{00E4}rke zu \u{00E4}ndern; Mittelklick stummschaltet die Gruppe oder hebt die Stummschaltung auf.",
+            "de": "Maus: Scrolle das Mausrad über „Jetzt läuft“, um die Lautstärke zu ändern; Mittelklick stummschaltet die Gruppe oder hebt die Stummschaltung auf.",
             "fr": "Souris\u{00A0}: faites d\u{00E9}filer la molette sur la lecture en cours pour modifier le volume\u{00A0}; cliquez avec le bouton central pour activer ou d\u{00E9}sactiver la sourdine du groupe.",
             "nl": "Muis: scroll met het wiel over Now Playing om het volume te wijzigen; middelklik om de groep te dempen of het dempen op te heffen.",
             "es": "Rat\u{00F3}n: desplaza la rueda sobre \u{00AB}En reproducci\u{00F3}n\u{00BB} para cambiar el volumen; clic central para silenciar o activar el grupo.",
@@ -13697,9 +15252,24 @@ public enum L10n {
             "pl": "Wykrywanie: Auto u\u{017C}ywa SSDP + Bonjour razem (domy\u{015B}lnie), Bonjour ogranicza do mDNS, Legacy Multicast ogranicza do SSDP.",
             "zh-Hans": "\u{53D1}\u{73B0}\u{FF1A}\u{300C}\u{81EA}\u{52A8}\u{300D}\u{540C}\u{65F6}\u{4F7F}\u{7528} SSDP \u{548C} Bonjour（\u{9ED8}\u{8BA4}），\u{300C}Bonjour\u{300D}\u{4EC5}\u{9650}\u{4E8E} mDNS\u{FF0C}\u{300C}\u{4F20}\u{7EDF}\u{591A}\u{64AD}\u{300D}\u{4EC5}\u{9650}\u{4E8E} SSDP\u{3002}",
         ],
+        "helpBulletDiscoveryHopLimit": [
+            "en": "Discovery hop limit \u{2014} how many routers the speaker search may cross. The default of 4 reaches speakers on another VLAN or subnet where the network routes multicast; raise it for larger networks. It cannot help where the network blocks multicast, so use Bonjour there.",
+            "de": "Suchreichweite (Hops) \u{2014} wie viele Router die Lautsprechersuche passieren darf. Der Standardwert 4 erreicht Lautsprecher in einem anderen VLAN oder Subnetz, sofern das Netzwerk Multicast weiterleitet; f\u{00FC}r gr\u{00F6}\u{00DF}ere Netzwerke erh\u{00F6}hen. Blockiert das Netzwerk Multicast, hilft nur Bonjour.",
+            "fr": "Limite de sauts pour la d\u{00E9}couverte \u{2014} nombre de routeurs que la recherche d\u{2019}enceintes peut traverser. La valeur par d\u{00E9}faut de 4 atteint les enceintes situ\u{00E9}es sur un autre VLAN ou sous-r\u{00E9}seau lorsque le r\u{00E9}seau achemine le multicast ; augmentez-la sur les grands r\u{00E9}seaux. Si le r\u{00E9}seau bloque le multicast, utilisez Bonjour.",
+            "nl": "Hoplimiet voor detectie \u{2014} hoeveel routers de speakerzoekopdracht mag passeren. De standaardwaarde 4 bereikt speakers op een ander VLAN of subnet als het netwerk multicast routeert; verhoog dit op grotere netwerken. Blokkeert het netwerk multicast, gebruik dan Bonjour.",
+            "es": "L\u{00ED}mite de saltos de detecci\u{00F3}n: cu\u{00E1}ntos routers puede atravesar la b\u{00FA}squeda de altavoces. El valor predeterminado de 4 alcanza altavoces en otra VLAN o subred cuando la red enruta la multidifusi\u{00F3}n; aum\u{00E9}ntelo en redes grandes. Si la red bloquea la multidifusi\u{00F3}n, use Bonjour.",
+            "it": "Limite di hop per il rilevamento: quanti router pu\u{00F2} attraversare la ricerca dei diffusori. Il valore predefinito 4 raggiunge i diffusori su un\u{2019}altra VLAN o subnet se la rete instrada il multicast; aumentarlo sulle reti pi\u{00F9} grandi. Se la rete blocca il multicast, usare Bonjour.",
+            "sv": "Hoppgr\u{00E4}ns f\u{00F6}r s\u{00F6}kning \u{2014} hur m\u{00E5}nga routrar h\u{00F6}gtalars\u{00F6}kningen f\u{00E5}r passera. Standardv\u{00E4}rdet 4 n\u{00E5}r h\u{00F6}gtalare p\u{00E5} ett annat VLAN eller subn\u{00E4}t n\u{00E4}r n\u{00E4}tverket dirigerar multicast; h\u{00F6}j det p\u{00E5} st\u{00F6}rre n\u{00E4}tverk. Blockerar n\u{00E4}tverket multicast f\u{00E5}r du anv\u{00E4}nda Bonjour.",
+            "nb": "Hoppgrense for s\u{00F8}k \u{2014} hvor mange rutere h\u{00F8}yttalers\u{00F8}ket kan krysse. Standardverdien 4 n\u{00E5}r h\u{00F8}yttalere p\u{00E5} et annet VLAN eller subnett n\u{00E5}r nettverket ruter multicast; \u{00F8}k den p\u{00E5} st\u{00F8}rre nettverk. Blokkerer nettverket multicast, bruk Bonjour.",
+            "da": "Hopgr\u{00E6}nse for s\u{00F8}gning \u{2014} hvor mange routere h\u{00F8}jttalers\u{00F8}gningen m\u{00E5} krydse. Standardv\u{00E6}rdien 4 n\u{00E5}r h\u{00F8}jttalere p\u{00E5} et andet VLAN eller subnet, n\u{00E5}r netv\u{00E6}rket router multicast; h\u{00E6}v den p\u{00E5} st\u{00F8}rre netv\u{00E6}rk. Blokerer netv\u{00E6}rket multicast, s\u{00E5} brug Bonjour.",
+            "ja": "\u{691C}\u{51FA}\u{306E}\u{30DB}\u{30C3}\u{30D7}\u{5236}\u{9650} \u{2014} \u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}\u{691C}\u{7D22}\u{304C}\u{901A}\u{904E}\u{3067}\u{304D}\u{308B}\u{30EB}\u{30FC}\u{30BF}\u{30FC}\u{306E}\u{6570}\u{3067}\u{3059}\u{3002}\u{65E2}\u{5B9A}\u{5024}\u{306E}4\u{306F}\u{3001}\u{30CD}\u{30C3}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{304C}\u{30DE}\u{30EB}\u{30C1}\u{30AD}\u{30E3}\u{30B9}\u{30C8}\u{3092}\u{30EB}\u{30FC}\u{30C6}\u{30A3}\u{30F3}\u{30B0}\u{3057}\u{3066}\u{3044}\u{308C}\u{3070}\u{5225}\u{306E}VLAN\u{3084}\u{30B5}\u{30D6}\u{30CD}\u{30C3}\u{30C8}\u{4E0A}\u{306E}\u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}\u{306B}\u{5C4A}\u{304D}\u{307E}\u{3059}\u{3002}\u{5927}\u{898F}\u{6A21}\u{306A}\u{30CD}\u{30C3}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{3067}\u{306F}\u{5024}\u{3092}\u{4E0A}\u{3052}\u{3066}\u{304F}\u{3060}\u{3055}\u{3044}\u{3002}\u{30DE}\u{30EB}\u{30C1}\u{30AD}\u{30E3}\u{30B9}\u{30C8}\u{304C}\u{906E}\u{65AD}\u{3055}\u{308C}\u{3066}\u{3044}\u{308B}\u{5834}\u{5408}\u{306F}Bonjour\u{3092}\u{4F7F}\u{7528}\u{3057}\u{307E}\u{3059}\u{3002}",
+            "pt": "Limite de saltos da dete\u{00E7}\u{00E3}o \u{2014} quantos routers a procura de colunas pode atravessar. O valor predefinido de 4 alcan\u{00E7}a colunas noutra VLAN ou sub-rede quando a rede encaminha multicast; aumente-o em redes maiores. Se a rede bloquear multicast, use o Bonjour.",
+            "pl": "Limit przeskok\u{00F3}w wykrywania \u{2014} ile router\u{00F3}w mo\u{017C}e pokona\u{0107} wyszukiwanie g\u{0142}o\u{015B}nik\u{00F3}w. Domy\u{015B}lna warto\u{015B}\u{0107} 4 obejmuje g\u{0142}o\u{015B}niki w innej sieci VLAN lub podsieci, je\u{015B}li sie\u{0107} kieruje multiemisj\u{0119}; zwi\u{0119}ksz j\u{0105} w wi\u{0119}kszych sieciach. Gdy sie\u{0107} blokuje multiemisj\u{0119}, u\u{017C}yj Bonjour.",
+            "zh-Hans": "\u{53D1}\u{73B0}\u{8DF3}\u{6570}\u{9650}\u{5236}\u{2014}\u{2014}\u{97F3}\u{7BB1}\u{641C}\u{7D22}\u{53EF}\u{7A7F}\u{8D8A}\u{7684}\u{8DEF}\u{7531}\u{5668}\u{6570}\u{91CF}\u{3002}\u{9ED8}\u{8BA4}\u{503C} 4 \u{53EF}\u{5728}\u{7F51}\u{7EDC}\u{8F6C}\u{53D1}\u{7EC4}\u{64AD}\u{65F6}\u{627E}\u{5230}\u{4F4D}\u{4E8E}\u{5176}\u{4ED6} VLAN \u{6216}\u{5B50}\u{7F51}\u{7684}\u{97F3}\u{7BB1}\u{FF1B}\u{7F51}\u{7EDC}\u{8F83}\u{5927}\u{65F6}\u{8BF7}\u{8C03}\u{9AD8}\u{3002}\u{82E5}\u{7F51}\u{7EDC}\u{963B}\u{6B62}\u{7EC4}\u{64AD}\u{FF0C}\u{8BF7}\u{6539}\u{7528} Bonjour\u{3002}",
+        ],
         "helpBulletScrobbling": [
             "en": "Scrobbling: send tracks to Last.fm using your own API key; per-room and per-service filters keep test rooms out.",
-            "de": "Scrobbling: Senden Sie Titel mit Ihrem eigenen API-Schl\u{00FC}ssel an Last.fm; Filter pro Raum und pro Dienst halten Testr\u{00E4}ume drau\u{00DF}en.",
+            "de": "Scrobbling: Sende Titel mit deinem eigenen API-Schlüssel an Last.fm; Filter pro Raum und pro Dienst halten Testräume draußen.",
             "fr": "Scrobbling\u{00A0}: envoyez des morceaux \u{00E0} Last.fm avec votre propre cl\u{00E9} API\u{00A0}; les filtres par pi\u{00E8}ce et par service excluent les pi\u{00E8}ces de test.",
             "nl": "Scrobblen: stuur tracks naar Last.fm met je eigen API-sleutel; filters per kamer en per dienst houden testkamers buiten beeld.",
             "es": "Scrobbling: env\u{00ED}a pistas a Last.fm con tu propia clave API; los filtros por sala y por servicio dejan fuera las salas de prueba.",
@@ -13714,7 +15284,7 @@ public enum L10n {
         ],
         "helpBulletImageCache": [
             "en": "Image cache: cap the on-disk artwork cache by size (MB) and age (days); overflow evicts oldest first.",
-            "de": "Bild-Cache: Begrenzen Sie den Cover-Cache auf der Festplatte nach Gr\u{00F6}\u{00DF}e (MB) und Alter (Tage); bei \u{00DC}berlauf werden \u{00E4}lteste zuerst entfernt.",
+            "de": "Bild-Cache: Begrenze den Cover-Cache auf der Festplatte nach Größe (MB) und Alter (Tage); bei Überlauf werden älteste zuerst entfernt.",
             "fr": "Cache d\u{2019}images\u{00A0}: limitez le cache des pochettes sur disque par taille (Mo) et \u{00E2}ge (jours)\u{00A0}; en cas de d\u{00E9}passement, les plus anciennes sont \u{00E9}vinc\u{00E9}es d\u{2019}abord.",
             "nl": "Afbeeldingscache: begrens de hoeslay-cache op schijf op grootte (MB) en leeftijd (dagen); bij overloop worden de oudste het eerst verwijderd.",
             "es": "Cach\u{00E9} de im\u{00E1}genes: limita la cach\u{00E9} de car\u{00E1}tulas en disco por tama\u{00F1}o (MB) y edad (d\u{00ED}as); el desbordamiento elimina primero las m\u{00E1}s antiguas.",
@@ -13751,7 +15321,7 @@ public enum L10n {
             "en": "Shifts every track's lyric timing by this many seconds. Negative values pull lyrics earlier; positive values delay them. Per-track \u{00B1} adjustments in the lyrics panel apply on top of this baseline. Default \u{2212}2.0 s compensates for typical Sonos position-poll lag.",
             "de": "Verschiebt das Liedtext-Timing aller Titel um diese Sekundenzahl. Negative Werte ziehen den Text vor, positive Werte verz\u{00F6}gern ihn. Pro-Titel \u{00B1}-Anpassungen im Liedtext-Bereich werden zus\u{00E4}tzlich zu dieser Grundeinstellung angewendet. Standard \u{2212}2,0 s gleicht die typische Sonos-Positionsabfrageverz\u{00F6}gerung aus.",
             "fr": "D\u{00E9}cale la synchronisation des paroles de chaque titre de ce nombre de secondes. Les valeurs n\u{00E9}gatives avancent les paroles\u{00A0}; les valeurs positives les retardent. Les ajustements \u{00B1} par titre dans le panneau Paroles s\u{2019}appliquent en plus de cette base. La valeur par d\u{00E9}faut \u{2212}2,0 s compense le d\u{00E9}calage typique du sondage de position Sonos.",
-            "nl": "Verschuift de timing van songteksten voor elke track met dit aantal seconden. Negatieve waarden trekken songteksten naar voren; positieve waarden vertragen ze. \u{00B1}-Aanpassingen per track in het songtekstpaneel komen bovenop deze basisinstelling. Standaard \u{2212}2,0 s compenseert de gebruikelijke Sonos-positiepollvertraging.",
+            "nl": "Verschuift de timing van songteksten voor elke track met dit aantal seconden. Negatieve waarden trekken songteksten naar voren; positieve waarden vertragen ze. ±-Aanpassingen per track in het songtekstpaneel komen bovenop deze basisinstelling. Standaard −2,0 s compenseert de gebruikelijke Sonos-positiepollvertraging.",
             "es": "Desplaza la sincronizaci\u{00F3}n de la letra de cada pista en estos segundos. Los valores negativos adelantan la letra; los positivos la retrasan. Los ajustes \u{00B1} por pista en el panel de letras se aplican sobre esta base. El valor predeterminado \u{2212}2,0 s compensa la latencia habitual de sondeo de posici\u{00F3}n de Sonos.",
             "it": "Sposta la sincronizzazione del testo di ogni brano di questi secondi. I valori negativi anticipano il testo; quelli positivi lo ritardano. Le regolazioni \u{00B1} per brano nel pannello Testo si applicano in aggiunta a questa base. Il valore predefinito \u{2212}2,0 s compensa la consueta latenza di polling della posizione Sonos.",
             "sv": "F\u{00F6}rskjuter s\u{00E5}ngtextens timing f\u{00F6}r varje l\u{00E5}t med detta antal sekunder. Negativa v\u{00E4}rden tidigarel\u{00E4}gger texten; positiva v\u{00E4}rden f\u{00F6}rdr\u{00F6}jer den. Per l\u{00E5}t-justeringar med \u{00B1} i s\u{00E5}ngtextspanelen l\u{00E4}ggs till denna baslinje. Standard \u{2212}2,0 s kompenserar f\u{00F6}r Sonos vanliga positionspollnings-f\u{00F6}rdr\u{00F6}jning.",
@@ -13792,11 +15362,14 @@ public enum L10n {
             "pl": "Motyw karaoke",
             "zh-Hans": "\u{5361}\u{62C9}OK\u{4E3B}\u{9898}",
         ],
+    ]
+
+    private static let translations43: [String: [String: String]] = [
         "karaokeWindowTitleFormat": [
             "en": "Karaoke \u{2014} %@",
             "de": "Karaoke \u{2014} %@",
             "fr": "Karaok\u{00E9} \u{2014} %@",
-            "nl": "Karaoke \u{2014} %@",
+            "nl": "Karaoke — %@",
             "es": "Karaoke \u{2014} %@",
             "it": "Karaoke \u{2014} %@",
             "sv": "Karaoke \u{2014} %@",
@@ -13872,6 +15445,36 @@ public enum L10n {
             "pl": "G\u{0142}o\u{015B}niki wysy\u{0142}aj\u{0105} aktualizacje stanu na ten port TCP. Dostosuj regu\u{0142}y zapory. Dzia\u{0142}a po ponownym uruchomieniu.",
             "zh-Hans": "\u{97F3}\u{7BB1}\u{5C06}\u{72B6}\u{6001}\u{66F4}\u{65B0}\u{63A8}\u{9001}\u{5230}\u{6B64}TCP\u{7AEF}\u{53E3}\u{3002}\u{8BF7}\u{76F8}\u{5E94}\u{8C03}\u{6574}\u{9632}\u{706B}\u{5899}\u{89C4}\u{5219}\u{3002}\u{91CD}\u{542F}\u{540E}\u{751F}\u{6548}\u{3002}",
         ],
+        "ssdpMulticastTTL": [
+            "en": "Discovery hop limit",
+            "de": "Suchreichweite (Hops)",
+            "fr": "Limite de sauts pour la d\u{00E9}couverte",
+            "nl": "Hoplimiet voor detectie",
+            "es": "L\u{00ED}mite de saltos de detecci\u{00F3}n",
+            "it": "Limite di hop per il rilevamento",
+            "sv": "Hoppgr\u{00E4}ns f\u{00F6}r s\u{00F6}kning",
+            "nb": "Hoppgrense for s\u{00F8}k",
+            "da": "Hopgr\u{00E6}nse for s\u{00F8}gning",
+            "ja": "\u{691C}\u{51FA}\u{306E}\u{30DB}\u{30C3}\u{30D7}\u{5236}\u{9650}",
+            "pt": "Limite de saltos da dete\u{00E7}\u{00E3}o",
+            "pl": "Limit przeskok\u{00F3}w wykrywania",
+            "zh-Hans": "\u{53D1}\u{73B0}\u{8DF3}\u{6570}\u{9650}\u{5236}",
+        ],
+        "ssdpMulticastTTLHint": [
+            "en": "How many routers the speaker search may cross. Raise it when speakers sit on another VLAN or subnet. Has no effect where the network blocks multicast.",
+            "de": "Wie viele Router die Lautsprechersuche passieren darf. Erh\u{00F6}hen, wenn Lautsprecher in einem anderen VLAN oder Subnetz stehen. Ohne Wirkung, wenn das Netzwerk Multicast blockiert.",
+            "fr": "Nombre de routeurs que la recherche d\u{2019}enceintes peut traverser. Augmentez-le lorsque les enceintes se trouvent sur un autre VLAN ou sous-r\u{00E9}seau. Sans effet si le r\u{00E9}seau bloque le multicast.",
+            "nl": "Hoeveel routers de speakerzoekopdracht mag passeren. Verhoog dit als speakers op een ander VLAN of subnet staan. Heeft geen effect als het netwerk multicast blokkeert.",
+            "es": "Cu\u{00E1}ntos routers puede atravesar la b\u{00FA}squeda de altavoces. Aum\u{00E9}ntelo cuando los altavoces est\u{00E9}n en otra VLAN o subred. No surte efecto si la red bloquea la multidifusi\u{00F3}n.",
+            "it": "Quanti router pu\u{00F2} attraversare la ricerca dei diffusori. Aumentarlo quando i diffusori sono su un\u{2019}altra VLAN o subnet. Nessun effetto se la rete blocca il multicast.",
+            "sv": "Hur m\u{00E5}nga routrar h\u{00F6}gtalars\u{00F6}kningen f\u{00E5}r passera. H\u{00F6}j v\u{00E4}rdet n\u{00E4}r h\u{00F6}gtalarna finns p\u{00E5} ett annat VLAN eller subn\u{00E4}t. Ingen effekt om n\u{00E4}tverket blockerar multicast.",
+            "nb": "Hvor mange rutere h\u{00F8}yttalers\u{00F8}ket kan krysse. \u{00D8}k verdien n\u{00E5}r h\u{00F8}yttalerne st\u{00E5}r p\u{00E5} et annet VLAN eller subnett. Ingen effekt hvis nettverket blokkerer multicast.",
+            "da": "Hvor mange routere h\u{00F8}jttalers\u{00F8}gningen m\u{00E5} krydse. H\u{00E6}v v\u{00E6}rdien, n\u{00E5}r h\u{00F8}jttalerne st\u{00E5}r p\u{00E5} et andet VLAN eller subnet. Ingen effekt, hvis netv\u{00E6}rket blokerer multicast.",
+            "ja": "\u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}\u{691C}\u{7D22}\u{304C}\u{901A}\u{904E}\u{3067}\u{304D}\u{308B}\u{30EB}\u{30FC}\u{30BF}\u{30FC}\u{306E}\u{6570}\u{3067}\u{3059}\u{3002}\u{30B9}\u{30D4}\u{30FC}\u{30AB}\u{30FC}\u{304C}\u{5225}\u{306E}VLAN\u{3084}\u{30B5}\u{30D6}\u{30CD}\u{30C3}\u{30C8}\u{306B}\u{3042}\u{308B}\u{5834}\u{5408}\u{306F}\u{5024}\u{3092}\u{4E0A}\u{3052}\u{3066}\u{304F}\u{3060}\u{3055}\u{3044}\u{3002}\u{30CD}\u{30C3}\u{30C8}\u{30EF}\u{30FC}\u{30AF}\u{304C}\u{30DE}\u{30EB}\u{30C1}\u{30AD}\u{30E3}\u{30B9}\u{30C8}\u{3092}\u{906E}\u{65AD}\u{3057}\u{3066}\u{3044}\u{308B}\u{5834}\u{5408}\u{306F}\u{52B9}\u{679C}\u{304C}\u{3042}\u{308A}\u{307E}\u{305B}\u{3093}\u{3002}",
+            "pt": "Quantos routers a procura de colunas pode atravessar. Aumente quando as colunas estiverem noutra VLAN ou sub-rede. N\u{00E3}o tem efeito se a rede bloquear multicast.",
+            "pl": "Ile router\u{00F3}w mo\u{017C}e pokona\u{0107} wyszukiwanie g\u{0142}o\u{015B}nik\u{00F3}w. Zwi\u{0119}ksz warto\u{015B}\u{0107}, gdy g\u{0142}o\u{015B}niki s\u{0105} w innej sieci VLAN lub podsieci. Nie dzia\u{0142}a, gdy sie\u{0107} blokuje multiemisj\u{0119}.",
+            "zh-Hans": "\u{97F3}\u{7BB1}\u{641C}\u{7D22}\u{53EF}\u{7A7F}\u{8D8A}\u{7684}\u{8DEF}\u{7531}\u{5668}\u{6570}\u{91CF}\u{3002}\u{5F53}\u{97F3}\u{7BB1}\u{4F4D}\u{4E8E}\u{5176}\u{4ED6} VLAN \u{6216}\u{5B50}\u{7F51}\u{65F6}\u{8BF7}\u{8C03}\u{9AD8}\u{3002}\u{82E5}\u{7F51}\u{7EDC}\u{963B}\u{6B62}\u{7EC4}\u{64AD}\u{5219}\u{65E0}\u{6548}\u{3002}",
+        ],
         // Listening Galaxy — the vis name stays untranslated as a brand
         // term, matching the Back of the Club convention above.
         "galaxyVis": [
@@ -13906,9 +15509,9 @@ public enum L10n {
         ],
         "galaxyLegend": [
             "en": "Star = artist \u{00B7} size = plays \u{00B7} colour = genre \u{00B7} glow = recency \u{00B7} lines = your listening transitions",
-            "de": "Stern = Interpret \u{00B7} Gr\u{00F6}\u{00DF}e = Wiedergaben \u{00B7} Farbe = Genre \u{00B7} Leuchten = Aktualit\u{00E4}t \u{00B7} Linien = Ihre H\u{00F6}r\u{00FC}berg\u{00E4}nge",
+            "de": "Stern = Interpret · Größe = Wiedergaben · Farbe = Genre · Leuchten = Aktualität · Linien = deine Hörübergänge",
             "fr": "\u{00C9}toile = artiste \u{00B7} taille = lectures \u{00B7} couleur = genre \u{00B7} halo = r\u{00E9}cence \u{00B7} lignes = vos transitions d\u{2019}\u{00E9}coute",
-            "nl": "Ster = artiest \u{00B7} grootte = afspeelbeurten \u{00B7} kleur = genre \u{00B7} gloed = recentheid \u{00B7} lijnen = uw luisterovergangen",
+            "nl": "Ster = artiest · grootte = afspeelbeurten · kleur = genre · gloed = recentheid · lijnen = je luisterovergangen",
             "es": "Estrella = artista \u{00B7} tama\u{00F1}o = reproducciones \u{00B7} color = g\u{00E9}nero \u{00B7} brillo = recencia \u{00B7} l\u{00ED}neas = sus transiciones de escucha",
             "it": "Stella = artista \u{00B7} dimensione = riproduzioni \u{00B7} colore = genere \u{00B7} bagliore = recenza \u{00B7} linee = le tue transizioni di ascolto",
             "sv": "Stj\u{00E4}rna = artist \u{00B7} storlek = uppspelningar \u{00B7} f\u{00E4}rg = genre \u{00B7} gl\u{00F6}d = nyligen spelat \u{00B7} linjer = dina lyssnings\u{00F6}verg\u{00E5}ngar",
@@ -13923,7 +15526,7 @@ public enum L10n {
             "en": "Each glyph = one play, replayed in time order \u{00B7} column = hour of day \u{00B7} red = starred \u{00B7} counters = artist play totals",
             "de": "Jedes Zeichen = eine Wiedergabe in zeitlicher Abfolge \u{00B7} Spalte = Tagesstunde \u{00B7} Rot = markiert \u{00B7} Z\u{00E4}hler = Wiedergaben pro Interpret",
             "fr": "Chaque glyphe = une lecture, rejou\u{00E9}e dans l\u{2019}ordre \u{00B7} colonne = heure du jour \u{00B7} rouge = favori \u{00B7} compteurs = lectures par artiste",
-            "nl": "Elk teken = \u{00E9}\u{00E9}n afspeelbeurt, in tijdsvolgorde \u{00B7} kolom = uur van de dag \u{00B7} rood = met ster \u{00B7} tellers = totalen per artiest",
+            "nl": "Elk teken = één afspeelbeurt, in tijdsvolgorde · kolom = uur van de dag · rood = met ster · tellers = totalen per artiest",
             "es": "Cada glifo = una reproducci\u{00F3}n, en orden temporal \u{00B7} columna = hora del d\u{00ED}a \u{00B7} rojo = destacada \u{00B7} contadores = totales por artista",
             "it": "Ogni glifo = una riproduzione, in ordine temporale \u{00B7} colonna = ora del giorno \u{00B7} rosso = preferita \u{00B7} contatori = totali per artista",
             "sv": "Varje tecken = en uppspelning i tidsordning \u{00B7} kolumn = timme p\u{00E5} dygnet \u{00B7} r\u{00F6}d = stj\u{00E4}rnm\u{00E4}rkt \u{00B7} r\u{00E4}knare = totalsummor per artist",
@@ -13938,7 +15541,7 @@ public enum L10n {
             "en": "Name size = plays \u{00B7} colour = genre \u{00B7} brightness = recency \u{00B7} the stage follows what's playing now",
             "de": "Namensgr\u{00F6}\u{00DF}e = Wiedergaben \u{00B7} Farbe = Genre \u{00B7} Helligkeit = Aktualit\u{00E4}t \u{00B7} die B\u{00FC}hne folgt der aktuellen Wiedergabe",
             "fr": "Taille du nom = lectures \u{00B7} couleur = genre \u{00B7} luminosit\u{00E9} = r\u{00E9}cence \u{00B7} la sc\u{00E8}ne suit la lecture en cours",
-            "nl": "Naamgrootte = afspeelbeurten \u{00B7} kleur = genre \u{00B7} helderheid = recentheid \u{00B7} het podium volgt wat nu speelt",
+            "nl": "Naamgrootte = afspeelbeurten · kleur = genre · helderheid = recentheid · het podium volgt wat nu speelt",
             "es": "Tama\u{00F1}o del nombre = reproducciones \u{00B7} color = g\u{00E9}nero \u{00B7} brillo = recencia \u{00B7} el escenario sigue lo que suena ahora",
             "it": "Dimensione del nome = riproduzioni \u{00B7} colore = genere \u{00B7} luminosit\u{00E0} = recenza \u{00B7} il palco segue ci\u{00F2} che \u{00E8} in riproduzione",
             "sv": "Namnstorlek = uppspelningar \u{00B7} f\u{00E4}rg = genre \u{00B7} ljusstyrka = nyligen spelat \u{00B7} scenen f\u{00F6}ljer det som spelas nu",
@@ -13953,7 +15556,7 @@ public enum L10n {
             "en": "Each bird = one artist \u{00B7} flocks = genre \u{00B7} speed = recency \u{00B7} size = plays \u{00B7} they gather around what's playing now",
             "de": "Jeder Vogel = ein Interpret \u{00B7} Schw\u{00E4}rme = Genre \u{00B7} Tempo = Aktualit\u{00E4}t \u{00B7} Gr\u{00F6}\u{00DF}e = Wiedergaben \u{00B7} sie sammeln sich um die aktuelle Wiedergabe",
             "fr": "Chaque oiseau = un artiste \u{00B7} vol\u{00E9}es = genre \u{00B7} vitesse = r\u{00E9}cence \u{00B7} taille = lectures \u{00B7} ils se rassemblent autour de la lecture en cours",
-            "nl": "Elke vogel = \u{00E9}\u{00E9}n artiest \u{00B7} zwermen = genre \u{00B7} snelheid = recentheid \u{00B7} grootte = afspeelbeurten \u{00B7} ze verzamelen zich rond wat nu speelt",
+            "nl": "Elke vogel = één artiest · zwermen = genre · snelheid = recentheid · grootte = afspeelbeurten · ze verzamelen zich rond wat nu speelt",
             "es": "Cada ave = un artista \u{00B7} bandadas = g\u{00E9}nero \u{00B7} velocidad = recencia \u{00B7} tama\u{00F1}o = reproducciones \u{00B7} se re\u{00FA}nen en torno a lo que suena ahora",
             "it": "Ogni uccello = un artista \u{00B7} stormi = genere \u{00B7} velocit\u{00E0} = recenza \u{00B7} dimensione = riproduzioni \u{00B7} si radunano attorno a ci\u{00F2} che \u{00E8} in riproduzione",
             "sv": "Varje f\u{00E5}gel = en artist \u{00B7} flockar = genre \u{00B7} hastighet = nyligen spelat \u{00B7} storlek = uppspelningar \u{00B7} de samlas kring det som spelas nu",
@@ -13966,9 +15569,9 @@ public enum L10n {
         ],
         "galaxyLegendMycelium": [
             "en": "Filaments trace your real artist-to-artist transitions \u{00B7} glow = recency \u{00B7} node size = plays",
-            "de": "F\u{00E4}den folgen Ihren echten Interpreten-\u{00DC}berg\u{00E4}ngen \u{00B7} Leuchten = Aktualit\u{00E4}t \u{00B7} Knotengr\u{00F6}\u{00DF}e = Wiedergaben",
+            "de": "Fäden folgen deinen echten Interpreten-Übergängen · Leuchten = Aktualität · Knotengröße = Wiedergaben",
             "fr": "Les filaments tracent vos vraies transitions entre artistes \u{00B7} halo = r\u{00E9}cence \u{00B7} taille des n\u{0153}uds = lectures",
-            "nl": "Draden volgen uw echte overgangen tussen artiesten \u{00B7} gloed = recentheid \u{00B7} knoopgrootte = afspeelbeurten",
+            "nl": "Draden volgen je echte overgangen tussen artiesten · gloed = recentheid · knoopgrootte = afspeelbeurten",
             "es": "Los filamentos trazan sus transiciones reales entre artistas \u{00B7} brillo = recencia \u{00B7} tama\u{00F1}o del nodo = reproducciones",
             "it": "I filamenti tracciano le tue vere transizioni tra artisti \u{00B7} bagliore = recenza \u{00B7} dimensione dei nodi = riproduzioni",
             "sv": "Tr\u{00E5}darna f\u{00F6}ljer dina verkliga \u{00F6}verg\u{00E5}ngar mellan artister \u{00B7} gl\u{00F6}d = nyligen spelat \u{00B7} nodstorlek = uppspelningar",
@@ -13981,9 +15584,9 @@ public enum L10n {
         ],
         "galaxyLegendTides": [
             "en": "Each stream = one artist's weekly plays \u{00B7} hue = when you first played them \u{00B7} the river flows through your years",
-            "de": "Jeder Strom = w\u{00F6}chentliche Wiedergaben eines Interpreten \u{00B7} Farbton = Zeitpunkt der ersten Wiedergabe \u{00B7} der Fluss zieht durch Ihre Jahre",
+            "de": "Jeder Strom = wöchentliche Wiedergaben eines Interpreten · Farbton = Zeitpunkt der ersten Wiedergabe · der Fluss zieht durch deine Jahre",
             "fr": "Chaque flux = les lectures hebdomadaires d\u{2019}un artiste \u{00B7} teinte = premi\u{00E8}re \u{00E9}coute \u{00B7} la rivi\u{00E8}re traverse vos ann\u{00E9}es",
-            "nl": "Elke stroom = wekelijkse afspeelbeurten van \u{00E9}\u{00E9}n artiest \u{00B7} tint = eerste keer afgespeeld \u{00B7} de rivier stroomt door uw jaren",
+            "nl": "Elke stroom = wekelijkse afspeelbeurten van één artiest · tint = eerste keer afgespeeld · de rivier stroomt door je jaren",
             "es": "Cada corriente = reproducciones semanales de un artista \u{00B7} tono = primera reproducci\u{00F3}n \u{00B7} el r\u{00ED}o fluye por sus a\u{00F1}os",
             "it": "Ogni flusso = le riproduzioni settimanali di un artista \u{00B7} tinta = primo ascolto \u{00B7} il fiume scorre attraverso i tuoi anni",
             "sv": "Varje str\u{00F6}m = en artists veckovisa uppspelningar \u{00B7} nyans = n\u{00E4}r du f\u{00F6}rst spelade dem \u{00B7} floden flyter genom dina \u{00E5}r",
@@ -13998,7 +15601,7 @@ public enum L10n {
             "en": "Back of the Club \u{2014} %@",
             "de": "Back of the Club \u{2014} %@",
             "fr": "Back of the Club \u{2014} %@",
-            "nl": "Back of the Club \u{2014} %@",
+            "nl": "Back of the Club — %@",
             "es": "Back of the Club \u{2014} %@",
             "it": "Back of the Club \u{2014} %@",
             "sv": "Back of the Club \u{2014} %@",
@@ -14179,6 +15782,144 @@ public enum L10n {
             "pl": "Poka\u{017C} panel Informacje",
             "zh-Hans": "\u{663E}\u{793A}\u{4ECB}\u{7ECD}\u{9762}\u{677F}",
         ],
+    ]
+
+    private static let translations44: [String: [String: String]] = [
+        "visColourScheme": [
+            "en": "Colour scheme",
+            "de": "Farbschema",
+            "fr": "Palette de couleurs",
+            "nl": "Kleurenschema",
+            "es": "Esquema de color",
+            "it": "Schema colori",
+            "sv": "F\u{00E4}rgschema",
+            "nb": "Fargeskjema",
+            "da": "Farveskema",
+            "ja": "\u{914D}\u{8272}",
+            "pt": "Esquema de cores",
+            "pl": "Schemat kolor\u{00F3}w",
+            "zh-Hans": "\u{914D}\u{8272}\u{65B9}\u{6848}",
+        ],
+        "visColourSchemeHelp": [
+            "en": "Colour source for the stage lighting. Album art derives the tones from the current cover; Choragus applies the logo's neon set; Custom applies the colours selected below.",
+            "de": "Farbquelle f\u{00FC}r die B\u{00FC}hnenbeleuchtung. Albumcover leitet die T\u{00F6}ne vom aktuellen Cover ab; Choragus verwendet das Neon-Set des Logos; Benutzerdefiniert verwendet die unten gew\u{00E4}hlten Farben.",
+            "fr": "Source des couleurs de l\u{2019}\u{00E9}clairage. Pochette d\u{2019}album d\u{00E9}rive les tons de la pochette actuelle\u{202F}; Choragus applique le jeu n\u{00E9}on du logo\u{202F}; Personnalis\u{00E9} applique les couleurs choisies ci-dessous.",
+            "nl": "Kleurenbron voor de podiumverlichting. Albumhoes leidt de tinten af van de huidige hoes; Choragus past de neonset van het logo toe; Aangepast gebruikt de hieronder gekozen kleuren.",
+            "es": "Fuente de color de la iluminaci\u{00F3}n. Portada del \u{00E1}lbum deriva los tonos de la portada actual; Choragus aplica el conjunto ne\u{00F3}n del logotipo; Personalizado aplica los colores seleccionados abajo.",
+            "it": "Origine dei colori delle luci. Copertina album deriva i toni dalla copertina corrente; Choragus applica il set neon del logo; Personalizzato applica i colori selezionati sotto.",
+            "sv": "F\u{00E4}rgk\u{00E4}lla f\u{00F6}r scenbelysningen. Albumomslag h\u{00E4}rleder tonerna fr\u{00E5}n aktuellt omslag; Choragus anv\u{00E4}nder logotypens neonset; Anpassad anv\u{00E4}nder f\u{00E4}rgerna nedan.",
+            "nb": "Fargekilde for scenebelysningen. Albumomslag utleder tonene fra gjeldende omslag; Choragus bruker logoens neonsett; Egendefinert bruker fargene nedenfor.",
+            "da": "Farvekilde til scenebelysningen. Albumcover udleder tonerne fra det aktuelle cover; Choragus anvender logoets neons\u{00E6}t; Brugerdefineret anvender farverne nedenfor.",
+            "ja": "\u{7167}\u{660E}\u{306E}\u{914D}\u{8272}\u{30BD}\u{30FC}\u{30B9}\u{3002}\u{30A2}\u{30EB}\u{30D0}\u{30E0}\u{30A2}\u{30FC}\u{30C8}\u{306F}\u{73FE}\u{5728}\u{306E}\u{30AB}\u{30D0}\u{30FC}\u{304B}\u{3089}\u{30C8}\u{30FC}\u{30F3}\u{3092}\u{5C0E}\u{51FA}\u{3001}Choragus\u{306F}\u{30ED}\u{30B4}\u{306E}\u{30CD}\u{30AA}\u{30F3}\u{30BB}\u{30C3}\u{30C8}\u{3001}\u{30AB}\u{30B9}\u{30BF}\u{30E0}\u{306F}\u{4E0B}\u{3067}\u{9078}\u{629E}\u{3057}\u{305F}\u{8272}\u{3092}\u{9069}\u{7528}\u{3057}\u{307E}\u{3059}\u{3002}",
+            "pt": "Fonte de cor da ilumina\u{00E7}\u{00E3}o. Capa do \u{00E1}lbum deriva os tons da capa atual; Choragus aplica o conjunto n\u{00E9}on do log\u{00F3}tipo; Personalizado aplica as cores selecionadas abaixo.",
+            "pl": "\u{0179}r\u{00F3}d\u{0142}o kolor\u{00F3}w o\u{015B}wietlenia. Ok\u{0142}adka albumu wyprowadza tony z bie\u{017C}\u{0105}cej ok\u{0142}adki; Choragus stosuje neonowy zestaw logo; Niestandardowy stosuje kolory wybrane poni\u{017C}ej.",
+            "zh-Hans": "\u{821E}\u{53F0}\u{706F}\u{5149}\u{7684}\u{914D}\u{8272}\u{6765}\u{6E90}\u{3002}\u{4E13}\u{8F91}\u{5C01}\u{9762}\u{4ECE}\u{5F53}\u{524D}\u{5C01}\u{9762}\u{63D0}\u{53D6}\u{8272}\u{8C03}\u{FF1B}Choragus \u{5E94}\u{7528}\u{6807}\u{5FD7}\u{7684}\u{9713}\u{8679}\u{914D}\u{8272}\u{FF1B}\u{81EA}\u{5B9A}\u{4E49}\u{5E94}\u{7528}\u{4E0B}\u{65B9}\u{9009}\u{62E9}\u{7684}\u{989C}\u{8272}\u{3002}",
+        ],
+        "visColourSchemeAlbumArt": [
+            "en": "Album art",
+            "de": "Albumcover",
+            "fr": "Pochette d\u{2019}album",
+            "nl": "Albumhoes",
+            "es": "Portada del \u{00E1}lbum",
+            "it": "Copertina album",
+            "sv": "Albumomslag",
+            "nb": "Albumomslag",
+            "da": "Albumcover",
+            "ja": "\u{30A2}\u{30EB}\u{30D0}\u{30E0}\u{30A2}\u{30FC}\u{30C8}",
+            "pt": "Capa do \u{00E1}lbum",
+            "pl": "Ok\u{0142}adka albumu",
+            "zh-Hans": "\u{4E13}\u{8F91}\u{5C01}\u{9762}",
+        ],
+        "visColourSchemeChoragus": [
+            "en": "Choragus",
+            "de": "Choragus",
+            "fr": "Choragus",
+            "nl": "Choragus",
+            "es": "Choragus",
+            "it": "Choragus",
+            "sv": "Choragus",
+            "nb": "Choragus",
+            "da": "Choragus",
+            "ja": "Choragus",
+            "pt": "Choragus",
+            "pl": "Choragus",
+            "zh-Hans": "Choragus",
+        ],
+        "visColourSchemeCustom": [
+            "en": "Custom",
+            "de": "Benutzerdefiniert",
+            "fr": "Personnalis\u{00E9}",
+            "nl": "Aangepast",
+            "es": "Personalizado",
+            "it": "Personalizzato",
+            "sv": "Anpassad",
+            "nb": "Egendefinert",
+            "da": "Brugerdefineret",
+            "ja": "\u{30AB}\u{30B9}\u{30BF}\u{30E0}",
+            "pt": "Personalizado",
+            "pl": "Niestandardowy",
+            "zh-Hans": "\u{81EA}\u{5B9A}\u{4E49}",
+        ],
+        "visCustomToneWash": [
+            "en": "Wash",
+            "de": "Grundlicht",
+            "fr": "Wash",
+            "nl": "Wash",
+            "es": "Baño de luz",
+            "it": "Wash",
+            "sv": "Wash",
+            "nb": "Wash",
+            "da": "Wash",
+            "ja": "ウォッシュ",
+            "pt": "Banho de luz",
+            "pl": "Światło zalewowe",
+            "zh-Hans": "泛光",
+        ],
+        "visCustomToneBeamA": [
+            "en": "Beam A",
+            "de": "Strahl A",
+            "fr": "Faisceau A",
+            "nl": "Straal A",
+            "es": "Haz A",
+            "it": "Fascio A",
+            "sv": "Stråle A",
+            "nb": "Stråle A",
+            "da": "Stråle A",
+            "ja": "ビーム A",
+            "pt": "Feixe A",
+            "pl": "Wiązka A",
+            "zh-Hans": "光束 A",
+        ],
+        "visCustomToneBeamB": [
+            "en": "Beam B",
+            "de": "Strahl B",
+            "fr": "Faisceau B",
+            "nl": "Straal B",
+            "es": "Haz B",
+            "it": "Fascio B",
+            "sv": "Stråle B",
+            "nb": "Stråle B",
+            "da": "Stråle B",
+            "ja": "ビーム B",
+            "pt": "Feixe B",
+            "pl": "Wiązka B",
+            "zh-Hans": "光束 B",
+        ],
+        "visCustomToneAccent": [
+            "en": "Accent",
+            "de": "Akzent",
+            "fr": "Accentuation",
+            "nl": "Accent",
+            "es": "Luz de acento",
+            "it": "Accento",
+            "sv": "Accent",
+            "nb": "Aksent",
+            "da": "Accent",
+            "ja": "アクセント",
+            "pt": "Destaque",
+            "pl": "Akcent",
+            "zh-Hans": "强调色",
+        ],
         "visHistorySource": [
             "en": "History source",
             "de": "Verlaufsquelle",
@@ -14258,7 +15999,7 @@ public enum L10n {
             "en": "Percentage of wall tiles drawn from your full play history at random rather than the current track\u{2019}s genre. Higher values keep the wall feeling varied even when one genre dominates the queue.",
             "de": "Anteil der Wandkacheln, die zuf\u{00E4}llig aus deinem gesamten Wiedergabeverlauf statt aus dem Genre des aktuellen Titels gezogen werden. H\u{00F6}here Werte halten die Wand abwechslungsreich, auch wenn ein Genre dominiert.",
             "fr": "Pourcentage des cases du mur tir\u{00E9}es au hasard dans l\u{2019}ensemble de votre historique d\u{2019}\u{00E9}coute plut\u{00F4}t que dans le genre du morceau en cours. Une valeur plus \u{00E9}lev\u{00E9}e maintient un mur vari\u{00E9} m\u{00EA}me lorsqu\u{2019}un genre domine la file.",
-            "nl": "Percentage muurtegels dat willekeurig uit je volledige afspeelgeschiedenis komt in plaats van het genre van het huidige nummer. Hogere waarden houden de muur gevarieerd, zelfs als \u{00E9}\u{00E9}n genre de wachtrij domineert.",
+            "nl": "Percentage muurtegels dat willekeurig uit je volledige afspeelgeschiedenis komt in plaats van het genre van het huidige nummer. Hogere waarden houden de muur gevarieerd, zelfs als één genre de wachtrij domineert.",
             "es": "Porcentaje de mosaicos del muro tomados al azar de todo tu historial en lugar del g\u{00E9}nero del tema actual. Valores m\u{00E1}s altos mantienen el muro variado incluso cuando un g\u{00E9}nero domina la cola.",
             "it": "Percentuale di tessere della parete prelevate a caso dall\u{2019}intera cronologia anziché dal genere del brano in riproduzione. Valori pi\u{00F9} alti mantengono la parete varia anche quando un genere domina la coda.",
             "sv": "Andel av v\u{00E4}ggens rutor som dras slumpm\u{00E4}ssigt ur hela din lyssningshistorik i st\u{00E4}llet f\u{00F6}r det aktuella sp\u{00E5}rets genre. H\u{00F6}gre v\u{00E4}rden h\u{00E5}ller v\u{00E4}ggen omv\u{00E4}xlande \u{00E4}ven n\u{00E4}r en genre dominerar k\u{00F6}n.",
@@ -14333,7 +16074,7 @@ public enum L10n {
             "en": "In memory of 2006-2015\u{2026}",
             "de": "Zum Gedenken an 2006\u{2013}2015\u{2026}",
             "fr": "En m\u{00E9}moire de 2006-2015\u{2026}",
-            "nl": "Ter herinnering aan 2006-2015\u{2026}",
+            "nl": "Ter herinnering aan 2006-2015…",
             "es": "En memoria de 2006-2015\u{2026}",
             "it": "In memoria di 2006-2015\u{2026}",
             "sv": "Till minne av 2006\u{2013}2015\u{2026}",
@@ -14390,5 +16131,13 @@ public enum L10n {
             "zh-Hans": "\u{65E0}\u{9650}",
         ],
     ]
+
+    private static let translations: [String: [String: String]] = {
+        var merged: [String: [String: String]] = [:]
+        for chunk in [translations0, translations1, translations2, translations3, translations4, translations5, translations6, translations7, translations8, translations9, translations10, translations11, translations12, translations13, translations14, translations15, translations16, translations17, translations18, translations19, translations20, translations21, translations22, translations23, translations24, translations25, translations26, translations27, translations28, translations29, translations30, translations31, translations32, translations33, translations34, translations35, translations36, translations37, translations38, translations39, translations40, translations41, translations42, translations43, translations44] {
+            merged.merge(chunk) { current, _ in current }
+        }
+        return merged
+    }()
     // swiftlint:enable function_body_length
 }

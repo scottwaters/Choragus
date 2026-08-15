@@ -902,10 +902,10 @@ struct BrowseListView: View {
             }
             Task { await vm.loadPlaylists() }
         }
-        .alert(L10n.renamePlaylist, isPresented: Binding(get: { vm.showRenameAlert }, set: { vm.showRenameAlert = $0 })) {
+        .alert(L10n.rename, isPresented: Binding(get: { vm.showRenameAlert }, set: { vm.showRenameAlert = $0 })) {
             TextField(L10n.name, text: Binding(get: { vm.renameText }, set: { vm.renameText = $0 }))
             Button(L10n.cancel, role: .cancel) {}
-            Button(L10n.rename) { Task { await vm.renamePlaylist() } }
+            Button(L10n.rename) { Task { await vm.renameSelectedItem() } }
         }
         .alert(L10n.deletePlaylist, isPresented: Binding(get: { vm.showDeleteConfirm }, set: { vm.showDeleteConfirm = $0 })) {
             Button(L10n.cancel, role: .cancel) {}
@@ -1012,6 +1012,18 @@ struct BrowseListView: View {
                 Divider()
                 Button(L10n.browse) {
                     onNavigate(smapiDestination(title: item.title, objectID: item.objectID))
+                }
+            }
+            // Favourites rename in place via the same `UpdateObject`
+            // title swap the playlist rename uses (#75). Gated to rows
+            // inside the favourites container so the action can't be
+            // offered for a service row that only looks like one.
+            if objectID == BrowseID.favorites && item.objectID.hasPrefix("FV:2/") {
+                Divider()
+                Button(L10n.rename) {
+                    vm.renameItem = item
+                    vm.renameText = item.title
+                    vm.showRenameAlert = true
                 }
             }
             if item.objectID.hasPrefix("SQ:") && item.isContainer && objectID == "SQ:" {
@@ -2083,7 +2095,7 @@ struct SunoSearchView: View {
                 Image(systemName: "link")
                     .foregroundStyle(.secondary)
                     .font(.caption)
-                TextField("Paste a suno.com song link", text: $linkText)
+                TextField(L10n.pasteSunoLink, text: $linkText)
                     .textFieldStyle(.plain)
                     .font(.callout)
                     .onSubmit { submit() }
@@ -2911,7 +2923,7 @@ private struct AZIndexBar: View {
                 .overlay(Capsule().stroke(.separator, lineWidth: 0.5))
         }
         .buttonStyle(.plain)
-        .help("Jump to letter")
+        .help(L10n.jumpToLetter)
         .popover(isPresented: $showGrid, arrowEdge: .trailing) {
             LazyVGrid(columns: columns, spacing: 6) {
                 ForEach(letters, id: \.self) { letter in

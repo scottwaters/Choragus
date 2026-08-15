@@ -60,14 +60,15 @@ public final class LyricsService: Sendable {
     private let session: URLSession
     private let cache: MetadataCacheRepository
 
-    /// In-flight fetch counter keyed on the cache key. Lets us
-    /// detect concurrent duplicate requests for the same track —
-    /// the duplicate `[LYRICS] resolved via /api/get (full)` log
-    /// pairs the user reported indicate two callers (now-playing
-    /// card + ClubVis About panel + karaoke window all subscribing)
-    /// hit `fetch` simultaneously without de-duplication.
+    /// In-flight fetch registry keyed on the cache key. Concurrent
+    /// callers for the same track (now-playing card + ClubVis About
+    /// panel + karaoke window + prewarm) share one resolution: the
+    /// first caller creates the task, later callers await the same
+    /// task, and the entry is removed on completion. The task is
+    /// unstructured so one caller's cancellation cannot cancel the
+    /// fetch out from under the other waiters.
     private let inflightLock = NSLock()
-    private nonisolated(unsafe) var inflightCountByKey: [String: Int] = [:]
+    private nonisolated(unsafe) var inflightTasks: [String: Task<Lyrics?, Never>] = [:]
 
     public init(cache: MetadataCacheRepository) {
         let config = URLSessionConfiguration.default
@@ -97,23 +98,35 @@ public final class LyricsService: Sendable {
         let key = MetadataCacheRepository.Kind.lyrics.key(artist, title, album ?? "")
         let summary = "[\(artist)|\(title)|\(album ?? "")|d=\(durationSeconds.map(String.init) ?? "-")]"
 
-        // De-duplication telemetry: bump the in-flight counter for
-        // this key on entry; if it was already ≥ 1, log the dup.
+        // De-duplication: first caller creates the resolution task;
+        // concurrent callers for the same key await that same task.
         inflightLock.lock()
-        let priorInflight = inflightCountByKey[key, default: 0]
-        inflightCountByKey[key] = priorInflight + 1
-        inflightLock.unlock()
-        if priorInflight > 0 {
-            sonosDebugLog("[LYRICS-DUP] concurrent fetch — \(summary) priorInflight=\(priorInflight) caller=\(callSite)")
-        }
-        defer {
-            inflightLock.lock()
-            let next = (inflightCountByKey[key] ?? 1) - 1
-            if next <= 0 { inflightCountByKey.removeValue(forKey: key) }
-            else { inflightCountByKey[key] = next }
+        if let existing = inflightTasks[key] {
             inflightLock.unlock()
+            sonosDebugLog("[LYRICS-DUP] joining in-flight fetch — \(summary) caller=\(callSite)")
+            return await existing.value
         }
+        let task = Task<Lyrics?, Never> { [weak self] in
+            guard let self else { return nil }
+            defer {
+                self.inflightLock.lock()
+                self.inflightTasks.removeValue(forKey: key)
+                self.inflightLock.unlock()
+            }
+            return await self.resolve(artist: artist, title: title, album: album,
+                                      durationSeconds: durationSeconds,
+                                      key: key, summary: summary)
+        }
+        inflightTasks[key] = task
+        inflightLock.unlock()
+        return await task.value
+    }
 
+    /// Full resolution chain (cache → /api/get → /api/search → miss
+    /// cache). Runs inside the shared in-flight task for its key.
+    private func resolve(artist: String, title: String,
+                         album: String?, durationSeconds: Int?,
+                         key: String, summary: String) async -> Lyrics? {
         // Cache lookup. We accept a cached *hit* unconditionally, but cached
         // *misses* are only authoritative if they came from the v2 fallback
         // chain (`fallbackVersion >= 2`). Older misses pre-date the

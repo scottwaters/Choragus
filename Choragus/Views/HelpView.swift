@@ -78,8 +78,23 @@ struct HelpView: View {
             ])
             heading(L10n.helpVolumeHeading)
             paragraph(L10n.helpVolumeBody)
+            paragraph(L10n.helpVolumeSyncBody)
+            heading(L10n.helpCrossfadeSleepHeading)
+            paragraph(L10n.helpCrossfadeSleepBody)
+            heading(L10n.helpMediaKeysHeading)
+            paragraph(L10n.helpMediaKeysBody)
+            paragraph(L10n.helpLockedScreenBody)
             heading(L10n.helpTransportState)
             paragraph(L10n.helpTransportStateBody)
+            paragraph(L10n.helpQueueFollowBody)
+            paragraph(L10n.helpQueueSourceBody)
+            heading(L10n.helpQueueLibraryHeading)
+            paragraph(L10n.helpQueueLibraryBody)
+            paragraph(L10n.helpQueueLibrarySourcesBody)
+            paragraph(L10n.helpQueueLibraryOrganiseBody)
+            paragraph(L10n.helpQueueLibraryExportBody)
+            paragraph(L10n.helpSaveToPlaylistBody)
+            paragraph(L10n.helpWindowLifecycleBody)
         }
     }
 
@@ -96,10 +111,15 @@ struct HelpView: View {
             ])
             heading(L10n.helpKaraokePopoutHeading)
             paragraph(L10n.helpKaraokePopoutBody)
+            paragraph(L10n.helpKaraokeSettingsBody)
             heading(L10n.helpAboutTabHeading)
             paragraph(L10n.helpAboutTabBody)
             heading(L10n.helpHistoryTabHeading)
             paragraph(L10n.helpHistoryTabBody)
+            paragraph(L10n.helpHistoryActionsBody)
+            paragraph(L10n.helpAudioFormatBadgesBody)
+            heading(L10n.helpHomeTheaterTogglesHeading)
+            paragraph(L10n.helpHomeTheaterTogglesBody)
             heading(L10n.helpCollapseHeading)
             paragraph(L10n.helpCollapseBody)
         }
@@ -113,6 +133,9 @@ struct HelpView: View {
             paragraph(L10n.helpDiagnosticsOpeningBody)
             heading(L10n.helpDiagnosticsLiveEventsHeading)
             paragraph(L10n.helpDiagnosticsLiveEventsBody)
+            paragraph(L10n.helpSpeakersTabBody)
+            heading(L10n.helpNetworkTabHeading)
+            paragraph(L10n.helpNetworkTabBody)
             heading(L10n.helpDiagnosticsReportingHeading)
             paragraph(L10n.helpDiagnosticsReportingBody)
             heading(L10n.helpDiagnosticsEncryptedHeading)
@@ -131,8 +154,13 @@ struct HelpView: View {
                 L10n.helpBulletUngroupAll,
                 L10n.helpBulletPreset
             ])
+            heading(L10n.helpPresetsHeading)
+            paragraph(L10n.helpPresetsBody)
+            heading(L10n.helpGroupingGesturesHeading)
+            paragraph(L10n.helpGroupingGesturesBody)
             heading(L10n.helpHomeTheaterSets)
             paragraph(L10n.helpHomeTheaterSetsBody)
+            paragraph(L10n.helpSurroundModeBody)
         }
     }
 
@@ -148,6 +176,9 @@ struct HelpView: View {
                 L10n.helpBulletRecentlyPlayed,
                 L10n.helpBulletLineIn
             ])
+            paragraph(L10n.helpRenameFavoriteBody)
+            paragraph(L10n.helpPlaylistManagementBody)
+            paragraph(L10n.helpFastScrollBody)
             heading(L10n.helpAppleMusicHeading)
             paragraph(L10n.helpAppleMusicBody)
             heading(L10n.helpPlexHeading)
@@ -172,6 +203,11 @@ struct HelpView: View {
             ])
             heading(L10n.helpServiceSetupHeading)
             paragraph(L10n.helpServiceSetupBody)
+            heading(L10n.helpMoreServicesHeading)
+            paragraph(L10n.helpMoreServicesBody)
+            paragraph(L10n.helpSunoBody)
+            heading(L10n.helpLibrarySharesHeading)
+            paragraph(L10n.helpLibrarySharesBody)
             heading(L10n.helpServiceNotesHeading)
             paragraph(L10n.helpServiceNotesBody)
         }
@@ -203,6 +239,7 @@ struct HelpView: View {
                 L10n.helpBulletMouseControls,
                 L10n.helpBulletCommunication,
                 L10n.helpBulletDiscoveryMode,
+                L10n.helpBulletDiscoveryHopLimit,
                 L10n.helpBulletQuickStart,
                 L10n.helpBulletMusicServices,
                 L10n.helpBulletScrobbling,
@@ -213,6 +250,9 @@ struct HelpView: View {
             paragraph(L10n.helpSoftwareUpdatesBody)
             heading(L10n.helpBetaChannelHeading)
             paragraph(L10n.helpBetaChannelBody)
+            paragraph(L10n.helpIgnoreTVBody)
+            heading(L10n.helpVisualisationsHeading)
+            paragraph(L10n.helpVisualisationsBody)
             heading(L10n.helpListeningStatsSection)
             paragraph(L10n.helpListeningStatsBody)
         }
@@ -256,6 +296,20 @@ struct HelpView: View {
                 Link("github.com/scottwaters/Choragus", destination: url)
                     .font(.body)
             }
+            // Optional support link — rendered only when the bundle
+            // carries a `ChoragusSupportURL` Info.plist key. Packaging
+            // injects it; a bare checkout builds without one, so the
+            // row is absent from third-party builds by construction.
+            if let supportString = Bundle.main.object(forInfoDictionaryKey: "ChoragusSupportURL") as? String,
+               !supportString.isEmpty,
+               let supportURL = URL(string: supportString) {
+                Link(destination: supportURL) {
+                    Label(L10n.supportProject, systemImage: "heart")
+                }
+                .font(.body)
+            }
+            centeredHeading(L10n.helpSupportHeading)
+            centeredParagraph(L10n.helpSupportBody)
             centeredHeading(L10n.helpLicense)
             centeredParagraph(L10n.helpLicenseBody)
         }

@@ -188,6 +188,8 @@ xcodebuild -scheme Choragus \
 
 The resulting app is at `build/Choragus.app`. Use `-configuration Debug` for a debug build with symbols and `DEBUG` defined.
 
+Don't reuse one `build/` directory for both configurations. `xcodebuild clean` does not remove products the other configuration left there: a Release bundle sitting in the directory makes the Debug link step fail with no useful diagnostic, and a Release build over Debug output can pick up `Choragus.debug.dylib` and `__preview.dylib` and carry them into the bundle. Delete `build/` when switching configuration.
+
 The project file is signing-neutral — no team ID, no provisioning profile, automatic style — so it builds cleanly under any identity (or none) without modification.
 
 ### Running Tests

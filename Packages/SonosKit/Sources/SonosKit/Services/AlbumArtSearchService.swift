@@ -20,6 +20,16 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
     private let session: URLSession
     private var cache: [String: String?] = [:] // cacheKey -> artURL (nil = not found)
     private let cacheLock = NSLock()
+    /// Query-level memo across cache keys. `cache` above is keyed per
+    /// artist|album pair, so a compilation album (many artists, one album
+    /// title) re-issued the identical artist-independent album/song query
+    /// once per artist, and the artist-entity query repeated once per album
+    /// — a v4.0 diagnostics bundle showed one known-miss album query fired
+    /// 72 times in 8 minutes, burning the 12 req/min throttle budget on
+    /// answers we already had. Keyed on entity|limit|query; only definitive
+    /// outcomes are stored (rate-limiter denials, HTTP and JSON failures
+    /// stay retryable). nil value = definitive miss.
+    private var queryMemo: [String: (artURL: String, artistName: String, collectionName: String, trackName: String)?] = [:]
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -404,7 +414,11 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
 
     /// Constructs a /getaa URL to extract embedded art from a local file via the Sonos speaker
     public static func getaaURL(speakerIP: String, port: Int = SonosProtocol.defaultPort, trackURI: String) -> String {
-        let encoded = trackURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trackURI
+        // Strict encoding: `.urlQueryAllowed` passed `&` through raw, so
+        // the `u=` value truncated at the first `&` for every service URI
+        // (`…?sid=204&flags=…`) and any path containing an ampersand —
+        // the speaker then served the wrong (or no) art.
+        let encoded = URLEncode.queryValue(trackURI)
         return "http://\(speakerIP):\(port)/getaa?s=1&u=\(encoded)"
     }
 
@@ -440,6 +454,12 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
         cacheLock.unlock()
     }
 
+    private func memoSet(_ key: String, _ value: (artURL: String, artistName: String, collectionName: String, trackName: String)?) {
+        cacheLock.lock()
+        queryMemo[key] = value
+        cacheLock.unlock()
+    }
+
     /// Low-level iTunes Search API call. `unthrottled` routes around
     /// the self-throttle (12 req/min cap) for user-facing latency-
     /// sensitive paths — matches the policy in
@@ -454,11 +474,19 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
 
     /// iTunes search that also returns metadata for verification
     private func iTunesSearchFull(query: String, entity: String, limit: Int = 3, maxWait: TimeInterval = 0, unthrottled: Bool = false) async -> (artURL: String, artistName: String, collectionName: String, trackName: String)? {
+        let memoKey = "\(entity)|\(limit)|\(query)"
+        cacheLock.lock()
+        if let memo = queryMemo[memoKey] {
+            cacheLock.unlock()
+            return memo
+        }
+        cacheLock.unlock()
+
         // Explicit `country=US` so the US iTunes catalog is searched
         // regardless of the caller's IP geolocation. Maximises chance
         // of finding artists who may not have storefronts in every region.
-        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=\(limit)&country=US") else {
+        let encoded = URLEncode.queryValue(query)
+        guard let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=\(limit)&country=US") else {
             return nil
         }
 
@@ -494,6 +522,7 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
             // playback) and burying real warnings.
             sonosDiagLog(.debug, tag: "ART",
                          "iTunes \(entity) returned 0 results for query=\(query)")
+            memoSet(memoKey, nil)
             return nil
         }
 
@@ -507,6 +536,7 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
             // emits a single warning when ALL entity types miss.
             sonosDiagLog(.debug, tag: "ART",
                          "iTunes \(entity) result for \(query) has no artworkUrl (artistName=\(artistName), totalResults=\(results.count))")
+            memoSet(memoKey, nil)
             return nil
         }
 
@@ -514,12 +544,14 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
                           .replacingOccurrences(of: "60x60", with: "600x600")
                           .replacingOccurrences(of: "30x30", with: "600x600")
 
-        return (
+        let hit = (
             artURL: upscaled,
             artistName: first["artistName"] as? String ?? "",
             collectionName: first["collectionName"] as? String ?? "",
             trackName: first["trackName"] as? String ?? ""
         )
+        memoSet(memoKey, hit)
+        return hit
     }
 
     // MARK: - Text Cleaning for Search
@@ -610,8 +642,8 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
         // Explicit `country=US` so the US iTunes catalog is searched
         // regardless of the caller's IP geolocation. Maximises chance
         // of finding artists who may not have storefronts in every region.
-        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=\(limit)&country=US") else {
+        let encoded = URLEncode.queryValue(query)
+        guard let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity)&limit=\(limit)&country=US") else {
             return nil
         }
         let result: (Data, URLResponse)?

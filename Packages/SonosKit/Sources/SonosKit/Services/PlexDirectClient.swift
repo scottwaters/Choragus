@@ -339,7 +339,7 @@ public final class PlexDirectClient: Sendable {
 
     public func search(baseURI: String, authToken: String,
                        query: String, limit: Int = 30) async throws -> [PlexMediaItem] {
-        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let q = URLEncode.queryValue(query)
         // /hubs/search returns grouped results (hubs of artists, albums, tracks).
         // /search is older + flatter — easier to consume here.
         let path = "/search?query=\(q)&limit=\(limit)"
@@ -615,6 +615,10 @@ public final class PlexAuthManager: ObservableObject {
     // MARK: - PIN flow
 
     private var pollTask: Task<Void, Never>?
+    /// Session token covering the pre-task window in `startPin` (the
+    /// `createPin` await runs before any poll task exists to cancel).
+    /// Bumped by every `startPin` and `cancelPin`.
+    private var pinSession = 0
 
     /// Builds the OAuth-style authorize URL the user should open.
     /// Strong PINs (which we use for security) aren't typeable codes —
@@ -643,10 +647,18 @@ public final class PlexAuthManager: ObservableObject {
     /// called).
     public func startPin() async throws -> String {
         cancelPin()
+        pinSession += 1
+        let session = pinSession
         let pin = try await client.createPin()
+        // `cancelPin` (or an overlapping `startPin`) during the createPin
+        // await has no task to cancel — the session token is the
+        // cancellation signal for that window. Abort without starting an
+        // orphan poll or touching the newer session's state.
+        guard session == pinSession else { throw CancellationError() }
         activePin = pin
         pinPollError = nil
         isPolling = true
+        pollTask?.cancel()
         pollTask = Task { [weak self] in
             await self?.pollPinUntilDone(pin)
         }
@@ -654,6 +666,7 @@ public final class PlexAuthManager: ObservableObject {
     }
 
     public func cancelPin() {
+        pinSession += 1
         pollTask?.cancel()
         pollTask = nil
         isPolling = false
@@ -668,6 +681,9 @@ public final class PlexAuthManager: ObservableObject {
         while !Task.isCancelled, Date() < deadline {
             do {
                 if let token = try await client.checkPin(pin), !token.isEmpty {
+                    // Cancelled during the round-trip — do not complete an
+                    // auth the user backed out of.
+                    guard !Task.isCancelled else { return }
                     await MainActor.run { self.completeAuth(token: token) }
                     return
                 }
@@ -686,6 +702,10 @@ public final class PlexAuthManager: ObservableObject {
             }
             try? await Task.sleep(nanoseconds: 2_000_000_000)
         }
+        // Cancellation exits the loop too — `cancelPin` already reset the
+        // UI state, and a newer PIN flow may be running. Only a genuine
+        // timeout falls through to the banner below.
+        guard !Task.isCancelled else { return }
         await MainActor.run {
             self.isPolling = false
             self.activePin = nil

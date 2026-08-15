@@ -730,6 +730,6 @@ public enum MusicServiceCatalogParser {
     private static func extractAttr(_ text: String, _ name: String) -> String? {
         guard let range = text.range(of: "\(name)=\""),
               let endQuote = text[range.upperBound...].range(of: "\"") else { return nil }
-        return String(text[range.upperBound..<endQuote.lowerBound])
+        return XMLResponseParser.xmlUnescape(String(text[range.upperBound..<endQuote.lowerBound]))
     }
 }

@@ -145,16 +145,26 @@ final class BrowseViewModel {
 
     // MARK: - Data Loading
 
+    /// Load generation. Bumped at the start of every `loadItems`;
+    /// captured by `loadItems`/`loadMore` and re-checked after each
+    /// await so a stale page from a superseded fetch can never reset or
+    /// append over a newer load's results.
+    private var loadGeneration = 0
+
     func loadItems() async {
+        loadGeneration += 1
+        let generation = loadGeneration
         isLoading = true
         errorMessage = nil
         reachedEnd = false
         do {
             if isSMAPI {
-                try await loadSMAPIItems()
+                try await loadSMAPIItems(generation: generation)
             } else if isServiceSearch {
                 let query = String(objectID.dropFirst("SERVICESEARCH:".count))
-                items = await ServiceSearchProvider.shared.searchAppleMusic(query: query, entity: serviceSearchEntity, sn: serviceSearchSN)
+                let result = await ServiceSearchProvider.shared.searchAppleMusic(query: query, entity: serviceSearchEntity, sn: serviceSearchSN)
+                guard generation == loadGeneration else { return }
+                items = result
                 totalItems = items.count
                 loadedCount = items.count
             } else if isSearch {
@@ -163,11 +173,13 @@ final class BrowseViewModel {
                 async let albumResults = sonosManager.search(query: query, in: BrowseID.album, householdID: group?.householdID, start: 0, count: PageSize.searchAlbum)
                 async let trackResults = sonosManager.search(query: query, in: BrowseID.tracks, householdID: group?.householdID, start: 0, count: PageSize.searchTrack)
                 let (artists, albums, tracks) = try await (artistResults, albumResults, trackResults)
+                guard generation == loadGeneration else { return }
                 items = artists.items + albums.items + tracks.items
                 totalItems = items.count
                 loadedCount = items.count
             } else {
                 let (result, total) = try await sonosManager.browse(objectID: objectID, householdID: group?.householdID, start: 0, count: pageSize)
+                guard generation == loadGeneration else { return }
                 // Hide legacy queue-history snapshots when browsing the
                 // saved-queues container — they're an undo buffer, not
                 // user content. `loadedCount` stays the RAW count: it is
@@ -181,12 +193,13 @@ final class BrowseViewModel {
                 loadedCount = result.count
             }
         } catch {
+            guard generation == loadGeneration else { return }
             errorMessage = error.localizedDescription
         }
-        isLoading = false
+        if generation == loadGeneration { isLoading = false }
     }
 
-    private func loadSMAPIItems() async throws {
+    private func loadSMAPIItems(generation: Int) async throws {
         guard let uri = smapiServiceURI, let client = smapiClient else {
             errorMessage = L10n.serviceNotConfigured
             return
@@ -198,6 +211,7 @@ final class BrowseViewModel {
         } else {
             result = try await client.getMetadataAnonymous(serviceURI: uri, deviceID: smapiDeviceID, id: browseID, index: 0, count: pageSize)
         }
+        guard generation == loadGeneration else { return }
         let sid = smapiServiceID ?? 0
         let sn = smapiSerialNumber
         items = result.items.map { ServiceSearchProvider.shared.smapiItemToBrowseItem($0, serviceID: sid, sn: sn) }
@@ -226,6 +240,10 @@ final class BrowseViewModel {
         if isSearch || isServiceSearch { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
+        // Capture the generation at page start — a `loadItems` reset that
+        // lands while this page is in flight makes the page stale; it must
+        // not append onto the freshly-reset list.
+        let generation = loadGeneration
 
         do {
             if isSMAPI {
@@ -242,6 +260,7 @@ final class BrowseViewModel {
                                                                     index: loadedCount,
                                                                     count: pageSize)
                 }
+                guard generation == loadGeneration else { return }
                 let sid = smapiServiceID ?? 0
                 let sn = smapiSerialNumber
                 let mapped = result.items.map {
@@ -256,6 +275,7 @@ final class BrowseViewModel {
                 }
             } else {
                 let (result, total) = try await sonosManager.browse(objectID: objectID, householdID: group?.householdID, start: loadedCount, count: pageSize)
+                guard generation == loadGeneration else { return }
                 if result.isEmpty {
                     reachedEnd = true
                 } else {
@@ -366,6 +386,10 @@ final class BrowseViewModel {
         if expansionUserConfirmed { return true }
         if expansionCancelled { return false }
         return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            // Overlapping bulk operations share this single slot — an
+            // overwritten continuation would suspend its operation
+            // forever. Resolve the earlier one as cancelled first.
+            expansionContinuation?.resume(returning: false)
             expansionContinuation = cont
         }
     }
@@ -397,11 +421,11 @@ final class BrowseViewModel {
         // takes to walk the container. SonosManager owns the published
         // flag; QueueView observes it.
         if let manager = sonosManager as? SonosManager {
-            manager.isAddingToQueue = true
+            manager.beginAddingToQueue()
         }
         defer {
             if let manager = sonosManager as? SonosManager {
-                manager.isAddingToQueue = false
+                manager.endAddingToQueue()
             }
         }
 
@@ -509,6 +533,9 @@ final class BrowseViewModel {
     func bulkAddToQueue(_ items: [BrowseItem], playNext: Bool) async {
         guard let group = group else { return }
         playbackError = nil
+        // Per-operation flag: a Cancel on a previous large-container
+        // prompt must not silently disable every later bulk action.
+        expansionCancelled = false
         let (leaves, capped) = await collectAllLeaves(items)
         guard !leaves.isEmpty else { return }
         do {
@@ -528,6 +555,8 @@ final class BrowseViewModel {
     func bulkPlayAll(_ items: [BrowseItem]) async {
         guard let group = group else { return }
         playbackError = nil
+        // Per-operation flag — see bulkAddToQueue.
+        expansionCancelled = false
         let (leaves, capped) = await collectAllLeaves(items)
         guard !leaves.isEmpty else { return }
         do {
@@ -730,11 +759,15 @@ final class BrowseViewModel {
 
     // MARK: - Playlist Management
 
-    func renamePlaylist() async {
+    /// Renames the pending `renameItem` in place. Works for any
+    /// speaker-side object the ContentDirectory accepts `UpdateObject`
+    /// for — Sonos playlists (`SQ:`) and favourites (`FV:2/`), which
+    /// share the same `<dc:title>` swap on the wire (#75).
+    func renameSelectedItem() async {
         guard let item = renameItem else { return }
         let newName = renameText.trimmingCharacters(in: .whitespaces)
         guard !newName.isEmpty, newName != item.title else { return }
-        await ErrorHandler.shared.handleAsync("PLAYLIST", userFacing: true) {
+        await ErrorHandler.shared.handleAsync("BROWSE", userFacing: true) {
             try await sonosManager.renamePlaylist(playlistID: item.objectID, oldTitle: item.title, newTitle: newName)
         }
         await loadItems()

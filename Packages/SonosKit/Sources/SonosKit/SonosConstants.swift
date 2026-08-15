@@ -28,10 +28,22 @@ public enum URIPrefix {
         uri.hasPrefix(fileCifs) || uri.hasPrefix(smb)
     }
 
-    /// True if this URI is a radio/internet stream
+    /// True if this URI is a radio/internet stream.
+    ///
+    /// `x-sonosapi-hls-static` carries BOTH station content and
+    /// on-demand tracks — Apple Music and YouTube Music deliver
+    /// catalog songs as `…hls-static:song:<id>?sid=…`. A `song:` id
+    /// is a track, not radio; classing it as radio mislabeled the
+    /// source ("Radio" instead of the service), hid Up Next, set
+    /// stationName on direct-played favorites, and excluded real
+    /// album art from the Club Vis wall.
     public static func isRadio(_ uri: String) -> Bool {
-        uri.hasPrefix(sonosApiStream) || uri.hasPrefix(sonosApiRadio) || uri.hasPrefix(rinconMP3Radio) ||
-        uri.hasPrefix(sonosApiHLS) || uri.hasPrefix(sonosApiHLSStatic)
+        if uri.hasPrefix(sonosApiHLSStatic) {
+            let decoded = uri.removingPercentEncoding ?? uri
+            return !decoded.contains("song:")
+        }
+        return uri.hasPrefix(sonosApiStream) || uri.hasPrefix(sonosApiRadio) ||
+            uri.hasPrefix(rinconMP3Radio) || uri.hasPrefix(sonosApiHLS)
     }
 
     /// Extracts the numeric Apple Music catalog song ID from a Sonos URI.
@@ -219,6 +231,10 @@ public enum Timing {
     public static let positionFreezeAfterSeek: TimeInterval = 3
     public static let progressTimerInterval: TimeInterval = 1.0
     public static let discoveryRescanInterval: TimeInterval = 30
+    /// Hop limit for SSDP M-SEARCH. Four crosses a typical home VLAN
+    /// boundary while staying well inside the local network.
+    public static let ssdpDefaultMulticastTTL: Int32 = 4
+    public static let ssdpMaxMulticastTTL: Int32 = 16
     public static let artCacheDebounceSec: UInt64 = 2_000_000_000
     public static let subscriptionRenewalFraction: Double = 0.8
     public static let presetStepDelay: UInt64 = 500_000_000
@@ -276,6 +292,13 @@ public enum UDKey {
     /// Default 3401; users on segmented networks scope a firewall rule to it
     /// (speakers → controller). 0/unset = default. Applied at next launch.
     public static let eventListenerPort = "eventListener.port"
+    /// Hop limit for outbound SSDP M-SEARCH datagrams. The socket default is
+    /// 1, which a router drops at the first hop, so speakers on another VLAN
+    /// or subnet never see the search. Raising it lets the search cross a
+    /// routed boundary where the network forwards multicast; it cannot help
+    /// where IGMP snooping or the AP blocks the traffic outright.
+    /// 0/unset = `Timing.ssdpDefaultMulticastTTL`. Applied on next scan.
+    public static let ssdpMulticastTTL = "ssdp.multicastTTL"
     public static let appearanceMode = "appearanceMode"
     /// Independent appearance preference for the karaoke popout
     /// window. Defaults to `.dark` because the karaoke window is an
@@ -299,6 +322,12 @@ public enum UDKey {
     /// sidebar entry routes to PlexDirectBrowseView instead of the SMAPI
     /// relay. Toggle exposed in MusicServicesView when both auths exist.
     public static let plexPreferDirect = "plex.preferDirect"
+    /// System media-key transport control (play/pause/next/previous).
+    /// Default on. Off unregisters the `MPRemoteCommandCenter` targets
+    /// AND releases the `MPNowPlayingInfoCenter` claim, so macOS routes
+    /// the keys to another app rather than to a silent recipient. The
+    /// ⌃⌥ volume chord is not covered by this key.
+    public static let mediaKeysEnabled = "mediaKeysEnabled"
     /// Mouse-wheel volume control over the Now Playing area.
     public static let scrollVolumeEnabled = "scrollVolumeEnabled"
     /// Middle-click mute toggle over the Now Playing area.
@@ -394,6 +423,18 @@ public enum UDKey {
     /// "group" (default) restricts the history pool to plays in the
     /// currently-selected group; "all" pools across every group.
     public static let visHistorySource = "vis.historySource"
+    /// Club Vis lighting colour scheme. Stored as a raw String
+    /// matching `VisColourScheme.rawValue` ("albumArt" | "choragus" |
+    /// "custom"). "albumArt" (default) derives lighting tones from
+    /// the current cover; "choragus" applies the fixed wordmark neon
+    /// set; "custom" applies the four user-selected tones below.
+    public static let visColourScheme = "vis.colourScheme"
+    /// Custom-scheme tones, one "#RRGGBB" string per lighting role.
+    /// Read only when `visColourScheme` == "custom".
+    public static let visCustomToneWash = "vis.customTone.wash"
+    public static let visCustomToneBeamA = "vis.customTone.beamA"
+    public static let visCustomToneBeamB = "vis.customTone.beamB"
+    public static let visCustomToneAccent = "vis.customTone.accent"
     /// Karaoke text rendering style. Stored as a raw String matching
     /// `KaraokeStyle.rawValue` ("dynamic" | "classic"). "dynamic"
     /// (default) scales the active line up + neighbours down for a
@@ -437,6 +478,24 @@ public enum VisHistorySource: String, CaseIterable {
     public static var current: VisHistorySource {
         let raw = UserDefaults.standard.string(forKey: UDKey.visHistorySource) ?? ""
         return VisHistorySource(rawValue: raw) ?? .defaultMode
+    }
+}
+
+/// Stored as a raw String UserDefault under `UDKey.visColourScheme`.
+/// `albumArt` (default) — Club Vis lighting tones derive from the
+/// now-playing cover. `choragus` — fixed set sampled from the
+/// Choragus wordmark neons. `custom` — the four user-selected tones
+/// stored under `UDKey.visCustomTone*`.
+public enum VisColourScheme: String, CaseIterable, Sendable {
+    case albumArt
+    case choragus
+    case custom
+
+    public static var defaultMode: VisColourScheme { .albumArt }
+
+    public static var current: VisColourScheme {
+        let raw = UserDefaults.standard.string(forKey: UDKey.visColourScheme) ?? ""
+        return VisColourScheme(rawValue: raw) ?? .defaultMode
     }
 }
 
@@ -517,6 +576,8 @@ public enum UILayout {
     public static let horizontalPadding: CGFloat = 24
     public static let defaultSpacing: CGFloat = 12
     public static let volumeLabelWidth: CGFloat = 28
+    /// Horizontal padding inside a format badge pill.
+    public static let badgePillInset: CGFloat = 6
     public static let speakerNameMinWidth: CGFloat = 60
     public static let presetWindowWidth: CGFloat = 680
     public static let presetWindowHeight: CGFloat = 580
@@ -582,5 +643,42 @@ public enum AppPaths {
         let dir = appSupport.appendingPathComponent("Choragus", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+}
+
+// MARK: - URL Encoding
+
+/// Strict RFC 3986 encoders for embedding content-derived values in
+/// URLs. Foundation's `.urlQueryAllowed` / `.urlPathAllowed` pass
+/// reserved characters through raw — `&` truncates a query value at
+/// the first ampersand ("Simon & Garfunkel"), `/` splits a path
+/// segment ("AC/DC"), `+` decodes server-side as a space. Encoding to
+/// the unreserved set is correct in both positions.
+public enum URLEncode {
+    public static let unreserved = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
+    /// Safe as a single query-parameter value.
+    public static func queryValue(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: unreserved) ?? value
+    }
+
+    /// Safe as a single path segment.
+    public static func pathSegment(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: unreserved) ?? value
+    }
+}
+
+// MARK: - DIDL Normalization
+
+public enum DIDLNormalize {
+    /// `resourceMetadata` reaches consumers either raw or whole-document
+    /// escaped depending on producer. Detect the escaped form by the
+    /// document signature (`&lt;DIDL-Lite`), never by any `&lt;` — a raw
+    /// DIDL whose title contains a literal `<` (escaped to `&lt;` in its
+    /// text node) matched the loose sniff and was unescaped wholesale,
+    /// leaving bare `&` in text nodes that the speaker rejects.
+    public static func metadata(_ meta: String) -> String {
+        meta.contains("&lt;DIDL-Lite") ? XMLResponseParser.xmlUnescape(meta) : meta
     }
 }

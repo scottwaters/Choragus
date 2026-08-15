@@ -130,6 +130,14 @@ The `Browse` action navigates the content hierarchy:
 
 Browse results are returned as DIDL-Lite XML inside a SOAP `Result` element. The DIDL uses `<item>` for playable content and `<container>` for navigable folders.
 
+### Music library shares are read-only over UPnP
+
+`S:` can be browsed to list the folders a system indexes, and `DestroyObject` removes one, but a share cannot be added. `CreateObject` against the `S:` container answers HTTP 200 with a well-formed `ObjectID` and `Result` container, then persists nothing — the share is absent from `Browse("S:")` immediately afterwards. Verified on both S1 (firmware 57.x) and S2 (96.x), with a path that does not exist and with an existing guest-readable share, and with both DIDL shapes (`<item>` plus plain path, and `<container>` plus an `x-file-cifs://` `res`). Adding a share requires the Sonos app.
+
+### `HTSatChanMapSet` is advertised per member, not per zone
+
+Every bonded member carries the attribute, but a satellite advertises only the soundbar and itself; the complete set appears on the soundbar's own entry. A live 5.1 zone publishes four different values — the soundbar's full map plus one partial view per satellite. Reading the first non-empty value found therefore records whichever partial view was enumerated first. Merge across all members.
+
 ## Zone Group Topology
 
 `GetZoneGroupState` returns XML describing all groups:

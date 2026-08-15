@@ -8,6 +8,27 @@ import SonosKit
 import AppKit
 
 struct ContentView: View {
+    /// Donation routes, both injected at package time from build
+    /// configuration that is never checked in. A bare checkout builds
+    /// with neither key, so the whole support menu is absent from
+    /// third-party builds by construction, matching the existing
+    /// `ChoragusSupportURL` row in Help (#79).
+    private static var supportURL: URL? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "ChoragusSupportURL") as? String,
+              !value.isEmpty else { return nil }
+        return URL(string: value)
+    }
+
+    /// Bitcoin receiving address. Whatever is injected is shown verbatim;
+    /// packaging is responsible for its correctness (a wrong character
+    /// sends donations somewhere unrecoverable, so the value is bech32
+    /// checksum-verified before it goes into the env file).
+    private static var bitcoinAddress: String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "ChoragusBitcoinAddress") as? String,
+              !value.isEmpty else { return nil }
+        return value
+    }
+
     @EnvironmentObject var sonosManager: SonosManager
     @EnvironmentObject var presetManager: PresetManager
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
@@ -44,6 +65,7 @@ struct ContentView: View {
     @Environment(\.openSettings) private var openSettings
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .automatic
     @State private var showFirstRunWelcome = false
+    @State private var showSupportSheet = false
 
     private var selectedGroup: SonosGroup? {
         guard let id = selectedGroupID else { return nil }
@@ -423,6 +445,10 @@ struct ContentView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showSupportSheet) {
+                SupportSheet(supportURL: Self.supportURL,
+                             bitcoinAddress: Self.bitcoinAddress)
+            }
             .sheet(isPresented: $showFirstRunWelcome) {
                 FirstRunWelcomeView(
                     onOpenSettings: {
@@ -553,26 +579,17 @@ struct ContentView: View {
                         Button {
                             WindowManager.shared.openDiagnostics()
                         } label: {
-                            if NSImage(named: "BugIcon") != nil {
-                                Image("BugIcon")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 18, height: 18)
-                            } else {
-                                ZStack(alignment: .topTrailing) {
-                                    Image(systemName: "ant.fill")
-                                    if hasDiagnosticError {
-                                        Image(systemName: "exclamationmark.circle.fill")
-                                            .font(.system(size: 8))
-                                            .foregroundStyle(.white, .red)
-                                            .symbolRenderingMode(.palette)
-                                            .offset(x: 5, y: -3)
-                                    }
-                                }
-                            }
+                            // Diagnostics, not bug-reporting: the window
+                            // shows live event history and speaker state.
+                            // The ECG trace is the conventional read for
+                            // "system health / activity"; no error badge,
+                            // the window itself surfaces problems.
+                            Image(systemName: "waveform.path.ecg")
                         }
                         .help(L10n.diagnostics)
                     }
+
+                    supportMenu
 
                     Button {
                         openSettings()
@@ -706,23 +723,26 @@ struct ContentView: View {
             Button {
                 WindowManager.shared.openDiagnostics()
             } label: {
-                if NSImage(named: "BugIcon") != nil {
-                    Image("BugIcon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 18, height: 18)
-                } else {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "ant.fill")
-                        Image(systemName: "exclamationmark.circle.fill")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.white, .red)
-                            .symbolRenderingMode(.palette)
-                            .offset(x: 5, y: -3)
-                    }
-                }
+                Image(systemName: "waveform.path.ecg")
             }
             .help(L10n.diagnostics)
+        }
+
+        supportMenu
+    }
+
+    /// Toolbar affordance for the support panel. Absent entirely when
+    /// packaging injected nothing — a fork's build shows no support
+    /// button at all, rather than one leading to an empty sheet.
+    @ViewBuilder
+    private var supportMenu: some View {
+        if Self.supportURL != nil || Self.bitcoinAddress != nil {
+            Button {
+                showSupportSheet = true
+            } label: {
+                Image(systemName: "heart")
+            }
+            .help(L10n.supportProject)
         }
     }
 

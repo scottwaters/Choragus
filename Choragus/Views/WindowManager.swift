@@ -264,6 +264,37 @@ final class WindowManager {
                             display: true)
         }
 
+        // Open on the display the user is actually working on. The
+        // autosaved frame pins the window to whichever monitor it
+        // last lived on; when the user (and the main window) are now
+        // on a different display, translate the frame there —
+        // preserving its relative position and size, clamped and
+        // shrunk (16:9) to fit the target's visible area.
+        let activeScreen = NSApp.keyWindow?.screen
+            ?? NSApp.mainWindow?.screen
+            ?? NSScreen.main
+        let currentScreen = NSScreen.screens.max(by: { a, b in
+            a.frame.intersection(window.frame).width * a.frame.intersection(window.frame).height
+                < b.frame.intersection(window.frame).width * b.frame.intersection(window.frame).height
+        })
+        if let target = activeScreen, let current = currentScreen, current != target {
+            var frame = window.frame
+            let dx = frame.origin.x - current.visibleFrame.origin.x
+            let dy = frame.origin.y - current.visibleFrame.origin.y
+            if frame.width > target.visibleFrame.width - 40 {
+                let w = target.visibleFrame.width - 80
+                frame.size = NSSize(width: w, height: w * 9.0 / 16.0)
+            }
+            frame.origin.x = target.visibleFrame.origin.x + dx
+            frame.origin.y = target.visibleFrame.origin.y + dy
+            frame.origin.x = min(max(frame.origin.x, target.visibleFrame.minX),
+                                 max(target.visibleFrame.maxX - frame.width, target.visibleFrame.minX))
+            frame.origin.y = min(max(frame.origin.y, target.visibleFrame.minY),
+                                 max(target.visibleFrame.maxY - frame.height, target.visibleFrame.minY))
+            sonosDebugLog("[CLUBVIS-OPEN] moved to active display frame=\(frame)")
+            window.setFrame(frame, display: true)
+        }
+
         clubVisWindow = window
         sonosDebugLog("[CLUBVIS-OPEN] window created visible=\(window.isVisible) frame=\(window.frame)")
 
@@ -285,14 +316,15 @@ final class WindowManager {
             // release the SwiftUI tree synchronously on close.
             window?.contentViewController = nil
         }
-        // The Back-of-the-Club debug companion window is no longer
-        // auto-opened. It remains in the codebase but isn't called
-        // from the production open path; it can be re-enabled by a
-        // local developer for debugging by uncommenting an
-        // `openClubVisDebugCompanion()` call here.
+        // Auto-open the debug companion in DEBUG builds only —
+        // release builds never see it. Re-enabled for the lighting-v2
+        // tuning cycle on this branch.
+        #if CHORAGUS_DEV
+        openClubVisDebugCompanion()
+        #endif
     }
 
-    #if DEBUG
+    #if CHORAGUS_DEV
     private static let clubVisDebugWindowIdentifier = NSUserInterfaceItemIdentifier("ChoragusClubVisDebug")
 
     /// Auto-opens the Back of the Club debug companion window in

@@ -368,13 +368,6 @@ public final class ContentDirectoryService {
     /// would arrive as invalid inner XML (UPnP fault), and a title
     /// containing `</dc:title>` would rewrite the tag value.
     public func renameSavedQueue(device: SonosDevice, objectID: String, oldTitle: String, newTitle: String) async throws {
-        func escaped(_ s: String) -> String {
-            s.replacingOccurrences(of: "&", with: "&amp;")
-                .replacingOccurrences(of: "<", with: "&lt;")
-                .replacingOccurrences(of: ">", with: "&gt;")
-                .replacingOccurrences(of: "\"", with: "&quot;")
-                .replacingOccurrences(of: "'", with: "&apos;")
-        }
         _ = try await soap.send(
             to: device.baseURL,
             path: Self.path,
@@ -382,8 +375,8 @@ public final class ContentDirectoryService {
             action: "UpdateObject",
             arguments: [
                 ("ObjectID", objectID),
-                ("CurrentTagValue", "<dc:title>\(escaped(oldTitle))</dc:title>"),
-                ("NewTagValue", "<dc:title>\(escaped(newTitle))</dc:title>")
+                ("CurrentTagValue", "<dc:title>\(XMLResponseParser.xmlEscape(oldTitle))</dc:title>"),
+                ("NewTagValue", "<dc:title>\(XMLResponseParser.xmlEscape(newTitle))</dc:title>")
             ]
         )
     }
@@ -452,7 +445,12 @@ private class QueueXMLParser: NSObject, XMLParserDelegate {
         let handler = QueueXMLParser(deviceIP: deviceIP, devicePort: devicePort, startIndex: startIndex)
         let parser = XMLParser(data: data)
         parser.delegate = handler
-        parser.parse()
+        let succeeded = parser.parse()
+        if !succeeded {
+            sonosDiagLog(.warning, tag: "XML",
+                         "QueueXMLParser parse aborted — result may be partial",
+                         context: ["parserError": String(describing: parser.parserError)])
+        }
         return handler.items
     }
 

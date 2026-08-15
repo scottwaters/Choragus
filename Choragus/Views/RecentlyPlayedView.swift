@@ -105,13 +105,13 @@ struct RecentlyPlayedView: View {
         let serviceType = inferServiceType(from: uri)
         var artElement = ""
         if let art = albumArtURI, !art.isEmpty {
-            artElement = "<upnp:albumArtURI>\(xmlEscape(art))</upnp:albumArtURI>"
+            artElement = "<upnp:albumArtURI>\(XMLResponseParser.xmlEscape(art))</upnp:albumArtURI>"
         }
         let cdudn = "SA_RINCON\(serviceType)_X_#Svc\(serviceType)-0-Token"
         // Use a generic ID — Sonos doesn't validate it against any
         // catalogue when the URI alone resolves, but it must be present.
         return """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="10032020history" parentID="" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:album>\(xmlEscape(album))</upnp:album>\(artElement)<upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="10032020history" parentID="" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><dc:creator>\(XMLResponseParser.xmlEscape(artist))</dc:creator><upnp:album>\(XMLResponseParser.xmlEscape(album))</upnp:album>\(artElement)<upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
         """
     }
 
@@ -126,13 +126,6 @@ struct RecentlyPlayedView: View {
         return (sid << 8) + 7
     }
 
-    private static func xmlEscape(_ s: String) -> String {
-        s.replacingOccurrences(of: "&", with: "&amp;")
-         .replacingOccurrences(of: "<", with: "&lt;")
-         .replacingOccurrences(of: ">", with: "&gt;")
-         .replacingOccurrences(of: "\"", with: "&quot;")
-         .replacingOccurrences(of: "'", with: "&apos;")
-    }
 
     private func playEntry(_ entry: PlayHistoryEntry) {
         guard let group = group,

@@ -26,23 +26,51 @@ public enum TVAudioFormat: String, Equatable, Sendable {
     case unknown
     case noSignal
     case stereoPCM
-    case multichannelPCM
-    case dolbyDigital
+    case multichannelPCM51
+    case multichannelPCM71
+    case dolbyDigital51
+    case dolbyDigitalPlus71
     case dolbyAtmos
+    case dolbyAtmosTrueHD71
+    case dtsSurround51
 
     /// Maps Sonos's `HTAudioIn` integer to a TVAudioFormat. The wire
     /// format is undocumented; cases are populated as captures from
-    /// real HDMI inputs accumulate. Unknown integers fall through to
-    /// `.unknown` — never guessed.
+    /// real HDMI inputs accumulate — the first three were captured
+    /// locally, the remainder supplied by issue #80 (whose table
+    /// matches the locally-captured values, cross-validating the
+    /// source). Unknown integers fall through to `.unknown` — never
+    /// guessed; `AudioFormatObserver` records the raw integer so new
+    /// values surface in diagnostics bundles.
     public static func from(htAudioIn: Int) -> TVAudioFormat {
         switch htAudioIn {
-        case 0:        return .noSignal
-        case 33554434: return .stereoPCM         // 0x2000002 — observed on TV stereo PCM
-        case 84934658: return .multichannelPCM   // 0x5100002 — observed on TV multichannel PCM 5.1
-        case 84934713: return .dolbyDigital      // 0x5100039 — observed on TV Dolby Digital 5.1
-        // .dolbyAtmos integer value to be filled in once a capture is
-        // available — see issue #39 follow-up.
-        default:       return .unknown
+        case 0:         return .noSignal
+        case 33554434:  return .stereoPCM          // 0x2000002 — TV stereo PCM
+        case 84934658:  return .multichannelPCM51  // 0x5100002 — multichannel PCM 5.1
+        case 118489090: return .multichannelPCM71  // 0x7100002 — multichannel PCM 7.1 (#80)
+        case 84934713:  return .dolbyDigital51     // 0x5100039 — Dolby Digital 5.1
+        case 118489146: return .dolbyDigitalPlus71 // 0x710003A — Dolby Digital Plus 7.1 (#80)
+        case 63:        return .dolbyAtmos         // 0x3F — Dolby Atmos (#80)
+        case 61:        return .dolbyAtmosTrueHD71 // 0x3D — Dolby Atmos TrueHD 7.1 (#80)
+        case 84934721:  return .dtsSurround51      // 0x5100041 — DTS Surround 5.1 (#80)
+        default:        return .unknown
+        }
+    }
+
+    /// Localised display label for the TV-input format pill (Now
+    /// Playing and Club Vis). Nil for `.noSignal` / `.unknown` — the
+    /// pill is suppressed rather than guessed.
+    public var displayLabel: String? {
+        switch self {
+        case .stereoPCM:          return L10n.tvAudioStereoPCM
+        case .multichannelPCM51:  return L10n.tvAudioMultichannelPCM51
+        case .multichannelPCM71:  return L10n.tvAudioMultichannelPCM71
+        case .dolbyDigital51:     return L10n.tvAudioDolbyDigital51
+        case .dolbyDigitalPlus71: return L10n.tvAudioDolbyDigitalPlus71
+        case .dolbyAtmos:         return L10n.audioFormatAtmos
+        case .dolbyAtmosTrueHD71: return L10n.tvAudioDolbyAtmosTrueHD71
+        case .dtsSurround51:      return L10n.tvAudioDTSSurround51
+        case .noSignal, .unknown: return nil
         }
     }
 }
@@ -80,6 +108,11 @@ public struct TrackMetadata: Equatable {
     public var stationName: String
     public var trackURI: String?
     public var isQueueSource: Bool  // true when CurrentURI is x-rincon-queue (playing from queue)
+
+    /// True only when the source actually reported `CurrentURI`. On
+    /// event-sourced values `isQueueSource` is a default, not an
+    /// observation — see the carry-forward in `SonosManager`.
+    public var didReportTransportSource: Bool = false
     public var genre: String
     /// Audio format inferred from `r:streamInfo`. `.unknown` until the
     /// speaker has reported a populated stream descriptor for the
@@ -89,6 +122,14 @@ public struct TrackMetadata: Equatable {
     /// speakers. Only meaningful when `trackURI` starts with
     /// `x-sonos-htastream:` or `x-rincon-stream:`; ignored otherwise.
     public var tvAudioFormat: TVAudioFormat
+    /// Raw `r:streamInfo` descriptor as reported
+    /// (`bd:…,sr:…,c:…,l:…,d:…`), kept alongside the parsed
+    /// `audioFormat` because bit depth and sample rate carry the
+    /// quality-tier evidence (16/44.1 vs 24/96) that the coarse enum
+    /// drops. Empty until the speaker reports a populated descriptor.
+    /// Excluded from `contentEquals` — the paired `audioFormat` flip
+    /// already publishes the change.
+    public var streamInfoRaw: String = ""
 
     public init(title: String = "", artist: String = "", album: String = "",
                 albumArtURI: String? = nil, duration: TimeInterval = 0,
@@ -109,6 +150,53 @@ public struct TrackMetadata: Equatable {
         self.genre = genre
         self.audioFormat = audioFormat
         self.tvAudioFormat = tvAudioFormat
+    }
+
+    /// Delivery details for the Now Playing pill, assembled from
+    /// whatever the speaker actually reported: container extension
+    /// from the track URI, the lossless flag, and bit depth / sample
+    /// rate / channel layout from `r:streamInfo`. Nil for
+    /// home-theater sources (the TV pill owns those) and when no
+    /// evidence is available — the pill never guesses.
+    public var streamDetailsLabel: String? {
+        guard let uri = trackURI,
+              !uri.hasPrefix("x-sonos-htastream:"),
+              !uri.hasPrefix("x-rincon-stream:") else { return nil }
+        var parts: [String] = []
+        if let ext = AudioFormatObserver.audioExtension(of: uri) {
+            parts.append(ext == "aif" ? "AIFF" : ext.uppercased())
+        }
+        if audioFormat == .lossless {
+            parts.append(L10n.audioFormatLossless)
+        }
+        if let quality = Self.qualityLabel(fromStreamInfo: streamInfoRaw) {
+            parts.append(quality)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// "24-bit/96 kHz" (+ "5.1"/"7.1" for multichannel) from a raw
+    /// `r:streamInfo` descriptor. Nil when bit depth or sample rate
+    /// is absent or zero.
+    public static func qualityLabel(fromStreamInfo info: String) -> String? {
+        guard !info.isEmpty else { return nil }
+        var bitDepth = 0, sampleRate = 0, channels = 0
+        for part in info.split(separator: ",") {
+            let kv = part.split(separator: ":", maxSplits: 1).map(String.init)
+            guard kv.count == 2, let n = Int(kv[1]) else { continue }
+            switch kv[0] {
+            case "bd": bitDepth = n
+            case "sr": sampleRate = n
+            case "c":  channels = n
+            default: break
+            }
+        }
+        guard bitDepth > 0, sampleRate > 0 else { return nil }
+        let khz = String(format: "%g", Double(sampleRate) / 1000)
+        var label = "\(bitDepth)-bit/\(khz) kHz"
+        if channels == 6 { label += " · 5.1" }
+        if channels == 8 { label += " · 7.1" }
+        return label
     }
 
     /// Parses Sonos's `r:streamInfo` field — format
@@ -209,7 +297,7 @@ public struct TrackMetadata: Equatable {
     /// Used by: AVTransportService, TransportStrategy, BrowseItemArtLoader, enrichFromMediaInfo.
     public mutating func enrichFromDIDL(_ rawDIDL: String, device: SonosDevice) {
         guard !rawDIDL.isEmpty, rawDIDL != "NOT_IMPLEMENTED" else { return }
-        let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
+        let didl = DIDLNormalize.metadata(rawDIDL)
         guard let parsed = XMLResponseParser.parseDIDLMetadata(didl) else { return }
 
         if title.isEmpty { title = parsed.title }
@@ -245,6 +333,9 @@ public struct TrackMetadata: Equatable {
         if audioFormat == .unknown || parsedFormat != .unknown {
             audioFormat = parsedFormat
         }
+        if parsedFormat != .unknown {
+            streamInfoRaw = streamInfo
+        }
     }
 
     /// Enriches metadata from GetMediaInfo's CurrentURIMetaData DIDL.
@@ -255,6 +346,7 @@ public struct TrackMetadata: Equatable {
         // Detect if playing from queue vs direct stream/favorite
         // Must run BEFORE the guard — even if no DIDL, we need isQueueSource set
         isQueueSource = currentURI.hasPrefix(URIPrefix.rinconQueue)
+        didReportTransportSource = true
 
         // Set queue size from NrTracks
         if let nrTracks = mediaInfo["NrTracks"], let n = Int(nrTracks) {
@@ -281,7 +373,7 @@ public struct TrackMetadata: Equatable {
     /// Quick parse to get just the title from DIDL without full parsing.
     private static func quickParseDIDLTitle(_ rawDIDL: String) -> String? {
         guard !rawDIDL.isEmpty, rawDIDL != "NOT_IMPLEMENTED" else { return nil }
-        let didl = rawDIDL.contains("&lt;") ? XMLResponseParser.xmlUnescape(rawDIDL) : rawDIDL
+        let didl = DIDLNormalize.metadata(rawDIDL)
         return XMLResponseParser.parseDIDLMetadata(didl)?.title
     }
 

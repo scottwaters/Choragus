@@ -144,12 +144,22 @@ private class AlarmXMLParser: NSObject, XMLParserDelegate {
     private var alarms: [SonosAlarm] = []
 
     static func parse(_ xml: String) -> [SonosAlarm] {
-        let unescaped = XMLResponseParser.xmlUnescape(xml)
-        guard let data = unescaped.data(using: .utf8) else { return [] }
+        // The alarm list arrives from the SOAP layer already unescaped
+        // exactly once — valid XML. A second unescape turned `&amp;` in
+        // ProgramURI query strings (and escaped ProgramMetaData DIDL)
+        // into bare `&`, aborting the parse and silently dropping alarms
+        // (same defect class as issue #81).
+        guard let data = xml.data(using: .utf8) else { return [] }
         let handler = AlarmXMLParser()
         let parser = XMLParser(data: data)
         parser.delegate = handler
-        parser.parse()
+        guard parser.parse() else {
+            sonosDiagLog(.error, tag: "ALARMS",
+                         "Alarm list parse aborted — discarding partial list",
+                         context: ["parserError": String(describing: parser.parserError),
+                                   "alarmsBeforeAbort": String(handler.alarms.count)])
+            return []
+        }
         return handler.alarms
     }
 

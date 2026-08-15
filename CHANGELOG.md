@@ -1,6 +1,61 @@
 
 # Changelog
 
+## v4.14 — 2026-08-17
+
+### Playback control and media keys
+
+- The keyboard's media keys can be turned off (Settings → Keyboard Controls). Some Bluetooth headsets and USB call headsets emit a play command when their audio session ends — one observed case fired ~4.4 s after a call finished — which macOS routes to whichever app last published Now Playing info. Turning the setting off unregisters the transport commands *and* releases the Now Playing claim, so the keys reach another app instead of a silent recipient.
+- Media commands that would start playback while the Mac's screen is locked stay ignored, but pressing play three times within five seconds now overrides the guard. Presses closer together than 300 ms are treated as one device event burst rather than a person pressing again.
+- Holding a group's master volume at zero for one second levels every speaker, so raising the slider afterwards moves them together instead of restoring the previous spread.
+- A queue whose tracks stop within seconds of starting now says so. Services hand the speaker a pre-signed track URL that expires; once it has, the speaker plays nothing, advances immediately and reports `STOPPED / OK` with no fault of any kind, so the queue ran through in silence. Three early advances inside a minute raise "Tracks are being skipped — the song links may have expired. Re-add them from the service.", rate-limited to once every two minutes per group.
+
+### Queue
+
+- The queue follows the speaker again. The auto-scroll guard read `isQueueSource`, which Sonos drops to false for a beat during the very track change that triggers the scroll, so the queue stopped sliding and the playing-row highlight and level bars went dead between polls. The transport source is now carried forward when an update doesn't actually report it, and the authoritative re-sync runs 400 ms after a track-URI change instead of a flat 2 s.
+- A queue containing several tracks with the same title no longer makes the highlight oscillate. The title fallback refuses ambiguous matches and never re-resolves a position the speaker has already confirmed.
+
+### Home theatre
+
+- Night Mode and Dialog Enhancement appear directly in Now Playing for home-theatre zones, below the group buttons.
+- The Surrounds tab is no longer missing on systems that have surrounds (#78). Every bonded member advertises `HTSatChanMapSet`, but a satellite advertises only the soundbar and itself; reading the first entry found recorded whichever partial view came first, so a zone whose sub was enumerated first reported no surrounds at all. All members' views are now merged.
+- Home-theatre zones no longer flicker out of existence. A topology payload that carries no bonded-channel attributes previously published an empty map, dropping every home-theatre zone until the next full refresh.
+
+### Discovery
+
+- SSDP searches are sent with a multicast hop limit of 4 instead of the socket default of 1. A TTL of 1 is dropped by the first router, so speakers on a separate VLAN or subnet never saw the M-SEARCH and the system read as empty even where the network forwards multicast. Reported by a user running a VLAN'd setup. Settings → System carries a **Discovery hop limit** field (clamped to 16) for setups that need to cross more than four routers; documented in `docs/DISCOVERY.md`. Networks that block multicast outright are unaffected — Bonjour remains the path there.
+
+### Grouping and rooms
+
+- Double-click a room in the sidebar to open the grouping editor (#71).
+- Drag a room onto another to group them, or onto the strip below the list to split a group (#82). Cross-system drops are refused.
+- A group whose reported coordinator is not one of its visible members is repaired instead of left inert (#83). Such a group accepted no transport command and reported no state while UPnP events for its speakers kept arriving; the coordinator is now substituted (preferring the one the group was last controlled through) and every substitution is logged. Topology applications are recorded in diagnostics, so a future bug report shows which update produced a broken household.
+
+### Library and favourites
+
+- Favourites can be renamed from the Browse context menu (#75).
+- Music Services lists the network folders each Sonos system indexes as local music, tagged (S1) or (S2). Adding and removing shares stays in the Sonos app: Sonos accepts `CreateObject` on the share container with HTTP 200 and a well-formed object id, then persists nothing — verified on both S1 and S2 hardware with an existing, reachable share.
+
+### Interface
+
+- The diagnostics toolbar icon is an activity trace rather than an insect, and no longer carries a red error badge.
+- The Network tab explains that link counters read high on first load and settle as repeat samples arrive.
+- Now Playing stacks the audio-format badges above the service name, matching the Back of the Club wall card. The badge outline, the service icon below it, and the track text above all share one left edge, and the two rows sit on the same spacing as the rest of the column.
+
+### Help and localisation
+
+- In-app Help gains 29 topics covering media keys, the locked-screen guard, crossfade and sleep timer, audio-format badges, home-theatre controls and surround modes, sidebar grouping gestures, volume sync, the Queue Library, saving to playlists, library shares, favourite renaming, A–Z fast scroll, TIDAL / Suno / SomaFM, history actions, visualisations, Ignore TV, the discovery hop limit, and the Diagnostics Speakers tab.
+- Every user-visible string is localised in all 13 languages (1138 keys, no gaps), and the address register now matches the platform convention per language — informal for German, Dutch, Spanish, Italian, Portuguese and the Nordic languages, formal *vous* for French. 261 strings were rewritten for consistency.
+
+### Earlier in this cycle
+
+- Launching at login (macOS "reopen windows" after a reboot) could leave the app running with no visible UI: state restoration resurrected the main window on a non-displayed Space or at coordinates for a display arrangement that no longer existed. A post-launch check (retried at 1 s / 3 s / 6 s to survive login-storm load) now re-centers a window that no longer meaningfully overlaps any screen, and orders an off-Space or never-shown window onto the active Space without stealing focus (#73).
+- Artwork lookups no longer repeat identical iTunes queries that already returned a definitive miss. The negative cache was keyed per artist+album pair, so compilation albums re-issued the same album/song query once per artist (one diagnostics bundle showed a single known-miss query fired 72 times in 8 minutes), wasting the 12 req/min throttle budget. Definitive outcomes are now memoized per query; rate-limiter denials and network failures remain retryable.
+- The Diagnostics window gains a **Speakers** tab: every discovered speaker with room, model, IP address, S1/S2 system, firmware, group role (coordinator / member-of), and its live UPnP event-subscription count, plus the GENA callback endpoint the speakers deliver events to. A Copy All button exports the full topology snapshot — deliberately unredacted, since LAN IPs and RINCON IDs are the content — for local debugging or trusted sharing.
+- A room name containing `&` no longer hides every speaker listed after it (#81). The ZoneGroupState document was entity-decoded one extra time before parsing, so a name like "B&W Room" became malformed XML mid-document; the parser stopped there and the partial speaker list was rendered with no error. The stray decode is removed, an aborted parse is discarded (with a diagnostic) instead of silently truncating the household, and the same double-decode is fixed in the music-services list and alarm list — where a `&` in a service URL or alarm program silently dropped entries.
+- Special characters in service track ids, search terms, and file paths are encoded correctly throughout (#66). Track ids containing umlauts or reserved characters previously produced mismatched or uppercase-hex encodings the speaker rejects (SOAP fault 800); searches for names containing `&` ("Simon & Garfunkel") were truncated at the ampersand across iTunes, TuneIn, MusicBrainz, Wikipedia, and Plex lookups; album-art requests for paths containing `&` fetched the wrong artwork; and "AC/DC" split Wikipedia lookups into two path segments. URI ids and their paired DIDL ids now share one encoder with fully lowercased escapes, and all query and path values use strict RFC 3986 encoding.
+- A rebooting or satellite speaker answering a topology query with only its own isolated view no longer erases every room of its system from the app (previously recoverable only by relaunching). Empty or self-view topology responses are rejected, and a manual Refresh re-pulls topology directly from a known speaker per system, so it recovers bad state even on networks that block multicast discovery.
+
 ## v4.13 — 2026-07-17 — YouTube Music metadata, per-system libraries, queue-history cleanup, canonical services
 
 A fix-and-feature release. YouTube Music titles settle correctly and the false play warning is gone, households running S1 and S2 side by side see which system carries each library share, queue-history snapshots no longer appear as playlists in other controllers (and existing ones are cleaned up automatically), and a service registered under an alternate id resolves to its proper name and status. Build 33.

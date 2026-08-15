@@ -53,7 +53,12 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
         parser.shouldProcessNamespaces = false
         parser.shouldReportNamespacePrefixes = false
         parser.delegate = handler
-        parser.parse()
+        let succeeded = parser.parse()
+        if !succeeded {
+            sonosDiagLog(.warning, tag: "XML",
+                         "BrowseXMLParser parse aborted — result may be partial",
+                         context: ["parserError": String(describing: parser.parserError)])
+        }
         return handler.items
     }
 
@@ -241,13 +246,7 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
                                   albumArtURI: String,
                                   upnpClass: String,
                                   resourceURI: String) -> String {
-        func esc(_ s: String) -> String {
-            s.replacingOccurrences(of: "&", with: "&amp;")
-             .replacingOccurrences(of: "<", with: "&lt;")
-             .replacingOccurrences(of: ">", with: "&gt;")
-             .replacingOccurrences(of: "\"", with: "&quot;")
-             .replacingOccurrences(of: "'", with: "&apos;")
-        }
+        let esc = XMLResponseParser.xmlEscape
         var inner = ""
         inner += "<dc:title>\(esc(title))</dc:title>"
         if !artist.isEmpty { inner += "<dc:creator>\(esc(artist))</dc:creator>" }

@@ -39,6 +39,10 @@ struct NowPlayingContextPanel: View {
     /// `NowPlayingView`). Carries the URL so the same `ExpandedArtView`
     /// can render it.
     @State private var expandedArtistPhotoURL: URL?
+    /// Pixel-level near-duplicate-free gallery (see
+    /// `MusicMetadataService.refineGallery`). Nil until the pass over
+    /// the current gallery completes.
+    @State private var similarityDedupedGallery: [URL]?
     @State private var appleArtistArtURL: URL?
     @State private var appleAlbumArtURL: URL?
     @State private var appleAlbumReleaseDate: Date?
@@ -326,11 +330,21 @@ struct NowPlayingContextPanel: View {
                 title: ctxVM.artistInfo?.name ?? trackMetadata.artist,
                 artist: ctxVM.artistInfo?.name ?? trackMetadata.artist,
                 album: "",
-                stationName: ""
+                stationName: "",
+                galleryURLs: displayGallery
             )
         }
         .task(id: "\(trackMetadata.artist)|\(trackMetadata.album)") {
             await loadAppleMusicCompanions()
+        }
+        .task(id: artistGallery.map(\.absoluteString).joined(separator: "|")) {
+            similarityDedupedGallery = nil
+            let urls = artistGallery
+            guard urls.count > 1 else { return }
+            let refined = await ctxVM.refinedGallery(urls)
+            if refined != urls {
+                similarityDedupedGallery = refined
+            }
         }
     }
 
@@ -374,36 +388,40 @@ struct NowPlayingContextPanel: View {
         var id: String { url.absoluteString }
     }
 
+    /// Photo gallery: Apple Music photo first, then the
+    /// Wikipedia/Last.fm gallery, deduplicated, capped at 5.
+    /// (Cached pre-gallery entries fall back to the single
+    /// `imageURL`; old entries that had the Apple photo written
+    /// into `imageURL` dedupe down to one.) Shared by the About
+    /// header strip and the expanded-photo carousel sheet.
+    private var artistGallery: [URL] {
+        guard let info = ctxVM.artistInfo else { return [] }
+        var candidates: [String] = []
+        if let apple = appleArtistArtURL { candidates.append(apple.absoluteString) }
+        if let list = info.imageURLs, !list.isEmpty {
+            candidates.append(contentsOf: list)
+        } else if let single = info.imageURL {
+            candidates.append(single)
+        }
+        // Dedupe by underlying FILE identity, not URL string —
+        // Wikipedia and Last.fm serve the same photo at multiple
+        // sizes, and 30-day-cached galleries may hold such dupes.
+        // The highest-resolution variant of each photo wins.
+        return MusicMetadataService.dedupePreferHighRes(candidates, limit: 5)
+            .compactMap { URL(string: $0) }
+    }
+
+    /// Gallery after pixel-level near-duplicate removal — falls back
+    /// to the URL-deduped list until the service pass completes (see
+    /// `MusicMetadataService.refineGallery`).
+    private var displayGallery: [URL] {
+        similarityDedupedGallery ?? artistGallery
+    }
+
     private func artistSection(_ info: ArtistInfo) -> some View {
         aboutCard {
             VStack(alignment: .leading, spacing: 10) {
-                // Photo gallery: Apple Music photo first, then the
-                // Wikipedia/Last.fm gallery, deduplicated, capped at 5.
-                // (Cached pre-gallery entries fall back to the single
-                // `imageURL`; old entries that had the Apple photo written
-                // into `imageURL` dedupe down to one.)
-                let gallery: [URL] = {
-                    var candidates: [String] = []
-                    if let apple = appleArtistArtURL { candidates.append(apple.absoluteString) }
-                    if let list = info.imageURLs, !list.isEmpty {
-                        candidates.append(contentsOf: list)
-                    } else if let single = info.imageURL {
-                        candidates.append(single)
-                    }
-                    // Dedupe by underlying FILE identity, not URL string —
-                    // Wikipedia serves the same photo at multiple thumbnail
-                    // sizes, and 30-day-cached galleries may hold such dupes.
-                    var seen = Set<String>()
-                    var out: [URL] = []
-                    for s in candidates
-                    where seen.insert(MusicMetadataService.imageIdentityKey(s)).inserted {
-                        if let u = URL(string: s) {
-                            out.append(u)
-                            if out.count == 5 { break }
-                        }
-                    }
-                    return out
-                }()
+                let gallery = displayGallery
                 sectionHeader(
                     icon: "person.fill", title: info.name,
                     subtitle: artistSubtitle(info),
@@ -460,7 +478,7 @@ struct NowPlayingContextPanel: View {
             if i > 0 {
                 combined = combined + Text("  ·  ").foregroundStyle(.tertiary)
             }
-            let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+            let encoded = URLEncode.queryValue(name)
             let urlString = "https://en.wikipedia.org/wiki/Special:Search?search=\(encoded)&go=Go"
             combined = combined + Text(.init("[\(name)](\(urlString))"))
         }
@@ -571,7 +589,7 @@ struct NowPlayingContextPanel: View {
                             .contentShape(Rectangle())
                             .onTapGesture { onGalleryTap?(url) }
                             .help(L10n.clickToEnlarge)
-                            .accessibilityLabel("\(title) photo")
+                            .accessibilityLabel(L10n.trackPhoto(title))
                     }
                 }
             }
@@ -588,7 +606,7 @@ struct NowPlayingContextPanel: View {
                     .contentShape(Rectangle())
                     .onTapGesture { onAppleImageTap?() }
                     .help(L10n.clickToEnlarge)
-                    .accessibilityLabel("\(title) Apple Music image")
+                    .accessibilityLabel(L10n.trackAppleMusicImage(title))
             }
             if let imageURL, let url = URL(string: imageURL) {
                 CachedAsyncImage(url: url, cornerRadius: 8, priority: .interactive)
@@ -600,7 +618,7 @@ struct NowPlayingContextPanel: View {
                     .contentShape(Rectangle())
                     .onTapGesture { onImageTap?() }
                     .help(L10n.clickToEnlarge)
-                    .accessibilityLabel("\(title) photo")
+                    .accessibilityLabel(L10n.trackPhoto(title))
             }
         }
     }

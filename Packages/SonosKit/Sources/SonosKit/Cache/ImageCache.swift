@@ -13,6 +13,10 @@ public final class ImageCache: ImageCacheProtocol {
     private let memoryCache = NSCache<NSString, NSImage>()
     private let diskCacheURL: URL
     private let fileManager = FileManager.default
+    // Guarded by `statsLock`: written from art-fetch threads (every
+    // `store` invalidates) while the Settings UI reads on main — an
+    // unsynchronized Optional<Int> is a two-word torn-read hazard.
+    private let statsLock = NSLock()
     private var cachedDiskUsage: Int?
     private var cachedFileCount: Int?
 
@@ -24,7 +28,21 @@ public final class ImageCache: ImageCacheProtocol {
     /// time. The index can grow unbounded but the file is small
     /// (~100 bytes per URL) and rebuilt lazily.
     private static let urlIndexFileName = "urls.txt"
-    private let urlIndexQueue = DispatchQueue(label: "com.choragus.imagecache.urlindex")
+    /// Single serial queue for EVERY disk + index operation (read,
+    /// store, sample, clear, eviction, stat computation). image files,
+    /// the URL index, and the pending-append buffer were previously
+    /// touched from unrelated threads (art fetches, Settings UI,
+    /// eviction on a global queue) with only index writes serialized.
+    /// `pendingURLAppends` is accessed exclusively on this queue.
+    /// CONCURRENT queue: reads (`image`, sampling, stats) run in
+    /// parallel via plain `.sync`; every mutation (store, remove,
+    /// eviction, clear, index flush) takes a `.barrier`. The previous
+    /// serial queue meant a long read (Club Vis's 1200-URL sample
+    /// enumeration + pool resolution reads) parked every other
+    /// caller — observed as ~1.3 s main stalls whenever a main-side
+    /// art resolver missed memory cache during a pool build.
+    private let diskQueue = DispatchQueue(label: "com.choragus.imagecache.disk",
+                                          qos: .utility, attributes: .concurrent)
     private var pendingURLAppends: [String] = []
 
     private static let maxSizeMBKey = "imageCacheMaxSizeMB"
@@ -62,9 +80,10 @@ public final class ImageCache: ImageCacheProtocol {
         memoryCache.countLimit = CacheDefaults.imageMemoryCountLimit
         memoryCache.totalCostLimit = CacheDefaults.imageMemoryBytesLimit
 
-        // Run eviction on startup in background
-        DispatchQueue.global(qos: .utility).async { [weak self] in guard let self else { return };
-            evictExpiredAndOversized()
+        // Run eviction on startup in background (on the disk queue so it
+        // can't race concurrent reads/stores)
+        diskQueue.async(flags: .barrier) { [weak self] in
+            self?.evictExpiredAndOversized()
         }
     }
 
@@ -85,26 +104,44 @@ public final class ImageCache: ImageCacheProtocol {
             return img
         }
 
-        let filePath = diskCacheURL.appendingPathComponent(key)
-        guard let data = try? Data(contentsOf: filePath),
-              let img = NSImage(data: data) else {
-            return nil
-        }
+        return diskQueue.sync {
+            let filePath = diskCacheURL.appendingPathComponent(key)
+            guard let data = try? Data(contentsOf: filePath),
+                  let img = NSImage(data: data) else {
+                return nil
+            }
 
-        // Check if this file has expired
-        if let attrs = try? fileManager.attributesOfItem(atPath: filePath.path),
-           let modDate = attrs[.modificationDate] as? Date,
-           Date().timeIntervalSince(modDate) > maxAgeSeconds {
-            // Expired — remove from disk, don't return
-            try? fileManager.removeItem(at: filePath)
-            return nil
-        }
+            // Check if this file has expired
+            if let attrs = try? fileManager.attributesOfItem(atPath: filePath.path),
+               let modDate = attrs[.modificationDate] as? Date,
+               Date().timeIntervalSince(modDate) > maxAgeSeconds {
+                // Expired — remove from disk, don't return
+                try? fileManager.removeItem(at: filePath)
+                return nil
+            }
 
-        let cost = data.count
-        memoryCache.setObject(img, forKey: key as NSString, cost: cost)
-        // Touch file to update access time for LRU
-        try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: filePath.path)
-        return img
+            let cost = data.count
+            memoryCache.setObject(img, forKey: key as NSString, cost: cost)
+            // Touch file to update access time for LRU
+            try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: filePath.path)
+            return img
+        }
+    }
+
+    /// Evicts one URL from memory and disk. For entries whose source
+    /// has become permanently unfetchable (dead speaker `getaa`,
+    /// removed CDN object) — a stale cached image would otherwise
+    /// resurface after the caller's failure bookkeeping resets. The
+    /// URL-index line is left in place; a sampled URL with no backing
+    /// file resolves to a miss.
+    public func remove(for url: URL) {
+        let key = cacheKey(for: url)
+        memoryCache.removeObject(forKey: key as NSString)
+        diskQueue.async(flags: .barrier) { [weak self] in
+            guard let self else { return }
+            try? self.fileManager.removeItem(at: self.diskCacheURL.appendingPathComponent(key))
+            self.invalidateDiskStats()
+        }
     }
 
     public func store(_ image: NSImage, for url: URL) {
@@ -118,40 +155,39 @@ public final class ImageCache: ImageCacheProtocol {
 
         memoryCache.setObject(image, forKey: key as NSString, cost: data.count)
 
-        let filePath = diskCacheURL.appendingPathComponent(key)
-        try? data.write(to: filePath, options: .atomic)
-        try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: filePath.path)
+        // Disk write, index append, and (occasionally) eviction all run
+        // on the disk queue so stores can't interleave with reads,
+        // sampling, clears, or eviction.
+        diskQueue.async(flags: .barrier) { [weak self] in
+            guard let self else { return }
+            let filePath = self.diskCacheURL.appendingPathComponent(key)
+            try? data.write(to: filePath, options: .atomic)
+            try? self.fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: filePath.path)
 
-        invalidateDiskStats()
+            self.invalidateDiskStats()
 
-        // Append to the URL index — debounced via the serial queue so
-        // bursts of stores coalesce into a single file write.
-        appendToURLIndex(url.absoluteString)
+            self.appendToURLIndex(url.absoluteString)
 
-        // Periodically evict (roughly every 50 stores)
-        if Int.random(in: 0..<CacheDefaults.imageEvictionFrequency) == 0 {
-            DispatchQueue.global(qos: .utility).async { [weak self] in
-                guard let self else { return }
+            // Periodically evict (roughly every 50 stores)
+            if Int.random(in: 0..<CacheDefaults.imageEvictionFrequency) == 0 {
                 self.evictExpiredAndOversized()
             }
         }
     }
 
-    /// Buffers a URL string for the index file and writes batched
-    /// appends. Avoids one file write per store on rapid bursts.
+    /// MUST be called on `diskQueue`. Buffers a URL string for the
+    /// index file and writes batched appends — avoids one file write
+    /// per store on rapid bursts.
     private func appendToURLIndex(_ urlString: String) {
-        urlIndexQueue.async { [weak self] in
-            guard let self else { return }
-            self.pendingURLAppends.append(urlString)
-            if self.pendingURLAppends.count >= 25 { self.flushURLIndexLocked() }
-        }
+        pendingURLAppends.append(urlString)
+        if pendingURLAppends.count >= 25 { flushURLIndexLocked() }
         // Schedule a flush in 2 s in case we don't hit the threshold.
-        urlIndexQueue.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+        diskQueue.asyncAfter(deadline: .now() + 2.0, flags: .barrier) { [weak self] in
             self?.flushURLIndexLocked()
         }
     }
 
-    /// MUST be called on `urlIndexQueue`. Appends pending URLs to the
+    /// MUST be called on `diskQueue`. Appends pending URLs to the
     /// on-disk index file in one write.
     private func flushURLIndexLocked() {
         guard !pendingURLAppends.isEmpty else { return }
@@ -178,6 +214,14 @@ public final class ImageCache: ImageCacheProtocol {
     /// by their cache file's mtime and taking equally-spaced indices.
     public func sampledCachedURLs(count: Int) -> [URL] {
         guard count > 0 else { return [] }
+        return diskQueue.sync { sampledCachedURLsLocked(count: count) }
+    }
+
+    /// MUST be called on `diskQueue`.
+    private func sampledCachedURLsLocked(count: Int) -> [URL] {
+        // Fold any buffered appends in first so just-stored art is
+        // visible to the sample.
+        flushURLIndexLocked()
         let path = diskCacheURL.appendingPathComponent(Self.urlIndexFileName)
         guard let raw = try? String(contentsOf: path, encoding: .utf8) else { return [] }
         // Dedupe — index can have duplicates because store() doesn't
@@ -205,9 +249,15 @@ public final class ImageCache: ImageCacheProtocol {
     }
 
     public func clearDisk() {
-        try? fileManager.removeItem(at: diskCacheURL)
-        try? fileManager.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
-        invalidateDiskStats()
+        diskQueue.sync(flags: .barrier) {
+            // Discard buffered index appends atomically with the wipe —
+            // flushing them afterwards would resurrect index entries for
+            // files that no longer exist.
+            pendingURLAppends.removeAll()
+            try? fileManager.removeItem(at: diskCacheURL)
+            try? fileManager.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
+            invalidateDiskStats()
+        }
     }
 
     public func clearMemory() {
@@ -215,12 +265,20 @@ public final class ImageCache: ImageCacheProtocol {
     }
 
     public var diskUsage: Int {
-        if let cached = cachedDiskUsage { return cached }
-        let value = computeDiskUsage()
+        statsLock.lock()
+        if let cached = cachedDiskUsage {
+            statsLock.unlock()
+            return cached
+        }
+        statsLock.unlock()
+        let value = diskQueue.sync { computeDiskUsage() }
+        statsLock.lock()
         cachedDiskUsage = value
+        statsLock.unlock()
         return value
     }
 
+    /// MUST be called on `diskQueue`.
     private func computeDiskUsage() -> Int {
         guard let files = try? fileManager.contentsOfDirectory(at: diskCacheURL, includingPropertiesForKeys: [.fileSizeKey]) else {
             return 0
@@ -240,18 +298,30 @@ public final class ImageCache: ImageCacheProtocol {
     }
 
     public var fileCount: Int {
-        if let cached = cachedFileCount { return cached }
-        let value = (try? fileManager.contentsOfDirectory(at: diskCacheURL, includingPropertiesForKeys: nil))?.count ?? 0
+        statsLock.lock()
+        if let cached = cachedFileCount {
+            statsLock.unlock()
+            return cached
+        }
+        statsLock.unlock()
+        let value = diskQueue.sync {
+            (try? fileManager.contentsOfDirectory(at: diskCacheURL, includingPropertiesForKeys: nil))?.count ?? 0
+        }
+        statsLock.lock()
         cachedFileCount = value
+        statsLock.unlock()
         return value
     }
 
     /// Invalidates cached disk stats (call after store/clear/evict)
     private func invalidateDiskStats() {
+        statsLock.lock()
+        defer { statsLock.unlock() }
         cachedDiskUsage = nil
         cachedFileCount = nil
     }
 
+    /// MUST be called on `diskQueue`.
     /// Two-pass eviction: (1) remove files older than maxAge, (2) if still over
     /// maxDiskBytes, sort remaining by modification date (LRU) and delete oldest first.
     private func evictExpiredAndOversized() {

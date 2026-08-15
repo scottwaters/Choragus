@@ -24,7 +24,7 @@ Norwegian Nynorsk (`nn`) and Traditional Chinese (`zh-Hant`) are not currently s
 
 ## Where translations live
 
-`Packages/SonosKit/Sources/SonosKit/Localization/L10n.swift` is the only translation file. It's a single Swift dictionary keyed by string-id, with each value being a sub-dictionary keyed by locale code:
+`Packages/SonosKit/Sources/SonosKit/Localization/L10n.swift` is the only translation file. Entries are Swift dictionaries keyed by string-id, each value a sub-dictionary keyed by locale code. The table is split across `translations0…translationsN` chunks of about 25 keys, merged once on first lookup: as one literal it grew large enough to stall the SIL optimiser under `-O`, and a Release build never finished. Add new keys to any chunk; keep chunks small.
 
 ```swift
 "playPause": [
@@ -34,7 +34,7 @@ Norwegian Nynorsk (`nn`) and Traditional Chinese (`zh-Hant`) are not currently s
 ],
 ```
 
-A matching `public static var` accessor on the `L10n` struct provides a callsite-friendly shorthand:
+A matching `public static var` accessor on the `L10n` struct gives call sites a shorthand:
 
 ```swift
 public static var playPause: String { tr("playPause") }
@@ -218,7 +218,7 @@ As of v3.7 every paragraph in the in-app Help window is localised across all 13 
 
 ## Translator workflow
 
-There's no external translation file (no `.xcloc`, no `.po`). All translations live in `L10n.swift`. The dictionary literal is the source of truth.
+There's no external translation file (no `.xcloc`, no `.po`). All translations live in `L10n.swift`. The chunked dictionary literals are the source of truth.
 
 When adding a single new key, the easiest path is:
 

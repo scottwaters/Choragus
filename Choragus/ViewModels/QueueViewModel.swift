@@ -9,7 +9,15 @@ final class QueueViewModel: ObservableObject {
     /// view model when the user switches rooms in the sidebar.
     var group: SonosGroup
 
-    @Published var queueItems: [QueueItem] = []
+    @Published var queueItems: [QueueItem] = [] {
+        didSet {
+            // A speaker-confirmed position is only valid for the queue it
+            // was confirmed against. After a reload, reorder or add, the
+            // same URI can sit at a different position, so the memo that
+            // suppresses the title fallback has to go with it.
+            authoritativelyResolvedURI = nil
+        }
+    }
     @Published var currentTrack: Int = 0
     @Published var totalTracks: Int = 0
     @Published var isLoading = true
@@ -26,6 +34,11 @@ final class QueueViewModel: ObservableObject {
         let meta = sonosManager.groupTrackMetadata[group.coordinatorID]
         return meta?.isQueueSource == true
     }
+
+    /// URI whose position came from the speaker's own `trackNumber`. Title
+    /// fallbacks must not re-resolve it: with duplicate titles they pick an
+    /// earlier row and the current track oscillates.
+    private var authoritativelyResolvedURI: String?
 
     init(sonosManager: any QueueServices, group: SonosGroup) {
         self.sonosManager = sonosManager
@@ -56,26 +69,41 @@ final class QueueViewModel: ObservableObject {
                 sonosDebugLog("[QUEUE] TrackNumber match: \(trackNum)")
                 currentTrack = trackNum
             }
+            authoritativelyResolvedURI = meta?.trackURI
             return
         }
+
+        // This URI already has a speaker-confirmed position. A title
+        // fallback here can only disagree with it, never improve on it.
+        if let uri = meta?.trackURI, uri == authoritativelyResolvedURI { return }
 
         // Fallback: title+artist match (used when trackNumber isn't
         // populated yet — early after a track change, or for service
         // tracks where Sonos sometimes lags on position reporting).
+        // Ambiguous matches are refused rather than guessed: picking the
+        // first of several identically-titled rows moves the highlight
+        // to the wrong track and fights the authoritative resolution.
         if let title = meta?.title, !title.isEmpty, !queueItems.isEmpty {
             let artist = meta?.artist ?? ""
-            if let match = queueItems.first(where: { $0.title == title && $0.artist == artist }) {
+            let titleAndArtist = queueItems.filter { $0.title == title && $0.artist == artist }
+            if titleAndArtist.count == 1, let match = titleAndArtist.first {
                 if match.id != currentTrack {
                     sonosDebugLog("[QUEUE] Title+artist fallback: '\(title)' -> queue pos \(match.id)")
                     currentTrack = match.id
                 }
                 return
             }
-            if let match = queueItems.first(where: { $0.title == title }) {
+            let titleOnly = queueItems.filter { $0.title == title }
+            if titleOnly.count == 1, let match = titleOnly.first {
                 if match.id != currentTrack {
                     sonosDebugLog("[QUEUE] Title-only fallback: '\(title)' -> queue pos \(match.id)")
                     currentTrack = match.id
                 }
+                return
+            }
+            if titleAndArtist.count > 1 || titleOnly.count > 1 {
+                sonosDebugLog("[QUEUE] Title fallback ambiguous for '\(title)' "
+                              + "(\(max(titleAndArtist.count, titleOnly.count)) matches) — holding position")
                 return
             }
         }
@@ -106,6 +134,11 @@ final class QueueViewModel: ObservableObject {
                 sonosDebugLog("[QUEUE] refreshCurrentTrack: \(currentTrack) → \(posInfo.trackNumber)")
                 currentTrack = posInfo.trackNumber
             }
+            // Speaker-confirmed either way — record it so the title
+            // fallbacks leave this URI alone.
+            if posInfo.trackNumber == currentTrack {
+                authoritativelyResolvedURI = posInfo.trackURI
+            }
         } catch {
             // Best-effort. The event-driven `currentTrack` stays put.
         }
@@ -122,14 +155,21 @@ final class QueueViewModel: ObservableObject {
         totalTracks = max(totalTracks, queueItems.map(\.id).max() ?? totalTracks)
     }
 
+    /// Load generation — captured at the start of each `loadQueue` and
+    /// re-checked after the awaits so an older fetch that finishes late
+    /// cannot overwrite a newer one's results.
+    private var loadGeneration = 0
+
     func loadQueue() async {
         // Show the spinner whenever we're actually fetching. Covers first
         // launch, speaker switch (queueItems just got cleared), and the
         // post-add reload after a batch — all cases where the user should
         // see that something is happening rather than a stale or empty list.
         let priorTotal = totalTracks
+        loadGeneration += 1
+        let generation = loadGeneration
         isLoading = true
-        defer { isLoading = false }
+        defer { if generation == loadGeneration { isLoading = false } }
         do {
             // Page-fetch the entire queue. The previous fixed-100 fetch
             // silently dropped any tracks past index 100, which is what
@@ -161,9 +201,11 @@ final class QueueViewModel: ObservableObject {
                 // (line above); this is just belt-and-suspenders.
                 if index >= 40_000 { break }
             }
+            guard generation == loadGeneration else { return }
             queueItems = collected
             totalTracks = totalSeen
             let posInfo = try await sonosManager.getPositionInfo(group: group)
+            guard generation == loadGeneration else { return }
             currentTrack = posInfo.trackNumber
             sonosDiagLog(.info, tag: "QUEUE",
                          "loadQueue done: \(collected.count) shown, total=\(totalSeen), prior=\(priorTotal)")
@@ -189,6 +231,7 @@ final class QueueViewModel: ObservableObject {
                     if retryIndex >= total { break }
                     if retryIndex >= 40_000 { break }
                 }
+                guard generation == loadGeneration else { return }
                 if retryTotal != totalSeen {
                     queueItems = retryCollected
                     totalTracks = retryTotal
@@ -207,17 +250,25 @@ final class QueueViewModel: ObservableObject {
     /// was just signalled — `loadQueue` honours it once and clears.
     var pendingPostAddRetry: Bool = false
 
+    /// Token for the most recent `playTrack` call. Concurrent taps share
+    /// the optimistic state (`playingTrack`, `userStartedQueuePlayback`);
+    /// only the newest call may clear or advance it — the first tap's
+    /// completion must not wipe the second's spinner.
+    private var playTrackGeneration = 0
+
     func playTrack(_ trackNumber: Int) async {
+        playTrackGeneration += 1
+        let generation = playTrackGeneration
         playingTrack = trackNumber
         userStartedQueuePlayback = true
         do {
             try await sonosManager.playTrackFromQueue(group: group, trackNumber: trackNumber)
-            currentTrack = trackNumber
+            if generation == playTrackGeneration { currentTrack = trackNumber }
         } catch {
-            userStartedQueuePlayback = false
+            if generation == playTrackGeneration { userStartedQueuePlayback = false }
             ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
         }
-        playingTrack = nil
+        if generation == playTrackGeneration { playingTrack = nil }
     }
 
     func removeTrack(_ trackIndex: Int) async {

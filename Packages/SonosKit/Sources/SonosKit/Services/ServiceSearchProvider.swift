@@ -69,8 +69,8 @@ public final class ServiceSearchProvider {
     }
 
     private func fetchiTunes(query: String, entity: ServiceSearchEntity, sn: Int, limit: Int) async -> [BrowseItem] {
-        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity.iTunesEntity)&limit=\(limit)\(Self.countryQueryParam())") else {
+        let encoded = URLEncode.queryValue(query)
+        guard let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=\(entity.iTunesEntity)&limit=\(limit)\(Self.countryQueryParam())") else {
             return []
         }
 
@@ -391,7 +391,7 @@ public final class ServiceSearchProvider {
     /// URL — no service binding is required.
     public func buildResolvedTuneInDIDL(title: String) -> String {
         """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="-1" parentID="-1" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="-1" parentID="-1" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class></item></DIDL-Lite>
         """
     }
 
@@ -414,12 +414,12 @@ public final class ServiceSearchProvider {
         // app-side per-URI art cache.
         let art: String
         if let a = albumArtURI, !a.isEmpty {
-            art = "<upnp:albumArtURI>\(xmlEscape(a))</upnp:albumArtURI>"
+            art = "<upnp:albumArtURI>\(XMLResponseParser.xmlEscape(a))</upnp:albumArtURI>"
         } else {
             art = ""
         }
         return """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="-1" parentID="-1" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator>\(art)<upnp:class>object.item.audioItem.musicTrack</upnp:class><res protocolInfo="\(protocolInfo)">\(xmlEscape(url))</res></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="-1" parentID="-1" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><dc:creator>\(XMLResponseParser.xmlEscape(artist))</dc:creator>\(art)<upnp:class>object.item.audioItem.musicTrack</upnp:class><res protocolInfo="\(protocolInfo)">\(XMLResponseParser.xmlEscape(url))</res></item></DIDL-Lite>
         """
     }
 
@@ -427,8 +427,8 @@ public final class ServiceSearchProvider {
     /// Search TuneIn for radio stations via the public RadioTime OPML API.
     /// No auth required. Returns BrowseItems with x-sonosapi-stream URIs.
     public func searchTuneIn(query: String, limit: Int = 25) async -> [BrowseItem] {
-        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://opml.radiotime.com/Search.ashx?query=\(encoded)&formats=mp3,aac&render=json") else {
+        let encoded = URLEncode.queryValue(query)
+        guard let url = URL(string: "https://opml.radiotime.com/Search.ashx?query=\(encoded)&formats=mp3,aac&render=json") else {
             sonosDebugLog("[SERVICE_SEARCH] TuneIn: failed to build URL for query '\(query)'")
             return []
         }
@@ -655,7 +655,7 @@ public final class ServiceSearchProvider {
 
     private func buildCalmRadioDIDL(channelId: Int, title: String, serviceType: Int) -> String {
         """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="10092020stream%3a\(channelId)%3a192" parentID="" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON\(serviceType)_X_#Svc\(serviceType)-0-Token</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="10092020stream%3a\(channelId)%3a192" parentID="" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON\(serviceType)_X_#Svc\(serviceType)-0-Token</desc></item></DIDL-Lite>
         """
     }
 
@@ -766,19 +766,19 @@ public final class ServiceSearchProvider {
     /// "item no longer available" rejections during queue-advance.
     private func buildTrackDIDL(trackId: Int, collectionId: Int, title: String, artist: String, album: String, serviceType: Int) -> String {
         """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="00032020song%3a\(trackId)" parentID="0004206calbum%3a\(collectionId)" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:album>\(xmlEscape(album))</upnp:album><upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">RINCON_AssociatedZPUDN</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="00032020song%3a\(trackId)" parentID="0004206calbum%3a\(collectionId)" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><dc:creator>\(XMLResponseParser.xmlEscape(artist))</dc:creator><upnp:album>\(XMLResponseParser.xmlEscape(album))</upnp:album><upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">RINCON_AssociatedZPUDN</desc></item></DIDL-Lite>
         """
     }
 
     private func buildAlbumDIDL(collectionId: Int, title: String, artist: String, serviceType: Int) -> String {
         """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="1006206calbum%3a\(collectionId)" parentID="" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:class>object.container.album.musicAlbum</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON\(serviceType)_X_#Svc\(serviceType)-0-Token</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="1006206calbum%3a\(collectionId)" parentID="" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><dc:creator>\(XMLResponseParser.xmlEscape(artist))</dc:creator><upnp:class>object.container.album.musicAlbum</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON\(serviceType)_X_#Svc\(serviceType)-0-Token</desc></item></DIDL-Lite>
         """
     }
 
     private func buildTuneInDIDL(guideId: String, title: String) -> String {
         """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="F00092020\(guideId)" parentID="L" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON3079_</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="F00092020\(guideId)" parentID="L" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON3079_</desc></item></DIDL-Lite>
         """
     }
 
@@ -787,8 +787,14 @@ public final class ServiceSearchProvider {
     private func buildSMAPIDIDL(id: String, title: String, artist: String, album: String,
                                 itemType: String, serviceID: Int, serviceType: Int) -> String {
         let upnpClass = itemType == "track" ? "object.item.audioItem.musicTrack" : "object.item.audioItem.audioBroadcast"
-        // Sonos item ID: prefix + URL-encoded service ID (colons → %3a)
-        let encodedID = id.replacingOccurrences(of: ":", with: "%3a")
+        // Same encoder as the play URI (`buildPlayURI` → `sonosEncodeItemID`)
+        // — the speaker matches the DIDL id against the URI's id, and
+        // divergent encoding faults UPnP 800 for ids with reserved chars.
+        // The previous colons-only replacement left `&`, `"`, spaces etc.
+        // raw in both the id attribute and the URI pairing. xmlEscape on
+        // top because percent-encoding leaves `&` intact (mirrors
+        // `buildSMAPIContainerDIDL`).
+        let encodedID = XMLResponseParser.xmlEscape(Self.sonosEncodeItemID(id))
         // Prefix selection routes through MusicServiceCatalog so any
         // per-service overrides win, with the universal Sonos prefixes
         // as the fallback when the catalog has no rules for this sid.
@@ -808,7 +814,7 @@ public final class ServiceSearchProvider {
         // Radio and TuneIn-anonymous).
         let cdudn: String = catalog.cdudn(forSid: serviceID, authToken: authToken(forSid: serviceID))
         return """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(idPrefix)\(encodedID)" parentID="-1" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><upnp:class>\(upnpClass)</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(idPrefix)\(encodedID)" parentID="-1" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><upnp:class>\(upnpClass)</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
         """
     }
 
@@ -844,10 +850,10 @@ public final class ServiceSearchProvider {
         }
         var artElement = ""
         if let art = albumArtURI, !art.isEmpty {
-            artElement = "<upnp:albumArtURI>\(xmlEscape(art))</upnp:albumArtURI>"
+            artElement = "<upnp:albumArtURI>\(XMLResponseParser.xmlEscape(art))</upnp:albumArtURI>"
         }
         return """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(itemID)" parentID="\(parentID)" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:album>\(xmlEscape(album))</upnp:album>\(artElement)<upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(itemID)" parentID="\(parentID)" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><dc:creator>\(XMLResponseParser.xmlEscape(artist))</dc:creator><upnp:album>\(XMLResponseParser.xmlEscape(album))</upnp:album>\(artElement)<upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
         """
     }
 
@@ -903,9 +909,25 @@ public final class ServiceSearchProvider {
     /// cpcontainer URI's id and the DIDL item id must encode identically —
     /// the speaker matches one against the other.
     static func sonosEncodeItemID(_ itemID: String) -> String {
-        let encoded = (itemID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? itemID)
-            .replacingOccurrences(of: ":", with: "%3a")
-        return encoded.replacingOccurrences(of: "%3A", with: "%3a")
+        // Unreserved-set encoding so reserved characters (`&`, `=`, `+`,
+        // `/`) can't survive raw into URIs or DIDL ids; then lowercase
+        // EVERY hex escape, not just `%3A` — Sonos rejects uppercase hex
+        // (fault 800 observed) and Foundation emits uppercase.
+        let encoded = itemID.addingPercentEncoding(withAllowedCharacters: URLEncode.unreserved) ?? itemID
+        var out = ""
+        out.reserveCapacity(encoded.count)
+        var idx = encoded.startIndex
+        while idx < encoded.endIndex {
+            if encoded[idx] == "%",
+               let end = encoded.index(idx, offsetBy: 3, limitedBy: encoded.endIndex) {
+                out += encoded[idx..<end].lowercased()
+                idx = end
+            } else {
+                out.append(encoded[idx])
+                idx = encoded.index(after: idx)
+            }
+        }
+        return out
     }
 
     private func buildPlayURI(itemID: String, itemType: String, serviceID: Int, sn: Int) -> String {
@@ -942,9 +964,19 @@ public final class ServiceSearchProvider {
         // keeps the legacy resolve path so its scheme and the DIDL stay
         // paired.
         let playableCollectionTypes: Set<String> = ["audiobook", "album", "playlist", "show"]
+        // Defensive reclassification at the SMAPI boundary: services
+        // occasionally return collection ids typed as leaf tracks —
+        // observed with Spotify personalized playlists (issue #77): a
+        // leaf item titled "Unable to access playlist" carrying
+        // `spotify:playlist:<id>`. A collection id in the track URI
+        // form (`x-sonos-spotify:spotify%3aplaylist%3a…`) faults
+        // UPnP 800 at AddURIToQueue, so an id that names a collection
+        // routes to the container form regardless of reported itemType.
+        let collectionIDMarkers = [":playlist:", ":album:", ":show:", ":artist:"]
+        let idNamesCollection = collectionIDMarkers.contains { smapi.id.contains($0) }
         let isPlayableCollection = smapi.canPlay && !smapi.canBrowse
             && !smapi.id.isEmpty && smapi.uri.isEmpty
-            && playableCollectionTypes.contains(smapi.itemType)
+            && (playableCollectionTypes.contains(smapi.itemType) || idNamesCollection)
         let playURI: String?
         // Server-supplied URI wins when present — Sonos's SMAPI returns
         // the canonical play URI in <uri> for services whose scheme
@@ -1039,10 +1071,10 @@ public final class ServiceSearchProvider {
         // DIDL item id against the cpcontainer URI's id; divergent encoding
         // (e.g. colons-only) faults UPnP 800 for ids with reserved chars.
         // xmlEscape on top because percent-encoding leaves `&` intact.
-        let encodedID = xmlEscape(Self.sonosEncodeItemID(id))
+        let encodedID = XMLResponseParser.xmlEscape(Self.sonosEncodeItemID(id))
         let cdudn = catalog.cdudn(forSid: serviceID, authToken: authToken(forSid: serviceID))
         return """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(prefix)\(encodedID)" parentID="-1" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:class>object.container.playlistContainer</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(prefix)\(encodedID)" parentID="-1" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><dc:creator>\(XMLResponseParser.xmlEscape(artist))</dc:creator><upnp:class>object.container.playlistContainer</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
         """
     }
 
@@ -1083,8 +1115,8 @@ public final class ServiceSearchProvider {
                 let album = parts.count > 1 ? parts[1] : ""
                 group.addTask {
                     let query = [artist, album].filter { !$0.isEmpty }.joined(separator: " ")
-                    guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                          let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=album&limit=1\(Self.countryQueryParam())") else {
+                    let encoded = URLEncode.queryValue(query)
+                    guard let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&entity=album&limit=1\(Self.countryQueryParam())") else {
                         return (key, nil)
                     }
                     guard let (data, _) = await ITunesRateLimiter.shared.perform(url: url, session: self.session) else {
@@ -1131,10 +1163,4 @@ public final class ServiceSearchProvider {
         return isoFormatter.date(from: str) ?? ISO8601DateFormatter().date(from: str)
     }
 
-    private func xmlEscape(_ str: String) -> String {
-        str.replacingOccurrences(of: "&", with: "&amp;")
-           .replacingOccurrences(of: "<", with: "&lt;")
-           .replacingOccurrences(of: ">", with: "&gt;")
-           .replacingOccurrences(of: "\"", with: "&quot;")
-    }
 }

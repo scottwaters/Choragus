@@ -114,13 +114,13 @@ public final class SMAPIClient {
          xmlns:s="http://www.sonos.com/Services/1.1">
         <soap:Header>
         <s:credentials>
-        <s:deviceId>\(deviceID)</s:deviceId>
+        <s:deviceId>\(XMLResponseParser.xmlEscape(deviceID))</s:deviceId>
         <s:deviceProvider>Sonos</s:deviceProvider>
         </s:credentials>
         </soap:Header>
         <soap:Body>
         <s:getAppLink>
-        <s:householdId>\(householdID)</s:householdId>
+        <s:householdId>\(XMLResponseParser.xmlEscape(householdID))</s:householdId>
         </s:getAppLink>
         </soap:Body></soap:Envelope>
         """
@@ -148,13 +148,13 @@ public final class SMAPIClient {
          xmlns:s="http://www.sonos.com/Services/1.1">
         <soap:Header>
         <s:credentials>
-        <s:deviceId>\(deviceID)</s:deviceId>
+        <s:deviceId>\(XMLResponseParser.xmlEscape(deviceID))</s:deviceId>
         <s:deviceProvider>Sonos</s:deviceProvider>
         </s:credentials>
         </soap:Header>
         <soap:Body>
         <s:getDeviceLinkCode>
-        <s:householdId>\(householdID)</s:householdId>
+        <s:householdId>\(XMLResponseParser.xmlEscape(householdID))</s:householdId>
         </s:getDeviceLinkCode>
         </soap:Body></soap:Envelope>
         """
@@ -186,7 +186,7 @@ public final class SMAPIClient {
     ) async throws -> (authToken: String, privateKey: String)? {
         let linkDeviceElement: String
         if let id = linkDeviceId, !id.isEmpty {
-            linkDeviceElement = "<s:linkDeviceId>\(id)</s:linkDeviceId>"
+            linkDeviceElement = "<s:linkDeviceId>\(XMLResponseParser.xmlEscape(id))</s:linkDeviceId>"
         } else {
             linkDeviceElement = ""
         }
@@ -196,14 +196,14 @@ public final class SMAPIClient {
          xmlns:s="http://www.sonos.com/Services/1.1">
         <soap:Header>
         <s:credentials>
-        <s:deviceId>\(deviceID)</s:deviceId>
+        <s:deviceId>\(XMLResponseParser.xmlEscape(deviceID))</s:deviceId>
         <s:deviceProvider>Sonos</s:deviceProvider>
         </s:credentials>
         </soap:Header>
         <soap:Body>
         <s:getDeviceAuthToken>
-        <s:householdId>\(householdID)</s:householdId>
-        <s:linkCode>\(linkCode)</s:linkCode>
+        <s:householdId>\(XMLResponseParser.xmlEscape(householdID))</s:householdId>
+        <s:linkCode>\(XMLResponseParser.xmlEscape(linkCode))</s:linkCode>
         \(linkDeviceElement)
         </s:getDeviceAuthToken>
         </soap:Body></soap:Envelope>
@@ -240,7 +240,7 @@ public final class SMAPIClient {
         let body = buildAuthenticatedEnvelope(token: token, bodyContent: """
         <s:search>
         <s:id>\(searchID)</s:id>
-        <s:term>\(xmlEscape(term))</s:term>
+        <s:term>\(XMLResponseParser.xmlEscape(term))</s:term>
         <s:index>\(index)</s:index>
         <s:count>\(clampedCount)</s:count>
         </s:search>
@@ -258,7 +258,7 @@ public final class SMAPIClient {
                             index: Int = 0, count: Int = 20) async throws -> (items: [SMAPIMediaItem], total: Int) {
         let body = buildAuthenticatedEnvelope(token: token, bodyContent: """
         <s:getMetadata>
-        <s:id>\(xmlEscape(id))</s:id>
+        <s:id>\(XMLResponseParser.xmlEscape(id))</s:id>
         <s:index>\(index)</s:index>
         <s:count>\(count)</s:count>
         </s:getMetadata>
@@ -301,7 +301,7 @@ public final class SMAPIClient {
     public func getMediaURI(serviceURI: String, token: SMAPIToken, id: String) async throws -> MediaURIResult {
         let body = buildAuthenticatedEnvelope(token: token, bodyContent: """
         <s:getMediaURI>
-        <s:id>\(xmlEscape(id))</s:id>
+        <s:id>\(XMLResponseParser.xmlEscape(id))</s:id>
         </s:getMediaURI>
         """)
         let result = try await soapCallWithRefresh(
@@ -315,21 +315,21 @@ public final class SMAPIClient {
 
     public func getMediaURIAnonymous(serviceURI: String, deviceID: String, householdID: String = "",
                                      id: String) async throws -> MediaURIResult {
-        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(householdID)</s:householdId>"
+        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(XMLResponseParser.xmlEscape(householdID))</s:householdId>"
         let body = """
         <?xml version="1.0" encoding="utf-8"?>
         <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
          xmlns:s="http://www.sonos.com/Services/1.1">
         <soap:Header>
         <s:credentials>
-        <s:deviceId>\(deviceID)</s:deviceId>
+        <s:deviceId>\(XMLResponseParser.xmlEscape(deviceID))</s:deviceId>
         <s:deviceProvider>Sonos</s:deviceProvider>
         \(householdElement)
         </s:credentials>
         </soap:Header>
         <soap:Body>
         <s:getMediaURI>
-        <s:id>\(xmlEscape(id))</s:id>
+        <s:id>\(XMLResponseParser.xmlEscape(id))</s:id>
         </s:getMediaURI>
         </soap:Body></soap:Envelope>
         """
@@ -353,7 +353,7 @@ public final class SMAPIClient {
     public func getMediaMetadata(serviceURI: String, token: SMAPIToken, id: String) async throws -> SMAPIMediaItem? {
         let body = buildAuthenticatedEnvelope(token: token, bodyContent: """
         <s:getMediaMetadata>
-        <s:id>\(xmlEscape(id))</s:id>
+        <s:id>\(XMLResponseParser.xmlEscape(id))</s:id>
         </s:getMediaMetadata>
         """)
         let result = try await soapCallWithRefresh(
@@ -367,21 +367,21 @@ public final class SMAPIClient {
 
     public func getMediaMetadataAnonymous(serviceURI: String, deviceID: String, householdID: String = "",
                                           id: String) async throws -> SMAPIMediaItem? {
-        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(householdID)</s:householdId>"
+        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(XMLResponseParser.xmlEscape(householdID))</s:householdId>"
         let body = """
         <?xml version="1.0" encoding="utf-8"?>
         <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
          xmlns:s="http://www.sonos.com/Services/1.1">
         <soap:Header>
         <s:credentials>
-        <s:deviceId>\(deviceID)</s:deviceId>
+        <s:deviceId>\(XMLResponseParser.xmlEscape(deviceID))</s:deviceId>
         <s:deviceProvider>Sonos</s:deviceProvider>
         \(householdElement)
         </s:credentials>
         </soap:Header>
         <soap:Body>
         <s:getMediaMetadata>
-        <s:id>\(xmlEscape(id))</s:id>
+        <s:id>\(XMLResponseParser.xmlEscape(id))</s:id>
         </s:getMediaMetadata>
         </soap:Body></soap:Envelope>
         """
@@ -398,13 +398,13 @@ public final class SMAPIClient {
          xmlns:s="http://www.sonos.com/Services/1.1">
         <soap:Header>
         <s:credentials>
-        <s:deviceId>\(token.deviceID)</s:deviceId>
+        <s:deviceId>\(XMLResponseParser.xmlEscape(token.deviceID))</s:deviceId>
         <s:deviceProvider>Sonos</s:deviceProvider>
         <s:context/>
         <s:loginToken>
-        <s:token>\(token.authToken)</s:token>
-        <s:key>\(token.privateKey)</s:key>
-        <s:householdId>\(token.householdID)</s:householdId>
+        <s:token>\(XMLResponseParser.xmlEscape(token.authToken))</s:token>
+        <s:key>\(XMLResponseParser.xmlEscape(token.privateKey))</s:key>
+        <s:householdId>\(XMLResponseParser.xmlEscape(token.householdID))</s:householdId>
         </s:loginToken>
         </s:credentials>
         </soap:Header>
@@ -418,21 +418,21 @@ public final class SMAPIClient {
     public func getMetadataAnonymous(serviceURI: String, deviceID: String, householdID: String = "",
                                      id: String = BrowseID.smapiRoot,
                                      index: Int = 0, count: Int = 20) async throws -> (items: [SMAPIMediaItem], total: Int) {
-        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(householdID)</s:householdId>"
+        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(XMLResponseParser.xmlEscape(householdID))</s:householdId>"
         let body = """
         <?xml version="1.0" encoding="utf-8"?>
         <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
          xmlns:s="http://www.sonos.com/Services/1.1">
         <soap:Header>
         <s:credentials>
-        <s:deviceId>\(deviceID)</s:deviceId>
+        <s:deviceId>\(XMLResponseParser.xmlEscape(deviceID))</s:deviceId>
         <s:deviceProvider>Sonos</s:deviceProvider>
         \(householdElement)
         </s:credentials>
         </soap:Header>
         <soap:Body>
         <s:getMetadata>
-        <s:id>\(xmlEscape(id))</s:id>
+        <s:id>\(XMLResponseParser.xmlEscape(id))</s:id>
         <s:index>\(index)</s:index>
         <s:count>\(count)</s:count>
         </s:getMetadata>
@@ -446,14 +446,14 @@ public final class SMAPIClient {
                                 searchID: String = "artist",
                                 term: String, index: Int = 0, count: Int = 20) async throws -> (items: [SMAPIMediaItem], total: Int) {
         guard !term.trimmingCharacters(in: .whitespaces).isEmpty else { return ([], 0) }
-        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(householdID)</s:householdId>"
+        let householdElement = householdID.isEmpty ? "" : "<s:householdId>\(XMLResponseParser.xmlEscape(householdID))</s:householdId>"
         let body = """
         <?xml version="1.0" encoding="utf-8"?>
         <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
          xmlns:s="http://www.sonos.com/Services/1.1">
         <soap:Header>
         <s:credentials>
-        <s:deviceId>\(deviceID)</s:deviceId>
+        <s:deviceId>\(XMLResponseParser.xmlEscape(deviceID))</s:deviceId>
         <s:deviceProvider>Sonos</s:deviceProvider>
         \(householdElement)
         </s:credentials>
@@ -461,7 +461,7 @@ public final class SMAPIClient {
         <soap:Body>
         <s:search>
         <s:id>\(searchID)</s:id>
-        <s:term>\(xmlEscape(term))</s:term>
+        <s:term>\(XMLResponseParser.xmlEscape(term))</s:term>
         <s:index>\(index)</s:index>
         <s:count>\(count)</s:count>
         </s:search>
@@ -544,7 +544,13 @@ public final class SMAPIClient {
                 artist: extractValue(from: element, tag: "artist") ?? extractValue(from: element, tag: "artistId") ?? "",
                 album: extractValue(from: element, tag: "album") ?? "",
                 albumArtURI: extractValue(from: element, tag: "albumArtURI") ?? extractValue(from: element, tag: "logo") ?? "",
-                canPlay: element.contains("canPlay") ? extractValue(from: element, tag: "canPlay") == "true" : true,
+                // Error placeholders (itemType "error") must never
+                // present as playable or browsable — Spotify returns
+                // rows like "Unable to access playlist" for auth /
+                // region failures, and the absent-canPlay default of
+                // true made them tappable tracks (#77).
+                canPlay: (extractValue(from: element, tag: "itemType") == "error") ? false
+                    : (element.contains("canPlay") ? extractValue(from: element, tag: "canPlay") == "true" : true),
                 canBrowse: element.contains("canEnumerate") ? extractValue(from: element, tag: "canEnumerate") == "true" : element.contains("mediaCollection"),
                 uri: extractValue(from: element, tag: "uri") ?? "",
                 metadata: ""
@@ -635,7 +641,7 @@ public final class SMAPIClient {
         guard let tagRange = xml.range(of: "<\(tag)"),
               let attrRange = xml.range(of: "\(attr)=\"", range: tagRange.upperBound..<xml.endIndex),
               let endQuote = xml.range(of: "\"", range: attrRange.upperBound..<xml.endIndex) else { return nil }
-        return String(xml[attrRange.upperBound..<endQuote.lowerBound])
+        return XMLResponseParser.xmlUnescape(String(xml[attrRange.upperBound..<endQuote.lowerBound]))
     }
 
     private func extractBodyContent(from envelope: String) -> String {
@@ -644,12 +650,6 @@ public final class SMAPIClient {
         return String(envelope[bodyStart.upperBound..<bodyEnd.lowerBound])
     }
 
-    private func xmlEscape(_ str: String) -> String {
-        str.replacingOccurrences(of: "&", with: "&amp;")
-           .replacingOccurrences(of: "<", with: "&lt;")
-           .replacingOccurrences(of: ">", with: "&gt;")
-           .replacingOccurrences(of: "\"", with: "&quot;")
-    }
 }
 
 // MARK: - Error Types

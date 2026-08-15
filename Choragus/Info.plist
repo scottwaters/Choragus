@@ -73,6 +73,15 @@
 	<key>ChoragusBuildTag</key>
 	<string>$(CHORAGUS_BUILD_TAG)</string>
 
+	<!-- Optional support link shown in Help → About. Populated via
+	     build-setting substitution by the maintainer's packaging;
+	     a bare xcodebuild leaves it empty and the UI renders no
+	     support row. -->
+	<key>ChoragusSupportURL</key>
+	<string>$(CHORAGUS_SUPPORT_URL)</string>
+	<key>ChoragusBitcoinAddress</key>
+	<string>$(CHORAGUS_BITCOIN_ADDRESS)</string>
+
 	<!--
 	  Sparkle 2 auto-updater configuration.
 

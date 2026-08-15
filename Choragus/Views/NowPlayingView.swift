@@ -386,13 +386,14 @@ struct NowPlayingView: View {
                                     .lineLimit(1)
                             }
 
-                            // Service tag + audio format badge
+                            // Format badges on one line, service tag on the
+                            // line below — the Club Vis wall card stacks
+                            // format details above the source label, and the
+                            // two surfaces should read the same way. The
+                            // pill border, the service icon below it, and
+                            // the title/artist/album text all share one
+                            // leading edge.
                             HStack(spacing: 8) {
-                                if let serviceName = currentServiceName {
-                                    Label(serviceName, systemImage: ServiceName.icon(for: serviceName))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
                                 // Dolby Atmos badge — fires only when the
                                 // speaker is reporting an Atmos stream
                                 // (`r:streamInfo` d:1) AND the group's
@@ -406,7 +407,7 @@ struct NowPlayingView: View {
                                           systemImage: "hifispeaker.and.homepod")
                                         .font(.caption.weight(.medium))
                                         .foregroundStyle(.secondary)
-                                        .padding(.horizontal, 6)
+                                        .padding(.horizontal, UILayout.badgePillInset)
                                         .padding(.vertical, 2)
                                         .background(
                                             RoundedRectangle(cornerRadius: 4)
@@ -425,7 +426,7 @@ struct NowPlayingView: View {
                                     Label(tvFormatLabel, systemImage: "tv")
                                         .font(.caption.weight(.medium))
                                         .foregroundStyle(.secondary)
-                                        .padding(.horizontal, 6)
+                                        .padding(.horizontal, UILayout.badgePillInset)
                                         .padding(.vertical, 2)
                                         .background(
                                             RoundedRectangle(cornerRadius: 4)
@@ -434,6 +435,30 @@ struct NowPlayingView: View {
                                         )
                                         .help(tvFormatLabel)
                                 }
+                                // Stream-details pill for normal audio —
+                                // container, lossless flag, and bit
+                                // depth / sample rate as reported by the
+                                // speaker. Absent evidence renders no
+                                // pill; nothing is guessed.
+                                if let streamDetails = trackMetadata.streamDetailsLabel {
+                                    Label(streamDetails, systemImage: "waveform")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, UILayout.badgePillInset)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .strokeBorder(.secondary.opacity(0.35),
+                                                              lineWidth: 1)
+                                        )
+                                        .help(streamDetails)
+                                }
+                            }
+
+                            if let serviceName = currentServiceName {
+                                Label(serviceName, systemImage: ServiceName.icon(for: serviceName))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         } else {
                             Text(L10n.nothingPlaying)
@@ -510,6 +535,13 @@ struct NowPlayingView: View {
                                 .tooltip(isCurrentTrackStarred ? L10n.statStarred : L10n.starThisTrack)
                             }
                         }
+
+                        // Home-theatre-only second row: the two settings
+                        // that get toggled nightly, otherwise buried in
+                        // the EQ window (#78). Renders nothing for
+                        // non-HT zones.
+                        HomeTheaterQuickControls(group: group)
+                            .environmentObject(sonosManager)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1006,13 +1038,7 @@ struct NowPlayingView: View {
         guard let uri = metadata.trackURI else { return nil }
         let isHTSource = uri.contains("x-sonos-htastream:") || uri.contains("x-rincon-stream:")
         guard isHTSource else { return nil }
-        switch metadata.tvAudioFormat {
-        case .stereoPCM:        return L10n.tvAudioStereoPCM
-        case .multichannelPCM:  return L10n.tvAudioMultichannelPCM
-        case .dolbyDigital:     return L10n.tvAudioDolbyDigital
-        case .dolbyAtmos:       return L10n.audioFormatAtmos
-        case .noSignal, .unknown: return nil
-        }
+        return metadata.tvAudioFormat.displayLabel
     }
 
     private func formatTime(_ interval: TimeInterval) -> String { vm.formatTime(interval) }
@@ -1072,29 +1098,79 @@ struct ExpandedArtView: View {
     let artist: String
     let album: String
     let stationName: String
+    /// Optional gallery for carousel paging (artist About photos).
+    /// With more than one URL, chevron buttons and the arrow keys
+    /// page through the set; empty at single-image call sites.
+    var galleryURLs: [URL] = []
     @Environment(\.dismiss) private var dismiss
+    @State private var galleryIndex: Int = 0
+
+    private var showsCarousel: Bool { galleryURLs.count > 1 }
+    private var displayedURL: URL? {
+        showsCarousel
+            ? galleryURLs[min(max(galleryIndex, 0), galleryURLs.count - 1)]
+            : artURL
+    }
+
+    private func stepGallery(_ delta: Int) {
+        let n = galleryURLs.count
+        guard n > 1 else { return }
+        galleryIndex = ((galleryIndex + delta) % n + n) % n
+    }
+
+    private func carouselButton(_ symbol: String, delta: Int,
+                                key: KeyEquivalent) -> some View {
+        Button { stepGallery(delta) } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(.black.opacity(0.45), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(key, modifiers: [])
+    }
 
     var body: some View {
         VStack(spacing: 16) {
-            if let url = artURL {
-                CachedAsyncImage(url: url, cornerRadius: 12, priority: .interactive)
-                    .frame(width: 400, height: 400)
-                    .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
-            } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(
-                        LinearGradient(
-                            colors: [.purple.opacity(0.3), .blue.opacity(0.3)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+            ZStack {
+                if let url = displayedURL {
+                    CachedAsyncImage(url: url, cornerRadius: 12, priority: .interactive)
+                        .frame(width: 400, height: 400)
+                        .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
+                        .id(url)
+                } else {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [.purple.opacity(0.3), .blue.opacity(0.3)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 400, height: 400)
-                    .overlay {
-                        Image(systemName: !stationName.isEmpty ? "radio.fill" : "music.note")
-                            .font(.system(size: 80))
-                            .foregroundStyle(.white.opacity(0.5))
+                        .frame(width: 400, height: 400)
+                        .overlay {
+                            Image(systemName: !stationName.isEmpty ? "radio.fill" : "music.note")
+                                .font(.system(size: 80))
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                }
+                if showsCarousel {
+                    HStack {
+                        carouselButton("chevron.left", delta: -1, key: .leftArrow)
+                        Spacer()
+                        carouselButton("chevron.right", delta: 1, key: .rightArrow)
                     }
+                    .padding(.horizontal, 10)
+                }
+            }
+            .frame(width: 400, height: 400)
+
+            if showsCarousel {
+                Text("\(galleryIndex + 1) / \(galleryURLs.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
 
             VStack(spacing: 6) {
@@ -1130,7 +1206,13 @@ struct ExpandedArtView: View {
                 .controlSize(.small)
         }
         .padding(30)
-        .frame(width: 460, height: 560)
+        .frame(width: 460, height: showsCarousel ? 584 : 560)
+        .onAppear {
+            if showsCarousel, let url = artURL,
+               let idx = galleryURLs.firstIndex(of: url) {
+                galleryIndex = idx
+            }
+        }
     }
 }
 

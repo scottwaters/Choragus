@@ -119,12 +119,26 @@ public enum XMLResponseParser {
     // MARK: - Helpers
 
     public static func xmlUnescape(_ string: String) -> String {
+        // `&amp;` must decode LAST — the mirror of escape order. Decoding
+        // it before `&quot;`/`&apos;` turned a singly-escaped `&amp;quot;`
+        // into a literal quote in one pass (two decode levels at once),
+        // corrupting `val="…"` attributes in LastChange event payloads.
         string
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&amp;", with: "&")
+    }
+
+    public static func xmlEscape(_ string: String) -> String {
+        // `&` first — escaping it later would corrupt the other entities.
+        string
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
     }
 }
 
@@ -203,7 +217,12 @@ private class SimpleXMLParser: NSObject, XMLParserDelegate {
         guard let data = xml.data(using: .utf8) else { return }
         let parser = XMLParser(data: data)
         parser.delegate = self
-        parser.parse()
+        let succeeded = parser.parse()
+        if !succeeded {
+            sonosDiagLog(.warning, tag: "XML",
+                         "SimpleXMLParser parse aborted — result may be partial",
+                         context: ["parserError": String(describing: parser.parserError)])
+        }
     }
 
     func parser(_ parser: XMLParser, didStartElement elementName: String,
@@ -237,22 +256,32 @@ private class ZoneGroupParser: NSObject, XMLParserDelegate {
     private var currentGroup: ZoneGroupData?
 
     func parse(_ xml: String) -> [ZoneGroupData] {
-        // Try to find the ZoneGroupState content
-        var xmlToParse = xml
-
-        // If wrapped in a SOAP response, extract the ZoneGroupState value
-        if let range = xml.range(of: "<ZoneGroupState>") {
-            let start = range.upperBound
-            if let endRange = xml.range(of: "</ZoneGroupState>", range: start..<xml.endIndex) {
-                let content = String(xml[start..<endRange.lowerBound])
-                xmlToParse = XMLResponseParser.xmlUnescape(content)
-            }
-        }
-
-        guard let data = xmlToParse.data(using: .utf8) else { return [] }
+        // The value arrives SOAP-unescaped exactly ONCE: a valid XML
+        // document whose root element is itself named <ZoneGroupState>.
+        // The previous implementation mistook that root for a SOAP
+        // wrapper, stripped it, and unescaped the body a second time —
+        // turning valid `&amp;` entities in room names into bare `&`.
+        // XMLParser aborts at the first such room (undeclared entity)
+        // and every group after it was silently dropped because the
+        // parse() result was ignored (issue #81: "B&W Room" hid 5 of
+        // 8 zone groups). Parse the document as-is.
+        guard let data = xml.data(using: .utf8) else { return [] }
         let parser = XMLParser(data: data)
         parser.delegate = self
-        parser.parse()
+        let succeeded = parser.parse()
+        if !succeeded {
+            // A partial accumulator is worse than no data: rendering it
+            // silently shrinks the household (issue #81) and merging it
+            // would evict the missing rooms. Discard and let the caller's
+            // empty-response guard keep the previous topology.
+            sonosDiagLog(.error, tag: "TOPOLOGY",
+                         "ZoneGroupState parse aborted — discarding partial result",
+                         context: [
+                            "parserError": String(describing: parser.parserError),
+                            "groupsBeforeAbort": String(groups.count)
+                         ])
+            return []
+        }
         return groups
     }
 
@@ -340,7 +369,12 @@ private class DIDLParser: NSObject, XMLParserDelegate {
         guard let data = xml.data(using: .utf8) else { return nil }
         let parser = XMLParser(data: data)
         parser.delegate = self
-        parser.parse()
+        let succeeded = parser.parse()
+        if !succeeded {
+            sonosDiagLog(.warning, tag: "XML",
+                         "DIDLParser parse aborted — result may be partial",
+                         context: ["parserError": String(describing: parser.parserError)])
+        }
         return item
     }
 

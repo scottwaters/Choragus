@@ -31,6 +31,7 @@ public final class MediaKeyHandler: ObservableObject {
     private var localMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
     private var commandsRegistered = false
+    private var remoteCommandsEnabled = false
     private var lastPublishedNowPlayingKey: String = ""
     /// Tracks the album-art URL most recently published to
     /// `MPNowPlayingInfoCenter`. Used to dedupe artwork fetches and to
@@ -46,13 +47,62 @@ public final class MediaKeyHandler: ObservableObject {
     /// input paths feel calibrated together.
     private static let volumeStep: Int = 5
 
+    /// True while the login screen / screensaver lock is up. Playback-
+    /// STARTING media commands are ignored in this state: with the Mac
+    /// locked, a "play" can only have come from a stray source (a
+    /// Bluetooth device reconnecting, an AirPods case event, another
+    /// device's AVRCP) — observed as speakers starting overnight.
+    /// Pause/stop/skip stay live so deliberate listening with a locked
+    /// screen keeps working.
+    private var screenLocked = false
+
+    /// Play commands the locked-screen guard refused, oldest first. A
+    /// person retries a second later; stray sources fire once or burst
+    /// milliseconds apart, so repeated presses read as deliberate.
+    private var suppressedPlayPresses: [Date] = []
+
+    /// Suppressed presses needed inside `lockedPlayOverrideWindow`
+    /// before the locked-screen guard yields.
+    private static let lockedPlayOverridePressCount = 3
+    private static let lockedPlayOverrideWindow: TimeInterval = 5
+    /// Presses closer together than this are one device event burst, not
+    /// a person pressing twice — they fold into the preceding press
+    /// instead of counting toward the override.
+    private static let lockedPlayOverrideMinGap: TimeInterval = 0.3
+
+    /// User opt-out, read live so the Settings toggle needs no relaunch.
+    private var mediaKeysEnabled: Bool {
+        UserDefaults.standard.object(forKey: UDKey.mediaKeysEnabled) as? Bool ?? true
+    }
+
     private init() {}
+
+    private func observeScreenLock() {
+        let dnc = DistributedNotificationCenter.default()
+        dnc.addObserver(forName: Notification.Name("com.apple.screenIsLocked"),
+                        object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.screenLocked = true
+                self?.suppressedPlayPresses.removeAll()
+            }
+        }
+        dnc.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"),
+                        object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.screenLocked = false
+                self?.suppressedPlayPresses.removeAll()
+            }
+        }
+    }
 
     // MARK: - Lifecycle
 
     public func start(sonosManager: SonosManager) {
         self.sonosManager = sonosManager
         registerRemoteCommands()
+        setRemoteCommandsEnabled(mediaKeysEnabled)
+        observeScreenLock()
+        observeMediaKeysSetting()
         installLocalKeyMonitor()
         // Eagerly seed MPNowPlayingInfoCenter BEFORE observing changes.
         // macOS's `rcd` daemon routes media keys to whichever app most
@@ -61,8 +111,10 @@ public final class MediaKeyHandler: ObservableObject {
         // running — wins the routing because it publishes a
         // .stopped/.paused state at launch and Choragus isn't yet a
         // candidate. The placeholder is overwritten as soon as a real
-        // track is selected.
-        seedInitialNowPlayingClaim()
+        // track is selected. Skipped when the user has turned media keys
+        // off — claiming the route then would swallow keys Choragus has
+        // been told not to act on.
+        if mediaKeysEnabled { seedInitialNowPlayingClaim() }
         observeSonosManagerForNowPlaying()
         sonosDiagLog(.info, tag: "MEDIA-KEYS", "MediaKeyHandler started")
     }
@@ -81,47 +133,113 @@ public final class MediaKeyHandler: ObservableObject {
 
     // MARK: - MPRemoteCommandCenter (transport)
 
+    /// Installs targets once; enablement is separate, since `addTarget`
+    /// accumulates and the Settings toggle flips repeatedly.
     private func registerRemoteCommands() {
         guard !commandsRegistered else { return }
         commandsRegistered = true
         let center = MPRemoteCommandCenter.shared()
 
-        center.playCommand.isEnabled = true
         center.playCommand.addTarget { [weak self] _ in
             self?.handleTransport(.play) ?? .commandFailed
         }
-        center.pauseCommand.isEnabled = true
         center.pauseCommand.addTarget { [weak self] _ in
             self?.handleTransport(.pause) ?? .commandFailed
         }
-        center.togglePlayPauseCommand.isEnabled = true
         center.togglePlayPauseCommand.addTarget { [weak self] _ in
             self?.handleTransport(.togglePlayPause) ?? .commandFailed
         }
-        center.nextTrackCommand.isEnabled = true
         center.nextTrackCommand.addTarget { [weak self] _ in
             self?.handleTransport(.next) ?? .commandFailed
         }
-        center.previousTrackCommand.isEnabled = true
         center.previousTrackCommand.addTarget { [weak self] _ in
             self?.handleTransport(.previous) ?? .commandFailed
         }
     }
 
-    private func unregisterRemoteCommands() {
-        guard commandsRegistered else { return }
-        commandsRegistered = false
+    private func setRemoteCommandsEnabled(_ enabled: Bool) {
         let center = MPRemoteCommandCenter.shared()
-        center.playCommand.isEnabled = false
-        center.pauseCommand.isEnabled = false
-        center.togglePlayPauseCommand.isEnabled = false
-        center.nextTrackCommand.isEnabled = false
-        center.previousTrackCommand.isEnabled = false
+        center.playCommand.isEnabled = enabled
+        center.pauseCommand.isEnabled = enabled
+        center.togglePlayPauseCommand.isEnabled = enabled
+        center.nextTrackCommand.isEnabled = enabled
+        center.previousTrackCommand.isEnabled = enabled
+        remoteCommandsEnabled = enabled
+    }
+
+    private func unregisterRemoteCommands() {
+        setRemoteCommandsEnabled(false)
+    }
+
+    // MARK: - Media-keys setting
+
+    private func observeMediaKeysSetting() {
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.applyMediaKeysSetting() }
+            .store(in: &cancellables)
+    }
+
+    /// Aligns command enablement and the Now Playing claim with the
+    /// setting. Early-outs unless the value actually moved.
+    private func applyMediaKeysSetting() {
+        let enabled = mediaKeysEnabled
+        guard enabled != remoteCommandsEnabled else { return }
+        setRemoteCommandsEnabled(enabled)
+
+        if enabled {
+            lastPublishedNowPlayingKey = ""
+            lastPublishedArtURL = ""
+            seedInitialNowPlayingClaim()
+            refreshNowPlayingInfo()
+            sonosDiagLog(.info, tag: "MEDIA-KEYS",
+                         "Media keys enabled — Now Playing claim taken")
+        } else {
+            // Releasing the claim matters as much as disabling the
+            // commands: macOS keeps routing keys to the claim holder.
+            let center = MPNowPlayingInfoCenter.default()
+            center.nowPlayingInfo = nil
+            center.playbackState = .stopped
+            lastPublishedNowPlayingKey = ""
+            lastPublishedArtURL = ""
+            suppressedPlayPresses.removeAll()
+            sonosDiagLog(.info, tag: "MEDIA-KEYS",
+                         "Media keys disabled — Now Playing claim released")
+        }
     }
 
     private enum TransportAction { case play, pause, togglePlayPause, next, previous }
 
+    /// Records a play command the locked-screen guard just refused and
+    /// reports whether the retry pattern is deliberate enough to let the
+    /// next one through. Returns `true` exactly once per satisfied
+    /// burst — the tally resets so a single grant can't be re-used by a
+    /// trailing duplicate event.
+    private func registerSuppressedPlayPress() -> Bool {
+        let now = Date()
+        suppressedPlayPresses.removeAll {
+            now.timeIntervalSince($0) > Self.lockedPlayOverrideWindow
+        }
+        // Duplicates milliseconds apart are one device event burst, not
+        // a person pressing again — fold them into the preceding press.
+        if let last = suppressedPlayPresses.last,
+           now.timeIntervalSince(last) < Self.lockedPlayOverrideMinGap {
+            return false
+        }
+        suppressedPlayPresses.append(now)
+        guard suppressedPlayPresses.count >= Self.lockedPlayOverridePressCount else {
+            return false
+        }
+        suppressedPlayPresses.removeAll()
+        return true
+    }
+
     private func handleTransport(_ action: TransportAction) -> MPRemoteCommandHandlerStatus {
+        // Belt-and-braces: the commands are disabled at the center when
+        // the setting is off, but the targets stay installed, so refuse
+        // here too rather than trust the OS not to deliver.
+        guard mediaKeysEnabled else { return .commandFailed }
+
         guard let manager = sonosManager, let group = currentGroup() else {
             sonosDiagLog(.warning, tag: "MEDIA-KEYS",
                          "Transport key with no selected group — ignored",
@@ -130,6 +248,51 @@ public final class MediaKeyHandler: ObservableObject {
         }
 
         let isPlaying = manager.groupTransportStates[group.coordinatorID]?.isPlaying ?? false
+
+        // Locked-screen guard: refuse commands that would START
+        // playback. Stopping/skipping already-playing audio stays
+        // allowed — locking the screen mid-listen is normal.
+        let wouldStartPlayback = action == .play
+            || (action == .togglePlayPause && !isPlaying)
+        // A user who presses play, gets nothing, and presses again is
+        // the one case the guard must not win: repeated presses inside a
+        // short window override it.
+        if screenLocked && wouldStartPlayback {
+            guard registerSuppressedPlayPress() else {
+                sonosDiagLog(.info, tag: "MEDIA-KEYS",
+                             "Play command IGNORED — screen locked",
+                             context: [
+                                "action": String(describing: action),
+                                "group": group.name,
+                                "suppressedPresses": String(suppressedPlayPresses.count)
+                             ])
+                return .commandFailed
+            }
+            sonosDiagLog(.info, tag: "MEDIA-KEYS",
+                         "Screen-locked play guard overridden — repeated presses",
+                         context: [
+                            "action": String(describing: action),
+                            "group": group.name,
+                            "presses": String(Self.lockedPlayOverridePressCount),
+                            "windowSeconds": String(Int(Self.lockedPlayOverrideWindow))
+                         ])
+        }
+
+        // Every received system media command is diagnostics-worthy:
+        // these arrive from ANY media source macOS routes to the app
+        // — keyboard keys, Touch Bar, Bluetooth AVRCP (AirPods stem /
+        // case, headsets auto-connecting, car units), Continuity —
+        // with no user-visible attribution. Unexplained playback
+        // starts (reported: overnight on the lockscreen and randomly
+        // during the day) are indistinguishable from external
+        // controllers without this line.
+        sonosDiagLog(.info, tag: "MEDIA-KEYS",
+                     "System media command received",
+                     context: [
+                        "action": String(describing: action),
+                        "group": group.name,
+                        "wasPlaying": String(isPlaying)
+                     ])
 
         Task { @MainActor in
             do {
@@ -312,6 +475,9 @@ public final class MediaKeyHandler: ObservableObject {
     }
 
     private func refreshNowPlayingInfo() {
+        // Publishing is what claims the media-key route; skip it while
+        // the user has the keys turned off.
+        guard mediaKeysEnabled else { return }
         guard let manager = sonosManager, let group = currentGroup() else {
             // Don't blank the info center on transient "no group" states —
             // doing that hands the media-key route back to Music.app

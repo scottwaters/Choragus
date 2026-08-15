@@ -19,10 +19,14 @@
 ///      count, the deficit slots stay blank — never duplicate a URL
 ///      across cells.
 ///
-/// The lighting layer uses a fixed warm bar palette (amber / magenta
-/// / indigo). v2 will sample dominant colours from the now-playing
-/// artwork so the lighting also encodes album mood; flagged in
-/// `ClubVisLightingView` below.
+/// Lighting: the now-playing artwork's detected hues (SonosKit's
+/// `StageSetMatcher` histogram + peaks, once per art change)
+/// generate a "Cover shades" stage set — shade ladders of those
+/// hues only, via `ClubStageSets.coverShadesSet` — so the lighting
+/// encodes album hue without adding hues the cover lacks. Tone
+/// changes crossfade over `ClubVisLightingView.setFadeDuration` —
+/// never a hard cut. Achromatic art / no art / the debug-window
+/// toggle resolve to catalogue set #0 ("Zune house").
 ///
 /// The whole stage is laid out at logical 1920×1080 inside a
 /// `GeometryReader` scaler, so the same code fullscreens cleanly to
@@ -69,6 +73,41 @@ struct ClubVisWindow: View {
     /// frame would tank scrolling and waste CPU. Pre-resolved here
     /// when the tile set changes.
     @State private var preloaded: [URL: NSImage] = [:]
+    /// Live set of URLs the wall is currently drawing (slot
+    /// assignments + both ends of in-flight fades), reported UP by
+    /// the wall view. The `preloaded` trim must never evict a
+    /// displayed image — the canvas draws from `preloaded`, so an
+    /// evicted-while-displayed URL blanks its tile and the next
+    /// diffFill mass-repairs (observed: 39 fades in one diff, wall
+    /// fps collapsed to ~7).
+    @State private var wallDisplayBox = WallDisplayBox()
+    /// Staged reveal: the lighting layer fades in AFTER the wall is
+    /// up — room first, then the rig comes on. 0 while hidden/behind
+    /// a reveal; ramped by the initial-open and rebuild pipelines.
+    @State private var lightingOpacity: Double = 0
+    /// Live key index of `preloaded` for the wall view's task-context
+    /// cache gates (see PreloadedIndex).
+    @State private var preloadedIndex = PreloadedIndex()
+    /// Live pool reference for the wall view's task contexts (see
+    /// TilePoolBox).
+    @State private var poolBox = TilePoolBox()
+    /// Periodic off-main sample of ImageCache URLs for the
+    /// cache-backfill tier. Sampling live inside the pool compute
+    /// held the ImageCache disk queue for over a second per rebuild;
+    /// a queued barrier write then parked every main-side art read
+    /// behind it (observed: 1.0 s stall + tile fades running 680 ms
+    /// long during the second rebuild of a track change).
+    @State private var cacheBackfillSample: [URL] = []
+    /// Consecutive fetch/decode failures per art URL this session.
+    /// URLs at the cap are skipped by `downloadMissingPoolArt` —
+    /// observed: the same ~10 dead URLs (unreachable speaker's getaa,
+    /// zero-byte CDN jpegs) re-fetched on every rebuild, forever.
+    @State private var artFetchFailures: [URL: Int] = [:]
+    private static let artFetchFailureCap = 3
+    /// URL sets of the current and previous pools — the retention
+    /// set for trimming `preloaded` (a mid-fade slot may still draw
+    /// a previous pool's image; anything older is unreachable).
+    @State private var recentPoolURLSets: [Set<URL>] = []
 
     /// Tiered tile pool — preferred URLs (queue / current artist /
     /// similar artists) take large slots first; fallback URLs (genre
@@ -85,6 +124,15 @@ struct ClubVisWindow: View {
     /// settle window so a station-logo→real-art transition lands
     /// even when the rebuild has just finished.
     @State private var heroUpdateTrigger: Int = 0
+    /// Last artwork URL a stage-set match ran for — gates
+    /// `matchStageSet` to one match per art change.
+    @State private var lastMatchedArtURL: URL?
+    /// Latest hero art requested for a stage match — the settle
+    /// debounce in `matchStageSet` matches only when a request is
+    /// still the newest 1.5 s later.
+    @State private var pendingStageMatchURL: URL?
+    /// Delayed no-art fallback — see `downloadNowPlayingArt`.
+    @State private var noArtFallbackTask: Task<Void, Never>?
 
     /// Identity for the WallView — when this changes, SwiftUI tears
     /// down the old WallView and creates a new one (which runs
@@ -152,6 +200,11 @@ struct ClubVisWindow: View {
     /// stacked up to 110+ in-flight tile fades. Debouncing
     /// collapses bursts into a single rebuild.
     @State private var rebuildTilesDebounceTask: Task<Void, Never>?
+    /// Fire time of the pending debounced rebuild — earliest wins.
+    @State private var rebuildTilesDeadline: Date?
+    /// When the last rebuildTiles actually ran — scheduler enforces
+    /// a 3 s spacing floor from this.
+    @State private var lastRebuildTilesAt: Date = .distantPast
 
     /// Cancellable task for the settledArtURL → download → heroBump
     /// chain. settledArtURL can flip 3 × per track (DIDL → history
@@ -233,6 +286,13 @@ struct ClubVisWindow: View {
                                             originX: ClubVisWallView.originX,
                                             originY: ClubVisWallView.originY,
                                             config: config)
+        // Publish the wall seed for the lighting layer. Every wall
+        // start funnels through recomputeSlots (.onAppear, .onChange
+        // of layoutSeed, forceWallRebuild's synchronous call), so
+        // this is the single point where the lights learn a new wall
+        // is on screen. `ClubVisLightingView` derives per-emitter
+        // anchor/phase variation from it — same seed, same lights.
+        BackOfTheClubDebugState.shared.wallLightSeed = UInt64(layoutSeed)
     }
 
     /// Lower-cased artist names returned by `MusicMetadataService.artistInfo`
@@ -350,6 +410,27 @@ struct ClubVisWindow: View {
         return ""
     }
 
+    /// Format line for the now-playing card — the same evidence the
+    /// main window's pills show: Atmos (capability-gated like the
+    /// main badge), the TV input format for HDMI sources, or the
+    /// stream details (container / lossless / bit depth-sample rate).
+    private var formatDetailsLabel: String? {
+        var parts: [String] = []
+        if trackMetadata.audioFormat == .atmos,
+           let g = group, g.isAtmosCapable(devices: sonosManager.devices) {
+            parts.append(L10n.audioFormatAtmos)
+        }
+        if let uri = trackMetadata.trackURI,
+           uri.contains("x-sonos-htastream:") || uri.contains("x-rincon-stream:") {
+            if let tv = trackMetadata.tvAudioFormat.displayLabel {
+                parts.append(tv)
+            }
+        } else if let details = trackMetadata.streamDetailsLabel {
+            parts.append(details)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     var body: some View {
         GeometryReader { geo in
             // Logical canvas is 1920×1080; scale uniformly to whatever
@@ -397,7 +478,19 @@ struct ClubVisWindow: View {
                     maxArtists: 300,
                     priorityArtists: priority)
             }
-            await rebuildTiles()
+            scheduleRebuildTiles("initialLoad")
+        }
+        .task {
+            // Cache-backfill sampler: refresh the URL sample off-main
+            // once a minute (and once immediately) so pool builds
+            // never enumerate the disk cache themselves.
+            while !Task.isCancelled {
+                let sample = await Task.detached(priority: .utility) {
+                    ImageCache.shared.sampledCachedURLs(count: 1200)
+                }.value
+                cacheBackfillSample = sample
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+            }
         }
         .task(id: "\(trackMetadata.trackURI ?? "")|\(trackMetadata.artist)") {
             // Keyed on (trackURI, artist) — not URI alone — because
@@ -409,6 +502,64 @@ struct ClubVisWindow: View {
             // the next track. Composite key re-fires when the artist
             // settles, restoring the fetch.
             queueHolder.vm?.updateCurrentTrack()
+            // Wall-rebuild rule — decided FIRST, before the artist
+            // fetch and rebuildTiles, so a scheduled rebuild starts
+            // its fade-out immediately at the track change instead
+            // of seconds into the song. The rebuild sequence runs
+            // detached; pool construction proceeds in parallel and
+            // lands during the fade-out window.
+            // Two trigger paths:
+            //   1. Cadence: every 3rd track change AND ≥60 s elapsed
+            //      since the last rebuild. Both must hold.
+            //   2. Source/mode change: queue → radio, radio → queue,
+            //      or service-id swap (Spotify → Apple Music etc.).
+            //      Forces an immediate rebuild regardless of cadence
+            //      because the new context is a meaningful shift.
+            tracksSinceRebuild += 1
+            let elapsed = Date().timeIntervalSince(lastWallRebuildAt)
+            let currentMode = playbackModeKey
+            let previousMode = lastPlaybackModeKey
+            let modeChanged = !previousMode.isEmpty
+                && currentMode != previousMode
+
+            let cadenceTrigger = tracksSinceRebuild >= 3 && elapsed >= 60
+            visLog("track tick — tracksSince=\(tracksSinceRebuild) elapsed=\(Int(elapsed))s mode=\(previousMode)→\(currentMode) modeChanged=\(modeChanged) cadenceTrigger=\(cadenceTrigger)")
+
+            if cadenceTrigger {
+                lastPlaybackModeKey = currentMode
+                let reason = "cadence(tracks=\(tracksSinceRebuild),elapsed=\(Int(elapsed))s)"
+                visLog("rebuild call — site=trackURI-task reason=\(reason)")
+                // Detach so a subsequent trackURI change (which
+                // cancels this `.task` closure) doesn't cut the
+                // in-flight rebuild's 6.5 s sequence short.
+                Task { @MainActor in
+                    await performRebuildSequence(source: "trackURI-task[\(reason)]")
+                }
+            } else if modeChanged {
+                // Debounce: defer 2s, then re-read playbackModeKey.
+                // If mode reverted to baseline (Sonos metadata churn:
+                // service:N → queue → service:N within 2s), drop it.
+                let baseline = previousMode
+                let observed = currentMode
+                visLog("mode-change DEFERRED — \(baseline)→\(observed) waiting 2s to confirm")
+                modeChangeDebounceTask?.cancel()
+                modeChangeDebounceTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    let settled = playbackModeKey
+                    if settled == baseline {
+                        visLog("mode-change DEBOUNCED — \(baseline)→\(observed)→\(settled) reverted, no rebuild")
+                        return
+                    }
+                    visLog("mode-change CONFIRMED — \(baseline)→\(settled) firing rebuild")
+                    lastPlaybackModeKey = settled
+                    await performRebuildSequence(source: "trackURI-task[mode-change(\(baseline)→\(settled))]")
+                }
+            } else {
+                // Stable — keep the baseline current so the next change
+                // compares against the latest known-good state.
+                lastPlaybackModeKey = currentMode
+            }
             Task { @MainActor in
                 var priority = [trackMetadata.artist]
                 if trackMetadata.isQueueSource,
@@ -466,67 +617,18 @@ struct ClubVisWindow: View {
                 nowPlayingArtistInfo = nil
                 nowPlayingSimilarArtists = []
             }
-            await rebuildTiles()
+            scheduleRebuildTiles("trackChange")
             trackChangeSwapTrigger &+= 1
 
-            // Wall-rebuild rule. Two trigger paths:
-            //   1. Cadence: every 3rd track change AND ≥60 s elapsed
-            //      since the last rebuild. Both must hold.
-            //   2. Source/mode change: queue → radio, radio → queue,
-            //      or service-id swap (Spotify → Apple Music etc.).
-            //      Forces an immediate rebuild regardless of cadence
-            //      because the new context is a meaningful shift.
-            tracksSinceRebuild += 1
-            let elapsed = Date().timeIntervalSince(lastWallRebuildAt)
-            let currentMode = playbackModeKey
-            let previousMode = lastPlaybackModeKey
-            let modeChanged = !previousMode.isEmpty
-                && currentMode != previousMode
-
-            let cadenceTrigger = tracksSinceRebuild >= 3 && elapsed >= 60
-            visLog("track tick — tracksSince=\(tracksSinceRebuild) elapsed=\(Int(elapsed))s mode=\(previousMode)→\(currentMode) modeChanged=\(modeChanged) cadenceTrigger=\(cadenceTrigger)")
-
-            if cadenceTrigger {
-                lastPlaybackModeKey = currentMode
-                let reason = "cadence(tracks=\(tracksSinceRebuild),elapsed=\(Int(elapsed))s)"
-                visLog("rebuild call — site=trackURI-task reason=\(reason)")
-                // Detach so a subsequent trackURI change (which
-                // cancels this `.task` closure) doesn't cut the
-                // in-flight rebuild's 6.5 s sequence short.
-                Task { @MainActor in
-                    await performRebuildSequence(source: "trackURI-task[\(reason)]")
-                }
-            } else if modeChanged {
-                // Debounce: defer 2s, then re-read playbackModeKey.
-                // If mode reverted to baseline (Sonos metadata churn:
-                // service:N → queue → service:N within 2s), drop it.
-                let baseline = previousMode
-                let observed = currentMode
-                visLog("mode-change DEFERRED — \(baseline)→\(observed) waiting 2s to confirm")
-                modeChangeDebounceTask?.cancel()
-                modeChangeDebounceTask = Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    guard !Task.isCancelled else { return }
-                    let settled = playbackModeKey
-                    if settled == baseline {
-                        visLog("mode-change DEBOUNCED — \(baseline)→\(observed)→\(settled) reverted, no rebuild")
-                        return
-                    }
-                    visLog("mode-change CONFIRMED — \(baseline)→\(settled) firing rebuild")
-                    lastPlaybackModeKey = settled
-                    await performRebuildSequence(source: "trackURI-task[mode-change(\(baseline)→\(settled))]")
-                }
-            } else {
-                // Stable — keep the baseline current so the next change
-                // compares against the latest known-good state.
-                lastPlaybackModeKey = currentMode
-            }
         }
         .onChange(of: playHistoryManager.entries.count) {
             scheduleRebuildTiles("entries.count")
         }
         .onChange(of: playHistoryManager.genreVersion) {
-            scheduleRebuildTiles("genreVersion")
+            // Genre-tier placement is cosmetic; the backfill bumps
+            // this once per artist it writes. Long delay collapses a
+            // whole pass into one rebuild (see scheduleRebuildTiles).
+            scheduleRebuildTiles("genreVersion", delay: .seconds(20))
         }
         .onChange(of: nowPlayingSimilarArtists) {
             scheduleRebuildTiles("similarArtists")
@@ -571,13 +673,13 @@ struct ClubVisWindow: View {
             if let items = note.userInfo?[QueueChangeKey.optimisticItems] as? [QueueItem] {
                 visLog("queueChanged — optimistic append (\(items.count) items), no rebuild")
                 vm.optimisticallyAppend(items)
-                Task { @MainActor in await rebuildTiles() }
+                scheduleRebuildTiles("queueOptimisticAppend")
             } else {
                 visLog("queueChanged — full reload (queue + tiles diff, no wall rebuild)")
                 Task { @MainActor in
                     await vm.loadQueue()
                     vm.updateCurrentTrack()
-                    await rebuildTiles()
+                    scheduleRebuildTiles("queueChanged")
                 }
             }
         }
@@ -614,7 +716,10 @@ struct ClubVisWindow: View {
                         heroUpdateTrigger: heroUpdateTrigger,
                         nowPlayingHeroURL: settledArtURL,
                         rebuildInProgress: rebuildInProgress,
-                        coverOpacity: wallCoverOpacity
+                        coverOpacity: wallCoverOpacity,
+                        displayBox: wallDisplayBox,
+                        preloadedIndex: preloadedIndex,
+                        poolBox: poolBox
                     )
                     .id(wallId)
                 }
@@ -644,6 +749,11 @@ struct ClubVisWindow: View {
                         }
                         try? await Task.sleep(nanoseconds: 2_500_000_000)
                         visLog("initial cover fade-OUT END coverOpacity=\(String(format: "%.2f", wallCoverOpacity))")
+                        // Wall is up — bring the lights on.
+                        visLog("lighting fade-IN start (2.5s)")
+                        withAnimation(.easeInOut(duration: 2.5)) {
+                            lightingOpacity = 1.0
+                        }
                     }
                 }
             }
@@ -655,26 +765,24 @@ struct ClubVisWindow: View {
             // below or the lighting opacities instead.
             .saturation(0.10)
 
-            // Lighting view applies its own per-layer blend modes
-            // internally — outer wrapper just composites normally.
-            // See `ClubVisLightingView.body`: ambient layer uses
-            // `.color` blend (uniform hue replacement), spotlight
-            // layer uses `.overlay` blend (focused accents). Earlier
-            // outer `.softLight` blend produced near-zero tint on
-            // the desaturated wall.
-            // Lighting fades with the wall during track-change
-            // resets so the screen genuinely goes black rather than
-            // showing colored ambient ovals during the hold.
-            ClubVisLightingView()
-
-            // Darkening pass — opacity controlled by the debug
-            // window's Lighting > Black multiply slider so it can
-            // be tuned live. Default 0.45 is the venue-back-wall
-            // brightness target.
+            // Darkening pass BELOW the lights — the wall is dimmed to
+            // venue darkness first and light is added on top. With this
+            // multiply above the lighting layer it multiplied the lit
+            // result toward grey and no blob survived (verified via
+            // screenshot pair 2026-08-07). Opacity via the debug
+            // window's Lighting > Black multiply slider.
             Color.black
                 .blendMode(.multiply)
                 .opacity(debugState.lighting.blackMultiplyOpacity)
                 .allowsHitTesting(false)
+
+            // Lighting view applies its own per-layer blend modes
+            // internally — one Canvas of drifting radial washes +
+            // highlight blooms on `.plusLighter`, then its static
+            // vignette on `.multiply`. Must stay ABOVE the darkening
+            // pass so added light is not multiplied away.
+            ClubVisLightingView()
+                .opacity(lightingOpacity)
 
             // Rebuild cover — opaque black during the seed-swap
             // window so the wall's `.id()` recreation happens
@@ -701,6 +809,7 @@ struct ClubVisWindow: View {
                 trackMetadata: trackMetadata,
                 albumArtURL: settledArtURL,
                 sourceLabel: sourceLabel,
+                formatDetails: formatDetailsLabel,
                 positionAnchor: anchorTracker.groupPositionAnchors[groupID] ?? .zero
             )
             .frame(width: 820, height: 320, alignment: .leading)
@@ -762,19 +871,60 @@ struct ClubVisWindow: View {
     /// single rebuildTiles invocation 250 ms later. Replaces direct
     /// `await rebuildTiles()` calls from .onChange handlers.
     @MainActor
-    private func scheduleRebuildTiles(_ callerHint: String) {
+    /// `delay` coalesces bursts. The 250 ms default suits user-visible
+    /// causes (track change, queue edit). Background metadata churn
+    /// passes a long delay: the genre backfill bumps `genreVersion`
+    /// once per ARTIST it writes, and a 100-artist pass at 250 ms
+    /// produced a rebuild every ~3.5 s for minutes — each costing a
+    /// >1 s main-thread stall (observed 2026-08-08: 221 rebuilds,
+    /// caller=genreVersion, MAIN-STALL ~1.1 s each — the wall stutter
+    /// and hitched fades).
+    private func scheduleRebuildTiles(_ callerHint: String,
+                                      delay: Duration = .milliseconds(250)) {
+        // Earliest requested fire time wins: a slow (genre) request
+        // must not push back a pending fast (track-change) rebuild,
+        // and a fast request supersedes a pending slow one.
+        var candidate = Date().addingTimeInterval(Double(delay.components.seconds)
+            + Double(delay.components.attoseconds) / 1e18)
+        // Spacing floor: chooseTiles costs >1 s on the main thread,
+        // and launch fires half a dozen triggers back-to-back (body,
+        // similarArtists, queue/hero art, entries.count — observed
+        // 12 rebuilds in 25 s stacking into 3-5 s stalls). Rebuilds
+        // run at most once per 3 s; a burst collapses into one.
+        let floor = lastRebuildTilesAt.addingTimeInterval(3.0)
+        if floor > candidate { candidate = floor }
+        if rebuildTilesDebounceTask != nil,
+           let pending = rebuildTilesDeadline, pending <= candidate {
+            return
+        }
+        rebuildTilesDeadline = candidate
         rebuildTilesDebounceTask?.cancel()
+        let wait = max(0, candidate.timeIntervalSinceNow)
         rebuildTilesDebounceTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 250_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
             guard !Task.isCancelled else { return }
+            rebuildTilesDeadline = nil
             await rebuildTiles(callerHint: callerHint)
         }
     }
 
     private func rebuildTiles(callerHint: String = #function) async {
+        lastRebuildTilesAt = Date()
         visLog("rebuildTiles ENTER — caller=\(callerHint) rebuilding=\(BackOfTheClubDebugState.shared.isWallRebuilding)")
-        let chosen = chooseTiles()
-        visLog("pool — preferred=\(chosen.preferred.count) t1=\(chosen.genreTier1.count) t2=\(chosen.genreTier2.count) t3=\(chosen.genreTier3.count) random=\(chosen.random.count) ambient=\(chosen.ambient.count) | isQueueMode=\(trackMetadata.isQueueSource) queueItems=\(queueHolder.vm?.queueItems.count ?? -1)")
+        let inputStart = Date()
+        let input = makeChooseTilesInput()
+        let inputMs = Int(Date().timeIntervalSince(inputStart) * 1000)
+        let computeStart = Date()
+        let result = await Task.detached(priority: .userInitiated) {
+            Self.computeTilePool(input)
+        }.value
+        if let fresh = result.freshAmbient {
+            pinnedAmbientSample = fresh
+            pinnedAmbientForWallId = wallId
+        }
+        let chosen = result.pool
+        visLog("chooseTiles OFF-MAIN — ms=\(Int(Date().timeIntervalSince(computeStart)*1000)) inputMs=\(inputMs)")
+        visLog("pool — preferred=\(chosen.preferred.count) photos=\(chosen.artistPhotos.count) t1=\(chosen.genreTier1.count) t2=\(chosen.genreTier2.count) t3=\(chosen.genreTier3.count) random=\(chosen.random.count) ambient=\(chosen.ambient.count) | isQueueMode=\(trackMetadata.isQueueSource) queueItems=\(queueHolder.vm?.queueItems.count ?? -1)")
         // `slots` is a computed property keyed on `packerSeed`, so it
         // refreshes automatically when the track changes — no need
         // to assign here.
@@ -782,7 +932,7 @@ struct ClubVisWindow: View {
         // Resolve pool images on a background queue. All tiers feed
         // the same image dict; size-aware assignment in the wall view
         // picks which URL each slot draws.
-        let allURLs = chosen.preferred + chosen.similarArtists + chosen.genreTier1 + chosen.genreTier2 + chosen.genreTier3 + chosen.random + chosen.ambient + chosen.cacheBackfill
+        let allURLs = chosen.preferred + chosen.similarArtists + chosen.artistPhotos + chosen.genreTier1 + chosen.genreTier2 + chosen.genreTier3 + chosen.random + chosen.ambient + chosen.cacheBackfill
         let resolvedNew: [URL: NSImage] = await Task.detached(priority: .userInitiated) {
             var dict: [URL: NSImage] = [:]
             for url in allURLs {
@@ -793,11 +943,31 @@ struct ClubVisWindow: View {
             return dict
         }.value
 
+        let commitStart = Date()
         pool = chosen
+        poolBox.pool = chosen
         // Merge new resolutions on top of the existing dict — never
         // evict URLs we may still be fading out of, otherwise a
         // mid-fade slot loses its `oldImg` and pops to blank.
         preloaded.merge(resolvedNew) { _, new in new }
+
+        // Trim `preloaded` to the last two pools' URLs. The
+        // merge-only policy grew it monotonically (observed: 17k
+        // NSImages after a long session); a mid-fade slot can still
+        // reference the PREVIOUS pool's image, anything older is
+        // unreachable.
+        let poolSet = Set(allURLs)
+        recentPoolURLSets = [poolSet] + recentPoolURLSets.prefix(1)
+        var retained = recentPoolURLSets.reduce(into: Set<URL>()) { $0.formUnion($1) }
+        // Never evict what the wall is drawing right now.
+        retained.formUnion(wallDisplayBox.urls)
+        if preloaded.count > retained.count {
+            let before = preloaded.count
+            preloaded = preloaded.filter { retained.contains($0.key) }
+            visLog("preloaded TRIM — \(before) → \(preloaded.count)")
+        }
+        preloadedIndex.keys = Set(preloaded.keys)
+        visLog("rebuild main-side commit — ms=\(Int(Date().timeIntervalSince(commitStart) * 1000)) preloaded=\(preloaded.count)")
 
         #if DEBUG
         publishDebugState(pool: chosen)
@@ -841,20 +1011,36 @@ struct ClubVisWindow: View {
     @MainActor
     private func fetchAndStore(_ url: URL) async -> Bool {
         let tag = url.lastPathComponent.suffix(40)
-        if let cached = ImageCache.shared.image(for: url) {
+        // Disk read + decode off the main actor — only the @State
+        // writes hop back.
+        if let cached = await Task.detached(priority: .utility,
+                                            operation: { ImageCache.shared.image(for: url) }).value {
             preloaded[url] = cached
+            preloadedIndex.keys.insert(url)
             return true
         }
         let start = Date()
         do {
             let (data, _) = try await Self.artFetchSession.data(from: url)
             let netMs = Int(Date().timeIntervalSince(start) * 1000)
-            guard let img = NSImage(data: data) else {
+            // Decode + cache transcode off-main: NSImage(data:) plus
+            // ImageCache.store's TIFF→JPEG encode cost tens of ms per
+            // image ON MAIN — a post-rebuild warm burst of dozens
+            // stacked into the observed periodic ~1.5 s stalls.
+            let decoded = await Task.detached(priority: .utility,
+                                              operation: { () -> NSImage? in
+                guard let img = NSImage(data: data) else { return nil }
+                ImageCache.shared.store(img, for: url)
+                return img
+            }).value
+            guard let img = decoded else {
                 visLog("art DECODE-FAIL — \(tag) bytes=\(data.count) netMs=\(netMs)")
+                recordArtFailure(url)
                 return false
             }
-            ImageCache.shared.store(img, for: url)
             preloaded[url] = img
+            preloadedIndex.keys.insert(url)
+            artFetchFailures[url] = nil
             if netMs > 500 {
                 visLog("art SLOW — \(tag) netMs=\(netMs) bytes=\(data.count)")
             }
@@ -862,7 +1048,43 @@ struct ClubVisWindow: View {
         } catch {
             let netMs = Int(Date().timeIntervalSince(start) * 1000)
             visLog("art FETCH-FAIL — \(tag) netMs=\(netMs) error=\(error.localizedDescription)")
+            recordArtFailure(url)
             return false
+        }
+    }
+
+    /// True when the URL has exhausted its fetch attempts this
+    /// session — excluded from the pool so no slot sits blank
+    /// waiting on art that will never arrive.
+    private func isArtBenched(_ url: URL) -> Bool {
+        artFetchFailures[url, default: 0] >= Self.artFetchFailureCap
+    }
+
+    /// Failure bookkeeping. Crossing the cap benches the URL: any
+    /// stale cached image is purged (so it can't resurface with wrong
+    /// content later) and a coalesced rebuild reassigns the slots
+    /// that were holding the now-benched URL — previously they sat
+    /// as blank tiles for the rest of the session.
+    private func recordArtFailure(_ url: URL) {
+        let count = artFetchFailures[url, default: 0] + 1
+        artFetchFailures[url] = count
+        guard count == Self.artFetchFailureCap else { return }
+        visLog("art BENCHED — \(url.lastPathComponent.suffix(40)) after \(count) failures")
+        ImageCache.shared.remove(for: url)
+        // Guarded write: a benched URL whose fetch failed was never
+        // IN `preloaded`, and a no-op @State dictionary write still
+        // invalidates the wall canvas — a 14-URL bench burst produced
+        // 14 back-to-back full redraws (observed 1.57 s stall).
+        if preloaded[url] != nil {
+            preloaded[url] = nil
+        }
+        preloadedIndex.keys.remove(url)
+        // Rebuild only when the benched URL is actually on screen —
+        // benching an off-screen candidate needs no reassignment.
+        // (At launch a burst of dead URLs benched back-to-back and
+        // each scheduled a rebuild: repeated >1 s chooseTiles stalls.)
+        if wallDisplayBox.urls.contains(url) {
+            scheduleRebuildTiles("artBenched", delay: .seconds(2))
         }
     }
 
@@ -871,28 +1093,73 @@ struct ClubVisWindow: View {
     /// concurrency for the bulk pool-warming case.
     @MainActor
     private func downloadMissingPoolArt(allURLs: [URL]) async {
-        let unique = Array(Set(allURLs).filter { preloaded[$0] == nil })
+        let unique = Array(Set(allURLs).filter { url in
+            preloaded[url] == nil
+                && artFetchFailures[url, default: 0] < Self.artFetchFailureCap
+        })
         guard !unique.isEmpty else { return }
         visLog("downloadMissingPoolArt — \(unique.count) URLs to fetch")
-        let maxConcurrent = 6
-        var iter = unique.makeIterator()
-        var fetched = 0
-        var failed = 0
+        // Fetch + decode + cache-store run entirely off the main
+        // actor, and the results commit to `preloaded` ONCE. The
+        // previous per-image commits invalidated the wall canvas per
+        // landed download — a warm burst re-rendered all ~200 tiles
+        // dozens of times (observed as back-to-back ~1.4 s
+        // MAIN-STALLs for the duration of the burst).
+        let results = await Self.fetchArtBatch(urls: unique)
+        var landed: [URL: NSImage] = [:]
+        var failedURLs: [URL] = []
+        for (url, image) in results {
+            if let image { landed[url] = image } else { failedURLs.append(url) }
+        }
+        if !landed.isEmpty {
+            preloaded.merge(landed) { _, new in new }
+            preloadedIndex.keys.formUnion(landed.keys)
+        }
+        for url in failedURLs {
+            recordArtFailure(url)
+        }
+        // Successes reset their failure counters.
+        for url in landed.keys where artFetchFailures[url] != nil {
+            artFetchFailures[url] = nil
+        }
+        visLog("downloadMissingPoolArt done — fetched=\(landed.count) failed=\(failedURLs.count) preloaded=\(preloaded.count)")
+    }
 
-        await withTaskGroup(of: Bool.self) { group in
-            var inflight = 0
-            while inflight < maxConcurrent, let url = iter.next() {
-                group.addTask { @MainActor in await self.fetchAndStore(url) }
-                inflight += 1
-            }
-            for await ok in group {
-                if ok { fetched += 1 } else { failed += 1 }
-                if let next = iter.next() {
-                    group.addTask { @MainActor in await self.fetchAndStore(next) }
+    /// Off-main batch fetch: cap-6 concurrency, per-URL disk-cache
+    /// check, network fetch, decode, and ImageCache store — no
+    /// actor-isolated state touched.
+    nonisolated private static func fetchArtBatch(urls: [URL]) async -> [(URL, NSImage?)] {
+        await withTaskGroup(of: (URL, NSImage?).self) { group in
+            var results: [(URL, NSImage?)] = []
+            var iter = urls.makeIterator()
+            func addNext() {
+                guard let url = iter.next() else { return }
+                group.addTask(priority: .utility) {
+                    if let cached = ImageCache.shared.image(for: url) {
+                        return (url, cached)
+                    }
+                    let start = Date()
+                    do {
+                        let (data, _) = try await Self.artFetchSession.data(from: url)
+                        guard let img = NSImage(data: data) else {
+                            sonosDebugLog("[VIS] art DECODE-FAIL — \(url.lastPathComponent.suffix(40)) bytes=\(data.count) netMs=\(Int(Date().timeIntervalSince(start) * 1000))")
+                            return (url, nil)
+                        }
+                        ImageCache.shared.store(img, for: url)
+                        return (url, img)
+                    } catch {
+                        sonosDebugLog("[VIS] art FETCH-FAIL — \(url.lastPathComponent.suffix(40)) netMs=\(Int(Date().timeIntervalSince(start) * 1000)) error=\(error.localizedDescription)")
+                        return (url, nil)
+                    }
                 }
             }
+            for _ in 0..<6 { addNext() }
+            for await result in group {
+                results.append(result)
+                addNext()
+            }
+            return results
         }
-        visLog("downloadMissingPoolArt done — fetched=\(fetched) failed=\(failed) preloaded=\(preloaded.count)")
     }
 
     /// Pre-fetches each queue item's `albumArtURI` so chooseTiles
@@ -903,12 +1170,29 @@ struct ClubVisWindow: View {
         let urls: [URL] = queueItems.compactMap {
             guard let raw = $0.albumArtURI, !raw.isEmpty else { return nil }
             return URL(string: raw)
-        }.filter { preloaded[$0] == nil }
+        }.filter {
+            preloaded[$0] == nil
+                && artFetchFailures[$0, default: 0] < Self.artFetchFailureCap
+        }
         guard !urls.isEmpty else { return }
-        var fetched = 0
-        for url in urls where await fetchAndStore(url) { fetched += 1 }
-        visLog("downloadQueueArtwork — needed=\(urls.count) fetched=\(fetched)")
-        if fetched > 0 { await rebuildTiles() }
+        // Batch, off-main, ONE preloaded commit — the previous
+        // sequential per-URL loop performed one @State write (and so
+        // one wall-canvas invalidation) per queue item; a 222-item
+        // queue of cache hits stalled main ~1.4 s behind the rebuild
+        // cover.
+        let results = await Self.fetchArtBatch(urls: urls)
+        var landed: [URL: NSImage] = [:]
+        var failedURLs: [URL] = []
+        for (url, image) in results {
+            if let image { landed[url] = image } else { failedURLs.append(url) }
+        }
+        if !landed.isEmpty {
+            preloaded.merge(landed) { _, new in new }
+            preloadedIndex.keys.formUnion(landed.keys)
+        }
+        for url in failedURLs { recordArtFailure(url) }
+        visLog("downloadQueueArtwork — needed=\(urls.count) fetched=\(landed.count)")
+        if !landed.isEmpty { scheduleRebuildTiles("downloadQueueArtwork") }
     }
 
     /// Pre-fetches the now-playing hero art and refreshes the pool
@@ -921,25 +1205,137 @@ struct ClubVisWindow: View {
     /// pool.preferred.first).
     @MainActor
     private func downloadNowPlayingArt() async {
-        guard let url = settledArtURL else { return }
+        guard let url = settledArtURL else {
+            // Track transitions clear the art for a moment. Keep the
+            // previous set through that window so the NEXT match
+            // crossfades old set → new set directly — the immediate
+            // fallback here made every song change detour through
+            // amber (old → fallback → new, two fades). Only a
+            // SUSTAINED no-art state (radio source, art genuinely
+            // absent) resolves to the fallback.
+            if lastMatchedArtURL != nil {
+                lastMatchedArtURL = nil
+                noArtFallbackTask?.cancel()
+                noArtFallbackTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 10_000_000_000)
+                    guard !Task.isCancelled, settledArtURL == nil else { return }
+                    BackOfTheClubDebugState.shared.setMatchedSet(ClubStageSets.fallbackIndex)
+                }
+            }
+            return
+        }
+        noArtFallbackTask?.cancel()
         if preloaded[url] == nil {
             if await fetchAndStore(url) {
                 visLog("downloadNowPlayingArt — cached hero art")
             }
         }
-        await rebuildTiles()
+        // Disk fallback reads detached — a main-actor ImageCache read
+        // here blocked ~1.2 s on the disk queue while the pool build's
+        // detached enumeration + resolution reads held it.
+        var heroImage = preloaded[url]
+        if heroImage == nil {
+            heroImage = await Task.detached(priority: .utility) {
+                ImageCache.shared.image(for: url)
+            }.value
+        }
+        if let image = heroImage {
+            await matchStageSet(url: url, image: image)
+        }
+        scheduleRebuildTiles("downloadNowPlayingArt")
+    }
+
+    /// Derives the stage set from the hero art: chromatic covers
+    /// yield a generated "Cover shades" set (tones use only the
+    /// detected hues); achromatic art resolves to the catalogue
+    /// fallback. Gated to one match per art URL; histogram + peak
+    /// extraction are CPU-bound and run off-main.
+    @MainActor
+    private func matchStageSet(url: URL, image: NSImage) async {
+        guard lastMatchedArtURL != url else { return }
+        // Settle debounce. During a track transition the hero art
+        // flip-flaps (new track's cover, then a stale flip-back,
+        // then the settled cover — observed twice in one second),
+        // and every flip re-lit the room: the lighting appeared to
+        // jump between states. Match only the art that is still the
+        // hero 1.5 s later; superseded requests drop out here.
+        pendingStageMatchURL = url
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        guard pendingStageMatchURL == url else {
+            visLog("stage-set match SUPERSEDED — art=\(url.lastPathComponent.suffix(40))")
+            return
+        }
+        guard lastMatchedArtURL != url else { return }
+        lastMatchedArtURL = url
+        let result = await Task.detached(priority: .utility) {
+            ClubStageSets.match(for: image)
+        }.value
+        // A newer art change may have superseded this match while it
+        // ran — publish only when still current.
+        guard lastMatchedArtURL == url else { return }
+        // Between-songs dip: for a real scheme change outside a
+        // rebuild, the rig fades to dark, the new scheme commits
+        // while dark (crossfade snapped — nothing half-blended when
+        // the lights return), then fades back up. Rebuilds keep
+        // their own black-point path; same-tone matches skip the
+        // theatre and stay lit.
+        let state = BackOfTheClubDebugState.shared
+        let dip = !state.isWallRebuilding
+            && lightingOpacity > 0.5
+            && state.tonesWouldChange(result.index, generated: result.generated)
+        if dip {
+            visLog("lighting DIP — out (1.2s)")
+            withAnimation(.easeInOut(duration: 1.2)) { lightingOpacity = 0.0 }
+            try? await Task.sleep(nanoseconds: 1_300_000_000)
+            guard lastMatchedArtURL == url else { return }
+        }
+        state.setMatchedSet(
+            result.index,
+            generated: result.generated,
+            dominantHue: result.dominantHue,
+            topHues: result.topHues,
+            chromaticFraction: result.chromaticFraction,
+            meanSaturation: result.meanChromaticSaturation,
+            meanBrightness: result.meanChromaticBrightness)
+        if dip {
+            state.snapFadeToTarget()
+            visLog("lighting DIP — up (2.0s)")
+            withAnimation(.easeInOut(duration: 2.0)) { lightingOpacity = 1.0 }
+        }
+        let set = result.generated ?? ClubStageSets.sets[result.index]
+        let toneHues = result.topHues
+            .map { String(format: "%.0f", $0) }.joined(separator: ",")
+        visLog("stage-set match — set=\(set.name) toneHues=[\(toneHues)]° chromatic=\(String(format: "%.3f", result.chromaticFraction)) art=\(url.lastPathComponent.suffix(40))")
     }
 
     #if DEBUG
     private func publishDebugState(pool: TilePool) {
+        let debugStart = Date()
+        defer {
+            let ms = Int(Date().timeIntervalSince(debugStart) * 1000)
+            if ms > 50 { visLog("publishDebugState — ms=\(ms)") }
+        }
         let entries = playHistoryManager.entries
         var entryByURL: [String: (title: String, artist: String, album: String)] = [:]
         var entryByURLFull: [String: (title: String, artist: String, album: String, genre: String)] = [:]
         for entry in entries {
-            guard let raw = entry.albumArtURI, !raw.isEmpty else { continue }
-            if entryByURL[raw] == nil {
-                entryByURL[raw] = (entry.title, entry.artist, entry.album)
-                entryByURLFull[raw] = (entry.title, entry.artist, entry.album, entry.genre)
+            // Index by the raw stored URI AND the recovered
+            // Suno/TIDAL cover URL — the pool carries the recovered
+            // form for direct-URL tracks (stripped DIDL), which
+            // previously matched nothing here and rendered pool rows
+            // with a URL but "—" for every metadata column.
+            var keys: [String] = []
+            if let raw = entry.albumArtURI, !raw.isEmpty { keys.append(raw) }
+            if let source = entry.sourceURI {
+                if let uuid = SunoCatalog.uuid(fromURI: source) {
+                    keys.append(SunoCatalog.coverURL(forUUID: uuid))
+                } else if let art = TidalCatalog.art(forURI: source) {
+                    keys.append(art)
+                }
+            }
+            for key in keys where entryByURL[key] == nil {
+                entryByURL[key] = (entry.title, entry.artist, entry.album)
+                entryByURLFull[key] = (entry.title, entry.artist, entry.album, entry.genre)
             }
         }
         var genreByArtist: [String: String] = [:]
@@ -972,6 +1368,7 @@ struct ClubVisWindow: View {
             }
         }
         appendRows(pool.preferred, tier: "preferred")
+        appendRows(pool.artistPhotos, tier: "artistPhoto")
         appendRows(pool.genreTier1, tier: "genre1")
         appendRows(pool.genreTier2, tier: "genre2")
         appendRows(pool.genreTier3, tier: "genre3")
@@ -1033,7 +1430,67 @@ struct ClubVisWindow: View {
     /// Radio URI schemes are excluded at every step. URLs are
     /// deduplicated across both tiers — if the pool ends up shorter
     /// than the slot count, the deficit slots stay blank.
-    private func chooseTiles() -> TilePool {
+    /// Snapshot of everything `computeTilePool` needs — captured on
+    /// the main actor, consumed off it. Pool computation walks the
+    /// full ~10k-entry history several times (>1 s); running it
+    /// detached keeps rebuilds off the render loop.
+    private struct ChooseTilesInput {
+        let entries: [PlayHistoryEntry]
+        let historySource: VisHistorySource
+        let memberRoomNames: Set<String>
+        let queueItems: [QueueItem]
+        let trackMetadata: TrackMetadata
+        let matchMode: VisGenreMatchMode
+        let benched: Set<URL>
+        let artistInfo: ArtistInfo?
+        let sprinklePercent: Double
+        let settledArtURL: URL?
+        let pinnedAmbientValid: Bool
+        let pinnedAmbientSample: [URL]
+        /// Periodic ImageCache URL sample (see cacheBackfillSample).
+        let cacheBackfillSample: [URL]
+        /// One-shot TIDAL blob→art snapshot — per-entry
+        /// TidalCatalog.art(forURI:) calls copy the whole
+        /// UserDefaults dict each time and contend the preferences
+        /// lock main's @AppStorage reads take.
+        let tidalArtByBlob: [String: String]
+    }
+
+    /// Builds the off-main input snapshot. Main-actor: reads @State
+    /// and observed objects.
+    private func makeChooseTilesInput() -> ChooseTilesInput {
+        ChooseTilesInput(
+            entries: playHistoryManager.entries,
+            historySource: VisHistorySource.current,
+            memberRoomNames: Set(
+                (group?.members ?? [])
+                    .map { $0.roomName }
+                    .filter { !$0.isEmpty }
+            ),
+            queueItems: queueHolder.vm?.queueItems ?? [],
+            trackMetadata: trackMetadata,
+            matchMode: VisGenreMatchMode.current,
+            benched: Set(artFetchFailures.filter { $0.value >= Self.artFetchFailureCap }.keys),
+            artistInfo: nowPlayingArtistInfo,
+            sprinklePercent: visRandomSprinklePercent,
+            settledArtURL: settledArtURL,
+            pinnedAmbientValid: pinnedAmbientForWallId == wallId,
+            pinnedAmbientSample: pinnedAmbientSample,
+            cacheBackfillSample: cacheBackfillSample,
+            tidalArtByBlob: TidalCatalog.artByBlobSnapshot()
+        )
+    }
+
+    /// Pure pool computation — no @State access; safe off-main.
+    /// Returns the pool plus a fresh ambient sample when one was
+    /// generated (caller commits it to the pinned @State on main).
+    /// `nonisolated` is LOAD-BEARING: the View struct's MainActor
+    /// inference otherwise isolates this static too, and the
+    /// Task.detached wrapper hops straight back to the main actor —
+    /// the "off-main" compute ran ON main (observed: 1.7-1.9 s
+    /// MAIN-STALLs exactly spanning each chooseTiles OFF-MAIN log).
+    nonisolated private static func computeTilePool(_ input: ChooseTilesInput) -> (pool: TilePool, freshAmbient: [URL]?) {
+        let trackMetadata = input.trackMetadata
         // Per `UDKey.visHistorySource`: ".group" (default) restricts
         // history to plays whose `groupName` includes ANY room
         // currently in the active group — not the exact group-name
@@ -1045,17 +1502,13 @@ struct ClubVisWindow: View {
         // Auto-fallback: if the room-match filter still yields too
         // few entries to feed a wall (< minGroupEntries), bump up
         // to all-history rather than starve.
-        let allEntries = playHistoryManager.entries
+        let allEntries = input.entries
         let minGroupEntries = 200
         let entries: [PlayHistoryEntry] = {
-            switch VisHistorySource.current {
+            switch input.historySource {
             case .all: return allEntries
             case .group:
-                let memberRoomNames = Set(
-                    (group?.members ?? [])
-                        .map { $0.roomName }
-                        .filter { !$0.isEmpty }
-                )
+                let memberRoomNames = input.memberRoomNames
                 guard !memberRoomNames.isEmpty else { return allEntries }
                 let filtered = allEntries.filter { entry in
                     guard !entry.groupName.isEmpty else { return false }
@@ -1068,15 +1521,15 @@ struct ClubVisWindow: View {
                     return false
                 }
                 if filtered.count < minGroupEntries {
-                    visLog("group filter rooms=\(memberRoomNames) yielded \(filtered.count) entries (< \(minGroupEntries)) — falling back to all (\(allEntries.count))")
+                    sonosDebugLog("[VIS] group filter rooms=\(memberRoomNames) yielded \(filtered.count) entries (< \(minGroupEntries)) — falling back to all (\(allEntries.count))")
                     return allEntries
                 }
                 return filtered
             }
         }()
-        let queueItems = queueHolder.vm?.queueItems ?? []
+        let queueItems = input.queueItems
         let isQueueMode = trackMetadata.isQueueSource
-        let mode = VisGenreMatchMode.current
+        let mode = input.matchMode
 
         func usableArt(_ raw: String?, sourceURI: String?) -> URL? {
             if let s = sourceURI, URIPrefix.isRadio(s) { return nil }
@@ -1089,7 +1542,8 @@ struct ClubVisWindow: View {
             if let s = sourceURI {
                 if let uuid = SunoCatalog.uuid(fromURI: s) {
                     effective = SunoCatalog.coverURL(forUUID: uuid)
-                } else if let art = TidalCatalog.art(forURI: s) {
+                } else if let blob = TidalCatalog.key(fromURI: s),
+                          let art = input.tidalArtByBlob[blob] {
                     effective = art
                 }
             }
@@ -1098,6 +1552,9 @@ struct ClubVisWindow: View {
             // No cache gate — pool now includes any valid art URL,
             // and `downloadMissingPoolArt()` (post-rebuildTiles)
             // backfills `preloaded` for anything not yet cached.
+            // Benched URLs (fetch attempts exhausted) are the one
+            // exclusion — a slot assigned one renders blank forever.
+            guard !input.benched.contains(url) else { return nil }
             return url
         }
 
@@ -1109,10 +1566,18 @@ struct ClubVisWindow: View {
             if genreByArtist[key] == nil { genreByArtist[key] = entry.genre }
         }
 
+        // Art URL per entry, computed ONCE. `usableArt` costs a URL
+        // parse plus Suno/TIDAL catalog lookups per call; the tier /
+        // sprinkle / ambient passes below previously re-ran it over
+        // the full history each (4 × ~10k entries ≈ the >1 s
+        // main-thread stall behind every wall rebuild).
+        let entryArt: [(entry: PlayHistoryEntry, url: URL)] = entries.compactMap { entry in
+            usableArt(entry.albumArtURI, sourceURI: entry.sourceURI).map { (entry, $0) }
+        }
+
         // Artist → ordered, deduped art URLs from history.
         var artByArtist: [String: [URL]] = [:]
-        for entry in entries {
-            guard let url = usableArt(entry.albumArtURI, sourceURI: entry.sourceURI) else { continue }
+        for (entry, url) in entryArt {
             let key = entry.artist.lowercased()
             if artByArtist[key]?.contains(url) == true { continue }
             artByArtist[key, default: []].append(url)
@@ -1192,6 +1657,7 @@ struct ClubVisWindow: View {
         var random: [URL] = []
 
         func addTo(_ list: inout [URL], _ url: URL) {
+            guard !input.benched.contains(url) else { return }
             if seen.insert(url).inserted { list.append(url) }
         }
 
@@ -1205,7 +1671,7 @@ struct ClubVisWindow: View {
         // gate — `downloadNowPlayingArt()` ensures `preloaded` has
         // it before the next rebuild.
         var heroURL: URL? = nil
-        if let s = settledArtURL { heroURL = s }
+        if let s = input.settledArtURL { heroURL = s }
         else if let raw = trackMetadata.albumArtURI, !raw.isEmpty,
                 let u = URL(string: raw),
                 !URIPrefix.isRadio(trackMetadata.trackURI ?? "") {
@@ -1219,7 +1685,19 @@ struct ClubVisWindow: View {
             // first 3×3 (pinned in wholesaleFill) always show real
             // queue covers. Dedup'd — same album appearing on N
             // queue tracks contributes ONE preferred URL.
-            for item in queueItems {
+            // Start at the track AFTER the one now playing —
+            // trackNumber is the 1-based queue position, so index
+            // trackNumber is the next track. Queue art on the wall
+            // then previews what is coming rather than replaying the
+            // queue's first covers.
+            let upcoming: [QueueItem]
+            if queueItems.isEmpty {
+                upcoming = queueItems
+            } else {
+                let start = min(max(trackMetadata.trackNumber, 0), queueItems.count - 1)
+                upcoming = Array(queueItems[start...]) + Array(queueItems[..<start])
+            }
+            for item in upcoming {
                 guard let url = usableArt(item.albumArtURI, sourceURI: nil) else { continue }
                 addTo(&preferred, url)
             }
@@ -1232,7 +1710,7 @@ struct ClubVisWindow: View {
             let queueArtistKeys = Set(queueItems.map { $0.artist.lowercased() })
             for artistKey in queueArtistKeys {
                 guard let arts = artByArtist[artistKey] else { continue }
-                for url in arts {
+                for url in arts where !input.benched.contains(url) {
                     if seen.insert(url).inserted { similarArtists.append(url) }
                 }
             }
@@ -1245,8 +1723,7 @@ struct ClubVisWindow: View {
         // Genre tiers: each entry goes into the tier matching its
         // BEST (lowest-index) top-genre. URLs already in `preferred`
         // are skipped via the `seen` set.
-        for entry in entries {
-            guard let url = usableArt(entry.albumArtURI, sourceURI: entry.sourceURI) else { continue }
+        for (entry, url) in entryArt {
             guard !seen.contains(url) else { continue }
             guard let tier = bestTier(entry) else { continue }
             switch tier {
@@ -1257,15 +1734,38 @@ struct ClubVisWindow: View {
             }
         }
 
+        // Artist About photos — same gallery source the About panel
+        // renders (`ArtistInfo.imageURLs`: Wikipedia media list +
+        // Last.fm primary; single `imageURL` fallback for cached
+        // pre-gallery entries). Built AHEAD of the random sprinkle so
+        // the sprinkle/ambient/backfill passes below skip these URLs
+        // via `seen`. Capped at 5, deduped by underlying file identity
+        // (Wikipedia serves one photo at several thumbnail sizes).
+        // Consumed by 1×1 slots only — see `pickURL`.
+        var artistPhotos: [URL] = []
+        if let info = input.artistInfo {
+            var photoCandidates: [String] = []
+            if let list = info.imageURLs, !list.isEmpty {
+                photoCandidates = list
+            } else if let single = info.imageURL {
+                photoCandidates = [single]
+            }
+            var photoIdentities = Set<String>()
+            for raw in photoCandidates
+            where photoIdentities.insert(MusicMetadataService.imageIdentityKey(raw)).inserted {
+                guard let url = URL(string: raw) else { continue }
+                addTo(&artistPhotos, url)
+                if artistPhotos.count == 5 { break }
+            }
+        }
+
         // Random sprinkle: entries with no genre match. Sized as a
         // percentage of the total cell count.
         let totalSlots = ClubVisWallView.cols * ClubVisWallView.rows
-        let sprinkleTarget = max(0, Int((Double(totalSlots) * visRandomSprinklePercent / 100.0).rounded()))
+        let sprinkleTarget = max(0, Int((Double(totalSlots) * input.sprinklePercent / 100.0).rounded()))
         if sprinkleTarget > 0 {
             var candidates: [URL] = []
-            for entry in entries {
-                guard let url = usableArt(entry.albumArtURI, sourceURI: entry.sourceURI) else { continue }
-                guard !seen.contains(url) else { continue }
+            for (_, url) in entryArt where !seen.contains(url) {
                 candidates.append(url)
             }
             for url in candidates.shuffled().prefix(sprinkleTarget) {
@@ -1278,16 +1778,15 @@ struct ClubVisWindow: View {
         // so the wall doesn't churn on every track change just
         // because chooseTiles ran again with a different shuffle.
         var ambient: [URL] = []
-        if pinnedAmbientForWallId == wallId, !pinnedAmbientSample.isEmpty {
-            for url in pinnedAmbientSample {
+        var freshAmbient: [URL]? = nil
+        if input.pinnedAmbientValid, !input.pinnedAmbientSample.isEmpty {
+            for url in input.pinnedAmbientSample where !input.benched.contains(url) {
                 if seen.insert(url).inserted { ambient.append(url) }
             }
-            visLog("ambient REUSED — pinned=\(pinnedAmbientSample.count) usable=\(ambient.count) wallId=\(wallId)")
+            sonosDebugLog("[VIS] ambient REUSED — pinned=\(input.pinnedAmbientSample.count) usable=\(ambient.count)")
         } else {
             var ambientCandidates: [URL] = []
-            for entry in entries {
-                guard let url = usableArt(entry.albumArtURI, sourceURI: entry.sourceURI) else { continue }
-                guard !seen.contains(url) else { continue }
+            for (_, url) in entryArt where !seen.contains(url) {
                 ambientCandidates.append(url)
             }
             for url in ambientCandidates.shuffled().prefix(800) {
@@ -1295,9 +1794,8 @@ struct ClubVisWindow: View {
                     ambient.append(url)
                 }
             }
-            pinnedAmbientSample = ambient
-            pinnedAmbientForWallId = wallId
-            visLog("ambient FRESH — generated=\(ambient.count) wallId=\(wallId) (prev pinId=\(pinnedAmbientForWallId))")
+            freshAmbient = ambient
+            sonosDebugLog("[VIS] ambient FRESH — generated=\(ambient.count)")
         }
 
         // Cache-fallback tier — enumerate URLs in ImageCache that
@@ -1306,7 +1804,7 @@ struct ClubVisWindow: View {
         // doesn't balloon. Excludes URLs already in `seen` (the
         // dedup set built up during the tier passes above).
         var cacheBackfill: [URL] = []
-        let candidates = ImageCache.shared.sampledCachedURLs(count: 1200)
+        let candidates = input.cacheBackfillSample
         for url in candidates {
             if seen.insert(url).inserted {
                 cacheBackfill.append(url)
@@ -1314,9 +1812,10 @@ struct ClubVisWindow: View {
             }
         }
 
-        return TilePool(
+        return (TilePool(
             preferred: preferred,
             similarArtists: similarArtists,
+            artistPhotos: artistPhotos,
             genreTier1: tier1,
             genreTier2: tier2,
             genreTier3: tier3,
@@ -1324,7 +1823,7 @@ struct ClubVisWindow: View {
             ambient: ambient,
             cacheBackfill: cacheBackfill,
             isQueueMode: isQueueMode
-        )
+        ), freshAmbient)
     }
 
     /// Imperative wall rebuild — fade out, swap layoutSeed/wallId,
@@ -1392,6 +1891,7 @@ struct ClubVisWindow: View {
         config.maxLargeNeighbours = s.packerMaxLargeNeighbours
         config.maxLargeComponent = s.packerMaxLargeComponent
         #endif
+        let packStart = Date()
         let newSlots = WallSlotPacker.pack(seed: newSeed,
                                             cols: ClubVisWallView.cols,
                                             rows: ClubVisWallView.rows,
@@ -1399,6 +1899,8 @@ struct ClubVisWindow: View {
                                             originX: ClubVisWallView.originX,
                                             originY: ClubVisWallView.originY,
                                             config: config)
+        let packMs = Int(Date().timeIntervalSince(packStart) * 1000)
+        if packMs > 20 { visLog("rebuild step — seq=\(seqId) pack ms=\(packMs)") }
 
         // Priority URLs = front of the pool's display order. The
         // wholesaleFill walks slots largest-first and pulls from
@@ -1454,6 +1956,15 @@ struct ClubVisWindow: View {
         // calls wholesaleFill with slots=0. Calling recomputeSlots
         // here ensures the new WallView opens with up-to-date slots.
         recomputeSlots()
+        // Black point — the cover is opaque. Commit the new lighting
+        // now (deferred match + fade snap) so the wall fades back in
+        // already lit by the new scheme; the tone crossfade path is
+        // for track changes without a rebuild.
+        BackOfTheClubDebugState.shared.commitLightingAtRebuildBlackPoint()
+        // Staged reveal: the wall comes back unlit; the rig fades in
+        // after the cover has fully lifted. Direct write — the cover
+        // is opaque, nothing visible changes here.
+        lightingOpacity = 0.0
         wallId = newSeed
         try? await Task.sleep(nanoseconds: 500_000_000)
         // Cover fades OUT, revealing the freshly-rebuilt wall.
@@ -1467,6 +1978,9 @@ struct ClubVisWindow: View {
         // 3 s, allowing a second rebuild to interrupt the fade-in.
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         visLog("rebuild step — seq=\(seqId) cover fade-OUT END (elapsedMs=\(Int(Date().timeIntervalSince(coverOutStart)*1000)) coverOpacity=\(String(format: "%.2f", wallCoverOpacity)))")
+        // Wall is up — bring the lights on.
+        visLog("rebuild step — seq=\(seqId) lighting fade-IN start (2.5s)")
+        withAnimation(.easeInOut(duration: 2.5)) { lightingOpacity = 1.0 }
         tracksSinceRebuild = 0
         lastWallRebuildAt = Date()
         lastRebuildEndAt = Date()
@@ -1518,6 +2032,32 @@ struct ClubVisWindow: View {
 
 // MARK: - Tiny holders
 
+/// Reference box the wall view writes its on-screen URL set into.
+/// Plain class (not ObservableObject): the parent only READS it at
+/// trim time — display updates must not re-render the parent.
+final class WallDisplayBox {
+    var urls: Set<URL> = []
+}
+
+/// Live index of `preloaded`'s keys, maintained by the parent. The
+/// wall view's long-lived tasks (swap loop, fade commits) capture the
+/// view STRUCT at task start, so its `let preloaded` snapshot goes
+/// stale — cache-eligibility gates evaluated in those tasks must
+/// read through this reference instead (a stale snapshot made every
+/// swap candidate look uncached: zero swaps, static wall).
+final class PreloadedIndex {
+    var keys: Set<URL> = []
+}
+
+/// Live pool reference for the same reason as PreloadedIndex: the
+/// swap loop's captured `let pool` is the launch-time (empty) pool,
+/// so swap/seed/hero candidate selection starved. The rebuild storm
+/// used to mask this by recreating the wall view (fresh capture)
+/// every few minutes.
+final class TilePoolBox {
+    fileprivate var pool: TilePool = .empty
+}
+
 /// `@StateObject`-friendly wrapper so `QueueViewModel` can be built
 /// lazily once `SonosGroup` is in hand. Building inline at
 /// `@StateObject` init would race against environment injection.
@@ -1568,6 +2108,12 @@ private struct TilePool: Equatable {
     /// for mid/small tiles that should still feel "on-artist"
     /// without repeating the literal queue album cover.
     let similarArtists: [URL]
+    /// Current artist's About-panel photo gallery (Wikipedia media
+    /// list + Last.fm primary via `ArtistInfo.imageURLs`), capped at
+    /// 5. Candidates for 1×1 slots ONLY — never offered to 2×2/3×3/
+    /// 4×4 slots or the hero. Consumed ahead of the random-sprinkle
+    /// tier at every 1×1 selection point.
+    let artistPhotos: [URL]
     let genreTier1: [URL]
     let genreTier2: [URL]
     let genreTier3: [URL]
@@ -1580,7 +2126,7 @@ private struct TilePool: Equatable {
     let isQueueMode: Bool
 
     static let empty = TilePool(
-        preferred: [], similarArtists: [],
+        preferred: [], similarArtists: [], artistPhotos: [],
         genreTier1: [], genreTier2: [], genreTier3: [],
         random: [], ambient: [], cacheBackfill: [], isQueueMode: false)
 }
@@ -1635,6 +2181,18 @@ private struct ClubVisWallView: View {
     /// running one creates a visible mid-fade-reveal artifact when
     /// the cover lifts.
     let coverOpacity: Double
+    /// Reported-up set of URLs currently on screen (slot assignments
+    /// + both ends of in-flight fades). The parent's `preloaded`
+    /// trim excludes these — evicting a displayed image blanks its
+    /// tile (the canvas draws from `preloaded`) and triggers a
+    /// mass-repair fade storm on the next diff.
+    let displayBox: WallDisplayBox
+    /// Live cache-key index — cache gates in long-lived tasks MUST
+    /// read this, never the `preloaded` let (stale struct capture).
+    let preloadedIndex: PreloadedIndex
+    /// Live pool — task contexts MUST read this, never the `pool`
+    /// let (stale struct capture; see TilePoolBox).
+    let poolBox: TilePoolBox
 
     /// 25 cols × 14 rows of 80 pt cells. 1080 / 14 ≈ 77 → cellSize 80
     /// with a non-uniform negative origin offset so the grid total
@@ -1650,6 +2208,9 @@ private struct ClubVisWallView: View {
 
     @State private var slotURLs: [Int: URL] = [:]
     @State private var fades: [Int: FadeState] = [:]
+    /// Slots holding the guaranteed artist About photos — selected by
+    /// `selectPhotoSlots`, protected from the periodic 1×1 rotation.
+    @State private var photoSlotIndices: [Int] = []
     /// First-fill marker. The original wholesale-vs-diff branch used
     /// `slotURLs.isEmpty && fades.isEmpty`, but a hero swap fired from
     /// the parent before `.task` runs would put one entry in `fades`,
@@ -1700,33 +2261,100 @@ private struct ClubVisWallView: View {
     /// and drawing via `Image(decorative: cgImage, …)` bypasses the
     /// `NSImage` path entirely.
     @State private var cgImageCache = CGImageCache()
+    /// Bumped (coalesced) when an off-main tile-bitmap render lands —
+    /// the static canvas keys a repaint off it.
+    @State private var bitmapVersion = 0
+    @State private var bitmapVersionBumpTask: Task<Void, Never>?
 
     /// Reference-typed cache so per-tick reads/fills mutate in-place
     /// without triggering SwiftUI re-renders (the `@State` only tracks
     /// the wrapping reference). Indexed by the tile-pool URL key.
+    /// Pre-scaled, decoded tile bitmaps keyed by (pixel size, url).
+    /// The draw pass previously decoded + scaled ~200 full-resolution
+    /// covers per canvas invalidation (measured ~1.5 s on every hero
+    /// swap). Now a miss kicks an off-main render and returns nil —
+    /// the tile paints on the next invalidation once ready — and the
+    /// canvas only ever blits display-sized decoded bitmaps.
+    /// Thread-safe: draw reads on main, renders land detached.
     fileprivate final class CGImageCache {
-        private var cache: [URL: CGImage] = [:]
+        private let lock = NSLock()
+        private var cache: [String: CGImage] = [:]
+        private var rendering: Set<String> = []
+        /// Called (main actor, coalesced by the owner) when a render
+        /// lands so the static canvas re-evaluates.
+        var onRenderLanded: (@MainActor () -> Void)?
 
-        /// Returns the cached `CGImage` for `url`, deriving and
-        /// inserting it from `nsImage` on a miss. Subsequent calls are
-        /// O(1) dictionary lookups.
-        func cgImage(for url: URL, nsImage: NSImage) -> CGImage? {
-            if let cached = cache[url] { return cached }
-            var rect = CGRect(origin: .zero, size: nsImage.size)
-            guard let cg = nsImage.cgImage(forProposedRect: &rect, context: nil, hints: nil) else {
-                return nil
+        private func key(_ url: URL, _ px: Int) -> String { "\(px)|\(url.absoluteString)" }
+
+        /// Ready bitmap or nil; nil kicks one background render per
+        /// (url, px).
+        func cgImage(for url: URL, nsImage: NSImage, px: Int) -> CGImage? {
+            let k = key(url, px)
+            lock.lock()
+            if let hit = cache[k] { lock.unlock(); return hit }
+            let inFlight = rendering.contains(k)
+            if !inFlight { rendering.insert(k) }
+            lock.unlock()
+            if !inFlight {
+                Task.detached(priority: .userInitiated) { [weak self] in
+                    guard let self else { return }
+                    let rendered = Self.renderBitmap(nsImage, px: px)
+                    self.lock.lock()
+                    if let rendered { self.cache[k] = rendered }
+                    self.rendering.remove(k)
+                    let callback = self.onRenderLanded
+                    self.lock.unlock()
+                    if rendered != nil, let callback {
+                        await MainActor.run { callback() }
+                    }
+                }
             }
-            cache[url] = cg
-            return cg
+            return nil
         }
 
-        /// Drops entries whose URLs are no longer in the live tile
-        /// pool. Called when the pool shrinks so the cache can't grow
-        /// without bound across long sessions / many track changes.
+        /// Synchronous render for callers already off-main.
+        nonisolated func warm(url: URL, nsImage: NSImage, px: Int) {
+            let k = key(url, px)
+            lock.lock()
+            let exists = cache[k] != nil || rendering.contains(k)
+            if !exists { rendering.insert(k) }
+            lock.unlock()
+            guard !exists else { return }
+            let rendered = Self.renderBitmap(nsImage, px: px)
+            lock.lock()
+            if let rendered { cache[k] = rendered }
+            rendering.remove(k)
+            lock.unlock()
+        }
+
+        /// Aspect-preserving decode + downscale to `px` on the SHORT
+        /// side (tiles are square, drawn aspect-fill).
+        private static func renderBitmap(_ image: NSImage, px: Int) -> CGImage? {
+            guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+            let w = CGFloat(cg.width), h = CGFloat(cg.height)
+            guard w > 0, h > 0 else { return nil }
+            let scale = min(1, CGFloat(px) / min(w, h))
+            let tw = max(1, Int((w * scale).rounded()))
+            let th = max(1, Int((h * scale).rounded()))
+            guard let ctx = CGContext(data: nil, width: tw, height: th,
+                                      bitsPerComponent: 8, bytesPerRow: tw * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+            ctx.interpolationQuality = .high
+            ctx.draw(cg, in: CGRect(x: 0, y: 0, width: tw, height: th))
+            return ctx.makeImage()
+        }
+
+        /// Drops entries whose URLs left the live pool.
         func prune(keepingURLs keep: Set<URL>) {
-            for key in cache.keys where !keep.contains(key) {
-                cache.removeValue(forKey: key)
+            lock.lock()
+            for k in cache.keys {
+                let urlPart = String(k.drop(while: { $0 != "|" }).dropFirst())
+                if let url = URL(string: urlPart), !keep.contains(url) {
+                    cache.removeValue(forKey: k)
+                }
             }
+            lock.unlock()
         }
     }
 
@@ -1764,15 +2392,17 @@ private struct ClubVisWallView: View {
                 let p = FadeState.eased(frac)
                 return (1.0 - p, p)
             case .blackHold(let out, let hold, let fadeIn):
+                // Eased ramps on both segments — the previous linear
+                // ramps had a visible kink at each end of the dip.
                 if out > 0, elapsed <= out {
-                    return (1.0 - elapsed / out, 0)
+                    return (1.0 - FadeState.eased(elapsed / out), 0)
                 }
                 if elapsed <= out + hold {
                     return (0, 0)
                 }
                 let inElapsed = elapsed - out - hold
                 return fadeIn > 0
-                    ? (0, min(1.0, inElapsed / fadeIn))
+                    ? (0, FadeState.eased(inElapsed / fadeIn))
                     : (0, 1)
             }
         }
@@ -1784,47 +2414,89 @@ private struct ClubVisWallView: View {
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
+        // Two-layer composite. The STATIC canvas draws every settled
+        // tile and re-renders only on a state change (no timeline);
+        // the FADE overlay ticks at 24 fps and draws ONLY the slots
+        // currently fading. The previous single canvas redrew all
+        // 200+ tiles every tick whenever ANY fade ran — measured as
+        // the jank on wall change / hero fade / photo placement
+        // (scrolling text, on its own cheap timeline, stayed smooth,
+        // which is what isolated the per-tick tile cost).
+        ZStack {
             Canvas { ctx, _ in
-                #if DEBUG
-                BackOfTheClubDebugState.shared.recordWallFrame()
-                #endif
-                for (i, slot) in slots.enumerated() {
+                // Dependency anchor: bumped (coalesced) when an
+                // off-main bitmap render lands, so newly ready tiles
+                // paint on the next evaluation.
+                _ = bitmapVersion
+                for (i, slot) in slots.enumerated() where fades[i] == nil {
                     // 1 pt inset — the back wall packs posters tightly
                     // with hairline gaps. Larger insets (the previous
                     // 4 pt) read as a moodboard, not a back wall.
                     let rect = slot.rect.insetBy(dx: 1, dy: 1)
-                    if let fade = fades[i] {
-                        let frac = (t - fade.startTime) / fade.duration
-                        let (oldOp, newOp) = fade.opacities(at: frac)
-                        if oldOp > 0,
-                           let oldURL = fade.oldURL,
-                           let oldImg = preloaded[oldURL],
-                           let oldCG = cgImageCache.cgImage(for: oldURL, nsImage: oldImg) {
-                            var oldCtx = ctx
-                            oldCtx.opacity = oldOp
-                            oldCtx.draw(Image(decorative: oldCG, scale: 1, orientation: .up), in: rect)
-                        }
-                        if newOp > 0,
-                           let newURL = fade.newURL,
-                           let newImg = preloaded[newURL],
-                           let newCG = cgImageCache.cgImage(for: newURL, nsImage: newImg) {
-                            var newCtx = ctx
-                            newCtx.opacity = newOp
-                            newCtx.draw(Image(decorative: newCG, scale: 1, orientation: .up), in: rect)
-                        }
-                    } else if let url = slotURLs[i],
-                              let img = preloaded[url],
-                              let cg = cgImageCache.cgImage(for: url, nsImage: img) {
+                    if let url = slotURLs[i],
+                       let img = preloaded[url],
+                       let cg = cgImageCache.cgImage(for: url, nsImage: img,
+                                                     px: slot.sizeClass * 160) {
                         ctx.draw(Image(decorative: cg, scale: 1, orientation: .up), in: rect)
                     }
                 }
             }
             .frame(width: ClubVisWindow.logicalWidth, height: ClubVisWindow.logicalHeight)
+
+            if !fades.isEmpty {
+                TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { timeline in
+                    let t = timeline.date.timeIntervalSinceReferenceDate
+                    Canvas { ctx, _ in
+                        #if DEBUG
+                        BackOfTheClubDebugState.shared.recordWallFrame()
+                        #endif
+                        for (i, fade) in fades {
+                            guard slots.indices.contains(i) else { continue }
+                            let rect = slots[i].rect.insetBy(dx: 1, dy: 1)
+                            // Opaque black base: the static layer
+                            // skips fading slots, and the blackHold
+                            // dip must read black, not whatever sits
+                            // behind the wall.
+                            ctx.fill(Path(rect), with: .color(.black))
+                            let frac = (t - fade.startTime) / fade.duration
+                            let (oldOp, newOp) = fade.opacities(at: frac)
+                            if oldOp > 0,
+                               let oldURL = fade.oldURL,
+                               let oldImg = preloaded[oldURL],
+                               let oldCG = cgImageCache.cgImage(for: oldURL, nsImage: oldImg,
+                                                                px: slots[i].sizeClass * 160) {
+                                var oldCtx = ctx
+                                oldCtx.opacity = oldOp
+                                oldCtx.draw(Image(decorative: oldCG, scale: 1, orientation: .up), in: rect)
+                            }
+                            if newOp > 0,
+                               let newURL = fade.newURL,
+                               let newImg = preloaded[newURL],
+                               let newCG = cgImageCache.cgImage(for: newURL, nsImage: newImg,
+                                                                px: slots[i].sizeClass * 160) {
+                                var newCtx = ctx
+                                newCtx.opacity = newOp
+                                newCtx.draw(Image(decorative: newCG, scale: 1, orientation: .up), in: rect)
+                            }
+                        }
+                    }
+                    .frame(width: ClubVisWindow.logicalWidth, height: ClubVisWindow.logicalHeight)
+                }
+            }
         }
         .clipped()
         .task {
+            // Coalesced repaint poke: renders land in bursts (a
+            // wholesale fill kicks ~200); one bump per 100 ms.
+            cgImageCache.onRenderLanded = {
+                if bitmapVersionBumpTask == nil {
+                    bitmapVersionBumpTask = Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 100_000_000)
+                        bitmapVersion &+= 1
+                        bitmapVersionBumpTask = nil
+                    }
+                }
+            }
             assignInitialSlots()
             startSwapLoop()
         }
@@ -1834,12 +2506,25 @@ private struct ClubVisWallView: View {
             // cache only grows across a session; with it cumulative
             // memory tracks the parent's tile-pool retention policy.
             cgImageCache.prune(keepingURLs: Set(preloaded.keys))
+            // A hero swap deferred on missing art fires as soon as
+            // the image lands, so the anchor crossfades properly
+            // instead of popping.
+            if let pending = pendingHeroURL, preloaded[pending] != nil,
+               !rebuildInProgress {
+                triggerNowPlayingHeroSwap()
+            }
         }
         .onChange(of: pool) {
             // Skip when a rebuild is in flight — the cover fade
             // would otherwise reveal tile fades happening behind it.
             // Settle window covers post-rebuild churn the same way.
             if rebuildInProgress { return }
+            // Guaranteed artist photos are exempt from the settle
+            // window: at launch the wall fills from a photos-empty
+            // pool and the gallery arrives seconds later, inside the
+            // window — waiting for the next general diff left the
+            // wall photo-less until the next track change.
+            placeArtistPhotos()
             if Date().timeIntervalSince(lastWholesaleAt) < Self.settleSeconds {
                 return
             }
@@ -1890,9 +2575,15 @@ private struct ClubVisWallView: View {
             if nowRebuilding {
                 let n = fades.count
                 fades.removeAll()
+                syncDisplayBox()
                 visLog("wallView — rebuild=true, cleared \(n) in-flight fades")
             } else {
                 visLog("wallView — rebuild=false, swap loop resumes")
+                // Guaranteed artist photos: pool changes arriving
+                // DURING the rebuild return early from the pool
+                // handler, and the fresh wall may have filled before
+                // the gallery-carrying pool landed — re-place now.
+                placeArtistPhotos()
             }
         }
         .onAppear {
@@ -1952,10 +2643,11 @@ private struct ClubVisWallView: View {
     }
 
     private func wholesaleFill() {
-        defer { publishSlotDebug() }
+        defer { publishSlotDebug(); syncDisplayBox() }
         visLog("wholesaleFill ENTER — slots=\(slots.count) rebuilding=\(BackOfTheClubDebugState.shared.isWallRebuilding)")
         var preferredQ = pool.preferred
         var similarArtistsQ = pool.similarArtists
+        var artistPhotosQ = pool.artistPhotos
         var t1Q = pool.genreTier1
         var t2Q = pool.genreTier2
         var t3Q = pool.genreTier3
@@ -1980,20 +2672,43 @@ private struct ClubVisWallView: View {
         // fade crossfaded the anchor to the correct URL — visible as
         // an in-progress fade when the initial cover lifted.
         if let first4x4 = sortedIdx.first(where: { slots[$0].sizeClass == 4 }) {
-            if let heroURL = nowPlayingHeroURL {
+            // Cache-only: an uncached hero is NOT pinned — the
+            // anchor takes pool art and the pendingHeroURL machinery
+            // crossfades the hero in once its image lands. There is
+            // deliberately NO queue-item stand-in: pinning
+            // preferred[0] (the queue's FIRST track) made the anchor
+            // flash that cover before fading to the actual current
+            // track on every fill (reported: Elvis Costello flash).
+            if let heroURL = nowPlayingHeroURL, preloadedIndex.keys.contains(heroURL) {
                 pinned[first4x4] = heroURL
                 // De-dup: if the hero URL is in preferred, remove it
                 // so a smaller slot doesn't pick it up too.
                 if let idx = preferredQ.firstIndex(of: heroURL) {
                     preferredQ.remove(at: idx)
                 }
-            } else if pool.isQueueMode, !preferredQ.isEmpty {
-                pinned[first4x4] = preferredQ.removeFirst()
             }
         }
-        if pool.isQueueMode, !preferredQ.isEmpty,
-           let first3x3 = sortedIdx.first(where: { slots[$0].sizeClass == 3 }) {
-            pinned[first3x3] = preferredQ.removeFirst()
+        if pool.isQueueMode,
+           let first3x3 = sortedIdx.first(where: { slots[$0].sizeClass == 3 }),
+           let url = takeFront(&preferredQ) {
+            pinned[first3x3] = url
+        }
+
+        // Artist About photos are guaranteed wall content, not an
+        // optional tier: each photo is pinned to a scattered central
+        // 1×1 slot before the general walk, and the queue is drained
+        // so no chain ever places (or skips) them.
+        photoSlotIndices = []
+        artistPhotosQ.removeAll { !preloadedIndex.keys.contains($0) }
+        if !artistPhotosQ.isEmpty {
+            let photoSlots = selectPhotoSlots(count: artistPhotosQ.count,
+                                              excluding: Set(pinned.keys))
+            for (slotIdx, url) in zip(photoSlots, artistPhotosQ) {
+                pinned[slotIdx] = url
+            }
+            photoSlotIndices = photoSlots
+            visLog("wholesaleFill — pinned \(photoSlots.count)/\(artistPhotosQ.count) artist photos to central slots \(photoSlots)")
+            artistPhotosQ.removeAll()
         }
 
         for idx in sortedIdx {
@@ -2055,6 +2770,10 @@ private struct ClubVisWallView: View {
     ///
     /// Ambient at the end of every chain guarantees the wall fully
     /// populates when curated tiers run dry.
+    ///
+    /// Artist About photos are NOT part of these chains — they are
+    /// guaranteed content, pinned to scattered central 1×1 slots by
+    /// `wholesaleFill` / placed by `diffFill` before the chain walk.
     private func pickURL(forSize size: Int,
                          isQueueMode: Bool,
                          injectRandom: Bool,
@@ -2117,11 +2836,12 @@ private struct ClubVisWallView: View {
     }
 
     private func diffFill() {
-        defer { publishSlotDebug() }
+        defer { publishSlotDebug(); syncDisplayBox() }
         let fadesAtEntry = fades.count
         visLog("diffFill ENTER — slots=\(slots.count) slotURLs=\(slotURLs.count) fades=\(fadesAtEntry) rebuilding=\(BackOfTheClubDebugState.shared.isWallRebuilding)")
         let allNew = Set(pool.preferred)
             .union(pool.similarArtists)
+            .union(pool.artistPhotos)
             .union(pool.genreTier1)
             .union(pool.genreTier2)
             .union(pool.genreTier3)
@@ -2167,6 +2887,9 @@ private struct ClubVisWallView: View {
 
         var smallCounter = 0
         let validRange = 0..<slots.count
+
+        placeArtistPhotos()
+
         for (slotIdx, currentURL) in slotURLs where evicted.contains(currentURL) {
             guard validRange.contains(slotIdx) else { continue }
             let size = slots[slotIdx].sizeClass
@@ -2220,9 +2943,99 @@ private struct ClubVisWallView: View {
         visLog("diffFill EXIT — fadesCreated=\(fades.count - fadesAtEntry) totalFades=\(fades.count) bulkCommit=\(bulkCommit)")
     }
 
+    /// Pops the first CACHED URL — display is cache-only, so an
+    /// uncached candidate is dropped from this walk (the background
+    /// warmer is fetching it; it re-enters on a later fill/diff).
     private func takeFront(_ array: inout [URL]) -> URL? {
-        guard !array.isEmpty else { return nil }
-        return array.removeFirst()
+        while !array.isEmpty {
+            let url = array.removeFirst()
+            if preloadedIndex.keys.contains(url) { return url }
+        }
+        return nil
+    }
+
+    /// Guaranteed placement of the current artist's About photos onto
+    /// the designated central 1×1 slots (photos keep pool order —
+    /// primary photo first). Idempotent: photos already visible are
+    /// left alone. Called from diffFill AND directly from the pool
+    /// change handler outside the settle window, because the gallery
+    /// typically arrives seconds after the wall fills.
+    private func placeArtistPhotos() {
+        guard !pool.artistPhotos.isEmpty, !slots.isEmpty else { return }
+        let validRange = 0..<slots.count
+        var currentlyShown = Set(slotURLs.values)
+        for fade in fades.values {
+            if let url = fade.newURL { currentlyShown.insert(url) }
+        }
+        let photosToPlace = pool.artistPhotos.filter { !currentlyShown.contains($0) }
+        guard !photosToPlace.isEmpty else { return }
+        if photoSlotIndices.count < pool.artistPhotos.count
+            || photoSlotIndices.contains(where: { !validRange.contains($0) }) {
+            photoSlotIndices = selectPhotoSlots(count: pool.artistPhotos.count,
+                                                excluding: [])
+        }
+        let photoSet = Set(pool.artistPhotos)
+        var free = photoSlotIndices.filter { idx in
+            validRange.contains(idx) && fades[idx] == nil
+                && !(slotURLs[idx].map { photoSet.contains($0) } ?? false)
+        }
+        let now = Date().timeIntervalSinceReferenceDate
+        var placed = 0
+        for url in photosToPlace {
+            guard !free.isEmpty else { break }
+            let slotIdx = free.removeFirst()
+            startFade(slotIdx: slotIdx, oldURL: slotURLs[slotIdx],
+                      newURL: url, startTime: now)
+            placed += 1
+        }
+        if placed > 0 {
+            visLog("placeArtistPhotos — placed \(placed) artist photos on central slots \(photoSlotIndices)")
+        }
+    }
+
+    /// Central-region 1×1 slots for the guaranteed artist-photo
+    /// tiles. The region excludes the edge bleed, the right-hand
+    /// panel column, and the lower band under the now-playing card,
+    /// so every photo lands in the viewable middle of the wall.
+    /// Selection is a deterministic hash-ordered scatter with a
+    /// minimum pairwise separation, relaxed in steps only when the
+    /// region can't satisfy it.
+    private func selectPhotoSlots(count: Int, excluding: Set<Int>) -> [Int] {
+        guard count > 0 else { return [] }
+        let region = CGRect(x: ClubVisWindow.logicalWidth * 0.15,
+                            y: ClubVisWindow.logicalHeight * 0.12,
+                            width: ClubVisWindow.logicalWidth * 0.55,
+                            height: ClubVisWindow.logicalHeight * 0.68)
+        func centre(_ idx: Int) -> CGPoint {
+            CGPoint(x: slots[idx].rect.midX, y: slots[idx].rect.midY)
+        }
+        let candidates = slots.indices.filter { idx in
+            slots[idx].sizeClass == 1 && !excluding.contains(idx)
+                && region.contains(centre(idx))
+        }
+        // Wall-stable ordering: same slot layout → same scatter;
+        // a new wall's layout re-derives it. No runtime randomness.
+        func orderHash(_ i: Int) -> UInt64 {
+            var h: UInt64 = 5381
+            for b in "\(i)/\(slots.count)".utf8 { h = ((h &<< 5) &+ h) &+ UInt64(b) }
+            return h
+        }
+        let ordered = candidates.sorted { orderHash($0) < orderHash($1) }
+        var best: [Int] = []
+        for minSep in [240.0, 160.0, 0.0] {
+            var chosen: [Int] = []
+            for idx in ordered {
+                let c = centre(idx)
+                let farEnough = chosen.allSatisfy { other in
+                    let o = centre(other)
+                    return hypot(c.x - o.x, c.y - o.y) >= minSep
+                }
+                if farEnough { chosen.append(idx) }
+                if chosen.count == count { return chosen }
+            }
+            if chosen.count > best.count { best = chosen }
+        }
+        return best
     }
 
     /// Snapshots current slot assignments into the shared debug
@@ -2266,6 +3079,15 @@ private struct ClubVisWallView: View {
     /// 1×1 tiles use a sequential black-hold (`smallFadeOutMs` →
     /// `smallFadeHoldMs` black → `smallFadeInMs`).
     private func startFade(slotIdx: Int, oldURL: URL?, newURL: URL?, startTime: Double, source: String = #function) {
+        // Display is cache-only: a fade to an image that isn't in
+        // `preloaded` renders old → blank → pop when the download
+        // lands. The background warmer keeps fetching; the URL
+        // becomes eligible on a later pass. (nil newURL is a
+        // legitimate fade-to-black.)
+        if let newURL, !preloadedIndex.keys.contains(newURL) {
+            visLog("fade SKIPPED — slot=\(slotIdx) uncached newURL source=\(source)")
+            return
+        }
         visLog("fade START — slot=\(slotIdx) size=\(slots[slotIdx].sizeClass) source=\(source) inFlight=\(fades.count)")
         let size = slots[slotIdx].sizeClass
         let s = BackOfTheClubDebugState.shared
@@ -2281,12 +3103,36 @@ private struct ClubVisWallView: View {
             duration = max(0.05, out + hold + fadeIn)
             style = .blackHold(out: out, hold: hold, fadeIn: fadeIn)
         }
+        // Warm the display bitmaps off-main so the fade's first
+        // frame blits instead of decoding mid-ramp.
+        let px = slots[slotIdx].sizeClass * 160
+        let warmCache = cgImageCache
+        let warmNew = newURL.flatMap { url in preloaded[url].map { (url, $0) } }
+        let warmOld = oldURL.flatMap { url in preloaded[url].map { (url, $0) } }
+        if warmNew != nil || warmOld != nil {
+            Task.detached(priority: .userInitiated) {
+                if let (url, img) = warmNew { warmCache.warm(url: url, nsImage: img, px: px) }
+                if let (url, img) = warmOld { warmCache.warm(url: url, nsImage: img, px: px) }
+            }
+        }
         fades[slotIdx] = FadeState(oldURL: oldURL, newURL: newURL,
                                    startTime: startTime, duration: duration,
                                    style: style, source: source)
+        syncDisplayBox()
         scheduleFadeCommit(slotIdx: slotIdx, newURL: newURL,
                            startTime: startTime, duration: duration,
                            source: source)
+    }
+
+    /// Publishes the wall's current on-screen URL set (slots + both
+    /// ends of in-flight fades) to the parent for trim protection.
+    private func syncDisplayBox() {
+        var urls = Set(slotURLs.values)
+        for fade in fades.values {
+            if let old = fade.oldURL { urls.insert(old) }
+            if let new = fade.newURL { urls.insert(new) }
+        }
+        displayBox.urls = urls
     }
 
     private func scheduleFadeCommit(slotIdx: Int, newURL: URL?, startTime: Double, duration: TimeInterval, source: String) {
@@ -2312,6 +3158,7 @@ private struct ClubVisWallView: View {
                 slotURLs.removeValue(forKey: slotIdx)
             }
             fades.removeValue(forKey: slotIdx)
+            syncDisplayBox()
             let actualMs = Int((Date().timeIntervalSinceReferenceDate - startTime) * 1000)
             visLog("fade END — slot=\(slotIdx) source=\(source) expectedMs=\(Int(duration*1000)) actualMs=\(actualMs) inFlight=\(fades.count)")
 
@@ -2404,37 +3251,45 @@ private struct ClubVisWallView: View {
         }()
 
         // Try the target size, then fall back to 1×1 if none free.
+        // Photo slots are excluded — the guaranteed artist photos
+        // stay put for the life of the wall.
+        let protected = Set(photoSlotIndices)
         var slotIdx: Int? = slots.indices.filter {
             slots[$0].sizeClass == targetSize && fades[$0] == nil
+                && !protected.contains($0)
         }.randomElement()
         if slotIdx == nil, targetSize != 1 {
             slotIdx = slots.indices.filter {
                 slots[$0].sizeClass == 1 && fades[$0] == nil
+                    && !protected.contains($0)
             }.randomElement()
         }
         guard let chosenIdx = slotIdx else { return }
         let actualSize = slots[chosenIdx].sizeClass
 
+        // Cache-only display: swap candidates must already have
+        // their image resolved.
+        func avail(_ tier: [URL]) -> [URL] {
+            tier.filter { !visible.contains($0) && preloadedIndex.keys.contains($0) }
+        }
         let candidatesByPreference: [[URL]]
         if actualSize == 1 {
             // Variety-first chain — keeps small-tile rotation feeling
-            // diverse rather than monotone-genre.
+            // diverse rather than monotone-genre. Artist About photos
+            // are NOT rotated in: they live on protected central
+            // slots pinned at fill time.
             candidatesByPreference = [
-                pool.random.filter { !visible.contains($0) },
-                pool.ambient.filter { !visible.contains($0) },
-                pool.genreTier3.filter { !visible.contains($0) },
-                pool.genreTier2.filter { !visible.contains($0) },
-                pool.genreTier1.filter { !visible.contains($0) },
+                avail(poolBox.pool.random), avail(poolBox.pool.ambient),
+                avail(poolBox.pool.genreTier3), avail(poolBox.pool.genreTier2),
+                avail(poolBox.pool.genreTier1),
             ]
         } else {
             // Genres-first for 2×2/3×3 so larger rotations stay
             // contextually tied to the playing track.
             candidatesByPreference = [
-                pool.genreTier1.filter { !visible.contains($0) },
-                pool.genreTier2.filter { !visible.contains($0) },
-                pool.genreTier3.filter { !visible.contains($0) },
-                pool.random.filter { !visible.contains($0) },
-                pool.ambient.filter { !visible.contains($0) },
+                avail(poolBox.pool.genreTier1), avail(poolBox.pool.genreTier2),
+                avail(poolBox.pool.genreTier3), avail(poolBox.pool.random),
+                avail(poolBox.pool.ambient),
             ]
         }
         guard let newURL = candidatesByPreference.first(where: { !$0.isEmpty })?.randomElement() else { return }
@@ -2460,8 +3315,12 @@ private struct ClubVisWallView: View {
         // playing card on the main view uses). Falls back to the
         // pool's preferred[0] when the parent hasn't resolved a URL
         // yet (e.g. very first frame before settledArtURL settles).
-        guard let heroURL = nowPlayingHeroURL ?? pool.preferred.first else {
-            visLog("triggerNowPlayingHeroSwap NOOP — heroURL empty (settled=\(nowPlayingHeroURL != nil) preferred=\(pool.preferred.count))")
+        // No preferred[0] fallback: in queue mode that is the queue's
+        // FIRST track, and fading the anchor to it before the settled
+        // hero arrives produced a wrong-cover flash on track changes.
+        // The settle path re-fires this via heroUpdateTrigger.
+        guard let heroURL = nowPlayingHeroURL else {
+            visLog("triggerNowPlayingHeroSwap NOOP — heroURL not settled yet")
             return
         }
         guard let anchorIdx = slots.firstIndex(where: { $0.sizeClass == 4 })
@@ -2485,6 +3344,7 @@ private struct ClubVisWallView: View {
             if fades[anchorIdx] != nil {
                 fades.removeValue(forKey: anchorIdx)
             }
+            syncDisplayBox()
             pendingHeroURL = nil
             visLog("triggerNowPlayingHeroSwap COMMIT-DIRECT — cover opaque (\(String(format: "%.2f", coverOpacity))), no fade")
             return
@@ -2495,6 +3355,15 @@ private struct ClubVisWallView: View {
             // triggerNowPlayingHeroSwap when the in-flight fade ends.
             pendingHeroURL = heroURL
             visLog("triggerNowPlayingHeroSwap QUEUED — anchor mid-fade pendingURL=...\(heroURL.absoluteString.suffix(50))")
+            return
+        }
+        if !preloadedIndex.keys.contains(heroURL) {
+            // The new art hasn't finished downloading: a fade started
+            // now renders old → blank → pop, not a crossfade. Queue
+            // and re-fire when `preloaded` picks the image up
+            // (.onChange(of: preloaded.count) below).
+            pendingHeroURL = heroURL
+            visLog("triggerNowPlayingHeroSwap DEFERRED — hero art not preloaded yet")
             return
         }
         // About to fire — clear the pending slot so the post-fade
@@ -2515,11 +3384,11 @@ private struct ClubVisWallView: View {
         var replacements: [(Int, URL)] = []
         for dupIdx in dupSlots {
             let candidatesByPreference: [[URL]] = [
-                pool.random.filter { !reserved.contains($0) },
-                pool.ambient.filter { !reserved.contains($0) },
-                pool.genreTier3.filter { !reserved.contains($0) },
-                pool.genreTier2.filter { !reserved.contains($0) },
-                pool.genreTier1.filter { !reserved.contains($0) },
+                poolBox.pool.random.filter { !reserved.contains($0) && preloadedIndex.keys.contains($0) },
+                poolBox.pool.ambient.filter { !reserved.contains($0) && preloadedIndex.keys.contains($0) },
+                poolBox.pool.genreTier3.filter { !reserved.contains($0) && preloadedIndex.keys.contains($0) },
+                poolBox.pool.genreTier2.filter { !reserved.contains($0) && preloadedIndex.keys.contains($0) },
+                poolBox.pool.genreTier1.filter { !reserved.contains($0) && preloadedIndex.keys.contains($0) },
             ]
             guard let newURL = candidatesByPreference
                 .first(where: { !$0.isEmpty })?.randomElement() else { continue }
@@ -2537,7 +3406,7 @@ private struct ClubVisWallView: View {
 
     /// Track-change seed swap — picks `count` random 1×1 slots
     /// (skipping ones already mid-fade) and fades each to a fresh
-    /// URL from `pool.genreTier1` (the new track's top-genre matches).
+    /// URL from `poolBox.pool.genreTier1` (the new track's top-genre matches).
     /// Skipped if the new track has no genre tier1 art available.
     private func triggerGenreSeedSwaps(count: Int) {
         visLog("triggerGenreSeedSwaps ENTER — count=\(count) rebuilding=\(BackOfTheClubDebugState.shared.isWallRebuilding)")
@@ -2549,10 +3418,14 @@ private struct ClubVisWallView: View {
         if BackOfTheClubDebugState.shared.isWallRebuilding { return }
         guard count > 0, !slots.isEmpty else { return }
         let visible = Set(slotURLs.values)
-        let candidates = pool.genreTier1.filter { !visible.contains($0) }
+        let candidates = poolBox.pool.genreTier1.filter {
+            !visible.contains($0) && preloadedIndex.keys.contains($0)
+        }
         guard !candidates.isEmpty else { return }
+        let protected = Set(photoSlotIndices)
         let smallIndices = slots.indices.filter {
             slots[$0].sizeClass == 1 && fades[$0] == nil
+                && !protected.contains($0)
         }
         guard !smallIndices.isEmpty else { return }
         let pickedSlots = smallIndices.shuffled().prefix(count)
@@ -2978,97 +3851,359 @@ private struct SeededRNG {
 
 // MARK: - Lighting
 
-/// Slow drifting stage-light wash. Renders as a handful of soft,
-/// blurred ovals anchored toward the corners/edges of the wall —
-/// the impression is of background reflected lighting from a live
-/// performance whose actual stage lights are happening elsewhere
-/// in the venue. Each oval has its own size, rotation, drift
-/// orbit, and colour role, so neighbouring ovals never share the
-/// same hue (the user spec: "always different base gradient
-/// colours such as one red and one green").
+/// Zune-style ambient lighting driven by the active stage colour
+/// set (`ClubStageSets`). Coloured light slowly moving across a
+/// dark wall — not a spotlight rig, not an audio visualiser.
 ///
-/// The cue system underneath (`StageCue` triples + 90s hold / 36s
-/// fade cycle through 7 named cues) drives the colour palette —
-/// each oval's `colorRoleIndex` picks one of the active cue's
-/// three colours, so the wall settles into a coherent mood (rock
-/// show, cool wash, warm ballad, etc.) before transitioning.
+/// Layer stack (bottom → top; the poster wall below plays the
+/// spec's flat desaturated base role):
+///   - one `Canvas` on `.plusLighter` drawing every light blob as a
+///     soft radial gradient with transparent falloff:
+///       * 2 large faint washes (radius 1.0–1.3 × width, alpha
+///         0.06–0.10, drift cycles 92 s / 133 s) — broad shifting
+///         illumination,
+///       * 5 smaller brighter highlight blooms (radius 0.21–0.38 ×
+///         width, alpha 0.16–0.35, drift cycles 19–57 s) — the
+///         visible Zune blooms, anchored asymmetrically so one
+///         region reads strongly lit while the opposite corner
+///         stays near-black; two anchors sit partly off-canvas so
+///         blooms enter from the edges,
+///   - a static vignette (`.multiply`) darkening the edges.
 ///
-/// 15 fps timeline — the motion is intentionally slow and 15 fps
-/// halves the render cost on 4K fullscreen vs. the previous 30 fps.
-/// All time math uses `timeIntervalSinceReferenceDate` so phase is
-/// stable across re-renders.
+/// Every blob drifts on its own elliptical orbit (distinct anchor,
+/// orbit, phase, period), wobbles with low-frequency deterministic
+/// value noise, and breathes in opacity and radius. All motion is a
+/// pure function of `t` — no runtime randomness, no cuts, no
+/// strobes.
+///
+/// Set changes (track change, override, enable toggle) crossfade
+/// all tones over `setFadeDuration` — never a hard cut.
+///
+/// 24 fps timeline cap — the motion is slow; higher rates only add
+/// render cost on 4K fullscreen. All time math uses
+/// `timeIntervalSinceReferenceDate` so phase is stable across
+/// re-renders.
 private struct ClubVisLightingView: View {
-    /// One coherent stage-light state — three colours that read as
-    /// a single venue cue (rock show, cool wash, etc.). Layers and
-    /// spots all draw from the active cue so the wall reads as one
-    /// lighting design rather than randomly-coloured spots.
-    fileprivate struct StageCue {
-        let name: String
-        let primary: RGB
-        let secondary: RGB
-        let tertiary: RGB
-    }
-    fileprivate typealias RGB = (r: Double, g: Double, b: Double)
+    /// Per-frame lighting tones — the active set's four roles after
+    /// the set-change crossfade is applied.
+    fileprivate struct ResolvedTones {
+        let wash: StageTone
+        let beamA: StageTone
+        let beamB: StageTone
+        let accent: StageTone
 
-    /// Named cues curated to match the reference image's range —
-    /// each triple is a typical live-music venue lighting state.
-    /// `fileprivate` so the debug companion window can render the
-    /// stage picker with names + colour swatches.
-    fileprivate static let cues: [StageCue] = [
-        .init(name: "Rock show",
-              primary: (0.85, 0.10, 0.20),
-              secondary: (0.95, 0.20, 0.55),
-              tertiary: (0.50, 0.10, 0.85)),
-        .init(name: "Cool wash",
-              primary: (0.10, 0.30, 0.95),
-              secondary: (0.00, 0.65, 0.85),
-              tertiary: (0.30, 0.85, 0.95)),
-        .init(name: "Warm ballad",
-              primary: (0.95, 0.55, 0.10),
-              secondary: (0.95, 0.30, 0.10),
-              tertiary: (0.85, 0.10, 0.20)),
-        .init(name: "Synthwave",
-              primary: (0.95, 0.20, 0.55),
-              secondary: (0.50, 0.10, 0.85),
-              tertiary: (0.20, 0.10, 0.65)),
-        .init(name: "Atmospheric",
-              primary: (0.05, 0.75, 0.40),
-              secondary: (0.00, 0.65, 0.85),
-              tertiary: (0.65, 0.85, 0.20)),
-        .init(name: "Pop bright",
-              primary: (0.95, 0.40, 0.65),
-              secondary: (0.95, 0.55, 0.30),
-              tertiary: (0.85, 0.10, 0.20)),
-        .init(name: "Dark moody",
-              primary: (0.30, 0.10, 0.55),
-              secondary: (0.20, 0.10, 0.65),
-              tertiary: (0.05, 0.05, 0.20)),
+        init(wash: StageTone, beamA: StageTone, beamB: StageTone, accent: StageTone) {
+            self.wash = wash
+            self.beamA = beamA
+            self.beamB = beamB
+            self.accent = accent
+        }
+
+        init(set: StageSet) {
+            self.init(wash: set.wash, beamA: set.beamA,
+                      beamB: set.beamB, accent: set.accent)
+        }
+
+        static func lerp(_ a: ResolvedTones, _ b: ResolvedTones, t: Double) -> ResolvedTones {
+            ResolvedTones(wash: StageTone.lerp(a.wash, b.wash, t: t),
+                          beamA: StageTone.lerp(a.beamA, b.beamA, t: t),
+                          beamB: StageTone.lerp(a.beamB, b.beamB, t: t),
+                          accent: StageTone.lerp(a.accent, b.accent, t: t))
+        }
+    }
+
+    // MARK: - Blob roster
+
+    /// Colour role a blob resolves against the active set's tones
+    /// each frame, so the set-change crossfade reaches every blob.
+    fileprivate enum ToneRole {
+        /// Set wash tone as declared.
+        case wash
+        /// beamA scaled down — the second large wash's muted
+        /// variant.
+        case mutedBeamA
+        case beamA
+        case beamB
+        case accent
+        /// Fixed warm white — the reference's upper-right bloom.
+        case warmWhite
+        /// beamA/accent midpoint — the reference's pink-purple
+        /// lower-centre bloom.
+        case pinkPurple
+
+        func tone(from tones: ResolvedTones) -> StageTone {
+            switch self {
+            case .wash: return tones.wash
+            case .mutedBeamA: return tones.beamA.scaled(0.55)
+            case .beamA: return tones.beamA
+            case .beamB: return tones.beamB
+            case .accent: return tones.accent
+            case .warmWhite: return StageTone(r: 1.0, g: 0.93, b: 0.82)
+            case .pinkPurple: return StageTone.lerp(tones.beamA, tones.accent, t: 0.5)
+            }
+        }
+    }
+
+    /// One drifting radial-gradient blob. Anchors/orbits are
+    /// fractions of the logical canvas (x/orbitX/noiseX × width,
+    /// y/orbitY/noiseY × height); radii are fractions of the
+    /// logical width. Position:
+    ///   x = anchorX + cos(t·2π/period + phase) · orbitX + noise
+    ///   y = anchorY + sin(t·2π/period·ySpeedRatio + phase) · orbitY + noise
+    /// with low-frequency value-noise wobble, plus opacity and
+    /// radius breathing on independent rates.
+    fileprivate struct Blob {
+        let role: ToneRole
+        let anchorX: Double
+        let anchorY: Double
+        let orbitX: Double
+        let orbitY: Double
+        let radius: Double
+        let baseAlpha: Double
+        /// Seconds per drift cycle.
+        let period: Double
+        let phase: Double
+        /// Vertical-frequency ratio — 0.6 for washes, 0.75 for
+        /// highlights, so paths are ellipses, not lines.
+        let ySpeedRatio: Double
+        /// Opacity breathing (rad/s, ± amount).
+        let pulseSpeed: Double
+        let pulseAmount: Double
+        /// Radius breathing (rad/s, ± amount as fraction of width).
+        let radiusSpeed: Double
+        let radiusAmount: Double
+        /// Value-noise lattice offset — distinct per blob so wobble
+        /// decorrelates.
+        let noiseSeed: Double
+        let noiseX: Double
+        let noiseY: Double
+    }
+
+    /// Draw order: washes first (broad shifting illumination), then
+    /// highlight blooms. Anchors cluster the bright mass toward the
+    /// lower-left; the upper-right corner gets only the faint warm
+    /// white, so the frame reads strongly asymmetric. Every
+    /// anchor/orbit/phase/period/pulse rate differs — no two blobs
+    /// ever move at the same speed.
+    fileprivate static let blobs: [Blob] = [
+        // Large faint washes — drift cycles 92 s / 133 s.
+        Blob(role: .wash, anchorX: 0.30, anchorY: 0.55,
+             orbitX: 0.16, orbitY: 0.10,
+             radius: 1.30, baseAlpha: 0.14, period: 92, phase: 0.7,
+             ySpeedRatio: 0.6,
+             pulseSpeed: 2 * .pi / 47, pulseAmount: 0.020,
+             radiusSpeed: 2 * .pi / 61, radiusAmount: 0.050,
+             noiseSeed: 11, noiseX: 0.05, noiseY: 0.04),
+        Blob(role: .mutedBeamA, anchorX: 0.50, anchorY: 0.70,
+             orbitX: 0.13, orbitY: 0.09,
+             radius: 1.00, baseAlpha: 0.09, period: 133, phase: 3.9,
+             ySpeedRatio: 0.6,
+             pulseSpeed: 2 * .pi / 53, pulseAmount: 0.015,
+             radiusSpeed: 2 * .pi / 71, radiusAmount: 0.040,
+             noiseSeed: 47, noiseX: 0.04, noiseY: 0.05),
+        // Highlight blooms — drift cycles 19–57 s.
+        // Dominant bloom, lower-left, anchored partly off-canvas.
+        Blob(role: .beamA, anchorX: 0.14, anchorY: -0.06,
+             orbitX: 0.09, orbitY: 0.11,
+             radius: 0.38, baseAlpha: 0.46, period: 68, phase: 0.0,
+             ySpeedRatio: 0.75,
+             pulseSpeed: 2 * .pi / 13, pulseAmount: 0.050,
+             radiusSpeed: 2 * .pi / 17, radiusAmount: 0.020,
+             noiseSeed: 101, noiseX: 0.03, noiseY: 0.03),
+        Blob(role: .accent, anchorX: 0.32, anchorY: 0.30,
+             orbitX: 0.07, orbitY: 0.13,
+             radius: 0.28, baseAlpha: 0.36, period: 52, phase: 4.4,
+             ySpeedRatio: 0.75,
+             pulseSpeed: 2 * .pi / 11, pulseAmount: 0.040,
+             radiusSpeed: 2 * .pi / 19, radiusAmount: 0.015,
+             noiseSeed: 163, noiseX: 0.025, noiseY: 0.03),
+        Blob(role: .beamB, anchorX: 0.86, anchorY: 0.04,
+             orbitX: 0.06, orbitY: 0.12,
+             radius: 0.34, baseAlpha: 0.44, period: 46, phase: 2.1,
+             ySpeedRatio: 0.75,
+             pulseSpeed: 2 * .pi / 9.5, pulseAmount: 0.040,
+             radiusSpeed: 2 * .pi / 14, radiusAmount: 0.018,
+             noiseSeed: 211, noiseX: 0.025, noiseY: 0.025),
+        // Faint warm white, upper-right, partly off-canvas — the
+        // only light near the darkest corner.
+        Blob(role: .warmWhite, anchorX: 0.97, anchorY: 0.05,
+             orbitX: 0.05, orbitY: 0.05,
+             radius: 0.25, baseAlpha: 0.22, period: 78, phase: 1.3,
+             ySpeedRatio: 0.75,
+             pulseSpeed: 2 * .pi / 15, pulseAmount: 0.030,
+             radiusSpeed: 2 * .pi / 23, radiusAmount: 0.012,
+             noiseSeed: 271, noiseX: 0.02, noiseY: 0.02),
+        // Lower-centre, anchored below the canvas edge — enters
+        // from the bottom.
+        Blob(role: .pinkPurple, anchorX: 0.20, anchorY: -0.08,
+             orbitX: 0.08, orbitY: 0.10,
+             radius: 0.21, baseAlpha: 0.34, period: 38, phase: 5.5,
+             ySpeedRatio: 0.75,
+             pulseSpeed: 2 * .pi / 8, pulseAmount: 0.035,
+             radiusSpeed: 2 * .pi / 12, radiusAmount: 0.014,
+             noiseSeed: 331, noiseX: 0.03, noiseY: 0.02),
+        // Centre-field ambience — one very large, very faint wash
+        // over the vertical middle of the wall. The ceiling rig
+        // (top band) and the stage sweeps (lower band) leave the
+        // centre unlit; this blob carries the scheme's colour into
+        // that band without adding structure that competes with
+        // either. Slowest drift in the roster.
+        Blob(role: .wash, anchorX: 0.50, anchorY: 0.45,
+             orbitX: 0.06, orbitY: 0.04,
+             radius: 0.90, baseAlpha: 0.13, period: 150, phase: 2.6,
+             ySpeedRatio: 0.6,
+             pulseSpeed: 2 * .pi / 59, pulseAmount: 0.012,
+             radiusSpeed: 2 * .pi / 83, radiusAmount: 0.030,
+             noiseSeed: 389, noiseX: 0.03, noiseY: 0.03),
     ]
 
-    /// SwiftUI Color exposed for the debug window's swatches.
-    fileprivate static func swatchColor(_ rgb: RGB) -> Color {
-        Color(red: rgb.r, green: rgb.g, blue: rgb.b)
+    /// Vignette geometry — transparent centre to black-0.35 edges.
+    private static let vignetteEdgeOpacity = 0.42
+    /// Set-change crossfade length.
+    fileprivate static let setFadeDuration = 6.0
+    /// Global light-energy scalar applied to every blob and sweep
+    /// alpha at draw time (clamped to 1.0). One knob for overall
+    /// intensity — the roster's relative alpha structure is preserved.
+    /// 1.35 was mathematically visible but visually flat against the
+    /// Zune reference; beams now saturate their cores.
+    fileprivate static let lightIntensity = 1.7
+    /// Extra alpha scalar on emitters carrying the hue-outlier tone
+    /// (see `emphasisSlot`).
+    fileprivate static let emphasisBoost = 1.5
+
+    /// Hue/saturation of a tone — pure math, no NSColor round-trip.
+    fileprivate static func hueSat(_ tone: StageTone) -> (hue: Double, sat: Double) {
+        let mx = max(tone.r, tone.g, tone.b)
+        let mn = min(tone.r, tone.g, tone.b)
+        let d = mx - mn
+        guard mx > 0.0001, d > 0.0001 else { return (0, 0) }
+        var h: Double
+        if mx == tone.r { h = (tone.g - tone.b) / d }
+        else if mx == tone.g { h = 2 + (tone.b - tone.r) / d }
+        else { h = 4 + (tone.r - tone.g) / d }
+        h *= 60
+        if h < 0 { h += 360 }
+        return (h, d / mx)
+    }
+
+    /// When three ladder tones cluster in hue and the fourth stands
+    /// apart (a cover like gold/gold/gold + red), that differing tone
+    /// is easy to lose on the wall. Returns the outlier slot with a
+    /// CONTINUOUS weight in (0, 1]: full weight when all four tones
+    /// are chromatic, the outlier sits ≥ 50° in hue from every other
+    /// tone, and the remaining three sit within 25° — ramping to 0
+    /// as any of those conditions relaxes (chromaticity below 0.20,
+    /// separation below 40°, cluster spread above 35°). Nil when the
+    /// weight is 0 (spread schemes, single-hue ladders, achromatic
+    /// members). The ramps matter: emphasis is evaluated on the
+    /// crossfade-resolved tones every frame, and a binary threshold
+    /// made the boosted emitters step in one frame mid-fade —
+    /// observed as the lights blinking on song change.
+    fileprivate static func emphasisSlot(tones: ResolvedTones)
+        -> (slot: ToneRole, weight: Double)? {
+        let slots: [(ToneRole, StageTone)] =
+            [(.wash, tones.wash), (.beamA, tones.beamA),
+             (.beamB, tones.beamB), (.accent, tones.accent)]
+        let hs = slots.map { hueSat($0.1) }
+        func ramp(_ x: Double) -> Double { min(max(x, 0), 1) }
+        let satW = hs.map { ramp(($0.sat - 0.20) / 0.05) }.min() ?? 0
+        guard satW > 0 else { return nil }
+        func dist(_ a: Double, _ b: Double) -> Double {
+            let d = abs(a - b).truncatingRemainder(dividingBy: 360)
+            return min(d, 360 - d)
+        }
+        let nn = (0..<4).map { i in
+            (0..<4).filter { $0 != i }
+                .map { dist(hs[i].hue, hs[$0].hue) }.min()!
+        }
+        guard let iMax = nn.indices.max(by: { nn[$0] < nn[$1] }) else { return nil }
+        let nnW = ramp((nn[iMax] - 40) / 10)
+        guard nnW > 0 else { return nil }
+        let rest = (0..<4).filter { $0 != iMax }
+        let clusterMax = rest.flatMap { i in
+            rest.filter { $0 > i }.map { dist(hs[i].hue, hs[$0].hue) }
+        }.max() ?? 0
+        let clusterW = ramp((35 - clusterMax) / 10)
+        let weight = satW * nnW * clusterW
+        return weight > 0 ? (slots[iMax].0, weight) : nil
+    }
+
+    /// The ladder slot an emitter role draws from — nil for the
+    /// derived roles (warm white, pink-purple blend) that never
+    /// carry emphasis.
+    fileprivate static func baseSlot(_ role: ToneRole) -> ToneRole? {
+        switch role {
+        case .wash: return .wash
+        case .beamA, .mutedBeamA: return .beamA
+        case .beamB: return .beamB
+        case .accent: return .accent
+        case .warmWhite, .pinkPurple: return nil
+        }
     }
 
     @ObservedObject private var debugState = BackOfTheClubDebugState.shared
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 15.0)) { timeline in
+        // 12 fps. Each tick rasterizes the blob field TWICE (the
+        // colorize and glow passes are separate full-window
+        // Canvases) and composites both through full-window blend
+        // modes — at 24 fps that fixed cost alone stuttered every
+        // other layer. 12 fps halves it; the gradients are smooth
+        // by construction so motion reads fine at this rate.
+        TimelineView(.animation(minimumInterval: 1.0 / 12.0)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            let ctrl = debugState.lighting
-            let cue = Self.activeCue(at: t,
-                                     period: ctrl.cuePeriod,
-                                     fadeFraction: ctrl.cueFadeFraction,
-                                     override: ctrl.stageOverride)
+            let tones = Self.resolvedTones(at: t, state: debugState)
+            // Vibrancy-graded pass opacities. The colorize pass at a
+            // fixed 0.85 tinted the ENTIRE wall with whatever peaks a
+            // near-achromatic cover scraped past the saturation gate
+            // — observed as a muddy sepia wall on a mostly-white/black
+            // cover. Colorize lerps 0.35 → 0.85 with vibrancy; the
+            // glow pass lerps the opposite way (0.65 → 0.55) so dim
+            // covers still read lit, just neutrally.
+            let vibrancy = Self.resolvedVibrancy(at: t, state: debugState)
+            let colorizeOpacity = Self.colorizeOpacity(vibrancy: vibrancy)
+            let glowOpacity = Self.glowOpacity(vibrancy: vibrancy)
 
             ZStack {
-                ambientLayer(t: t, cue: cue, ctrl: ctrl)
-                    .compositingGroup()
-                    .blendMode(ctrl.ambientBlendMode.blend)
+                // All light blobs in one Canvas. `.plusLighter` on
+                // the view adds the canvas output to the wall; the
+                // same blend inside the context stacks overlapping
+                // blobs additively.
+                // Colorize + glow double pass — the LightingLab
+                // harness (tools/LightingLab) showed a single screen
+                // pass lifts luminance and greys out; a `.color` hue
+                // layer makes the light OWN its region at full
+                // saturation (the Zune reference look) while the
+                // moderated screen pass adds the glow.
+                ClubVisBlobCanvas(tones: tones, t: t,
+                                  seed: debugState.wallLightSeed)
+                    .blendMode(.color)
+                    .opacity(colorizeOpacity)
+                ClubVisBlobCanvas(tones: tones, t: t,
+                                  seed: debugState.wallLightSeed)
+                    .blendMode(.screen)
+                    .opacity(glowOpacity)
 
-                spotlightLayer(t: t, cue: cue, ctrl: ctrl)
-                    .compositingGroup()
-                    .blendMode(ctrl.spotlightBlendMode.blend)
+                // Static vignette — transparent centre, darkened
+                // edges, per the reference frames.
+                // Floor darkness — the back of a club is lit from the
+                // ceiling rig; the bottom of the wall falls away into
+                // crowd shadow. Linear pull-down under the radial
+                // vignette.
+                LinearGradient(
+                    stops: [.init(color: .clear, location: 0.0),
+                            .init(color: .clear, location: 0.55),
+                            .init(color: .black.opacity(0.30), location: 1.0)],
+                    startPoint: .top, endPoint: .bottom)
+                    .blendMode(.multiply)
+
+                RadialGradient(
+                    colors: [.clear,
+                             .black.opacity(Self.vignetteEdgeOpacity)],
+                    center: .center,
+                    startRadius: ClubVisWindow.logicalHeight * 0.15,
+                    endRadius: ClubVisWindow.logicalWidth * 0.57)
+                .blendMode(.multiply)
             }
             .frame(width: ClubVisWindow.logicalWidth,
                    height: ClubVisWindow.logicalHeight)
@@ -3076,232 +4211,375 @@ private struct ClubVisLightingView: View {
         }
     }
 
-    @ViewBuilder
-    private func ambientLayer(t: Double, cue: StageCue,
-                              ctrl: BackOfTheClubDebugState.LightingControls) -> some View {
-        ZStack {
-            if ctrl.ambientLEnabled {
-                ambientCircle(t: t, period: ctrl.ambientLPeriod, phase: 0,
-                              anchorX: ctrl.ambientLAnchorX, anchorY: ctrl.ambientLAnchorY,
-                              driftX: ctrl.ambientLDriftX, driftY: ctrl.ambientLDriftY,
-                              sizeMul: ctrl.ambientLSize, blur: ctrl.ambientLBlur,
-                              centreOpacity: ctrl.ambientLOpacity,
-                              intensity: ctrl.ambientLIntensity,
-                              brightness: ctrl.ambientLBrightness,
-                              saturation: ctrl.ambientLSaturation,
-                              blend: ctrl.ambientLBlend.blend,
-                              color: cue.primary)
-            }
-            if ctrl.ambientREnabled {
-                ambientCircle(t: t, period: ctrl.ambientRPeriod, phase: .pi,
-                              anchorX: ctrl.ambientRAnchorX, anchorY: ctrl.ambientRAnchorY,
-                              driftX: ctrl.ambientRDriftX, driftY: ctrl.ambientRDriftY,
-                              sizeMul: ctrl.ambientRSize, blur: ctrl.ambientRBlur,
-                              centreOpacity: ctrl.ambientROpacity,
-                              intensity: ctrl.ambientRIntensity,
-                              brightness: ctrl.ambientRBrightness,
-                              saturation: ctrl.ambientRSaturation,
-                              blend: ctrl.ambientRBlend.blend,
-                              color: cue.secondary)
-            }
+    // MARK: - Blob drawing
+
+    /// Per-wall variation. Deterministic [−1, 1] jitter for one
+    /// emitter channel — a pure function of (wall seed, emitter key,
+    /// channel) built on the same `hash01` lattice hash the value
+    /// noise uses. Same wall seed → identical light arrangement
+    /// every frame; a new wall seed re-derives every offset. No
+    /// runtime randomness.
+    fileprivate static func seedJitter(_ seed: UInt64, key: Int, channel: Int) -> Double {
+        hash01(key &+ channel &* 7919, salt: seed &+ 0xA5A5_1EAF) * 2.0 - 1.0
+    }
+
+    /// Renders one blob as a soft radial gradient with transparent
+    /// falloff — no crisp circles, no spotlight cones. Position,
+    /// opacity, and radius are continuous pure functions of `t` and
+    /// the wall `seed`.
+    fileprivate static func draw(_ blob: Blob, tones: ResolvedTones,
+                             emphasis: (slot: ToneRole, weight: Double)?,
+                             at t: Double, seed: UInt64, size: CGSize,
+                             in ctx: inout GraphicsContext) {
+        let w = size.width
+        let h = size.height
+        // Per-wall variation — anchors jittered ±0.10 in x/y and the
+        // phase re-derived from the wall seed, so each wall lights a
+        // recognisably different arrangement. The y clamp keeps each
+        // emitter in its designed band: ceiling-rig blobs (roster
+        // anchors ≤ 0.16) stay in the top band; the centre-field
+        // ambience blob stays in the middle band.
+        let key = Int(blob.noiseSeed)
+        var anchorX = min(max(blob.anchorX + seedJitter(seed, key: key, channel: 0) * 0.10, 0.02), 1.02)
+        let yBand: ClosedRange<Double> = blob.anchorY < 0.30 ? (-0.14)...0.26 : 0.35...0.55
+        var anchorY = min(max(blob.anchorY + seedJitter(seed, key: key, channel: 1) * 0.10,
+                              yBand.lowerBound), yBand.upperBound)
+        // The differing colour must be CENTRALLY visible — several
+        // roster anchors sit off-canvas or behind the right-hand
+        // panels (beamB at x 0.86). Pull the emphasised emitter's
+        // anchor toward the centre field, scaled by the continuous
+        // emphasis weight so relocation glides with set crossfades.
+        if let emphasis, Self.baseSlot(blob.role) == emphasis.slot {
+            let pull = 0.65 * emphasis.weight
+            anchorX += (0.42 - anchorX) * pull
+            anchorY += (0.30 - anchorY) * pull
+        }
+        let phase = hash01(key &+ 3, salt: seed &+ 0x9E37_79B9) * 2.0 * .pi
+        let speed = 2.0 * .pi / blob.period
+        var x = anchorX * w + cos(t * speed + phase) * blob.orbitX * w
+        var y = anchorY * h
+            + sin(t * speed * blob.ySpeedRatio + phase) * blob.orbitY * h
+        // Low-frequency wobble so orbits never read mechanical.
+        x += smoothNoise(t * 0.015 + blob.noiseSeed) * blob.noiseX * w
+        y += smoothNoise(t * 0.015 + blob.noiseSeed + 20) * blob.noiseY * h
+        let boost: Double = {
+            guard let emphasis, Self.baseSlot(blob.role) == emphasis.slot else { return 1.0 }
+            return 1.0 + (Self.emphasisBoost - 1.0) * emphasis.weight
+        }()
+        let alpha = min(1.0, (blob.baseAlpha
+            + sin(t * blob.pulseSpeed + phase) * blob.pulseAmount)
+            * Self.lightIntensity * boost)
+        let radius = (blob.radius
+            + sin(t * blob.radiusSpeed + phase) * blob.radiusAmount) * w
+        let color = Self.richColor(for: blob.role, tones: tones)
+        // Blurred solid fill, not gradient shading: radial-gradient
+        // shading in GraphicsContext rendered nothing on macOS
+        // (probe-verified 2026-08-07 — solid .color fills in the same
+        // canvas drew fine). The blur also produces the reference's
+        // soft edge more faithfully than gradient stops.
+        // Concentric falloff fills with a CAPPED blur. A blur radius
+        // proportional to blob radius reached 300-950 px on the wash
+        // blobs and the Canvas filter rasterized to nothing at that
+        // size (probe-verified); three nested ellipses at falling
+        // alpha carry the falloff, and a capped blur only softens the
+        // ring edges.
+        // Ring falloff with NO blur filter: the per-layer blur
+        // rasterization (two passes x ten layers per frame) stalled the
+        // main thread for seconds. Six rings under the colorize blend
+        // read as soft against the wall texture at zero filter cost.
+        // True radial gradient — smooth by construction, no banding,
+        // no blur cost. The earlier gradient-draws-nothing failure was
+        // specific to `ctx.blendMode = .plusLighter`; under default
+        // in-canvas blending gradient shading renders correctly.
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: x - radius, y: y - radius,
+                                   width: radius * 2, height: radius * 2)),
+            with: .radialGradient(
+                Gradient(stops: [
+                    .init(color: color.opacity(alpha), location: 0.0),
+                    .init(color: color.opacity(alpha * 0.35), location: 0.45),
+                    .init(color: color.opacity(0.0), location: 1.0),
+                ]),
+                center: CGPoint(x: x, y: y),
+                startRadius: 0,
+                endRadius: radius))
+    }
+
+    // (blob canvas extracted below as ClubVisBlobCanvas for the
+    // colorize + glow double pass.)
+
+    /// Club-photo grading: lit surfaces read as SATURATED colour at
+    /// moderate luminance — a screen-blended layer built from bright
+    /// tones lifts luminance and washes the top of the wall toward
+    /// white. Rebuild each layer colour at full saturation with capped
+    /// brightness so the light adds tint, not white. The warm-white
+    /// bloom keeps its low saturation but is dimmed for the same
+    /// reason.
+    private static func richColor(for role: ToneRole, tones: ResolvedTones) -> Color {
+        let tone = role.tone(from: tones)
+        let base = NSColor(red: tone.r, green: tone.g, blue: tone.b, alpha: 1)
+            .usingColorSpace(.deviceRGB) ?? .white
+        var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        base.getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
+        // Stage-gel floor applied AFTER the role caps: no brown
+        // stage light — a warm hue rendered dark reads brown, which
+        // no fixture produces (see ClubStageSets.gelBrightnessFloor).
+        let gelFloor = CGFloat(ClubStageSets.gelBrightnessFloor(hue: Double(h) * 360))
+        switch role {
+        case .warmWhite:
+            return Color(NSColor(hue: h, saturation: sat, brightness: min(b, 0.72), alpha: 1))
+        case .wash, .mutedBeamA:
+            return Color(NSColor(hue: h, saturation: max(sat, 0.95),
+                                 brightness: max(min(b, 0.70), gelFloor), alpha: 1))
+        default:
+            return Color(NSColor(hue: h, saturation: max(sat, 0.92),
+                                 brightness: max(min(b, 0.85), gelFloor), alpha: 1))
         }
     }
 
-    @ViewBuilder
-    private func spotlightLayer(t: Double, cue: StageCue,
-                                ctrl: BackOfTheClubDebugState.LightingControls) -> some View {
-        ZStack {
-            if ctrl.spotlightTLEnabled {
-                spotlightOval(t: t, period: ctrl.spotlightTLPeriod, phase: 0.7,
-                              anchorX: ctrl.spotlightTLAnchorX, anchorY: ctrl.spotlightTLAnchorY,
-                              driftX: ctrl.spotlightTLDriftX, driftY: ctrl.spotlightTLDriftY,
-                              widthFrac: ctrl.spotlightTLWidth, heightFrac: ctrl.spotlightTLHeight,
-                              rotationDeg: ctrl.spotlightTLRotation, blur: ctrl.spotlightTLBlur,
-                              centreOpacity: ctrl.spotlightTLOpacity,
-                              intensity: ctrl.spotlightTLIntensity,
-                              brightness: ctrl.spotlightTLBrightness,
-                              saturation: ctrl.spotlightTLSaturation,
-                              blend: ctrl.spotlightTLBlend.blend,
-                              color: cue.tertiary)
-            }
-            if ctrl.spotlightBREnabled {
-                spotlightOval(t: t, period: ctrl.spotlightBRPeriod, phase: 2.4,
-                              anchorX: ctrl.spotlightBRAnchorX, anchorY: ctrl.spotlightBRAnchorY,
-                              driftX: ctrl.spotlightBRDriftX, driftY: ctrl.spotlightBRDriftY,
-                              widthFrac: ctrl.spotlightBRWidth, heightFrac: ctrl.spotlightBRHeight,
-                              rotationDeg: ctrl.spotlightBRRotation, blur: ctrl.spotlightBRBlur,
-                              centreOpacity: ctrl.spotlightBROpacity,
-                              intensity: ctrl.spotlightBRIntensity,
-                              brightness: ctrl.spotlightBRBrightness,
-                              saturation: ctrl.spotlightBRSaturation,
-                              blend: ctrl.spotlightBRBlend.blend,
-                              color: cue.primary)
-            }
-        }
+    // MARK: - Stage beam sweeps
+
+    /// Rotating oval beam footprints on the lower wall — stage-mounted
+    /// moving heads. Position and rotation are independent value-noise
+    /// signals per beam (no shared period): the three run async and
+    /// only align when the noise happens to coincide.
+    fileprivate struct SweepBeam {
+        let role: ToneRole
+        let posSeed: Double
+        let rotSeed: Double
+        /// Noise time scale — differs per beam so no two share a cadence.
+        let speed: Double
+        let anchorY: Double
+        /// Beam footprint half-length as a fraction of canvas width.
+        let length: Double
+        /// Minor axis as a fraction of the major axis.
+        let aspect: Double
+        let alpha: Double
     }
 
-    @ViewBuilder
-    private func ambientCircle(t: Double, period: Double, phase: Double,
-                                anchorX: Double, anchorY: Double,
-                                driftX: Double, driftY: Double,
-                                sizeMul: Double, blur: Double,
-                                centreOpacity: Double, intensity: Double,
-                                brightness: Double, saturation: Double,
-                                blend: BlendMode, color: RGB) -> some View {
-        let omega = 2.0 * .pi / max(0.001, period)
-        let angle = t * omega + phase
-        let dx = cos(angle) * driftX
-        let dy = sin(angle * 0.7) * driftY
-        let logicalW = ClubVisWindow.logicalWidth
-        let logicalH = ClubVisWindow.logicalHeight
-        let cx = logicalW * (anchorX + dx)
-        let cy = logicalH * (anchorY + dy)
-        let diameter = max(logicalW, logicalH) * sizeMul
-        let c = Self.color(color)
-        // Intensity multiplies centre alpha; brightness/saturation
-        // are SwiftUI shader modifiers on the rendered shape.
-        let alpha = max(0, min(1, centreOpacity * intensity))
-        Circle()
-            .fill(
-                RadialGradient(
-                    gradient: Gradient(colors: [
-                        c.opacity(alpha),
-                        c.opacity(alpha * 0.6),
-                        c.opacity(0.0),
+    fileprivate static let sweeps: [SweepBeam] = [
+        SweepBeam(role: .beamA, posSeed: 411, rotSeed: 412, speed: 0.011,
+                  anchorY: 0.80, length: 0.24, aspect: 0.38, alpha: 0.78),
+        SweepBeam(role: .beamB, posSeed: 421, rotSeed: 422, speed: 0.016,
+                  anchorY: 0.88, length: 0.21, aspect: 0.36, alpha: 0.72),
+        SweepBeam(role: .accent, posSeed: 431, rotSeed: 432, speed: 0.024,
+                  anchorY: 0.76, length: 0.18, aspect: 0.40, alpha: 0.75),
+    ]
+
+    fileprivate static func drawSweep(_ sweep: SweepBeam, tones: ResolvedTones,
+                                      emphasis: (slot: ToneRole, weight: Double)?,
+                                      at t: Double, seed: UInt64, size: CGSize,
+                                      in ctx: inout GraphicsContext) {
+        // Per-wall variation — the position/rotation noise-timeline
+        // seeds are offset by a wall-seed-derived shift (each wall
+        // samples a different stretch of the noise field) and the
+        // anchor row is jittered ±0.10, clamped to the lower band so
+        // sweeps stay stage-mounted. Pure functions of the wall seed.
+        let key = Int(sweep.posSeed)
+        let posSeed = sweep.posSeed + hash01(key, salt: seed &+ 0x0BEA_C0DE) * 512.0
+        let rotSeed = sweep.rotSeed + hash01(Int(sweep.rotSeed), salt: seed &+ 0x0BEA_C0DE) * 512.0
+        let anchorY = min(max(sweep.anchorY + seedJitter(seed, key: key, channel: 2) * 0.10, 0.62), 0.92)
+        let x = size.width * (0.5 + smoothNoise(t * sweep.speed + posSeed) * 0.42)
+        // Vertical travel: sweeps range up from the stage row toward
+        // the centre band on upward swings. 0.18 crowded the centre
+        // (with the centre wash and the emphasised emitter also
+        // there) — the blooms own the top, sweeps own the lower half.
+        let y = size.height * (anchorY + smoothNoise(t * sweep.speed * 0.7 + posSeed + 7) * 0.14)
+        let angle = smoothNoise(t * sweep.speed * 1.3 + rotSeed) * 0.9
+        let major = sweep.length * size.width
+        let color = richColor(for: sweep.role, tones: tones)
+        let boost: Double = {
+            guard let emphasis, baseSlot(sweep.role) == emphasis.slot else { return 1.0 }
+            return 1.0 + (emphasisBoost - 1.0) * emphasis.weight
+        }()
+        let coreAlpha = min(1.0, sweep.alpha * lightIntensity * boost)
+        ctx.drawLayer { layer in
+            layer.translateBy(x: x, y: y)
+            layer.rotate(by: .radians(angle))
+            // Oval via y-scale so a circular radial gradient renders
+            // the angled beam footprint smoothly (see blob comment on
+            // gradient shading vs the removed ring ladder).
+            layer.scaleBy(x: 1.0, y: sweep.aspect)
+            layer.fill(
+                Path(ellipseIn: CGRect(x: -major, y: -major,
+                                       width: major * 2, height: major * 2)),
+                with: .radialGradient(
+                    Gradient(stops: [
+                        .init(color: color.opacity(coreAlpha), location: 0.0),
+                        .init(color: color.opacity(coreAlpha * 0.4), location: 0.5),
+                        .init(color: color.opacity(0.0), location: 1.0),
                     ]),
-                    center: .center,
+                    center: .zero,
                     startRadius: 0,
-                    endRadius: diameter / 2
-                )
-            )
-            .frame(width: diameter, height: diameter)
-            .position(x: cx, y: cy)
-            .blur(radius: blur)
-            .saturation(saturation)
-            .brightness(brightness)
-            .blendMode(blend)
-    }
-
-    @ViewBuilder
-    private func spotlightOval(t: Double, period: Double, phase: Double,
-                                anchorX: Double, anchorY: Double,
-                                driftX: Double, driftY: Double,
-                                widthFrac: Double, heightFrac: Double,
-                                rotationDeg: Double, blur: Double,
-                                centreOpacity: Double, intensity: Double,
-                                brightness: Double, saturation: Double,
-                                blend: BlendMode, color: RGB) -> some View {
-        let omega = 2.0 * .pi / max(0.001, period)
-        let angle = t * omega + phase
-        let dx = cos(angle) * driftX
-        let dy = sin(angle * 0.6) * driftY
-        let logicalW = ClubVisWindow.logicalWidth
-        let logicalH = ClubVisWindow.logicalHeight
-        let cx = logicalW * (anchorX + dx)
-        let cy = logicalH * (anchorY + dy)
-        let w = logicalW * widthFrac
-        let h = logicalH * heightFrac
-        let c = Self.color(color)
-        let alpha = max(0, min(1, centreOpacity * intensity))
-        Ellipse()
-            .fill(
-                RadialGradient(
-                    gradient: Gradient(colors: [
-                        c.opacity(alpha),
-                        c.opacity(0.0),
-                    ]),
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: max(w, h) / 2
-                )
-            )
-            .frame(width: w, height: h)
-            .rotationEffect(.degrees(rotationDeg))
-            .position(x: cx, y: cy)
-            .blur(radius: blur)
-            .saturation(saturation)
-            .brightness(brightness)
-            .blendMode(blend)
-    }
-
-    /// Picks the active cue. If `override >= 0` and within bounds,
-    /// returns that specific cue verbatim (stage pinned). Otherwise
-    /// each cycle slot picks a deterministic-but-shuffled cue index
-    /// via `cueIndexForCycle`, so the wall doesn't march through
-    /// `cues` in array order — but two adjacent cycles never land
-    /// on the same cue (no immediate repeat).
-    fileprivate static func activeCue(at t: Double,
-                                      period: Double = 120,
-                                      fadeFraction: Double = 0.30,
-                                      override: Int = -1) -> StageCue {
-        if override >= 0 && override < cues.count {
-            return cues[override]
+                    endRadius: major))
         }
-        let p = max(1.0, period)
-        let cycle = t / p
-        let lo = Int(cycle.rounded(.down))
-        let frac = cycle - Double(lo)
-        let ff = max(0.001, min(0.99, fadeFraction))
-        let holdEnd = 1.0 - ff
-        let blend: Double
-        if frac < holdEnd {
-            blend = 0
-        } else {
-            let phase = (frac - holdEnd) / ff
-            blend = phase * phase * (3 - 2 * phase)
+    }
+
+    // MARK: - Noise
+
+    /// Deterministic value noise in [−1, 1] — integer-lattice hash
+    /// values, smoothstep-interpolated between neighbours. Pure
+    /// function of its argument; no runtime randomness, so every
+    /// body eval at the same `t` renders identically.
+    static func smoothNoise(_ v: Double) -> Double {
+        let i = Int(v.rounded(.down))
+        let f = v - v.rounded(.down)
+        let a = hash01(i, salt: 0x51D0_0D5E)
+        let b = hash01(i + 1, salt: 0x51D0_0D5E)
+        return (a + (b - a) * smoothstep(f)) * 2.0 - 1.0
+    }
+
+    /// Deterministic [0, 1) hash of an integer — lattice source for
+    /// `smoothNoise`. splitmix64-style diffusion so adjacent lattice
+    /// points decorrelate.
+    static func hash01(_ n: Int, salt: UInt64) -> Double {
+        var h = UInt64(bitPattern: Int64(n)) &* 0x9E37_79B9_7F4A_7C15 &+ salt
+        h ^= h >> 33
+        h &*= 0xFF51_AFD7_ED55_8CCD
+        h ^= h >> 33
+        return Double(h % 1_000_000) / 1_000_000.0
+    }
+
+    static func smoothstep(_ x: Double) -> Double {
+        let c = min(1.0, max(0.0, x))
+        return c * c * (3 - 2 * c)
+    }
+
+    // MARK: - Set resolution
+
+    /// Target set for the current state, in precedence order:
+    ///   1. Debug override ≥ 0 → pinned catalogue set (debug-only
+    ///      control, wins over every scheme).
+    ///   2. Settings scheme "Choragus" / "Custom" → the fixed set;
+    ///      matching is bypassed but changes still crossfade.
+    ///   3. Scheme "Album art" (default): lighting disabled →
+    ///      fallback set; otherwise the generated cover-shades set
+    ///      for the current artwork, or the fallback when no
+    ///      generated set is present.
+    fileprivate static func targetSet(state: BackOfTheClubDebugState) -> StageSet {
+        let sets = ClubStageSets.sets
+        let override = state.stageSetOverride
+        if override >= 0 && override < sets.count { return sets[override] }
+        switch state.colourScheme {
+        case .choragus: return ClubStageSets.choragusSet
+        case .custom: return state.customStageSet
+        case .albumArt: break
         }
-        let aIdx = cueIndexForCycle(lo)
-        let bIdx = cueIndexForCycle(lo + 1)
-        return interpolate(cues[aIdx], cues[bIdx], t: blend)
-    }
-
-    /// Deterministic shuffled cue picker: each cycle slot maps to a
-    /// pseudo-random cue index, with the constraint that consecutive
-    /// cycles never share an index. The pick for cycle `n` is the
-    /// raw hash of `n`, shifted forward by 1 if it would equal the
-    /// pick chosen for cycle `n − 1`. Iterating forward from a
-    /// negative seed slot ensures the no-repeat rule propagates
-    /// correctly past any chain of hash collisions.
-    private static func cueIndexForCycle(_ n: Int) -> Int {
-        let count = cues.count
-        guard count > 1 else { return 0 }
-        func raw(_ i: Int) -> Int {
-            // Knuth-multiplicative + xorshift folding so adjacent
-            // integers diffuse into very different bucket indices.
-            var h = UInt64(bitPattern: Int64(i)) &* 2_654_435_761
-            h ^= (h >> 33)
-            return Int(h % UInt64(count))
+        guard state.stageSetLightingEnabled else { return sets[ClubStageSets.fallbackIndex] }
+        if let generated = state.matchedGeneratedSet { return generated }
+        // Achromatic (black-and-white) covers and no-art states
+        // light with the Choragus wordmark neons — the brand scheme,
+        // not a colour guess. The Zune house set remains only for
+        // the explicit disabled toggle above.
+        if state.matchedSetIndex == ClubStageSets.fallbackIndex {
+            return ClubStageSets.choragusSet
         }
-        // Walk forward from a fixed origin so the shifted-on-collision
-        // chain is consistent across calls (otherwise `cueIndexForCycle(5)`
-        // and `cueIndexForCycle(6)` could disagree about what slot 5
-        // resolved to).
-        let origin = max(0, n - 32)  // 32-cycle window is plenty in practice
-        var prev = raw(origin)
-        if origin >= n { return prev }
-        for i in (origin + 1)...n {
-            var pick = raw(i)
-            if pick == prev { pick = (pick + 1) % count }
-            prev = pick
+        let idx = state.matchedSetIndex
+        return sets[(idx >= 0 && idx < sets.count) ? idx : ClubStageSets.fallbackIndex]
+    }
+
+    /// Tones rendered this frame. Every target change (new match,
+    /// override, enable toggle) blends from the snapshot in
+    /// `state.setFadeFrom` over `setFadeDuration` — never a hard
+    /// cut. Mid-fade changes re-snapshot, so the blend always
+    /// continues from the on-screen colours.
+    fileprivate static func resolvedTones(at t: Double,
+                                          state: BackOfTheClubDebugState) -> ResolvedTones {
+        let target = ResolvedTones(set: targetSet(state: state))
+        guard let from = state.setFadeFrom else { return target }
+        let elapsed = t - state.setFadeStart.timeIntervalSinceReferenceDate
+        guard elapsed >= 0, elapsed < setFadeDuration else { return target }
+        return ResolvedTones.lerp(from, target, t: smoothstep(elapsed / setFadeDuration))
+    }
+
+    /// Vibrancy target for the current state. Album-art scheme uses
+    /// the matched cover's vibrancy (mean sat × mean bri of chromatic
+    /// pixels); the fixed schemes and the debug override apply their
+    /// declared colours at full strength (v = 1).
+    fileprivate static func targetVibrancy(state: BackOfTheClubDebugState) -> Double {
+        if state.stageSetOverride >= 0 { return 1.0 }
+        switch state.colourScheme {
+        case .choragus, .custom: return 1.0
+        case .albumArt: return state.matchedVibrancy
         }
-        return prev
     }
 
-    private static func interpolate(_ a: StageCue, _ b: StageCue, t: Double) -> StageCue {
-        StageCue(name: t < 0.5 ? a.name : b.name,
-                 primary: lerp(a.primary, b.primary, t: t),
-                 secondary: lerp(a.secondary, b.secondary, t: t),
-                 tertiary: lerp(a.tertiary, b.tertiary, t: t))
+    /// Vibrancy rendered this frame — lerps from the snapshot in
+    /// `state.vibrancyFadeFrom` on the same clock as `resolvedTones`
+    /// so the colorize-pass opacity glides with the tone crossfade.
+    fileprivate static func resolvedVibrancy(at t: Double,
+                                             state: BackOfTheClubDebugState) -> Double {
+        let target = targetVibrancy(state: state)
+        guard let from = state.vibrancyFadeFrom else { return target }
+        let elapsed = t - state.setFadeStart.timeIntervalSinceReferenceDate
+        guard elapsed >= 0, elapsed < setFadeDuration else { return target }
+        return from + (target - from) * smoothstep(elapsed / setFadeDuration)
     }
 
-    private static func lerp(_ x: RGB, _ y: RGB, t: Double) -> RGB {
-        (x.r + (y.r - x.r) * t, x.g + (y.g - x.g) * t, x.b + (y.b - x.b) * t)
+    /// Pass-opacity grading — single definition shared by the render
+    /// body and the debug readout.
+    fileprivate static func colorizeOpacity(vibrancy: Double) -> Double {
+        0.40 + 0.45 * vibrancy
     }
-
-    private static func color(_ c: RGB) -> Color {
-        Color(red: c.r, green: c.g, blue: c.b)
+    /// Glow strengthens as vibrancy falls: a muted cover's tint pass
+    /// is weak, so the glow pass alone must carry visible light.
+    /// Curve history: 0.65 − 0.10v left a v = 0.20 cover at ~25/255
+    /// in blob cores (unlit); 0.85 − 0.30v was measurable but still
+    /// visually flat against the Zune reference. Full-strength glow
+    /// at v = 0 tapering to 0.70 at v = 1.
+    fileprivate static func glowOpacity(vibrancy: Double) -> Double {
+        1.0 - 0.30 * vibrancy
     }
+}
 
+/// One frame of the blob field. Rendered twice per frame by
+/// `ClubVisLightingView` with different blend modes (colorize + glow).
+private struct ClubVisBlobCanvas: View {
+    let tones: ClubVisLightingView.ResolvedTones
+    let t: Double
+    /// Wall seed — per-wall emitter variation (see `seedJitter`).
+    let seed: UInt64
+
+    var body: some View {
+        Canvas { ctx, size in
+            let emphasis = ClubVisLightingView.emphasisSlot(tones: tones)
+            // Uniform base wash: the wash BLOB is a radial gradient
+            // centred mid-wall, so the corners and edges sat almost
+            // unlit (reported: wash should be even across the whole
+            // wall). A flat full-canvas fill in the wash tone carries
+            // the scheme's colour to every tile; the blobs and sweeps
+            // add the structured light on top. Slow breathing pulse
+            // keeps it feeling live rather than painted on.
+            let washTone = tones.wash
+            let pulse = 0.85 + 0.15 * (0.5 + 0.5 * sin(t * 2 * .pi / 41))
+            let washAlpha = min(1.0, 0.16 * ClubVisLightingView.lightIntensity) * pulse
+            // Vertical falloff: the rig hangs from the ceiling, so
+            // the wash is brightest at the top and falls to about a
+            // third of that strength at the floor line (the multiply
+            // floor-shadow below takes it the rest of the way down).
+            let washColor = { (alpha: Double) in
+                Color(red: washTone.r, green: washTone.g,
+                      blue: washTone.b, opacity: alpha)
+            }
+            ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                     with: .linearGradient(
+                        Gradient(stops: [
+                            .init(color: washColor(washAlpha), location: 0.0),
+                            .init(color: washColor(washAlpha * 0.75), location: 0.45),
+                            .init(color: washColor(washAlpha * 0.35), location: 1.0),
+                        ]),
+                        startPoint: .zero,
+                        endPoint: CGPoint(x: 0, y: size.height)))
+            for blob in ClubVisLightingView.blobs {
+                ClubVisLightingView.draw(blob, tones: tones, emphasis: emphasis,
+                                         at: t, seed: seed, size: size, in: &ctx)
+            }
+            for sweep in ClubVisLightingView.sweeps {
+                ClubVisLightingView.drawSweep(sweep, tones: tones, emphasis: emphasis,
+                                              at: t, seed: seed, size: size, in: &ctx)
+            }
+        }
+    }
 }
 
 // MARK: - Now Playing card
@@ -3310,6 +4588,9 @@ private struct ClubVisNowPlayingCard: View {
     let trackMetadata: TrackMetadata
     let albumArtURL: URL?
     let sourceLabel: String
+    /// Format evidence line (Atmos / TV format / stream details) —
+    /// nil renders nothing, matching the main window's pill rule.
+    let formatDetails: String?
     let positionAnchor: PositionAnchor
 
     /// Average luminance of the current album art in [0, 1]. Updated
@@ -3361,8 +4642,14 @@ private struct ClubVisNowPlayingCard: View {
                     // image never lands.
                     guard let url = albumArtURL else { artLuma = 0.5; return }
                     for _ in 0..<10 {
-                        if let img = ImageCache.shared.image(for: url) {
-                            artLuma = img.averagePerceivedLuminance()
+                        // Read + luma computation off-main; the disk
+                        // queue can be busy for seconds during pool
+                        // warms.
+                        let luma = await Task.detached(priority: .utility) {
+                            ImageCache.shared.image(for: url)?.averagePerceivedLuminance()
+                        }.value
+                        if let luma {
+                            artLuma = luma
                             return
                         }
                         try? await Task.sleep(nanoseconds: 500_000_000)
@@ -3386,29 +4673,38 @@ private struct ClubVisNowPlayingCard: View {
             // matches the artwork so the Spacer can push the source
             // label down to sit on the same baseline as the bottom
             // of the album art.
+            // Line order mirrors the player's now-playing stack:
+            // title, artist, album.
             VStack(alignment: .leading, spacing: 12) {
-                if !trackMetadata.artist.isEmpty {
-                    Text(trackMetadata.artist.uppercased())
+                if !trackMetadata.title.isEmpty {
+                    Text(trackMetadata.title.uppercased())
                         .font(.system(size: 30, weight: .heavy))
                         .tracking(2)
                         .foregroundStyle(.white)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
-                if !trackMetadata.album.isEmpty {
-                    Text(trackMetadata.album.uppercased())
+                if !trackMetadata.artist.isEmpty {
+                    Text(trackMetadata.artist.uppercased())
                         .font(.system(size: 22, weight: .semibold))
                         .tracking(1.5)
                         .foregroundStyle(.white.opacity(0.85))
                         .lineLimit(1)
                 }
-                if !trackMetadata.title.isEmpty {
-                    Text(trackMetadata.title)
+                if !trackMetadata.album.isEmpty {
+                    Text(trackMetadata.album)
                         .font(.system(size: 22, weight: .regular, design: .rounded))
                         .foregroundStyle(.white.opacity(0.95))
-                        .lineLimit(2)
+                        .lineLimit(1)
                         .padding(.top, 4)
                 }
                 Spacer(minLength: 0)
+                if let formatDetails {
+                    Text(formatDetails.uppercased())
+                        .font(.system(size: 13, weight: .semibold))
+                        .tracking(1.5)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
                 if !sourceLabel.isEmpty {
                     Text(sourceLabel.uppercased())
                         .font(.system(size: 13, weight: .semibold))
@@ -3923,10 +5219,231 @@ final class BackOfTheClubDebugState: ObservableObject {
     /// compare against what the Now Playing About tab shows and
     /// confirm both views are reading the same cached string.
     @Published var nowPlayingBio: String = ""
-    /// Live-tunable lighting parameters — `ClubVisLightingView` reads
-    /// from here every body eval, so adjusting any control in the
-    /// debug window applies immediately without rebuild.
+    /// Lighting parameters surfaced to the debug window —
+    /// `ClubVisWindow.stage` reads the black multiply opacity every
+    /// body eval, so slider changes apply immediately.
     @Published var lighting: LightingControls = LightingControls()
+
+    /// Seed of the wall currently on screen — the packer layout seed,
+    /// written from `ClubVisWindow.recomputeSlots()` (the funnel every
+    /// wall-start path passes through). `ClubVisLightingView` derives
+    /// per-emitter anchor jitter, phases, and sweep noise offsets from
+    /// it, so each wall renders a distinct deterministic light
+    /// arrangement: same seed → identical lights, new wall → new
+    /// arrangement. Never derived from runtime randomness here.
+    @Published var wallLightSeed: UInt64 = 0
+
+    // MARK: - Stage-set lighting (matched from now-playing art)
+
+    /// Catalogue index applied when no generated set is present —
+    /// the fallback for no-art and achromatic-cover states. Written
+    /// only through `setMatchedSet` so every tone change starts a
+    /// crossfade.
+    @Published private(set) var matchedSetIndex: Int = ClubStageSets.fallbackIndex
+    /// "Cover shades" set generated from the current artwork's
+    /// detected hues — the automatic lighting target. Nil on the
+    /// fallback path (no art / achromatic cover). Written only
+    /// through `setMatchedSet`.
+    @Published private(set) var matchedGeneratedSet: StageSet?
+    /// Gate for matched-set lighting. Off = set #0 ("Zune house").
+    /// Applies within the album-art scheme only — the fixed schemes
+    /// bypass matching entirely.
+    @Published var stageSetLightingEnabled: Bool = true {
+        didSet { beginSetFade() }
+    }
+
+    // MARK: - Colour scheme (Settings-selected)
+
+    /// Active Club Vis colour scheme. Bound directly by the Settings
+    /// UI (single source of truth — no parallel @AppStorage), loaded
+    /// from UserDefaults at init, persisted on change. Every change
+    /// runs the standard set crossfade. `albumArt` (default) is the
+    /// existing cover-derived pipeline including its fallback rules;
+    /// `choragus` / `custom` bypass matching and apply a fixed set.
+    @Published var colourScheme: VisColourScheme = VisColourScheme.current {
+        didSet {
+            guard colourScheme != oldValue else { return }
+            beginSetFade()
+            UserDefaults.standard.set(colourScheme.rawValue,
+                                      forKey: UDKey.visColourScheme)
+        }
+    }
+    /// Custom-scheme tones, "#RRGGBB". Defaults are the Choragus
+    /// scheme's role tones so first-time Custom selection renders a
+    /// coherent set before the user edits anything.
+    @Published var customWashHex: String =
+        UserDefaults.standard.string(forKey: UDKey.visCustomToneWash)
+            ?? ClubStageSets.choragusSet.wash.hexString {
+        didSet { customToneChanged(oldValue, customWashHex, key: UDKey.visCustomToneWash) }
+    }
+    @Published var customBeamAHex: String =
+        UserDefaults.standard.string(forKey: UDKey.visCustomToneBeamA)
+            ?? ClubStageSets.choragusSet.beamA.hexString {
+        didSet { customToneChanged(oldValue, customBeamAHex, key: UDKey.visCustomToneBeamA) }
+    }
+    @Published var customBeamBHex: String =
+        UserDefaults.standard.string(forKey: UDKey.visCustomToneBeamB)
+            ?? ClubStageSets.choragusSet.beamB.hexString {
+        didSet { customToneChanged(oldValue, customBeamBHex, key: UDKey.visCustomToneBeamB) }
+    }
+    @Published var customAccentHex: String =
+        UserDefaults.standard.string(forKey: UDKey.visCustomToneAccent)
+            ?? ClubStageSets.choragusSet.accent.hexString {
+        didSet { customToneChanged(oldValue, customAccentHex, key: UDKey.visCustomToneAccent) }
+    }
+
+    private func customToneChanged(_ old: String, _ new: String, key: String) {
+        guard new != old else { return }
+        // Re-snapshot the fade so live ColorPicker drags glide from
+        // the on-screen colours instead of hard-cutting.
+        if colourScheme == .custom { beginSetFade() }
+        UserDefaults.standard.set(new, forKey: key)
+    }
+
+    /// The custom StageSet built from the four stored tones.
+    var customStageSet: StageSet {
+        ClubStageSets.customSet(washHex: customWashHex,
+                                beamAHex: customBeamAHex,
+                                beamBHex: customBeamBHex,
+                                accentHex: customAccentHex)
+    }
+    /// −1 = follow the matcher; valid set index = pin that set.
+    @Published var stageSetOverride: Int = -1 {
+        didSet { beginSetFade() }
+    }
+    /// Histogram readings behind the current match — dominant
+    /// detected hue (nil = no chromatic mass) and chromatic
+    /// fraction. Debug-window display only.
+    @Published private(set) var matchedDominantHue: Double?
+    @Published private(set) var matchedTopHues: [Double] = []
+    @Published private(set) var matchedChromaticFraction: Double = 0
+    /// Mean saturation / brightness of the cover's chromatic pixels
+    /// and their product (the vibrancy factor v, [0, 1]). v grades
+    /// the cover-shades ladder AND the lighting view's colorize-pass
+    /// opacity: muted / near-achromatic covers get a mostly-neutral
+    /// wall instead of a full-strength low-saturation tint.
+    @Published private(set) var matchedMeanSaturation: Double = 0
+    @Published private(set) var matchedMeanBrightness: Double = 0
+    @Published private(set) var matchedVibrancy: Double = 0
+    /// Crossfade origin — the tones rendered at the moment the
+    /// target set last changed. `ClubVisLightingView` blends from
+    /// here to the current target over
+    /// `ClubVisLightingView.setFadeDuration`, so mid-fade changes
+    /// continue from the on-screen colours.
+    fileprivate var setFadeFrom: ClubVisLightingView.ResolvedTones?
+    fileprivate var setFadeStart: Date = .distantPast
+    /// Vibrancy crossfade origin — snapshotted alongside
+    /// `setFadeFrom` so the colorize-pass opacity lerps on the same
+    /// clock as the tones instead of hard-cutting.
+    fileprivate var vibrancyFadeFrom: Double?
+
+    /// Publishes a match result. Histogram diagnostics update on
+    /// every call — a new cover can produce new readings while
+    /// yielding identical tones; only a TONE change starts a
+    /// crossfade (a new cover with the same detected hues keeps the
+    /// current fade state; any tone change re-snapshots the fade).
+    /// Match deferred while a wall rebuild is in flight — committed
+    /// instantly at the rebuild's black point. Transition order on a
+    /// track change WITH a wall rebuild is: wall fades out under the
+    /// EXISTING lighting, the new lighting commits behind the opaque
+    /// cover, the wall fades back in already lit by the new scheme.
+    /// The 6 s tone crossfade is reserved for track changes without
+    /// a rebuild.
+    private var pendingRebuildMatch: (index: Int, generated: StageSet?,
+                                      dominantHue: Double?, topHues: [Double],
+                                      chromaticFraction: Double,
+                                      meanSaturation: Double,
+                                      meanBrightness: Double)?
+
+    func setMatchedSet(_ index: Int,
+                       generated: StageSet? = nil,
+                       dominantHue: Double? = nil,
+                       topHues: [Double] = [],
+                       chromaticFraction: Double = 0,
+                       meanSaturation: Double = 0,
+                       meanBrightness: Double = 0) {
+        if isWallRebuilding {
+            visLog("lighting DEFER — match queued behind rebuild (set=\(index))")
+            pendingRebuildMatch = (index, generated, dominantHue, topHues,
+                                   chromaticFraction, meanSaturation, meanBrightness)
+            return
+        }
+        matchedDominantHue = dominantHue
+        matchedTopHues = topHues
+        matchedChromaticFraction = chromaticFraction
+        let newVibrancy = min(1.0, max(0.0, meanSaturation * meanBrightness))
+        let oldTones = (matchedGeneratedSet ?? catalogueSet(matchedSetIndex)).tones
+        let newTones = (generated ?? catalogueSet(index)).tones
+        // Snapshot BEFORE mutating — beginSetFade resolves the
+        // currently rendered tones (and vibrancy) from this state.
+        // Vibrancy alone changing (same tones, different cover
+        // statistics) also starts a fade so the colorize opacity
+        // never hard-cuts.
+        if newTones != oldTones || abs(newVibrancy - matchedVibrancy) > 0.01 {
+            visLog("lighting FADE begin — tonesChanged=\(newTones != oldTones) vibDelta=\(String(format: "%.3f", abs(newVibrancy - matchedVibrancy))) set=\(index)")
+            beginSetFade()
+        } else {
+            visLog("lighting NO-CHANGE — set=\(index) same tones+vibrancy")
+        }
+        matchedGeneratedSet = generated
+        matchedSetIndex = index
+        matchedMeanSaturation = meanSaturation
+        matchedMeanBrightness = meanBrightness
+        matchedVibrancy = newVibrancy
+    }
+
+    /// True when applying this match would change the rendered
+    /// tones — the between-songs dip only runs for a real scheme
+    /// change.
+    func tonesWouldChange(_ index: Int, generated: StageSet?) -> Bool {
+        let newTones = (generated ?? catalogueSet(index)).tones
+        let oldTones = (matchedGeneratedSet ?? catalogueSet(matchedSetIndex)).tones
+        return newTones != oldTones
+    }
+
+    /// Instant-commit for the dip path: the lights are dark, so any
+    /// in-flight tone crossfade is cancelled — the new scheme must be
+    /// fully resolved when they come back up.
+    func snapFadeToTarget() {
+        setFadeFrom = nil
+        vibrancyFadeFrom = nil
+        setFadeStart = .distantPast
+    }
+
+    /// Black-point commit for the rebuild pipeline: apply any match
+    /// deferred during the fade-out and snap the tone/vibrancy fade
+    /// to target — the reveal shows the new lighting fully resolved,
+    /// with no crossfade running behind the fade-in.
+    func commitLightingAtRebuildBlackPoint() {
+        visLog("lighting SNAP at black point — pending=\(pendingRebuildMatch != nil)")
+        if let p = pendingRebuildMatch {
+            pendingRebuildMatch = nil
+            matchedDominantHue = p.dominantHue
+            matchedTopHues = p.topHues
+            matchedChromaticFraction = p.chromaticFraction
+            matchedGeneratedSet = p.generated
+            matchedSetIndex = p.index
+            matchedMeanSaturation = p.meanSaturation
+            matchedMeanBrightness = p.meanBrightness
+            matchedVibrancy = min(1.0, max(0.0, p.meanSaturation * p.meanBrightness))
+        }
+        setFadeFrom = nil
+        vibrancyFadeFrom = nil
+        setFadeStart = .distantPast
+    }
+
+    private func catalogueSet(_ index: Int) -> StageSet {
+        let sets = ClubStageSets.sets
+        return sets.indices.contains(index)
+            ? sets[index] : sets[ClubStageSets.fallbackIndex]
+    }
+
+    private func beginSetFade() {
+        let now = Date().timeIntervalSinceReferenceDate
+        setFadeFrom = ClubVisLightingView.resolvedTones(at: now, state: self)
+        vibrancyFadeFrom = ClubVisLightingView.resolvedVibrancy(at: now, state: self)
+        setFadeStart = Date()
+    }
 
     /// Live-tunable packer config — `WallSlotPacker.pack` reads from
     /// here when called from `ClubVisWindow.slots`. Debug UI lets us
@@ -3956,9 +5473,14 @@ final class BackOfTheClubDebugState: ObservableObject {
         wallFrameCount += 1
         let elapsed = Date().timeIntervalSince(wallFrameSampleStart)
         if elapsed >= 1.0 {
-            wallFps = Double(wallFrameCount) / elapsed
+            let fps = Double(wallFrameCount) / elapsed
             wallFrameCount = 0
             wallFrameSampleStart = Date()
+            // Called from inside a Canvas draw closure — publishing
+            // there mutates observable state DURING a view update
+            // (undefined re-render behaviour). Defer off the render
+            // pass.
+            Task { @MainActor in self.wallFps = fps }
         }
     }
 
@@ -4007,96 +5529,10 @@ final class BackOfTheClubDebugState: ObservableObject {
     @Published var swap3x3Percent: Int = 5
 
     struct LightingControls {
-        // Per-shape enable
-        var ambientLEnabled: Bool = true
-        var ambientREnabled: Bool = true
-        var spotlightTLEnabled: Bool = true
-        var spotlightBREnabled: Bool = true
-        // Ambient L
-        var ambientLAnchorX: Double = 0.30
-        var ambientLAnchorY: Double = 0.50
-        var ambientLPeriod: Double = 200
-        var ambientLDriftX: Double = 0.10
-        var ambientLDriftY: Double = 0.08
-        var ambientLSize: Double = 1.40
-        var ambientLBlur: Double = 180
-        var ambientLOpacity: Double = 0.90
-        var ambientLIntensity: Double = 1.0
-        var ambientLBrightness: Double = 0.0
-        var ambientLSaturation: Double = 1.0
-        var ambientLBlend: BlendModeChoice = .normal
-        // Ambient R
-        var ambientRAnchorX: Double = 0.70
-        var ambientRAnchorY: Double = 0.50
-        var ambientRPeriod: Double = 240
-        var ambientRDriftX: Double = 0.10
-        var ambientRDriftY: Double = 0.08
-        var ambientRSize: Double = 1.40
-        var ambientRBlur: Double = 180
-        var ambientROpacity: Double = 0.90
-        var ambientRIntensity: Double = 1.0
-        var ambientRBrightness: Double = 0.0
-        var ambientRSaturation: Double = 1.0
-        var ambientRBlend: BlendModeChoice = .normal
-        // Spotlight TL
-        var spotlightTLAnchorX: Double = 0.30
-        var spotlightTLAnchorY: Double = 0.30
-        var spotlightTLPeriod: Double = 130
-        var spotlightTLDriftX: Double = 0.20
-        var spotlightTLDriftY: Double = 0.15
-        var spotlightTLWidth: Double = 0.40
-        var spotlightTLHeight: Double = 0.30
-        var spotlightTLRotation: Double = 25
-        var spotlightTLBlur: Double = 60
-        var spotlightTLOpacity: Double = 0.95
-        var spotlightTLIntensity: Double = 1.0
-        var spotlightTLBrightness: Double = 0.0
-        var spotlightTLSaturation: Double = 1.0
-        var spotlightTLBlend: BlendModeChoice = .normal
-        // Spotlight BR
-        var spotlightBRAnchorX: Double = 0.70
-        var spotlightBRAnchorY: Double = 0.70
-        var spotlightBRPeriod: Double = 165
-        var spotlightBRDriftX: Double = 0.18
-        var spotlightBRDriftY: Double = 0.14
-        var spotlightBRWidth: Double = 0.45
-        var spotlightBRHeight: Double = 0.32
-        var spotlightBRRotation: Double = -35
-        var spotlightBRBlur: Double = 60
-        var spotlightBROpacity: Double = 0.95
-        var spotlightBRIntensity: Double = 1.0
-        var spotlightBRBrightness: Double = 0.0
-        var spotlightBRSaturation: Double = 1.0
-        var spotlightBRBlend: BlendModeChoice = .normal
-        // (wall saturation is pinned at 0.10 — not exposed here.)
-        // Global
-        var blackMultiplyOpacity: Double = 0.45
-        var ambientBlendMode: BlendModeChoice = .color
-        var spotlightBlendMode: BlendModeChoice = .overlay
-        // Cue
-        var cuePeriod: Double = 120
-        var cueFadeFraction: Double = 0.30
-        /// -1 = auto cycle through cues (default behaviour);
-        /// 0..6 = pin the active cue to a specific stage.
-        var stageOverride: Int = -1
-
-        enum BlendModeChoice: String, CaseIterable, Identifiable {
-            case color, softLight, overlay, screen, multiply, plusLighter, normal, plusDarker, sourceAtop
-            var id: String { rawValue }
-            var blend: BlendMode {
-                switch self {
-                case .color: return .color
-                case .softLight: return .softLight
-                case .overlay: return .overlay
-                case .screen: return .screen
-                case .multiply: return .multiply
-                case .plusLighter: return .plusLighter
-                case .normal: return .normal
-                case .plusDarker: return .plusDarker
-                case .sourceAtop: return .sourceAtop
-                }
-            }
-        }
+        /// Darkening pass over wall + lighting — venue-back-wall
+        /// brightness target. (Wall saturation is pinned at 0.10 —
+        /// not exposed here.)
+        var blackMultiplyOpacity: Double = 0.40
     }
     /// URL → metadata snapshot used by the wall view to enrich
     /// slot rows. Updated alongside `poolRows` so the wall doesn't
@@ -4105,8 +5541,67 @@ final class BackOfTheClubDebugState: ObservableObject {
 }
 
 // MARK: - Debug companion window UI
+//
+// Maintainer tuning surface only. `CHORAGUS_DEV` is defined by the
+// maintainer's local build configuration and by nothing else, so
+// neither a release build nor a fork's build compiles any of this —
+// the panel's controls and its English-only labels never reach a user.
+#if CHORAGUS_DEV
 
 struct BackOfTheClubDebugWindow: View {
+    /// Sector name for a hue in degrees — the vocabulary of the
+    /// match narration.
+    /// Names aligned with the matcher's colour groups (see
+    /// StageSetMatcher.hueGroup) so the narration and the peak
+    /// discounting agree — the 30°-sector names called 25° "red".
+    static func hueName(_ h: Double) -> String {
+        let hn = StageSetMatcher.normalizedHue(h)
+        switch StageSetMatcher.hueGroup(hn) {
+        case 0: return "red"
+        case 1: return hn < 50 ? "orange" : "yellow"
+        case 2: return "green"
+        case 3: return "teal"
+        case 4: return "blue"
+        case 5: return "violet"
+        default: return "magenta"
+        }
+    }
+
+    /// Narrates: which scheme is active, what was detected on the
+    /// cover, then how the lighting tones were derived from it.
+    static func matchExplanation(state: BackOfTheClubDebugState) -> String {
+        let scheme: String
+        switch state.colourScheme {
+        case .choragus:
+            scheme = "Scheme: Choragus (Settings) — fixed wordmark neon set; "
+                   + "cover matching bypassed. Histogram readings below are "
+                   + "informational only. "
+        case .custom:
+            scheme = "Scheme: Custom (Settings) — user-selected tones; "
+                   + "cover matching bypassed. Histogram readings below are "
+                   + "informational only. "
+        case .albumArt:
+            scheme = "Scheme: Album art (Settings default) — tones derive "
+                   + "from the current cover. "
+        }
+        let pct = String(format: "%.1f", state.matchedChromaticFraction * 100)
+        if state.matchedTopHues.isEmpty {
+            return scheme
+                 + "Detected: no usable colour — \(pct)% of sampled pixels are chromatic "
+                 + "(black/white/grey are excluded). Below the 0.8% floor the cover is "
+                 + "treated as achromatic and the Choragus wordmark scheme is used."
+        }
+        let peaks = state.matchedTopHues
+            .map { String(format: "%.0f° (%@)", $0, hueName($0)) }
+            .joined(separator: ", ")
+        return scheme
+             + "Detected: \(pct)% of sampled pixels are chromatic (black/white/grey "
+             + "excluded). Strongest hue peaks, mass-ordered: \(peaks). "
+             + "Selection: lighting tones are shade ladders of these detected hues "
+             + "only — no hues are added. Colour theory grades the ladder "
+             + "(wash deepest, accent brightest), scaled by cover vibrancy."
+    }
+
     @StateObject private var state = BackOfTheClubDebugState.shared
 
     var body: some View {
@@ -4115,7 +5610,8 @@ struct BackOfTheClubDebugWindow: View {
                 contextSection
                 packerSection
                 swapAndFadeSection
-                lightingSection
+                stageSetSection
+                setTemplatesSection
                 lightingControlsSection
                 queueSection
                 poolSection
@@ -4262,30 +5758,152 @@ struct BackOfTheClubDebugWindow: View {
         }
     }
 
-    private var lightingSection: some View {
-        GroupBox("Active stage cue (live, 1 fps sample)") {
-            TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                let cue = ClubVisLightingView.activeCue(at: t)
+    // MARK: - Stage set lighting
+
+    private var stageSetSection: some View {
+        GroupBox("Stage set lighting") {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Match set from now-playing art",
+                       isOn: $state.stageSetLightingEnabled)
+                let matched = state.matchedGeneratedSet ?? ClubStageSets.sets[
+                    min(max(0, state.matchedSetIndex), ClubStageSets.sets.count - 1)]
+                Text(state.matchedGeneratedSet != nil
+                        ? "Matched: \(matched.name)"
+                        : "Matched: \(matched.id). \(matched.name)")
+                    .font(.system(.body, design: .monospaced))
+                Text(matched.theoryBasis)
+                    .font(.caption).foregroundStyle(.secondary)
+                // Plain-language narration of the match pipeline,
+                // composed from the live histogram readings.
+                Text(Self.matchExplanation(state: state))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Vibrancy readout — the applied value accounts for
+                // the active scheme (fixed schemes pin v = 1).
+                Text(String(format: "Vibrancy: cover v=%.2f (mean sat %.2f × mean bri %.2f "
+                                  + "of chromatic pixels) — applied v=%.2f, colorize pass "
+                                  + "opacity %.2f, glow pass %.2f.",
+                            state.matchedVibrancy,
+                            state.matchedMeanSaturation,
+                            state.matchedMeanBrightness,
+                            ClubVisLightingView.targetVibrancy(state: state),
+                            ClubVisLightingView.colorizeOpacity(
+                                vibrancy: ClubVisLightingView.targetVibrancy(state: state)),
+                            ClubVisLightingView.glowOpacity(
+                                vibrancy: ClubVisLightingView.targetVibrancy(state: state))))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Hue-outlier emphasis readout — mirrors the render
+                // path's emphasisSlot on the matched set's tones.
+                if let emphasis = ClubVisLightingView.emphasisSlot(
+                    tones: .init(wash: matched.wash, beamA: matched.beamA,
+                                 beamB: matched.beamB, accent: matched.accent)) {
+                    Text("Hue outlier: \(String(describing: emphasis.slot)) sits apart from "
+                         + "the other three tones — its emitters draw at "
+                         + String(format: "%.2f×",
+                                  1.0 + (ClubVisLightingView.emphasisBoost - 1.0) * emphasis.weight)
+                         + " alpha so the differing colour stays visible.")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                // Swatches show the ACTIVE set (override / disabled
+                // state applied), not necessarily the matched one.
+                let active = ClubVisLightingView.targetSet(state: state)
                 HStack(spacing: 14) {
-                    cueSwatch(label: "primary", color: cue.primary)
-                    cueSwatch(label: "secondary", color: cue.secondary)
-                    cueSwatch(label: "tertiary", color: cue.tertiary)
+                    toneSwatch(label: "wash", tone: active.wash)
+                    toneSwatch(label: "beam A", tone: active.beamA)
+                    toneSwatch(label: "beam B", tone: active.beamB)
+                    toneSwatch(label: "accent", tone: active.accent)
                     Spacer()
                 }
+                HStack {
+                    Text("Override").frame(width: 110, alignment: .leading).font(.caption)
+                    Picker("", selection: $state.stageSetOverride) {
+                        Text("Auto (matched)").tag(-1)
+                        ForEach(ClubStageSets.sets) { set in
+                            Text("\(set.id). \(set.name)").tag(set.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 260)
+                }
+                Text("Set changes crossfade over \(Int(ClubVisLightingView.setFadeDuration)) s. Disabled toggle resolves to set 0 (Zune house); achromatic art resolves to the Choragus scheme.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
+            .padding(.vertical, 4)
         }
     }
 
-    private func cueSwatch(label: String, color: ClubVisLightingView.RGB) -> some View {
-        VStack(spacing: 4) {
+    private func toneSwatch(label: String, tone: StageTone) -> some View {
+        let r = Int((tone.r * 255).rounded())
+        let g = Int((tone.g * 255).rounded())
+        let b = Int((tone.b * 255).rounded())
+        return VStack(spacing: 4) {
             RoundedRectangle(cornerRadius: 6)
-                .fill(Color(red: color.r, green: color.g, blue: color.b))
+                .fill(tone.color)
                 .frame(width: 96, height: 48)
             Text(label).font(.caption2)
-            Text(String(format: "RGB %.2f %.2f %.2f", color.r, color.g, color.b))
+            Text(String(format: "#%02X%02X%02X", r, g, b))
+                .font(.system(.caption2, design: .monospaced))
+            Text("\(r) \(g) \(b)")
                 .font(.system(.caption2, design: .monospaced))
         }
+    }
+
+    // MARK: - Set templates
+
+    /// Every declared set in one auditable grid — index, name,
+    /// theory basis, four role swatches. Tapping a row pins the set
+    /// through the same override binding the picker uses.
+    private var setTemplatesSection: some View {
+        GroupBox("Set templates (\(ClubStageSets.sets.count))") {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(ClubStageSets.sets) { set in
+                        templateRow(set)
+                    }
+                }
+            }
+            .frame(maxHeight: 300)
+        }
+    }
+
+    private func templateRow(_ set: StageSet) -> some View {
+        HStack(spacing: 8) {
+            Text("\(set.id)")
+                .monospacedDigit()
+                .frame(width: 26, alignment: .trailing)
+            Text(set.name)
+                .frame(width: 160, alignment: .leading)
+                .lineLimit(1)
+            miniSwatch(set.wash)
+            miniSwatch(set.beamA)
+            miniSwatch(set.beamB)
+            miniSwatch(set.accent)
+            Text(set.theoryBasis)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .padding(.vertical, 2)
+        .padding(.horizontal, 4)
+        .background(state.stageSetOverride == set.id
+                        ? Color.accentColor.opacity(0.18)
+                        : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 4))
+        .contentShape(Rectangle())
+        .onTapGesture { state.stageSetOverride = set.id }
+    }
+
+    private func miniSwatch(_ tone: StageTone) -> some View {
+        RoundedRectangle(cornerRadius: 3)
+            .fill(tone.color)
+            .frame(width: 26, height: 16)
     }
 
     private var queueSection: some View {
@@ -4326,193 +5944,16 @@ struct BackOfTheClubDebugWindow: View {
     // MARK: - Lighting controls
 
     private var lightingControlsSection: some View {
-        GroupBox("Lighting controls (live)") {
+        GroupBox("Lighting (live)") {
             VStack(alignment: .leading, spacing: 8) {
-                globalLightingControls
-                Divider()
-                ambientLControls
-                Divider()
-                ambientRControls
-                Divider()
-                spotlightTLControls
-                Divider()
-                spotlightBRControls
-                Divider()
-                Button("Reset all to defaults") {
+                slider("Black multiply", $state.lighting.blackMultiplyOpacity,
+                       range: 0...0.95, step: 0.01) { String(format: "%.2f", $0) }
+                Button("Reset to default") {
                     state.lighting = BackOfTheClubDebugState.LightingControls()
                 }
                 .controlSize(.small)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private var globalLightingControls: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Global").font(.caption.bold()).foregroundStyle(.secondary)
-            slider("Black multiply", $state.lighting.blackMultiplyOpacity, range: 0...0.95, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Cue period (s)", $state.lighting.cuePeriod, range: 5...600, step: 1) { "\(Int($0))" }
-            slider("Cue fade frac", $state.lighting.cueFadeFraction, range: 0.05...0.95, step: 0.01) { String(format: "%.2f", $0) }
-            stagePicker
-            HStack {
-                Text("Ambient blend").frame(width: 110, alignment: .leading)
-                Picker("", selection: $state.lighting.ambientBlendMode) {
-                    ForEach(BackOfTheClubDebugState.LightingControls.BlendModeChoice.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 180)
-            }
-            HStack {
-                Text("Spotlight blend").frame(width: 110, alignment: .leading)
-                Picker("", selection: $state.lighting.spotlightBlendMode) {
-                    ForEach(BackOfTheClubDebugState.LightingControls.BlendModeChoice.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 180)
-            }
-        }
-    }
-
-    /// Stage cue picker — "Auto cycle" plus one row per named cue.
-    /// Each cue shows its primary/secondary/tertiary swatches inline
-    /// for quick visual identification.
-    private var stagePicker: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Active stage").frame(width: 110, alignment: .leading).font(.caption)
-                Picker("", selection: $state.lighting.stageOverride) {
-                    Text("Auto cycle").tag(-1)
-                    ForEach(Array(ClubVisLightingView.cues.enumerated()), id: \.offset) { idx, cue in
-                        Text(cue.name).tag(idx)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 220)
-            }
-            // Cue swatches grid for quick reference.
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(Array(ClubVisLightingView.cues.enumerated()), id: \.offset) { idx, cue in
-                    HStack(spacing: 6) {
-                        Text("\(idx + 1).")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 16, alignment: .trailing)
-                        Text(cue.name)
-                            .font(.system(size: 10))
-                            .frame(width: 90, alignment: .leading)
-                        cueSwatch(cue.primary, size: 14)
-                        cueSwatch(cue.secondary, size: 14)
-                        cueSwatch(cue.tertiary, size: 14)
-                        if state.lighting.stageOverride == idx {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.tint)
-                        }
-                        Spacer()
-                    }
-                }
-            }
-            .padding(.leading, 110)
-        }
-    }
-
-    private func cueSwatch(_ rgb: ClubVisLightingView.RGB, size: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: 2)
-            .fill(ClubVisLightingView.swatchColor(rgb))
-            .frame(width: size, height: size)
-    }
-
-    private var ambientLControls: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle("Ambient L (left circle, primary)", isOn: $state.lighting.ambientLEnabled).font(.caption.bold())
-            slider("Anchor X", $state.lighting.ambientLAnchorX, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Anchor Y", $state.lighting.ambientLAnchorY, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Period (s)", $state.lighting.ambientLPeriod, range: 5...600, step: 1) { "\(Int($0))" }
-            slider("Drift X", $state.lighting.ambientLDriftX, range: 0...0.5, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Drift Y", $state.lighting.ambientLDriftY, range: 0...0.5, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Size ×", $state.lighting.ambientLSize, range: 0.2...3.0, step: 0.05) { String(format: "%.2f", $0) }
-            slider("Blur (pt)", $state.lighting.ambientLBlur, range: 0...300, step: 1) { "\(Int($0))" }
-            slider("Centre α", $state.lighting.ambientLOpacity, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Intensity ×", $state.lighting.ambientLIntensity, range: 0...2, step: 0.05) { String(format: "%.2f", $0) }
-            slider("Brightness", $state.lighting.ambientLBrightness, range: -1...1, step: 0.05) { String(format: "%+.2f", $0) }
-            slider("Saturation", $state.lighting.ambientLSaturation, range: 0...2, step: 0.05) { String(format: "%.2f", $0) }
-            blendPicker("Element blend", $state.lighting.ambientLBlend)
-        }
-    }
-
-    private var ambientRControls: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle("Ambient R (right circle, secondary)", isOn: $state.lighting.ambientREnabled).font(.caption.bold())
-            slider("Anchor X", $state.lighting.ambientRAnchorX, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Anchor Y", $state.lighting.ambientRAnchorY, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Period (s)", $state.lighting.ambientRPeriod, range: 5...600, step: 1) { "\(Int($0))" }
-            slider("Drift X", $state.lighting.ambientRDriftX, range: 0...0.5, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Drift Y", $state.lighting.ambientRDriftY, range: 0...0.5, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Size ×", $state.lighting.ambientRSize, range: 0.2...3.0, step: 0.05) { String(format: "%.2f", $0) }
-            slider("Blur (pt)", $state.lighting.ambientRBlur, range: 0...300, step: 1) { "\(Int($0))" }
-            slider("Centre α", $state.lighting.ambientROpacity, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Intensity ×", $state.lighting.ambientRIntensity, range: 0...2, step: 0.05) { String(format: "%.2f", $0) }
-            slider("Brightness", $state.lighting.ambientRBrightness, range: -1...1, step: 0.05) { String(format: "%+.2f", $0) }
-            slider("Saturation", $state.lighting.ambientRSaturation, range: 0...2, step: 0.05) { String(format: "%.2f", $0) }
-            blendPicker("Element blend", $state.lighting.ambientRBlend)
-        }
-    }
-
-    private var spotlightTLControls: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle("Spotlight TL (top-left, tertiary)", isOn: $state.lighting.spotlightTLEnabled).font(.caption.bold())
-            slider("Anchor X", $state.lighting.spotlightTLAnchorX, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Anchor Y", $state.lighting.spotlightTLAnchorY, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Period (s)", $state.lighting.spotlightTLPeriod, range: 5...600, step: 1) { "\(Int($0))" }
-            slider("Drift X", $state.lighting.spotlightTLDriftX, range: 0...0.5, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Drift Y", $state.lighting.spotlightTLDriftY, range: 0...0.5, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Width frac", $state.lighting.spotlightTLWidth, range: 0.05...2.0, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Height frac", $state.lighting.spotlightTLHeight, range: 0.05...2.0, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Rotation°", $state.lighting.spotlightTLRotation, range: -90...90, step: 1) { "\(Int($0))°" }
-            slider("Blur (pt)", $state.lighting.spotlightTLBlur, range: 0...200, step: 1) { "\(Int($0))" }
-            slider("Centre α", $state.lighting.spotlightTLOpacity, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Intensity ×", $state.lighting.spotlightTLIntensity, range: 0...2, step: 0.05) { String(format: "%.2f", $0) }
-            slider("Brightness", $state.lighting.spotlightTLBrightness, range: -1...1, step: 0.05) { String(format: "%+.2f", $0) }
-            slider("Saturation", $state.lighting.spotlightTLSaturation, range: 0...2, step: 0.05) { String(format: "%.2f", $0) }
-            blendPicker("Element blend", $state.lighting.spotlightTLBlend)
-        }
-    }
-
-    private var spotlightBRControls: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle("Spotlight BR (bottom-right, primary)", isOn: $state.lighting.spotlightBREnabled).font(.caption.bold())
-            slider("Anchor X", $state.lighting.spotlightBRAnchorX, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Anchor Y", $state.lighting.spotlightBRAnchorY, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Period (s)", $state.lighting.spotlightBRPeriod, range: 5...600, step: 1) { "\(Int($0))" }
-            slider("Drift X", $state.lighting.spotlightBRDriftX, range: 0...0.5, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Drift Y", $state.lighting.spotlightBRDriftY, range: 0...0.5, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Width frac", $state.lighting.spotlightBRWidth, range: 0.05...2.0, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Height frac", $state.lighting.spotlightBRHeight, range: 0.05...2.0, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Rotation°", $state.lighting.spotlightBRRotation, range: -90...90, step: 1) { "\(Int($0))°" }
-            slider("Blur (pt)", $state.lighting.spotlightBRBlur, range: 0...200, step: 1) { "\(Int($0))" }
-            slider("Centre α", $state.lighting.spotlightBROpacity, range: 0...1, step: 0.01) { String(format: "%.2f", $0) }
-            slider("Intensity ×", $state.lighting.spotlightBRIntensity, range: 0...2, step: 0.05) { String(format: "%.2f", $0) }
-            slider("Brightness", $state.lighting.spotlightBRBrightness, range: -1...1, step: 0.05) { String(format: "%+.2f", $0) }
-            slider("Saturation", $state.lighting.spotlightBRSaturation, range: 0...2, step: 0.05) { String(format: "%.2f", $0) }
-            blendPicker("Element blend", $state.lighting.spotlightBRBlend)
-        }
-    }
-
-    private func blendPicker(_ label: String,
-                             _ binding: Binding<BackOfTheClubDebugState.LightingControls.BlendModeChoice>) -> some View {
-        HStack {
-            Text(label).frame(width: 100, alignment: .leading).font(.caption)
-            Picker("", selection: binding) {
-                ForEach(BackOfTheClubDebugState.LightingControls.BlendModeChoice.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .labelsHidden()
-            .frame(maxWidth: 180)
         }
     }
 
@@ -4547,3 +5988,5 @@ struct BackOfTheClubDebugWindow: View {
         }
     }
 }
+
+#endif  // CHORAGUS_DEV

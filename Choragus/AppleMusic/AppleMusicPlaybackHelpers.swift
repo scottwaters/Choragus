@@ -259,17 +259,22 @@ struct AppleMusicPlayHelper {
     /// validate the track itself.
     private func buildDIDL(catalogID: String, albumID: String, track: AppleMusicTrack, serviceType: Int) -> String {
         let id = catalogID
+        // The cdudn descriptor must be the Apple Music service token
+        // (`SA_RINCON<type>_…`). The previous `RINCON_AssociatedZPUDN`
+        // (local-library descriptor) contradicted the service URI, so the
+        // speaker discarded the whole DIDL and stored a bare queue row —
+        // title/artist/album missing in every other controller (Sonos app
+        // included); Choragus's own queue panel masked it via
+        // `cachedTrackInfo`. Item/parent id prefixes stay `00032020` /
+        // `0004206c` with a real album catalog id — the validated queue
+        // form; the `1…`-prefix variants have a known silent-no-play
+        // failure mode on this path.
+        let desc = "SA_RINCON\(serviceType)_X_#Svc\(serviceType)-0-Token"
         return """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="00032020song%3a\(id)" parentID="0004206calbum%3a\(albumID)" restricted="true"><dc:title>\(escape(track.title))</dc:title><dc:creator>\(escape(track.artist))</dc:creator><upnp:album>\(escape(track.album))</upnp:album><upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">RINCON_AssociatedZPUDN</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="00032020song%3a\(id)" parentID="0004206calbum%3a\(albumID)" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(track.title))</dc:title><dc:creator>\(XMLResponseParser.xmlEscape(track.artist))</dc:creator><upnp:album>\(XMLResponseParser.xmlEscape(track.album))</upnp:album><upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(desc)</desc></item></DIDL-Lite>
         """
     }
 
-    private func escape(_ s: String) -> String {
-        s.replacingOccurrences(of: "&", with: "&amp;")
-         .replacingOccurrences(of: "<", with: "&lt;")
-         .replacingOccurrences(of: ">", with: "&gt;")
-         .replacingOccurrences(of: "\"", with: "&quot;")
-    }
 }
 
 // MARK: - Sort
@@ -512,7 +517,7 @@ struct AppleMusicTrackRow: View {
                         }
                     }
                 }
-            } label: { Label("Add to Choragus Queue", systemImage: "internaldrive.fill") }
+            } label: { Label(L10n.addToChoragusQueue, systemImage: "internaldrive.fill") }
             #if DEBUG
             AddToTestFixturesMenuItem(service: "apple-music") {
                 await helper.buildBrowseItem(track)
@@ -616,7 +621,7 @@ func albumContextMenu(album: AppleMusicAlbum, helper: AppleMusicPlayHelper) -> s
                     }
                 }
             }
-        } label: { Label("Add to Choragus Queue", systemImage: "internaldrive.fill") }
+        } label: { Label(L10n.addToChoragusQueue, systemImage: "internaldrive.fill") }
         .disabled(!helper.canPlay)
     }
     #if DEBUG
@@ -669,7 +674,7 @@ func playlistContextMenu(playlist: AppleMusicPlaylist, helper: AppleMusicPlayHel
                     }
                 }
             }
-        } label: { Label("Add to Choragus Queue", systemImage: "internaldrive.fill") }
+        } label: { Label(L10n.addToChoragusQueue, systemImage: "internaldrive.fill") }
         .disabled(!helper.canPlay)
     }
     #if DEBUG

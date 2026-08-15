@@ -131,7 +131,7 @@ public final class SOAPClient: SOAPClientProtocol {
     private func buildEnvelope(service: String, action: String, arguments: [(String, String)]) -> String {
         var args = ""
         for (name, value) in arguments {
-            args += "<\(name)>\(xmlEscape(value))</\(name)>"
+            args += "<\(name)>\(XMLResponseParser.xmlEscape(value))</\(name)>"
         }
 
         return """
@@ -147,12 +147,4 @@ public final class SOAPClient: SOAPClientProtocol {
         """
     }
 
-    private func xmlEscape(_ string: String) -> String {
-        string
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "'", with: "&apos;")
-    }
 }

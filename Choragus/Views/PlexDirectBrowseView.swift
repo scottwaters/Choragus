@@ -312,7 +312,7 @@ struct PlexDirectBrowseView: View {
                 }
             }
         } label: {
-            Label("Add to Choragus Queue", systemImage: "internaldrive.fill")
+            Label(L10n.addToChoragusQueue, systemImage: "internaldrive.fill")
         }
         #if DEBUG
         AddToTestFixturesMenuItem(service: "plex") {
@@ -765,11 +765,11 @@ struct PlexDirectBrowseView: View {
                                   artURL: String?, streamURI: String,
                                   durationMs: Int?) -> String {
         let id = "plex-direct"
-        let escTitle = xmlEscape(title)
-        let escArtist = xmlEscape(artist)
-        let escAlbum = xmlEscape(album)
-        let escStream = xmlEscape(streamURI)
-        let artElement: String = artURL.map { "<upnp:albumArtURI>\(xmlEscape($0))</upnp:albumArtURI>" } ?? ""
+        let escTitle = XMLResponseParser.xmlEscape(title)
+        let escArtist = XMLResponseParser.xmlEscape(artist)
+        let escAlbum = XMLResponseParser.xmlEscape(album)
+        let escStream = XMLResponseParser.xmlEscape(streamURI)
+        let artElement: String = artURL.map { "<upnp:albumArtURI>\(XMLResponseParser.xmlEscape($0))</upnp:albumArtURI>" } ?? ""
         let durationAttr: String = durationMs
             .map { " duration=\"\(formatDIDLDuration(milliseconds: $0))\"" } ?? ""
         return """
@@ -799,11 +799,4 @@ struct PlexDirectBrowseView: View {
         return String(format: "%d:%02d:%02d.%03d", hours, minutes, seconds, millis)
     }
 
-    private static func xmlEscape(_ s: String) -> String {
-        s.replacingOccurrences(of: "&", with: "&amp;")
-         .replacingOccurrences(of: "<", with: "&lt;")
-         .replacingOccurrences(of: ">", with: "&gt;")
-         .replacingOccurrences(of: "\"", with: "&quot;")
-         .replacingOccurrences(of: "'", with: "&apos;")
-    }
 }

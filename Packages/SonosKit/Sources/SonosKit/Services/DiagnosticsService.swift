@@ -7,6 +7,11 @@ import Foundation
 public final class DiagnosticsService: @unchecked Sendable {
     public static let shared = DiagnosticsService()
 
+    /// Guarded by `stateLock`: written once by `attach` at startup but
+    /// read by `log`/`recent`/`clearAll` from arbitrary threads — the
+    /// class is `@unchecked Sendable`, so the reference itself needs a
+    /// lock. Callers copy the reference out under the lock and perform
+    /// all repository I/O outside it.
     private var repository: DiagnosticsRepository?
 
     /// Whether an error-level entry exists (persisted from a prior session
@@ -14,23 +19,31 @@ public final class DiagnosticsService: @unchecked Sendable {
     /// indicator appears only on an actual error — not on warnings, info, or
     /// nothing. Read off the hot path: `log` consults the cached flag rather
     /// than querying SQLite per line.
-    private let errorLock = NSLock()
+    private let stateLock = NSLock()
     private var _hasErrors = false
 
     public var hasErrors: Bool {
-        errorLock.lock(); defer { errorLock.unlock() }
+        stateLock.lock(); defer { stateLock.unlock() }
         return _hasErrors
+    }
+
+    /// Copies the repository reference out under the lock.
+    private var currentRepository: DiagnosticsRepository? {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return repository
     }
 
     private init() {}
 
     public func attach(repository: DiagnosticsRepository) {
+        stateLock.lock()
         self.repository = repository
+        stateLock.unlock()
         repository.purgeStale()
         // Seed the badge from persisted errors (runs after purgeStale on the
         // repo's serial queue, so it reflects the trimmed store).
         let seeded = repository.errorCount() > 0
-        errorLock.lock(); _hasErrors = seeded; errorLock.unlock()
+        stateLock.lock(); _hasErrors = seeded; stateLock.unlock()
         if seeded { NotificationCenter.default.post(name: .diagnosticsErrorStateChanged, object: nil) }
     }
 
@@ -63,26 +76,26 @@ public final class DiagnosticsService: @unchecked Sendable {
             }
             return String(data: data, encoding: .utf8)
         }
-        repository?.insert(level: level, tag: tag, message: persisted, contextJSON: json)
+        currentRepository?.insert(level: level, tag: tag, message: persisted, contextJSON: json)
 
         // Flip the badge on the first error of the session and notify once;
         // subsequent errors don't re-post, so a storm can't flood observers.
         if level == .error {
-            errorLock.lock()
+            stateLock.lock()
             let wasSet = _hasErrors
             _hasErrors = true
-            errorLock.unlock()
+            stateLock.unlock()
             if !wasSet { NotificationCenter.default.post(name: .diagnosticsErrorStateChanged, object: nil) }
         }
     }
 
     public func recent(limit: Int = 1000) -> [DiagnosticEntry] {
-        repository?.recent(limit: limit) ?? []
+        currentRepository?.recent(limit: limit) ?? []
     }
 
     public func clearAll() {
-        repository?.clearAll()
-        errorLock.lock(); _hasErrors = false; errorLock.unlock()
+        currentRepository?.clearAll()
+        stateLock.lock(); _hasErrors = false; stateLock.unlock()
         NotificationCenter.default.post(name: .diagnosticsErrorStateChanged, object: nil)
     }
 }

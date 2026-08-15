@@ -71,14 +71,32 @@ public final class LyricsCoordinator: ObservableObject {
         // cache miss — the resulting publisher tick was contributing
         // to per-frame re-renders during karaoke playback.
         if offsets[key] == nil {
-            let saved = lyricsService.loadOffset(
-                artist: metadata.artist,
-                title: metadata.title,
-                album: metadata.album.isEmpty ? nil : metadata.album
-            ) ?? 0
-            offsets[key] = saved
+            // Placeholder now, disk later: the previous synchronous
+            // read ran dbQueue.sync SQLite on the MAIN actor — when
+            // the shared play_history DB was contended (track-change
+            // insert + metadata reads), main blocked up to ~850 ms
+            // on every track change. The placeholder keeps body-time
+            // `offset(for:)` reads pure; the real value lands
+            // asynchronously and only overwrites an untouched
+            // placeholder (a user scrub in the gap wins).
+            offsets[key] = 0
+            let service = lyricsService
+            let artist = metadata.artist
+            let title = metadata.title
+            let album = metadata.album.isEmpty ? nil : metadata.album
+            Task { [weak self] in
+                let saved = await Task.detached(priority: .utility) {
+                    service.loadOffset(artist: artist, title: title, album: album)
+                }.value ?? 0
+                guard let self, saved != 0, self.offsets[key] == 0 else { return }
+                self.offsets[key] = saved
+            }
         }
-        if let existing = resolved[key], existing.status == .loading || existing.status == .loaded {
+        // `.missing` is terminal: the service has already cached the
+        // miss, so re-triggering on every call only burns a task per
+        // render. `refresh(for:)` is the explicit retry path.
+        if let existing = resolved[key],
+           existing.status == .loading || existing.status == .loaded || existing.status == .missing {
             return
         }
         guard !metadata.title.isEmpty else {

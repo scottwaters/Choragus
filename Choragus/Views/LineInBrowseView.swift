@@ -189,9 +189,9 @@ struct LineInBrowseView: View {
 
     private static func buildDIDL(title: String, album: String, streamURI: String) -> String {
         let id = "linein"
-        let escTitle = xmlEscape(title)
-        let escAlbum = xmlEscape(album)
-        let escStream = xmlEscape(streamURI)
+        let escTitle = XMLResponseParser.xmlEscape(title)
+        let escAlbum = XMLResponseParser.xmlEscape(album)
+        let escStream = XMLResponseParser.xmlEscape(streamURI)
         return """
         <DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" \
         xmlns:dc="http://purl.org/dc/elements/1.1/" \
@@ -205,11 +205,4 @@ struct LineInBrowseView: View {
         """
     }
 
-    private static func xmlEscape(_ s: String) -> String {
-        s.replacingOccurrences(of: "&", with: "&amp;")
-         .replacingOccurrences(of: "<", with: "&lt;")
-         .replacingOccurrences(of: ">", with: "&gt;")
-         .replacingOccurrences(of: "\"", with: "&quot;")
-         .replacingOccurrences(of: "'", with: "&apos;")
-    }
 }

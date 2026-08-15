@@ -180,7 +180,7 @@ public enum SunoResolver {
         // two sort params or it 422s.
         var bio: String?
         if !handle.isEmpty,
-           let encoded = handle.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+           case let encoded = URLEncode.pathSegment(handle),
            let purl = URL(string: "https://studio-api.prod.suno.com/api/profiles/\(encoded)?playlists_sort_by=created_at&clips_sort_by=created_at"),
            let (pdata, _) = try? await session.data(for: clipRequest(purl)),
            let prof = try? JSONSerialization.jsonObject(with: pdata) as? [String: Any] {
@@ -220,11 +220,30 @@ public enum SunoCatalog {
     private static let titlesKey = "sunoTrackTitles"
     private static let uuidPattern =
         "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    /// Serializes each remember's read-modify-write — UserDefaults
+    /// guarantees atomicity per call, not across a read + write pair,
+    /// so unlocked concurrent remembers could lose entries.
+    private static let storeLock = NSLock()
+
+    /// Locked read-modify-write for the `[key: value]` stores backing
+    /// titles / genres / artists.
+    private static func rememberValue(_ value: String, forKey key: String, store storeKey: String) {
+        storeLock.lock()
+        defer { storeLock.unlock() }
+        var store = (UserDefaults.standard.dictionary(forKey: storeKey) as? [String: String]) ?? [:]
+        guard store[key] != value else { return }
+        store[key] = value
+        UserDefaults.standard.set(store, forKey: storeKey)
+    }
+
+    /// Compiled once — called per history entry in hot paths (Club
+    /// Vis pool build).
+    private static let uuidRegex = try? NSRegularExpression(pattern: uuidPattern)
 
     /// The clip UUID embedded in a Suno CDN / song URI, or nil if not Suno.
     public static func uuid(fromURI uri: String) -> String? {
         guard uri.lowercased().contains("suno") else { return nil }
-        guard let re = try? NSRegularExpression(pattern: uuidPattern) else { return nil }
+        guard let re = uuidRegex else { return nil }
         let range = NSRange(uri.startIndex..., in: uri)
         guard let m = re.firstMatch(in: uri, range: range),
               let r = Range(m.range, in: uri) else { return nil }
@@ -240,11 +259,7 @@ public enum SunoCatalog {
     public static func remember(uuid: String, title: String) {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty, t.lowercased() != "suno track" else { return }
-        let key = uuid.lowercased()
-        var store = (UserDefaults.standard.dictionary(forKey: titlesKey) as? [String: String]) ?? [:]
-        guard store[key] != t else { return }
-        store[key] = t
-        UserDefaults.standard.set(store, forKey: titlesKey)
+        rememberValue(t, forKey: uuid.lowercased(), store: titlesKey)
     }
 
     public static func title(forUUID uuid: String) -> String? {
@@ -259,11 +274,7 @@ public enum SunoCatalog {
     public static func rememberGenre(uuid: String, genre: String) {
         let g = genre.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !g.isEmpty else { return }
-        let key = uuid.lowercased()
-        var store = (UserDefaults.standard.dictionary(forKey: genresKey) as? [String: String]) ?? [:]
-        guard store[key] != g else { return }
-        store[key] = g
-        UserDefaults.standard.set(store, forKey: genresKey)
+        rememberValue(g, forKey: uuid.lowercased(), store: genresKey)
     }
 
     public static func genre(forUUID uuid: String) -> String? {
@@ -278,11 +289,7 @@ public enum SunoCatalog {
     public static func rememberArtist(uuid: String, artist: String) {
         let a = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !a.isEmpty else { return }
-        let key = uuid.lowercased()
-        var store = (UserDefaults.standard.dictionary(forKey: artistsKey) as? [String: String]) ?? [:]
-        guard store[key] != a else { return }
-        store[key] = a
-        UserDefaults.standard.set(store, forKey: artistsKey)
+        rememberValue(a, forKey: uuid.lowercased(), store: artistsKey)
     }
 
     public static func artist(forUUID uuid: String) -> String? {

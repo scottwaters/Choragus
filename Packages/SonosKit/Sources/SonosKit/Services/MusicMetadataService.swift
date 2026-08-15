@@ -21,6 +21,7 @@
 /// + MusicBrainz alone fill the panel for any artist/album with a
 /// Wikipedia article.
 import Foundation
+import AppKit
 
 public struct ArtistInfo: Codable, Equatable, Sendable {
     public let name: String
@@ -250,20 +251,17 @@ public final class MusicMetadataService: ArtistInfoProvider {
         // Photo gallery: primary photo first, then extra images from the
         // Wikipedia article's media list (capped — the Apple Music photo is
         // prepended at display time, keeping the panel's max at 5).
+        // Same-photo variants at different resolutions dedupe to the
+        // HIGHEST-resolution URL, keeping first-seen order.
         if let current = merged {
-            var gallery: [String] = []
-            var seenKeys = Set<String>()
+            var candidates: [String] = []
             if let primary = current.imageURL, !primary.isEmpty {
-                gallery.append(primary)
-                seenKeys.insert(Self.imageIdentityKey(primary))
+                candidates.append(primary)
             }
             if let wiki = current.wikipediaURL {
-                for extra in await fetchWikipediaGalleryImages(wikipediaURL: wiki, limit: 6)
-                where seenKeys.insert(Self.imageIdentityKey(extra)).inserted {
-                    gallery.append(extra)
-                    if gallery.count >= 4 { break }
-                }
+                candidates += await fetchWikipediaGalleryImages(wikipediaURL: wiki, limit: 6)
             }
+            let gallery = Self.dedupePreferHighRes(candidates, limit: 4)
             merged = ArtistInfo(
                 name: current.name, bio: current.bio, tags: current.tags,
                 similarArtists: current.similarArtists, listeners: current.listeners,
@@ -495,16 +493,186 @@ public final class MusicMetadataService: ArtistInfoProvider {
     /// summary endpoint's `330px-Name.jpg`) — distinct URL strings, one
     /// picture. The key is the original filename with the `NNNpx-` size
     /// prefix stripped; non-Wikipedia URLs key as themselves.
-    public static func imageIdentityKey(_ urlString: String) -> String {
-        guard urlString.contains("wikimedia.org") || urlString.contains("wikipedia.org"),
-              let last = urlString.split(separator: "/").last else {
-            return urlString
+    nonisolated public static func imageIdentityKey(_ urlString: String) -> String {
+        // Query/fragment carry no identity — Wikipedia's summary
+        // endpoint appends `?utm_source=…` to some thumb URLs, which
+        // otherwise splits one file into two keys.
+        let pathOnly = urlString
+            .split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)[0]
+            .split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
+        let lower = pathOnly.lowercased()
+        if lower.contains("wikimedia.org") || lower.contains("wikipedia.org"),
+           let last = pathOnly.split(separator: "/").last {
+            var name = String(last)
+            if let r = name.range(of: #"^\d+px-"#, options: .regularExpression) {
+                name.removeSubrange(r)
+            }
+            name = (name.removingPercentEncoding ?? name).lowercased()
+                .replacingOccurrences(of: "_", with: " ")
+            // Commons hosts crop/edit variants of one photo under
+            // qualified filenames — "x.jpg" vs "x (cropped).jpg" —
+            // which are the same picture for gallery purposes.
+            // Qualifier list stays narrow: parenthesised years or
+            // photographer credits DO distinguish photos.
+            name = name.replacingOccurrences(
+                of: #" ?\((cropped|crop|cropped \d+|retouched|edited|restored|colou?r(ised|ized)?)\)"#,
+                with: "", options: .regularExpression)
+            return name
         }
-        var name = String(last)
-        if let r = name.range(of: #"^\d+px-"#, options: .regularExpression) {
-            name.removeSubrange(r)
+        // Last.fm CDN serves one photo at many sizes under
+        // /i/u/<size>/<hash>.<ext> — the hash filename is the
+        // stable identity across sizes.
+        if lower.contains("lastfm") || lower.contains("last.fm"),
+           let last = pathOnly.split(separator: "/").last {
+            return String(last).lowercased()
         }
-        return name.removingPercentEncoding?.lowercased() ?? name.lowercased()
+        return urlString
+    }
+
+    /// Approximate pixel-size hint parsed from known thumbnail URL
+    /// forms — Wikipedia `/123px-` thumbs (an un-thumbed original
+    /// ranks highest), Last.fm `/i/u/300x300/` size directories,
+    /// Apple `/600x600bb.jpg` artwork. 0 when unrecognised.
+    nonisolated public static func imageResolutionHint(_ urlString: String) -> Int {
+        let s = urlString.lowercased()
+        if s.contains("wikimedia.org") || s.contains("wikipedia.org") {
+            if let last = s.split(separator: "/").last,
+               last.range(of: #"^\d+px-"#, options: .regularExpression) != nil {
+                return Int(last.prefix(while: \.isNumber)) ?? 0
+            }
+            return s.contains("/thumb/") ? 0 : Int.max
+        }
+        if s.contains("lastfm") || s.contains("last.fm") {
+            let comps = s.split(separator: "/")
+            if let idx = comps.firstIndex(of: "u"), idx + 1 < comps.count {
+                return Int(comps[idx + 1].prefix(while: \.isNumber)) ?? 0
+            }
+            return 0
+        }
+        if let m = s.range(of: #"/\d+x\d+[a-z]*\.(jpg|jpeg|png|webp)"#,
+                           options: .regularExpression) {
+            return Int(s[m].dropFirst().prefix(while: \.isNumber)) ?? 0
+        }
+        return 0
+    }
+
+    /// True when the URL plausibly points at an artist PHOTO for the
+    /// About gallery. Excludes non-photo Wikipedia media by keyword
+    /// (signatures, logos, maps, crests…) and Wikipedia/Commons PNGs
+    /// outright — artist photos there are JPEGs; PNGs in an article's
+    /// media list are overwhelmingly signatures, logos, and diagrams
+    /// (observed: a signature PNG rendering as a gallery tile).
+    /// Non-Wikipedia sources (Last.fm hashes, Apple artwork) pass.
+    nonisolated public static func isGalleryPhotoCandidate(_ urlString: String) -> Bool {
+        let s = urlString.lowercased()
+        for keyword in ["logo", "icon", "signature", "autograph", "map",
+                        "coat of arms", "coat_of_arms", "crest", "seal",
+                        "stamp", "plaque"] where s.contains(keyword) {
+            return false
+        }
+        if s.contains("wikimedia.org") || s.contains("wikipedia.org") {
+            return s.contains(".jpg") || s.contains(".jpeg")
+        }
+        return true
+    }
+
+    /// Order-preserving dedup by `imageIdentityKey` that keeps the
+    /// HIGHEST-resolution variant of each photo (first-seen position,
+    /// best URL). Non-photo candidates (see
+    /// `isGalleryPhotoCandidate`) are dropped first — cached
+    /// galleries assembled before that filter existed clean up at
+    /// display time. `limit` caps distinct photos, not candidates.
+    nonisolated public static func dedupePreferHighRes(_ urls: [String], limit: Int = .max) -> [String] {
+        var orderedKeys: [String] = []
+        var bestByKey: [String: String] = [:]
+        for url in urls where isGalleryPhotoCandidate(url) {
+            let key = imageIdentityKey(url)
+            if let existing = bestByKey[key] {
+                if imageResolutionHint(url) > imageResolutionHint(existing) {
+                    bestByKey[key] = url
+                }
+            } else if orderedKeys.count < limit {
+                orderedKeys.append(key)
+                bestByKey[key] = url
+            }
+        }
+        return orderedKeys.compactMap { bestByKey[$0] }
+    }
+
+    // MARK: - Gallery pixel-level dedupe (persisted dHash)
+
+    /// Persisted perceptual-hash record for one gallery image URL.
+    /// The download + downsample + hash is the CPU-bound part of the
+    /// pixel-level dedupe; image bytes at a Wikipedia/Last.fm CDN URL
+    /// are immutable, so a computed hash never goes stale.
+    struct ImageHashRecord: Codable, Equatable {
+        let hash: UInt64
+        let pixels: Int
+    }
+
+    /// Deliberately NOT `Kind.key`: that lower-cases its parts, and
+    /// CDN paths are case-sensitive — distinct files must not share
+    /// an entry.
+    nonisolated static func imageHashKey(_ url: URL) -> String {
+        "imagehash:v1|\(url.absoluteString)"
+    }
+
+    /// dHash + pixel count for `url`, cache-first: the SQLite record,
+    /// then the shared image cache, then network. A computed hash is
+    /// persisted without TTL so the downsample runs once per URL.
+    /// Failed loads return nil and are not cached — no data is a
+    /// retryable condition, not a verdict on the image.
+    func imageHash(for url: URL) async -> ImageHashRecord? {
+        let key = Self.imageHashKey(url)
+        if let cached = cache.get(key),
+           let data = cached.data(using: .utf8),
+           let record = try? JSONDecoder().decode(ImageHashRecord.self, from: data) {
+            return record
+        }
+        var image = ImageCache.shared.image(for: url)
+        if image == nil,
+           let (data, response) = try? await session.data(from: url),
+           (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true,
+           let downloaded = NSImage(data: data) {
+            ImageCache.shared.store(downloaded, for: url)
+            image = downloaded
+        }
+        guard let image, let hash = ImageSimilarity.dHash(image) else { return nil }
+        let record = ImageHashRecord(hash: hash,
+                                     pixels: Int(image.size.width * image.size.height))
+        if let payload = try? JSONEncoder().encode(record),
+           let str = String(data: payload, encoding: .utf8) {
+            cache.set(key, payload: str)
+        }
+        return record
+    }
+
+    /// Pixel-level near-duplicate pass over an already URL-deduped
+    /// gallery: Last.fm and Wikipedia host the SAME photograph as
+    /// unrelated files (different filenames/hashes), which URL dedup
+    /// cannot see. Each URL resolves to a cached-or-computed dHash
+    /// and is dropped when within the near-duplicate distance of an
+    /// already-kept photo — keeping whichever variant carries more
+    /// pixels, at the first-seen position. URLs whose image can't be
+    /// resolved are kept (no data = no evidence of duplication).
+    public func refineGallery(_ urls: [URL]) async -> [URL] {
+        var kept: [(url: URL, hash: UInt64?, pixels: Int)] = []
+        for url in urls {
+            guard let record = await imageHash(for: url) else {
+                kept.append((url, nil, 0))
+                continue
+            }
+            if let dupIdx = kept.firstIndex(where: { entry in
+                entry.hash.map { ImageSimilarity.isNearDuplicate($0, record.hash) } ?? false
+            }) {
+                if record.pixels > kept[dupIdx].pixels {
+                    kept[dupIdx] = (url, record.hash, record.pixels)
+                }
+            } else {
+                kept.append((url, record.hash, record.pixels))
+            }
+        }
+        return kept.map(\.url)
     }
 
     /// Extra photos from the Wikipedia article's media list
@@ -727,8 +895,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
     /// for an arbitrary query. Returns nil if Wikipedia has no match.
     /// `lang` selects the wiki subdomain (`en`, `de`, etc.).
     private nonisolated func wikipediaResolveTitle(query: String, lang: String) async -> String? {
-        guard let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://\(lang).wikipedia.org/w/api.php?action=opensearch&search=\(q)&limit=1&format=json")
+        let q = URLEncode.queryValue(query)
+        guard let url = URL(string: "https://\(lang).wikipedia.org/w/api.php?action=opensearch&search=\(q)&limit=1&format=json")
         else { return nil }
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
@@ -770,7 +938,7 @@ public final class MusicMetadataService: ArtistInfoProvider {
     }
 
     private nonisolated func wikipediaSummary(title: String, lang: String, resolvedTitle: String?) async -> WikipediaSummary? {
-        let path = title.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? title
+        let path = URLEncode.pathSegment(title)
         guard let url = URL(string: "https://\(lang).wikipedia.org/api/rest_v1/page/summary/\(path)")
         else { return nil }
         var request = URLRequest(url: url)
@@ -808,8 +976,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
     /// Throttle: MB rate-limits to 1 req/sec/IP; per-call sleep keeps
     /// us under the bar without needing a global token bucket.
     private nonisolated func musicBrainzArtist(name: String) async -> ArtistInfo? {
-        guard let q = "artist:\(name)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://musicbrainz.org/ws/2/artist/?query=\(q)&fmt=json&limit=1")
+        let q = URLEncode.queryValue("artist:\(name)")
+        guard let url = URL(string: "https://musicbrainz.org/ws/2/artist/?query=\(q)&fmt=json&limit=1")
         else { return nil }
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
@@ -850,8 +1018,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
     /// release-group level — full tracklist would need another hop.
     private nonisolated func musicBrainzAlbum(artist: String, album: String) async -> AlbumInfo? {
         let queryStr = #"artist:"\#(artist)" AND release:"\#(album)""#
-        guard let q = queryStr.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://musicbrainz.org/ws/2/release-group/?query=\(q)&fmt=json&limit=1")
+        let q = URLEncode.queryValue(queryStr)
+        guard let url = URL(string: "https://musicbrainz.org/ws/2/release-group/?query=\(q)&fmt=json&limit=1")
         else { return nil }
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
