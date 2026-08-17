@@ -8,6 +8,32 @@
     <description>Auto-update feed for Choragus, the Sonos controller for macOS.</description>
     <language>en</language>
     <item>
+      <title>Version 4.14</title>
+      <pubDate>Mon, 17 Aug 2026 20:15:20 +1000</pubDate>
+      <sparkle:version>34</sparkle:version>
+      <sparkle:shortVersionString>4.14</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>:root{color-scheme:light dark}body{font:13px/1.45 -apple-system,Helvetica,Arial,sans-serif;margin:8px 10px;color:#1d1d1f}@media(prefers-color-scheme:dark){body{color:#f5f5f7}}ul{padding-left:20px;margin:8px 0}li{margin:6px 0}p{margin:8px 0}strong{font-weight:600}a{color:#0a84ff}</style>
+<p>Home-theatre controls, sidebar grouping, and a queue that keeps up.</p>
+<ul>
+<li><strong>Night Mode and Dialog Enhancement in Now Playing.</strong> No trip to the EQ window for the two settings you change nightly — and the Surrounds tab now appears on every system that actually has surrounds.</li>
+<li><strong>Group from the sidebar.</strong> Double-click a room to edit its group, or drag one room onto another to group them.</li>
+<li><strong>The queue keeps up.</strong> The playing track stays in view as tracks change, with the highlight and level bars arriving within about a second instead of lagging or dropping out.</li>
+<li><strong>Silent queues explain themselves.</strong> When a saved queue's track links have expired, the speaker skips through them without a sound and without an error; Choragus now tells you what happened and what to do about it.</li>
+<li><strong>Media keys can be turned off.</strong> Some Bluetooth and USB headsets send a play command when a call ends, which could start music unexpectedly. Settings → Keyboard Controls hands the keys back to other apps.</li>
+<li><strong>Volume that moves together.</strong> Hold the group slider at zero for a second and every speaker rises in sync.</li>
+<li><strong>Rename favourites</strong>, and see which folders each Sonos system indexes as local music.</li>
+<li><strong>Rooms that went missing come back.</strong> A group whose coordinator no longer matched its own members left the system visible but uncontrollable until a relaunch; it now repairs itself.</li>
+<li><strong>Speakers on another VLAN.</strong> The speaker search now crosses routers instead of stopping at the first one, with a hop limit you can raise in Settings → System.</li>
+<li><strong>Help covers the whole app</strong>, in all 13 languages.</li>
+</ul>]]></description>
+      <enclosure
+        url="https://github.com/scottwaters/Choragus/releases/download/v4.14/Choragus.dmg"
+        length="17594734"
+        type="application/x-apple-diskimage"
+        sparkle:edSignature="81fJf9Ah/dG42JfCZZCYIKL+AGi9cNQPiiRY4yIj9Gw0XeMV/JwSLpK1UroI62AXnW90fA8NGZWDesPUH6P8DA=="/>
+    </item>
+    <item>
       <title>Version 4.13</title>
       <pubDate>Fri, 17 Jul 2026 16:47:44 +1000</pubDate>
       <sparkle:version>33</sparkle:version>
