@@ -3,7 +3,7 @@ import SwiftUI
 import SonosKit
 
 struct RecentlyPlayedView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     let group: SonosGroup?
 
@@ -38,32 +38,14 @@ struct RecentlyPlayedView: View {
                         .contextMenu {
                             if let group = group {
                                 Button(L10n.playNow) { playEntry(entry) }
+                                Button(L10n.playNext) {
+                                    guard let item = queueItem(for: entry) else { return }
+                                    Task { try? await sonosManager.addBrowseItemToQueue(item, in: group, playNext: true) }
+                                }
+                                .disabled(entry.sourceURI == nil || entry.sourceURI?.isEmpty == true)
                                 Button(L10n.addToQueue) {
-                                    guard let uri = entry.sourceURI, !uri.isEmpty else { return }
-                                    Task {
-                                        // Pass full metadata + a constructed DIDL so the
-                                        // queue row actually shows title/artist/album and
-                                        // doesn't render as a blank entry. Without DIDL,
-                                        // Sonos accepts the URI (the track plays) but
-                                        // Browse(Q:0) returns an empty title for the row.
-                                        let item = BrowseItem(
-                                            id: "history",
-                                            title: entry.title,
-                                            artist: entry.artist,
-                                            album: entry.album,
-                                            albumArtURI: entry.albumArtURI,
-                                            itemClass: .musicTrack,
-                                            resourceURI: uri,
-                                            resourceMetadata: Self.buildHistoryDIDL(
-                                                uri: uri,
-                                                title: entry.title,
-                                                artist: entry.artist,
-                                                album: entry.album,
-                                                albumArtURI: entry.albumArtURI
-                                            )
-                                        )
-                                        try? await sonosManager.addBrowseItemToQueue(item, in: group)
-                                    }
+                                    guard let item = queueItem(for: entry) else { return }
+                                    Task { try? await sonosManager.addBrowseItemToQueue(item, in: group) }
                                 }
                                 .disabled(entry.sourceURI == nil || entry.sourceURI?.isEmpty == true)
                             }
@@ -126,6 +108,30 @@ struct RecentlyPlayedView: View {
         return (sid << 8) + 7
     }
 
+
+    /// A history entry as an enqueueable row. Full metadata plus a
+    /// constructed DIDL so the queue row shows title, artist and album;
+    /// without DIDL Sonos accepts the URI but Browse(Q:0) returns an empty
+    /// title for the row.
+    private func queueItem(for entry: PlayHistoryEntry) -> BrowseItem? {
+        guard let uri = entry.sourceURI, !uri.isEmpty else { return nil }
+        return BrowseItem(
+            id: "history",
+            title: entry.title,
+            artist: entry.artist,
+            album: entry.album,
+            albumArtURI: entry.albumArtURI,
+            itemClass: .musicTrack,
+            resourceURI: uri,
+            resourceMetadata: Self.buildHistoryDIDL(
+                uri: uri,
+                title: entry.title,
+                artist: entry.artist,
+                album: entry.album,
+                albumArtURI: entry.albumArtURI
+            )
+        )
+    }
 
     private func playEntry(_ entry: PlayHistoryEntry) {
         guard let group = group,

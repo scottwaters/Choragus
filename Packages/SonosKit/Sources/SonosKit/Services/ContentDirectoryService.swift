@@ -21,10 +21,27 @@ public struct QueueItem: Identifiable, Equatable, Codable {
     /// Apple Music / SMAPI tracks fault UPnP 800 if re-enqueued without it,
     /// so it must be preserved when a queue is saved for later restore.
     public var metadata: String?
+    /// The service and item id this track's play URL was resolved from, for
+    /// tracks played via a pre-signed CDN URL (TIDAL, Qobuz, Suno). `uri`
+    /// expires; this does not, so a saved queue holding both can re-resolve
+    /// rather than rot. Nil for tracks the speaker resolves itself, and for
+    /// rows read straight off the speaker's queue.
+    public var originSid: Int?
+    public var originItemID: String?
+
+    /// The row as an enqueueable browse item, or nil when it has no URI.
+    /// `resourceMetadata` carries the preserved `<r:resMD>` DIDL: Apple
+    /// Music / SMAPI tracks fault UPnP 800 if re-enqueued without it.
+    public func browseItem(id objectID: String) -> BrowseItem? {
+        guard let uri, !uri.isEmpty else { return nil }
+        return BrowseItem(id: objectID, title: title, artist: artist, album: album,
+                          albumArtURI: albumArtURI, itemClass: .musicTrack,
+                          resourceURI: uri, resourceMetadata: metadata)
+    }
 
     public init(id: Int, title: String = "", artist: String = "", album: String = "",
                 albumArtURI: String? = nil, duration: String = "", uri: String? = nil,
-                metadata: String? = nil) {
+                metadata: String? = nil, originSid: Int? = nil, originItemID: String? = nil) {
         self.id = id
         self.title = title
         self.artist = artist
@@ -33,10 +50,52 @@ public struct QueueItem: Identifiable, Equatable, Codable {
         self.duration = duration
         self.uri = uri
         self.metadata = metadata
+        self.originSid = originSid
+        self.originItemID = originItemID
+    }
+
+    /// The stored origin, falling back to whatever the registry recorded when
+    /// this URL was resolved. Queues saved before the columns existed carry no
+    /// origin of their own, so the registry is their only route back.
+    public var serviceOrigin: (sid: Int, itemID: String)? {
+        if let sid = originSid, let itemID = originItemID, !itemID.isEmpty {
+            return (sid, itemID)
+        }
+        guard let uri else { return nil }
+        return ResolvedPlaybackRegistry.origin(ofPlayURL: uri)
     }
 }
 
-public final class ContentDirectoryService {
+/// The ContentDirectory capabilities `LibraryStore` needs. Narrow on purpose:
+/// the store depends on browsing containers and asking a speaker to reindex
+/// its shares, not on the whole SOAP service, and a stub satisfies it in tests.
+public protocol ContentDirectoryBrowsing: Sendable {
+    func browse(device: SonosDevice, objectID: String, start: Int, count: Int) async throws -> (items: [BrowseItem], total: Int)
+    func refreshShareIndex(device: SonosDevice) async throws
+}
+
+/// The queue verbs `QueueController` needs. Separate from
+/// `ContentDirectoryBrowsing` so a collaborator that only reads containers is
+/// not handed the ability to mutate a queue.
+public protocol QueueDirectoryOperating: Sendable {
+    func browseQueue(device: SonosDevice, start: Int, count: Int,
+                     includeMetadata: Bool) async throws -> (items: [QueueItem], total: Int)
+    /// The speaker's UpdateID for Q:0 — bumps on every change to the
+    /// queue, reorders included. Two reads with the same value saw the
+    /// same queue.
+    func queueRevision(device: SonosDevice) async throws -> Int
+    func removeTrackFromQueue(device: SonosDevice, objectID: String) async throws
+    func reorderTracksInQueue(device: SonosDevice, startIndex: Int, numberOfTracks: Int, insertBefore: Int) async throws
+    @discardableResult
+    func addURIToQueue(device: SonosDevice, uri: String, metadata: String,
+                       desiredFirstTrackNumberEnqueued: Int, enqueueAsNext: Bool) async throws -> Int
+    @discardableResult
+    func addMultipleURIsToQueue(device: SonosDevice, uris: [String], metadatas: [String],
+                                desiredFirstTrackNumberEnqueued: Int,
+                                enqueueAsNext: Bool) async throws -> (firstTrackNumber: Int, numAdded: Int)
+}
+
+public final class ContentDirectoryService: ContentDirectoryBrowsing, QueueDirectoryOperating {
     private let soap: SOAPClient
     private static let path = "/MediaServer/ContentDirectory/Control"
     private static let service = "ContentDirectory"
@@ -50,6 +109,14 @@ public final class ContentDirectoryService {
     /// Music / SMAPI tracks fault UPnP 800 when re-enqueued without it). The
     /// live queue panel omits it: it doesn't use the envelope, and requesting
     /// it makes the speaker return heavier per-item metadata for no benefit.
+    public func queueRevision(device: SonosDevice) async throws -> Int {
+        let result = try await soap.send(
+            to: device.baseURL, path: Self.path, service: Self.service, action: "Browse",
+            arguments: [("ObjectID", "Q:0"), ("BrowseFlag", "BrowseDirectChildren"), ("Filter", "dc:title"),
+                        ("StartingIndex", "0"), ("RequestedCount", "1"), ("SortCriteria", "")])
+        return Int(result["UpdateID"] ?? "0") ?? 0
+    }
+
     public func browseQueue(device: SonosDevice, start: Int = 0, count: Int = PageSize.queue,
                             includeMetadata: Bool = false) async throws -> (items: [QueueItem], total: Int) {
         let filter = includeMetadata
@@ -284,10 +351,9 @@ public final class ContentDirectoryService {
                 ("EnqueueAsNext", enqueueAsNext ? "1" : "0")
             ],
             // Bulk add scales linearly with the chunk size on the speaker.
-            // 14-16 tracks ≈ 15-25 s on real hardware. Default 10 s
-            // session timeout caused us to abort the batch even when
-            // Sonos was still happily processing it, leading to false
-            // "batch failed" → per-track fallback → DOUBLE-ADD.
+            // 14-16 tracks ≈ 15-25 s on real hardware. The default 10 s
+            // session timeout would abort a batch Sonos is still processing:
+            // false "batch failed" → per-track fallback → DOUBLE-ADD.
             timeoutSeconds: 30
         )
         let first = Int(result["FirstTrackNumberEnqueued"] ?? "0") ?? 0
@@ -465,8 +531,7 @@ private class QueueXMLParser: NSObject, XMLParserDelegate {
         // the SAX layer delivers it as character data and no child-element
         // events fire. Some firmware returns it as real nested elements,
         // though — guard against that so a nested `<item>`/`<res>`/
-        // `<albumArtURI>` can't reset or clobber the OUTER queue row's fields
-        // (the cause of queue artwork vanishing when resMD was requested).
+        // `<albumArtURI>` can't reset or clobber the OUTER queue row's fields.
         if inResMD {
             resMDHadChildElements = true
             return
@@ -532,6 +597,14 @@ private class QueueXMLParser: NSObject, XMLParserDelegate {
                    URIPrefix.isLocal(currentResURI) {
                     artURI = AlbumArtSearchService.getaaURL(
                         speakerIP: deviceIP, port: devicePort, trackURI: currentResURI)
+                }
+                // A media-server track carries art the server published at
+                // browse time. Sonos echoes either nothing or a /getaa? proxy
+                // URL that 404s against a non-Sonos server, so the published
+                // URL is the only one that resolves.
+                if !currentResURI.isEmpty,
+                   let published = MediaServerService.PublishedArt.art(forPlayURL: currentResURI) {
+                    artURI = published.absoluteString
                 }
                 itemIndex += 1
                 items.append(QueueItem(

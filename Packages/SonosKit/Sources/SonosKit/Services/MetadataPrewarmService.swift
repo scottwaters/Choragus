@@ -21,7 +21,7 @@ public final class MetadataPrewarmService: ObservableObject {
 
     public func attach(to manager: SonosManager) {
         trackCancellable?.cancel()
-        trackCancellable = manager.$groupTrackMetadata
+        trackCancellable = manager.groupTrackMetadataPublisher
             .removeDuplicates()
             .sink { [weak self] map in
                 self?.handle(map)

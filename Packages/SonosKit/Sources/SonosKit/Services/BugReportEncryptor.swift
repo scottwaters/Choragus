@@ -25,11 +25,11 @@ public enum BugReportEncryptor {
         public var errorDescription: String? {
             switch self {
             case .publicKeyMissing:
-                return "BugReportPublicKey is not configured in Info.plist."
+                return L10n.errBugReportKeyMissing
             case .publicKeyMalformed:
-                return "BugReportPublicKey in Info.plist is not a valid base64 X25519 public key."
+                return L10n.errBugReportKeyInvalid
             case .wrapFailed:
-                return "Failed to wrap the bug-report bundle."
+                return L10n.errBugReportWrapFailed
             }
         }
     }

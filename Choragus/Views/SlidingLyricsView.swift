@@ -5,11 +5,10 @@
 /// Render path: a single `Canvas` drawn inside a `TimelineView(.animation)`.
 /// `Canvas` is a leaf to SwiftUI's diff, so the display-refresh redraw
 /// repaints straight into a `GraphicsContext` without re-evaluating any
-/// surrounding view tree. The earlier `VStack { ForEach { Text } }` body
-/// re-built its subtree per frame, which cascaded `ViewGraph.updateOutputs`
-/// into the surrounding `ScrollView` and put the main thread into a
-/// continuous `_layoutSubtreeWithOldSize` loop (~30–50% main-thread CPU
-/// while lyrics were visible).
+/// surrounding view tree. A `VStack { ForEach { Text } }` body re-builds
+/// its subtree per frame, cascading `ViewGraph.updateOutputs` into the
+/// surrounding `ScrollView` and putting the main thread into a continuous
+/// `_layoutSubtreeWithOldSize` loop (~30–50% main-thread CPU).
 ///
 /// Per-frame budget on the render thread:
 /// - Visible slice (`visibleRows + 2·bufferRows` rows) so long LRCs
@@ -97,8 +96,7 @@ struct SlidingLyricsView: View, Equatable {
                 // `centreRow * rowHeight + rowHeight/2`.
                 let centreY = CGFloat(centreRow) * rowHeight + rowHeight / 2
                 let centreX = size.width / 2
-                // Horizontal slack for shrink-to-fit (mirrors the
-                // previous `.padding(.horizontal, 16)` + `.minimumScaleFactor(0.3)`).
+                // Horizontal slack for shrink-to-fit (16 pt each side).
                 let availableWidth = max(size.width - 32, 1)
                 let minFitScale: CGFloat = 0.3
                 let minScale = baseSize / peakSize
@@ -142,10 +140,10 @@ struct SlidingLyricsView: View, Equatable {
                     }
                 }
             }
-            // Fixed height — previous `.frame(maxHeight: windowHeight)`
-            // let intrinsic content negotiate, which fluctuated per tick
-            // as the visible-row window shifted and pulled the parent
-            // ScrollView into a `_layoutSubtreeWithOldSize` loop.
+            // Fixed height — a `maxHeight` frame lets intrinsic content
+            // negotiate, which fluctuates per tick as the visible-row
+            // window shifts and pulls the parent ScrollView into a
+            // `_layoutSubtreeWithOldSize` loop.
             .frame(maxWidth: .infinity,
                    minHeight: windowHeight,
                    maxHeight: windowHeight,
@@ -161,38 +159,13 @@ struct SlidingLyricsView: View, Equatable {
     /// adjustment.
     ///
     /// Binary search — TimelineView ticks at display refresh, so an
-    /// O(N) scan over a few-hundred-line LRC ran the main thread for
-    /// long enough to drop frames on dense songs.
+    /// O(N) scan over a few-hundred-line LRC drops frames on dense songs.
     private func fractionalIndex(for pos: Double) -> Double {
-        guard !lines.isEmpty else { return 0 }
-        var lo = 0
-        var hi = lines.count - 1
-        var prevIdx = -1
-        while lo <= hi {
-            let mid = (lo + hi) / 2
-            if lines[mid].time <= pos {
-                prevIdx = mid
-                lo = mid + 1
-            } else {
-                hi = mid - 1
-            }
-        }
-        if prevIdx < 0 {
-            // Pre-roll: glide the first line in from below as the
-            // song approaches its first lyric stamp.
-            guard let firstTime = lines.first?.time, firstTime > 0 else { return 0 }
-            return (pos / firstTime) - 1.0
-        }
-        let nextIdx = prevIdx + 1
-        if nextIdx >= lines.count {
-            return Double(prevIdx)
-        }
-        let prevTime = lines[prevIdx].time
-        let nextTime = lines[nextIdx].time
-        let span = nextTime - prevTime
-        if span <= 0 { return Double(prevIdx) }
-        let progress = (pos - prevTime) / span
-        return Double(prevIdx) + min(max(progress, 0), 1)
+        // Interpolation, pre-roll and the degenerate cases live in
+        // LyricScrollPosition so they can be tested without a running clock.
+        LyricScrollPosition.fractionalIndex(
+            for: pos,
+            lines: lines.map { .init(time: $0.time, text: $0.line) })
     }
 
 }

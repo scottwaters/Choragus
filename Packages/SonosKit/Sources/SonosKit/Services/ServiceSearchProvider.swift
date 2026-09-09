@@ -128,12 +128,9 @@ public final class ServiceSearchProvider {
             let artURL = upscaleArt(result["artworkUrl100"] as? String)
             let relDate = Self.parseISODate(result["releaseDate"] as? String)
 
-            // Reverted to v3.7's working form: hardcoded `flags=8224`.
-            // The `serviceFlagsOverrides` table (which maps Apple Music
-            // → 8232) is for SMAPI-browse items routed through
-            // `buildPlayURI`; iTunes-search-derived items use the
-            // legacy `8224` flag and have done so reliably since the
-            // feature first shipped.
+            // Hardcoded `flags=8224`. The `serviceFlagsOverrides` table
+            // (Apple Music → 8232) is for SMAPI-browse items routed through
+            // `buildPlayURI`; iTunes-search-derived items use `8224`.
             let resourceURI = "x-sonos-http:song%3a\(trackId).mp4?sid=\(sid)&flags=8224&sn=\(sn)"
             let metadata = buildTrackDIDL(trackId: trackId, collectionId: collectionId, title: trackName, artist: artistName, album: albumName, serviceType: serviceType)
 
@@ -309,8 +306,23 @@ public final class ServiceSearchProvider {
     /// audioBroadcasts; they need RadioTime's Tune.ashx resolver to a
     /// direct MP3/HLS URL.
     private func tuneInNeedsResolve(_ guideId: String) -> Bool {
+        let catalog = MusicServiceCatalog.shared
+        return Self.tuneInNeedsResolve(guideId,
+                                       catalogLoaded: catalog.lastRefresh != .distantPast,
+                                       tuneInListed: catalog.sid(forName: ServiceName.tuneIn) != nil)
+    }
+
+    /// Topics / programs / groups are never audioBroadcasts and always
+    /// need the RadioTime resolver. Stations (s-prefix) need it only on
+    /// households where Sonos has removed the TuneIn service — there the
+    /// `x-sonosapi-stream:…sid=254` form has nothing to answer it. That
+    /// is only knowable once the catalog has loaded; an unloaded catalog
+    /// (Music Services disabled, or not refreshed yet) keeps the legacy
+    /// `sid=254` form.
+    static func tuneInNeedsResolve(_ guideId: String, catalogLoaded: Bool, tuneInListed: Bool) -> Bool {
         guard let first = guideId.first else { return false }
-        return first == "t" || first == "p" || first == "g"
+        if first == "t" || first == "p" || first == "g" { return true }
+        return catalogLoaded && !tuneInListed
     }
 
     /// Result of resolving a TuneIn guide ID via RadioTime's public
@@ -404,6 +416,11 @@ public final class ServiceSearchProvider {
     public func buildDirectHTTPTrackDIDL(title: String, artist: String, url: String, mediaType: String, albumArtURI: String? = nil) -> String {
         let protocolInfo: String
         switch mediaType.lowercased() {
+        // FLAC and WAV arrive from UPnP media servers, which serve lossless
+        // freely; declaring them as audio/mpeg makes the speaker refuse.
+        case "flac": protocolInfo = "http-get:*:audio/flac:*"
+        case "wav":  protocolInfo = "http-get:*:audio/wav:*"
+        case "mp4", "m4a": protocolInfo = "http-get:*:audio/mp4:*"
         case "aac":  protocolInfo = "http-get:*:audio/aac:*"
         case "ogg":  protocolInfo = "http-get:*:audio/ogg:*"
         case "hls":  protocolInfo = "http-get:*:application/vnd.apple.mpegurl:*"
@@ -665,27 +682,52 @@ public final class ServiceSearchProvider {
     /// Returns BrowseItems with proper playback URIs and metadata.
     public func searchSMAPI(term: String, searchID: String = "track", serviceID: Int,
                             serviceURI: String, token: SMAPIToken, sn: Int,
-                            index: Int = 0, count: Int = 25) async -> [BrowseItem] {
-        let client = SMAPIClient.shared
+                            index: Int = 0, count: Int = 25,
+                            generation: SonosSystemVersion = .unknown) async -> [BrowseItem] {
         do {
-            let result = try await client.search(serviceURI: serviceURI, token: token,
-                                                  searchID: searchID, term: term,
-                                                  index: index, count: count)
-            return result.items.map { smapiItemToBrowseItem($0, serviceID: serviceID, sn: sn) }
+            return try await searchSMAPIThrowing(term: term, searchID: searchID, serviceID: serviceID,
+                                                 serviceURI: serviceURI, token: token, sn: sn,
+                                                 index: index, count: count, generation: generation)
         } catch {
             sonosDebugLog("[SERVICE_SEARCH] SMAPI search failed for sid=\(serviceID): \(error)")
             return []
         }
     }
 
+    /// `searchSMAPI` without the fail-soft. A browse list can treat a
+    /// failed service as an empty one, but a caller that has to report
+    /// back — the agent server — must be able to tell "the service found
+    /// nothing" from "the service did not answer".
+    public func searchSMAPIThrowing(term: String, searchID: String = "track", serviceID: Int,
+                                    serviceURI: String, token: SMAPIToken, sn: Int,
+                                    index: Int = 0, count: Int = 25,
+                                    generation: SonosSystemVersion = .unknown) async throws -> [BrowseItem] {
+        let client = SMAPIClient.shared
+        let result = try await client.search(serviceURI: serviceURI, token: token,
+                                             searchID: searchID, term: term,
+                                             index: index, count: count)
+        // Flags per result, so an account tier that marks items
+        // unplayable (Amazon Prime) is visible in a bug report.
+        let flags = result.items.prefix(3).map {
+            "\($0.itemType):play=\($0.canPlay ? 1 : 0)/browse=\($0.canBrowse ? 1 : 0)\($0.uri.isEmpty ? "" : "/uri")"
+        }.joined(separator: " ")
+        sonosDebugLog("[SERVICE_SEARCH] SMAPI sid=\(serviceID) id=\(searchID) term=\(term.prefix(40)) → \(result.items.count)/\(result.total) [\(flags)]")
+        return result.items.map { smapiItemToBrowseItem($0, serviceID: serviceID, sn: sn, generation: generation) }
+    }
+
     /// Browse into a container on any authenticated SMAPI service.
     public func browseSMAPI(id: String, serviceID: Int, serviceURI: String, token: SMAPIToken,
-                            sn: Int, index: Int = 0, count: Int = 50) async -> [BrowseItem] {
+                            sn: Int, index: Int = 0, count: Int = 50,
+                            generation: SonosSystemVersion = .unknown) async -> [BrowseItem] {
         let client = SMAPIClient.shared
         do {
             let result = try await client.getMetadata(serviceURI: serviceURI, token: token,
                                                        id: id, index: index, count: count)
-            return result.items.map { smapiItemToBrowseItem($0, serviceID: serviceID, sn: sn) }
+            let flags = result.items.prefix(3).map {
+                "\($0.itemType):play=\($0.canPlay ? 1 : 0)/browse=\($0.canBrowse ? 1 : 0)\($0.uri.isEmpty ? "" : "/uri")"
+            }.joined(separator: " ")
+            sonosDebugLog("[SERVICE_SEARCH] SMAPI browse sid=\(serviceID) id=\(id.prefix(50)) → \(result.items.count)/\(result.total) [\(flags)]")
+            return result.items.map { smapiItemToBrowseItem($0, serviceID: serviceID, sn: sn, generation: generation) }
         } catch {
             sonosDebugLog("[SERVICE_SEARCH] SMAPI browse failed for sid=\(serviceID) id=\(id): \(error)")
             return []
@@ -695,18 +737,19 @@ public final class ServiceSearchProvider {
     /// Paginated `browseSMAPI` — fetches every item in a container by
     /// looping `index += pageSize` until an empty page returns. Empty
     /// page is the only authoritative terminator (speaker-reported
-    /// `total` is unreliable for SMAPI containers, per the v3.51 batch
-    /// add findings). Used by bulk play/enqueue fallback paths where a
-    /// one-shot `browseSMAPI(count: 50)` would silently truncate large
-    /// Spotify / Plex playlists.
+    /// `total` is unreliable for SMAPI containers). Used by bulk
+    /// play/enqueue paths where a one-shot `browseSMAPI(count: 50)`
+    /// would silently truncate large playlists.
     public func pagedBrowseSMAPI(id: String, serviceID: Int, serviceURI: String, token: SMAPIToken,
-                                 sn: Int, pageSize: Int = 100, maxItems: Int = 500) async -> [BrowseItem] {
+                                 sn: Int, pageSize: Int = 100, maxItems: Int = 500,
+                                 generation: SonosSystemVersion = .unknown) async -> [BrowseItem] {
         var all: [BrowseItem] = []
         var index = 0
         while all.count < maxItems {
             let want = min(pageSize, maxItems - all.count)
             let page = await browseSMAPI(id: id, serviceID: serviceID, serviceURI: serviceURI,
-                                          token: token, sn: sn, index: index, count: want)
+                                          token: token, sn: sn, index: index, count: want,
+                                          generation: generation)
             sonosDebugLog("[BROWSE] pagedSMAPI page index=\(index) want=\(want) got=\(page.count) total=\(all.count + page.count)")
             if page.isEmpty { break }
             all.append(contentsOf: page)
@@ -756,13 +799,11 @@ public final class ServiceSearchProvider {
 
     // MARK: - DIDL Builders
 
-    /// Track DIDL for iTunes-search-derived Apple Music tracks.
-    /// Matches v3.7's working form exactly — `00032020song:<id>` ID with
-    /// `0004206calbum:<collectionId>` parent, including `dc:creator` and
-    /// `upnp:album`. This is what Sonos accepted for both single-track
-    /// `AddURIToQueue` and bulk `AddMultipleURIsToQueue` in the released
-    /// build. Earlier "fixes" to mirror the SMAPI-favorite shape
-    /// (`10032020song:` + empty parentID, drop creator/album) caused
+    /// Track DIDL for iTunes-search-derived Apple Music tracks:
+    /// `00032020song:<id>` ID with `0004206calbum:<collectionId>` parent,
+    /// including `dc:creator` and `upnp:album`. Sonos accepts this for
+    /// both `AddURIToQueue` and `AddMultipleURIsToQueue`; the SMAPI-favorite
+    /// form (`10032020song:` + empty parentID, no creator/album) causes
     /// "item no longer available" rejections during queue-advance.
     private func buildTrackDIDL(trackId: Int, collectionId: Int, title: String, artist: String, album: String, serviceType: Int) -> String {
         """
@@ -776,6 +817,19 @@ public final class ServiceSearchProvider {
         """
     }
 
+    /// Generic radio-broadcast DIDL with NO service cdudn. Used when a
+    /// station plays via its raw stream URL rather than through a Sonos
+    /// service — a cdudn there would tell the speaker to consult a service
+    /// that, on the households needing this path, no longer exists.
+    public func buildRadioBroadcastDIDL(title: String, artURI: String? = nil) -> String {
+        let art = (artURI?.isEmpty == false)
+            ? "<upnp:albumArtURI>\(XMLResponseParser.xmlEscape(artURI ?? ""))</upnp:albumArtURI>"
+            : ""
+        return """
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="-1" parentID="-1" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title>\(art)<upnp:class>object.item.audioItem.audioBroadcast</upnp:class></item></DIDL-Lite>
+        """
+    }
+
     private func buildTuneInDIDL(guideId: String, title: String) -> String {
         """
         <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="F00092020\(guideId)" parentID="L" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON3079_</desc></item></DIDL-Lite>
@@ -785,16 +839,16 @@ public final class ServiceSearchProvider {
     /// Builds DIDL metadata matching the exact format Sonos favorites use for service tracks.
     /// Based on r:resMD from actual Sonos Favorite browse response.
     private func buildSMAPIDIDL(id: String, title: String, artist: String, album: String,
-                                itemType: String, serviceID: Int, serviceType: Int) -> String {
+                                albumArtURI: String = "",
+                                itemType: String, serviceID: Int, serviceType: Int,
+                                generation: SonosSystemVersion = .unknown) -> String {
         let upnpClass = itemType == "track" ? "object.item.audioItem.musicTrack" : "object.item.audioItem.audioBroadcast"
         // Same encoder as the play URI (`buildPlayURI` → `sonosEncodeItemID`)
         // — the speaker matches the DIDL id against the URI's id, and
         // divergent encoding faults UPnP 800 for ids with reserved chars.
-        // The previous colons-only replacement left `&`, `"`, spaces etc.
-        // raw in both the id attribute and the URI pairing. xmlEscape on
-        // top because percent-encoding leaves `&` intact (mirrors
-        // `buildSMAPIContainerDIDL`).
-        let encodedID = XMLResponseParser.xmlEscape(Self.sonosEncodeItemID(id))
+        // xmlEscape on top because percent-encoding leaves `&` intact
+        // (mirrors `buildSMAPIContainerDIDL`).
+        let encodedID = XMLResponseParser.xmlEscape(Self.playbackItemID(id, serviceID: serviceID, generation: generation))
         // Prefix selection routes through MusicServiceCatalog so any
         // per-service overrides win, with the universal Sonos prefixes
         // as the fallback when the catalog has no rules for this sid.
@@ -803,18 +857,38 @@ public final class ServiceSearchProvider {
         let catalog = MusicServiceCatalog.shared
         let idPrefix: String
         switch itemType {
-        case "track":              idPrefix = catalog.didlTrackIdPrefix(forSid: serviceID)
+        case "track":              idPrefix = catalog.didlTrackIdPrefix(forSid: serviceID, generation: generation)
         case "stream", "program":  idPrefix = catalog.didlStreamIdPrefix(forSid: serviceID)
-        default:                   idPrefix = catalog.didlContainerIdPrefix(forSid: serviceID)
+        default:                   idPrefix = catalog.didlContainerIdPrefix(forSid: serviceID, generation: generation)
         }
         // cdudn auth-token resolution: prefer a Choragus-side AppLink
-        // token if the user authenticated the service through us;
+        // token if the user authenticated the service in Choragus;
         // otherwise emit the anonymous cdudn (which the speaker
         // accepts only for genuinely-anonymous services like Sonos
         // Radio and TuneIn-anonymous).
-        let cdudn: String = catalog.cdudn(forSid: serviceID, authToken: authToken(forSid: serviceID))
+        let cdudn: String = catalog.cdudn(forSid: serviceID, authToken: authToken(forSid: serviceID), generation: generation)
+        // Artist / album / art from the SMAPI response. Sonos's own
+        // favorite DIDLs carry these, and without them the only art the
+        // now-playing pipeline ever sees for a service track is the
+        // speaker's `/getaa?` proxy — which 404s for the first seconds
+        // after a track starts, sending `ArtResolver` into an iTunes
+        // guess. Emitting the service's own art URL removes the guess.
+        // Each element is omitted when empty rather than emitted blank:
+        // an empty `<dc:creator/>` reads as "artist is known to be
+        // nothing" and blanks the field the speaker would otherwise
+        // resolve itself.
+        var extras = ""
+        if !artist.isEmpty {
+            extras += "<dc:creator>\(XMLResponseParser.xmlEscape(artist))</dc:creator>"
+        }
+        if !album.isEmpty {
+            extras += "<upnp:album>\(XMLResponseParser.xmlEscape(album))</upnp:album>"
+        }
+        if !albumArtURI.isEmpty {
+            extras += "<upnp:albumArtURI>\(XMLResponseParser.xmlEscape(albumArtURI))</upnp:albumArtURI>"
+        }
         return """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(idPrefix)\(encodedID)" parentID="-1" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><upnp:class>\(upnpClass)</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(idPrefix)\(encodedID)" parentID="-1" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title>\(extras)<upnp:class>\(upnpClass)</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
         """
     }
 
@@ -880,7 +954,7 @@ public final class ServiceSearchProvider {
 
     /// RINCON service type for the runtime sid the speaker reports.
     /// Routes through the catalog so households whose sid for a service
-    /// drifted (issue #19) still get the correct RINCON value, with the
+    /// drifted still get the correct RINCON value, with the
     /// `(sid << 8) + 7` formula as the fallback when the catalog hasn't
     /// loaded yet.
     private func rinconServiceType(for serviceID: Int) -> Int {
@@ -894,15 +968,12 @@ public final class ServiceSearchProvider {
     /// → service name → protocol rules. Per-service URI quirks (Spotify
     /// wants `x-sonos-spotify:`, Apple Music wants `.mp4` + flags 8232,
     /// etc.) live in the catalog so the lookup tracks the household's
-    /// actual sid for the service rather than a compile-time guess. The
-    /// previous compile-time tables silently mis-routed any household
-    /// whose sid for a service didn't match the constants — see
-    /// issue #19 for the resulting "x-sonos-http: → SOAP 714" failure
-    /// on accounts where Spotify is sid 9 instead of 12.
+    /// actual sid for the service rather than a compile-time constant
+    /// (Spotify is sid 9 on some accounts, 12 on others).
     ///
     /// Falls back to `x-sonos-http:` and logs a CATALOG diagnostic when
-    /// the catalog has no rules for this sid (either it hasn't been
-    /// refreshed yet or this is a service we don't know about).
+    /// the catalog has no rules for this sid (not yet refreshed, or an
+    /// unknown service).
     /// Sonos item-id encoding shared by every URI and DIDL-id builder:
     /// percent-encode, then force colons to LOWERCASE `%3a` (Sonos is
     /// case-sensitive and rejects uppercase hex for Spotify URIs). The
@@ -930,22 +1001,72 @@ public final class ServiceSearchProvider {
         return out
     }
 
-    private func buildPlayURI(itemID: String, itemType: String, serviceID: Int, sn: Int) -> String {
+    /// Rewrites a service's SMAPI object id into the id its play URIs use.
+    /// Most services need no rewrite; see `ItemIDStyle` for why Amazon does.
+    static func rewriteItemID(_ id: String, style: ItemIDStyle) -> String {
+        switch style {
+        case .verbatim:
+            return id
+        case .amazonAsin:
+            return Self.strippingAmazonFragment(id)
+        case .amazonCatalogPath:
+            let id = Self.strippingAmazonFragment(id)
+            let trackPrefix = "catalog:track:asin:"
+            let albumPrefix = "catalog:album:asin:"
+            if id.hasPrefix(trackPrefix) {
+                return "catalog/tracks/\(id.dropFirst(trackPrefix.count))/"
+            }
+            if id.hasPrefix(albumPrefix) {
+                return "catalog/albums/\(id.dropFirst(albumPrefix.count))/#album_desc"
+            }
+            // Artists, playlists and podcasts keep their object id. The
+            // artist container has its own prefix (`1008206c`) that the
+            // single `didlContainerIdPrefix` rule can't express, so it
+            // browses rather than plays as a container.
+            return id
+        }
+    }
+
+    /// The id to embed in a play URI or DIDL item id, ready-encoded.
+    /// URI and DIDL must both come from here — the speaker matches one
+    /// against the other, and a divergent rewrite faults UPnP 800.
+    /// Amazon search and playlist rows carry a per-result tracking
+    /// fragment (`catalog:track:asin:<ASIN>#erefid-<uuid>`) that is not
+    /// part of the playable id; both S1 and S2 speakers fault on it
+    /// (UPnP 701).
+    static func strippingAmazonFragment(_ id: String) -> String {
+        guard let hash = id.firstIndex(of: "#") else { return id }
+        return String(id[..<hash])
+    }
+
+    static func playbackItemID(_ rawID: String, serviceID: Int,
+                               generation: SonosSystemVersion = .unknown) -> String {
+        let style = MusicServiceCatalog.shared.itemIDStyle(forSid: serviceID, generation: generation)
+        return sonosEncodeItemID(rewriteItemID(rawID, style: style))
+    }
+
+    private func buildPlayURI(itemID: String, itemType: String, serviceID: Int, sn: Int,
+                              generation: SonosSystemVersion) -> String {
         let catalog = MusicServiceCatalog.shared
-        let encodedID = Self.sonosEncodeItemID(itemID)
+        let encodedID = Self.playbackItemID(itemID, serviceID: serviceID, generation: generation)
+        let rules = catalog.rules(forSid: serviceID, generation: generation)
         if itemType == "stream" || itemType == "program" {
-            let streamScheme = catalog.rules(forSid: serviceID)?.streamURIScheme ?? URIPrefix.sonosApiStream
-            let streamFlags = catalog.rules(forSid: serviceID)?.streamPlaybackFlags ?? 8224
+            let streamScheme = rules?.streamURIScheme ?? URIPrefix.sonosApiStream
+            let streamFlags = rules?.streamPlaybackFlags ?? 8224
             return "\(streamScheme)\(encodedID)?sid=\(serviceID)&flags=\(streamFlags)&sn=\(sn)"
         }
-        let prefix = catalog.trackURIScheme(forSid: serviceID)
-        let ext = catalog.trackURIExtension(forSid: serviceID)
-        let flags = catalog.trackPlaybackFlags(forSid: serviceID)
+        let prefix = catalog.trackURIScheme(forSid: serviceID, generation: generation)
+        let ext = catalog.trackURIExtension(forSid: serviceID, generation: generation)
+        let flags = catalog.trackPlaybackFlags(forSid: serviceID, generation: generation)
         return "\(prefix)\(encodedID)\(ext)?sid=\(serviceID)&flags=\(flags)&sn=\(sn)"
     }
 
     /// Converts an SMAPIMediaItem to a BrowseItem with correct per-service URI and metadata.
-    public func smapiItemToBrowseItem(_ smapi: SMAPIMediaItem, serviceID: Int, sn: Int) -> BrowseItem {
+    /// `generation` selects the household's play form (see
+    /// `MusicServiceCatalog.rules(forSid:generation:)`); `.unknown`
+    /// takes the S2 default.
+    public func smapiItemToBrowseItem(_ smapi: SMAPIMediaItem, serviceID: Int, sn: Int,
+                                      generation: SonosSystemVersion = .unknown) -> BrowseItem {
         let serviceType = rinconServiceType(for: serviceID)
         // A playable but non-enumerable collection — e.g. an Audible
         // audiobook (`itemType` "audiobook", canPlay=true,
@@ -961,29 +1082,56 @@ public final class ServiceSearchProvider {
         // response omits the tags, so a negative test would misroute
         // plain leaf items onto the container path. Applies only when the
         // server supplied no `<uri>` of its own — a server-supplied URI
-        // keeps the legacy resolve path so its scheme and the DIDL stay
-        // paired.
+        // keeps the resolve path so its scheme and the DIDL stay paired.
         let playableCollectionTypes: Set<String> = ["audiobook", "album", "playlist", "show"]
         // Defensive reclassification at the SMAPI boundary: services
-        // occasionally return collection ids typed as leaf tracks —
-        // observed with Spotify personalized playlists (issue #77): a
-        // leaf item titled "Unable to access playlist" carrying
-        // `spotify:playlist:<id>`. A collection id in the track URI
+        // occasionally return collection ids typed as leaf tracks
+        // (Spotify personalized playlists: a leaf item titled
+        // "Unable to access playlist" carrying
+        // `spotify:playlist:<id>`). A collection id in the track URI
         // form (`x-sonos-spotify:spotify%3aplaylist%3a…`) faults
         // UPnP 800 at AddURIToQueue, so an id that names a collection
         // routes to the container form regardless of reported itemType.
         let collectionIDMarkers = [":playlist:", ":album:", ":show:", ":artist:"]
         let idNamesCollection = collectionIDMarkers.contains { smapi.id.contains($0) }
-        let isPlayableCollection = smapi.canPlay && !smapi.canBrowse
-            && !smapi.id.isEmpty && smapi.uri.isEmpty
-            && (playableCollectionTypes.contains(smapi.itemType) || idNamesCollection)
+        // An Amazon artist (`catalog:artist:asin:…`) has its own container
+        // prefix (`1008206c`) that `didlContainerIdPrefix` can't express;
+        // the generic container URI faults UPnP 714. Rather than emit a
+        // URI known to fail, leave the row browse-only (`rewriteItemID`
+        // passes the id through unchanged for the same reason).
+        let rules = MusicServiceCatalog.shared.rules(forSid: serviceID, generation: generation)
+        let amazonStyle = rules?.itemIDStyle ?? .verbatim
+        // Station-wrapper services (Amazon on S2). Two cases play as a
+        // station on the transport, the way the Sonos app plays them:
+        //   - ids the service already shaped as `sp:container:station:…`
+        //     (albums and playlists on an Amazon Music Prime account come
+        //     this way, itemType "program"; the Sonos app shows them with
+        //     a shuffle badge and no track list), used verbatim;
+        //   - artist rows (`catalog:artist:asin:`), which the wrapper
+        //     prefix turns into the artist station.
+        // Real stations (`catalog:station:key:`) keep the S1-verified
+        // stream form, and tracks stay on the per-track path.
+        let stationWrapper = rules?.containerPlayForm == .stationWrapper
+        let isServiceStation = stationWrapper && smapi.id.hasPrefix(Self.amazonStationWrapperPrefix)
+        // `canPlay` is not consulted for leaves: Amazon reports it for the
+        // controller's own link (false for album tracks on a link without
+        // on-demand entitlement) while the speaker plays through the
+        // household's account, so a `canPlay=false` track can still play.
+        // A refusal at play time is reported instead.
+        let isStationWrappedCollection = isServiceStation
+            || (stationWrapper && !smapi.id.isEmpty && smapi.uri.isEmpty && smapi.id.contains(":artist:"))
+        let isUnplayableAmazonArtist = amazonStyle == .amazonCatalogPath && smapi.id.contains(":artist:")
+        let isPlayableCollection = isStationWrappedCollection
+            || (smapi.canPlay && !smapi.canBrowse
+                && !smapi.id.isEmpty && smapi.uri.isEmpty && !isUnplayableAmazonArtist
+                && (playableCollectionTypes.contains(smapi.itemType) || idNamesCollection))
         let playURI: String?
         // Server-supplied URI wins when present — Sonos's SMAPI returns
         // the canonical play URI in <uri> for services whose scheme
         // can't be derived from sid/itemType alone (Radio Paradise's
         // resume tokens, services with custom schemes, etc.). Falling
-        // through to `buildPlayURI` is the legacy path for services
-        // that omit <uri> from mediaMetadata.
+        // through to `buildPlayURI` is the path for services that omit
+        // <uri> from mediaMetadata.
         if !smapi.uri.isEmpty {
             playURI = smapi.uri
             sonosDiagLog(.info, tag: "SERVICE-SEARCH",
@@ -993,21 +1141,25 @@ public final class ServiceSearchProvider {
                             "itemType": smapi.itemType
                          ])
         } else if isPlayableCollection {
-            playURI = buildContainerPlayURI(itemID: smapi.id, serviceID: serviceID, sn: sn)
-        } else if !smapi.canBrowse && !smapi.id.isEmpty {
-            playURI = buildPlayURI(itemID: smapi.id, itemType: smapi.itemType, serviceID: serviceID, sn: sn)
+            playURI = buildContainerPlayURI(itemID: smapi.id, serviceID: serviceID, sn: sn, generation: generation)
+        } else if !smapi.canBrowse && !smapi.id.isEmpty && !isUnplayableAmazonArtist {
+            playURI = buildPlayURI(itemID: smapi.id, itemType: smapi.itemType, serviceID: serviceID, sn: sn,
+                                   generation: generation)
         } else {
             playURI = nil
         }
 
         let didlMeta: String?
-        if playURI != nil, !smapi.canBrowse {
+        if playURI != nil, !smapi.canBrowse || isStationWrappedCollection {
             didlMeta = isPlayableCollection
                 ? buildSMAPIContainerDIDL(id: smapi.id, title: smapi.title,
-                                          artist: smapi.artist, serviceID: serviceID)
+                                          artist: smapi.artist, serviceID: serviceID,
+                                          generation: generation)
                 : buildSMAPIDIDL(id: smapi.id, title: smapi.title, artist: smapi.artist,
-                                 album: smapi.album, itemType: smapi.itemType,
-                                 serviceID: serviceID, serviceType: serviceType)
+                                 album: smapi.album, albumArtURI: smapi.albumArtURI,
+                                 itemType: smapi.itemType,
+                                 serviceID: serviceID, serviceType: serviceType,
+                                 generation: generation)
         } else {
             didlMeta = nil
         }
@@ -1015,11 +1167,18 @@ public final class ServiceSearchProvider {
         // A playable collection stays a leaf (`.musicTrack`) so a tap
         // PLAYS it via its cpcontainer URI rather than drilling in —
         // `playBrowseItem` routes containers by URI prefix, not item class.
-        let itemClass: BrowseItemClass = smapi.canBrowse ? .container
-            : (isPlayableCollection ? .musicTrack
+        // A service-shaped album / playlist station plays whole through
+        // its station id, but its level is the plain collection id: the
+        // station id browses to only the current track, the plain id
+        // to the full track list. The row therefore
+        // drills into the plain id and plays the station.
+        let plainCollectionID = isServiceStation
+            ? String(smapi.id.dropFirst(Self.amazonStationWrapperPrefix.count)) : smapi.id
+        let itemClass: BrowseItemClass = smapi.canBrowse || isServiceStation ? .container
+            : (isPlayableCollection ? (isStationWrappedCollection ? .container : .musicTrack)
                : (smapi.itemType == "album" ? .musicAlbum : .musicTrack))
         var item = BrowseItem(
-            id: "smapi:\(serviceID):\(smapi.id)",
+            id: "smapi:\(serviceID):\(plainCollectionID)",
             title: smapi.title,
             artist: smapi.artist,
             album: smapi.album,
@@ -1040,9 +1199,19 @@ public final class ServiceSearchProvider {
         //
         // Playable collections (cpcontainer URI + container DIDL) play
         // directly through the container queue path; no getMediaURI resolution.
+        //
+        // Services whose rules opt out of getMediaURI (Amazon Music) keep
+        // their raw service URI + DIDL for every item: their resolved URL
+        // is a signed HLS manifest the speaker can't play from the queue
+        // (UPnP 701), and getMediaURI faults for their stations. The raw
+        // `x-sonosapi-hls-static:` track still routes through the queue via
+        // `isSMAPIServiceTrackURI`; the `x-sonosapi-radio:` station plays
+        // by direct SetAVTransportURI.
         if serviceID == ServiceID.somaFM && smapi.itemType == "stream" {
             item.playbackStrategy = .directURIWithDIDL
         } else if isPlayableCollection {
+            item.playbackStrategy = .directURIWithDIDL
+        } else if !(MusicServiceCatalog.shared.rules(forSid: serviceID, generation: generation)?.resolvesViaGetMediaURI ?? true) {
             item.playbackStrategy = .directURIWithDIDL
         } else {
             item.playbackStrategy = .smapiResolveThenEmpty
@@ -1054,9 +1223,24 @@ public final class ServiceSearchProvider {
     /// (e.g. an Audible audiobook). Mirrors the album cpcontainer form:
     /// `x-rincon-cpcontainer:<containerIdPrefix><encoded-id>?sid=&flags=8300&sn=`.
     /// `flags=8300` is the value Sonos uses for playable service containers.
-    private func buildContainerPlayURI(itemID: String, serviceID: Int, sn: Int) -> String {
-        let prefix = MusicServiceCatalog.shared.didlContainerIdPrefix(forSid: serviceID)
-        let encodedID = Self.sonosEncodeItemID(itemID)
+    /// Amazon wraps a collection id as a station: `sp:container:station:<id>`.
+    static let amazonStationWrapperPrefix = "sp:container:station:"
+
+    /// The id as a station id: service-shaped ids pass through, plain
+    /// collection ids get the wrapper.
+    static func stationWrapped(_ id: String) -> String {
+        id.hasPrefix(amazonStationWrapperPrefix) ? id : amazonStationWrapperPrefix + id
+    }
+
+    private func buildContainerPlayURI(itemID: String, serviceID: Int, sn: Int,
+                                       generation: SonosSystemVersion = .unknown) -> String {
+        let catalog = MusicServiceCatalog.shared
+        if catalog.rules(forSid: serviceID, generation: generation)?.containerPlayForm == .stationWrapper {
+            let encodedID = Self.playbackItemID(Self.stationWrapped(itemID), serviceID: serviceID, generation: generation)
+            return "\(URIPrefix.sonosApiRadio)\(encodedID)?sid=\(serviceID)&flags=0&sn=\(sn)"
+        }
+        let prefix = catalog.didlContainerIdPrefix(forSid: serviceID, generation: generation)
+        let encodedID = Self.playbackItemID(itemID, serviceID: serviceID, generation: generation)
         return "\(URIPrefix.rinconContainer)\(prefix)\(encodedID)?sid=\(serviceID)&flags=8300&sn=\(sn)"
     }
 
@@ -1064,15 +1248,24 @@ public final class ServiceSearchProvider {
     /// Item id matches the cpcontainer URI's `<containerIdPrefix><encoded-id>`;
     /// uses the auth-aware service cdudn (a `-0-Token` anonymous form faults on
     /// authenticated services like Audible).
-    private func buildSMAPIContainerDIDL(id: String, title: String, artist: String, serviceID: Int) -> String {
+    private func buildSMAPIContainerDIDL(id: String, title: String, artist: String, serviceID: Int,
+                                         generation: SonosSystemVersion = .unknown) -> String {
         let catalog = MusicServiceCatalog.shared
-        let prefix = catalog.didlContainerIdPrefix(forSid: serviceID)
+        let prefix = catalog.didlContainerIdPrefix(forSid: serviceID, generation: generation)
+        if catalog.rules(forSid: serviceID, generation: generation)?.containerPlayForm == .stationWrapper {
+            let encodedID = XMLResponseParser.xmlEscape(
+                Self.playbackItemID(Self.stationWrapped(id), serviceID: serviceID, generation: generation))
+            let cdudn = catalog.cdudn(forSid: serviceID, authToken: authToken(forSid: serviceID), generation: generation)
+            return """
+            <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(prefix)\(encodedID)" parentID="-1" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><upnp:class>object.item.audioItem.audioBroadcast</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
+            """
+        }
         // Same encoder as buildContainerPlayURI — the speaker matches the
         // DIDL item id against the cpcontainer URI's id; divergent encoding
         // (e.g. colons-only) faults UPnP 800 for ids with reserved chars.
         // xmlEscape on top because percent-encoding leaves `&` intact.
-        let encodedID = XMLResponseParser.xmlEscape(Self.sonosEncodeItemID(id))
-        let cdudn = catalog.cdudn(forSid: serviceID, authToken: authToken(forSid: serviceID))
+        let encodedID = XMLResponseParser.xmlEscape(Self.playbackItemID(id, serviceID: serviceID, generation: generation))
+        let cdudn = catalog.cdudn(forSid: serviceID, authToken: authToken(forSid: serviceID), generation: generation)
         return """
         <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(prefix)\(encodedID)" parentID="-1" restricted="true"><dc:title>\(XMLResponseParser.xmlEscape(title))</dc:title><dc:creator>\(XMLResponseParser.xmlEscape(artist))</dc:creator><upnp:class>object.container.playlistContainer</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
         """

@@ -34,13 +34,17 @@ public struct LocalSavedQueue: Identifiable, Equatable {
     /// Folders this queue belongs to. A queue can be a member of several
     /// folders at once (many-to-many); empty == top level.
     public let folderIDs: [Int64]
+    /// When the queue was moved to Deleted Items; nil while it is live.
+    public let deletedAt: Date?
 
-    public init(id: Int64, name: String, createdAt: Date, trackCount: Int, folderIDs: [Int64] = []) {
+    public init(id: Int64, name: String, createdAt: Date, trackCount: Int, folderIDs: [Int64] = [],
+                deletedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.trackCount = trackCount
         self.folderIDs = folderIDs
+        self.deletedAt = deletedAt
     }
 }
 
@@ -82,14 +86,17 @@ public final class SavedQueueRepository {
                 is_snapshot INTEGER NOT NULL DEFAULT 0
             )
             """)
-        // Defensive migration for stores created before folders (B1320).
+        // Migration for stores created before folders.
         addColumnIfMissing(table: "saved_queues", column: "folder_id",
                            definition: "folder_id INTEGER REFERENCES saved_queue_folders(id) ON DELETE SET NULL")
         // Queue-history snapshots share this store but stay out of the
         // Queue Library UI (`list()` filters them). Migration for stores
-        // created before snapshots moved off the speaker (4.12.x).
+        // created before local snapshots.
         addColumnIfMissing(table: "saved_queues", column: "is_snapshot",
                            definition: "is_snapshot INTEGER NOT NULL DEFAULT 0")
+        // Deleted Items: a user delete stamps the row instead of removing
+        // it, so it can be restored until the retention window ends.
+        addColumnIfMissing(table: "saved_queues", column: "deleted_at", definition: "deleted_at REAL")
         // Sub-folders: nest folders via parent_id. CASCADE so deleting a parent
         // removes its subtree; the queues inside those subfolders fall back to
         // top level via the saved_queues SET NULL above.
@@ -124,9 +131,13 @@ public final class SavedQueueRepository {
                 PRIMARY KEY (queue_id, position)
             )
             """)
-        // Defensive migration for queues saved by a build that predated the
-        // metadata column (B1307).
+        // Migration for stores created before the metadata column.
         addColumnIfMissing(table: "saved_queue_tracks", column: "metadata", definition: "metadata TEXT")
+        // A pre-signed play URL expires; the service item it came from does
+        // not. Stored so a restore can re-resolve instead of enqueuing a dead
+        // URL. Absent in older saves, which fall back to the registry.
+        addColumnIfMissing(table: "saved_queue_tracks", column: "origin_sid", definition: "origin_sid INTEGER")
+        addColumnIfMissing(table: "saved_queue_tracks", column: "origin_item_id", definition: "origin_item_id TEXT")
     }
 
     deinit {
@@ -139,6 +150,21 @@ public final class SavedQueueRepository {
     /// on failure. Tracks keep their 1-based queue positions. `snapshot`
     /// rows are queue-history undo states: hidden from `list()`, enumerable
     /// via `snapshotRowIDs()`.
+
+    /// Binds the track's service origin into parameters 10 and 11 of an
+    /// insert. Falls back to the resolution registry so a queue saved from
+    /// rows read off the speaker — which carry no origin — still records one
+    /// while the app remembers it.
+    private static func bindOrigin(_ track: QueueItem, into stmt: OpaquePointer?) {
+        guard let origin = track.serviceOrigin else {
+            sqlite3_bind_null(stmt, 10)
+            sqlite3_bind_null(stmt, 11)
+            return
+        }
+        sqlite3_bind_int(stmt, 10, Int32(origin.sid))
+        sqlite3_bind_text(stmt, 11, origin.itemID, -1, SQLITE_TRANSIENT)
+    }
+
     public func save(name: String, tracks: [QueueItem], snapshot: Bool = false) -> Int64? {
         guard !tracks.isEmpty else { return nil }
         exec("BEGIN")
@@ -156,8 +182,9 @@ public final class SavedQueueRepository {
         defer { sqlite3_finalize(trackStmt) }
         guard sqlite3_prepare_v2(db, """
             INSERT INTO saved_queue_tracks
-                (queue_id, position, title, artist, album, art_url, uri, duration, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (queue_id, position, title, artist, album, art_url, uri, duration, metadata,
+                 origin_sid, origin_item_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, -1, &trackStmt, nil) == SQLITE_OK else { exec("ROLLBACK"); return nil }
         for track in tracks {
             sqlite3_reset(trackStmt)
@@ -182,6 +209,7 @@ public final class SavedQueueRepository {
             } else {
                 sqlite3_bind_null(trackStmt, 9)
             }
+            Self.bindOrigin(track, into: trackStmt)
             guard sqlite3_step(trackStmt) == SQLITE_DONE else { exec("ROLLBACK"); return nil }
         }
         exec("COMMIT")
@@ -207,8 +235,9 @@ public final class SavedQueueRepository {
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(db, """
             INSERT INTO saved_queue_tracks
-                (queue_id, position, title, artist, album, art_url, uri, duration, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (queue_id, position, title, artist, album, art_url, uri, duration, metadata,
+                 origin_sid, origin_item_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, -1, &stmt, nil) == SQLITE_OK else { exec("ROLLBACK"); return 0 }
         var count = 0
         for track in tracks {
@@ -222,6 +251,7 @@ public final class SavedQueueRepository {
             if let uri = track.uri { sqlite3_bind_text(stmt, 7, uri, -1, Self.SQLITE_TRANSIENT) } else { sqlite3_bind_null(stmt, 7) }
             sqlite3_bind_text(stmt, 8, track.duration, -1, Self.SQLITE_TRANSIENT)
             if let meta = track.metadata { sqlite3_bind_text(stmt, 9, meta, -1, Self.SQLITE_TRANSIENT) } else { sqlite3_bind_null(stmt, 9) }
+            Self.bindOrigin(track, into: stmt)
             guard sqlite3_step(stmt) == SQLITE_DONE else { exec("ROLLBACK"); return 0 }
             nextPos += 1
             count += 1
@@ -245,8 +275,9 @@ public final class SavedQueueRepository {
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(db, """
             INSERT INTO saved_queue_tracks
-                (queue_id, position, title, artist, album, art_url, uri, duration, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (queue_id, position, title, artist, album, art_url, uri, duration, metadata,
+                 origin_sid, origin_item_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, -1, &stmt, nil) == SQLITE_OK else { exec("ROLLBACK"); return }
         for (idx, track) in tracks.enumerated() {
             sqlite3_reset(stmt)
@@ -274,13 +305,58 @@ public final class SavedQueueRepository {
         sqlite3_step(stmt)
     }
 
-    public func delete(id: Int64) {
+    /// Removes the row and its tracks for good. Snapshot pruning and
+    /// Deleted Items use this; a user delete goes through `softDelete`.
+    public func purge(id: Int64) {
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(db, "DELETE FROM saved_queues WHERE id = ?",
                                  -1, &stmt, nil) == SQLITE_OK else { return }
         sqlite3_bind_int64(stmt, 1, id)
         sqlite3_step(stmt)
+    }
+
+    // MARK: - Deleted Items
+
+    /// Moves a queue to Deleted Items: hidden from `list()`, folder
+    /// memberships kept so a restore puts it back where it was.
+    public func softDelete(id: Int64, at date: Date = Date()) {
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, "UPDATE saved_queues SET deleted_at = ? WHERE id = ? AND is_snapshot = 0",
+                                 -1, &stmt, nil) == SQLITE_OK else { return }
+        sqlite3_bind_double(stmt, 1, date.timeIntervalSince1970)
+        sqlite3_bind_int64(stmt, 2, id)
+        sqlite3_step(stmt)
+    }
+
+    public func restore(id: Int64) {
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, "UPDATE saved_queues SET deleted_at = NULL WHERE id = ?",
+                                 -1, &stmt, nil) == SQLITE_OK else { return }
+        sqlite3_bind_int64(stmt, 1, id)
+        sqlite3_step(stmt)
+    }
+
+    /// Queues in Deleted Items, most recently deleted first.
+    public func listDeleted() -> [LocalSavedQueue] {
+        listQueues(where: "q.is_snapshot = 0 AND q.deleted_at IS NOT NULL", orderBy: "q.deleted_at DESC")
+    }
+
+    /// Removes every queue deleted before `date` (the retention cut-off).
+    public func purgeDeleted(before date: Date) {
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, "DELETE FROM saved_queues WHERE deleted_at IS NOT NULL AND deleted_at < ?",
+                                 -1, &stmt, nil) == SQLITE_OK else { return }
+        sqlite3_bind_double(stmt, 1, date.timeIntervalSince1970)
+        sqlite3_step(stmt)
+    }
+
+    /// Empties Deleted Items.
+    public func purgeAllDeleted() {
+        exec("DELETE FROM saved_queues WHERE deleted_at IS NOT NULL")
     }
 
     // MARK: - Folders
@@ -400,15 +476,19 @@ public final class SavedQueueRepository {
     /// Queue-history snapshot rows are excluded — they're an undo buffer,
     /// not user content.
     public func list() -> [LocalSavedQueue] {
+        listQueues(where: "q.is_snapshot = 0 AND q.deleted_at IS NULL", orderBy: "q.created_at DESC")
+    }
+
+    private func listQueues(where predicate: String, orderBy: String) -> [LocalSavedQueue] {
         let members = folderMemberships()
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(db, """
-            SELECT q.id, q.name, q.created_at, COUNT(t.position)
+            SELECT q.id, q.name, q.created_at, COUNT(t.position), q.deleted_at
             FROM saved_queues q
             LEFT JOIN saved_queue_tracks t ON t.queue_id = q.id
-            WHERE q.is_snapshot = 0
-            GROUP BY q.id ORDER BY q.created_at DESC
+            WHERE \(predicate)
+            GROUP BY q.id ORDER BY \(orderBy)
             """, -1, &stmt, nil) == SQLITE_OK else { return [] }
         var out: [LocalSavedQueue] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -418,7 +498,9 @@ public final class SavedQueueRepository {
                 name: sqlite3_column_text(stmt, 1).map { String(cString: $0) } ?? "",
                 createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 2)),
                 trackCount: Int(sqlite3_column_int(stmt, 3)),
-                folderIDs: members[id] ?? []
+                folderIDs: members[id] ?? [],
+                deletedAt: sqlite3_column_type(stmt, 4) == SQLITE_NULL
+                    ? nil : Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4))
             ))
         }
         return out
@@ -481,14 +563,20 @@ public final class SavedQueueRepository {
     }
 
     /// Tracks for one saved queue, in stored order.
-    public func tracks(for id: Int64) -> [QueueItem] {
+    /// `limit` 0 = all rows. Cover-art derivation passes a small limit
+    /// so a 500-track queue does not load in full on the main thread
+    /// to pick 4 covers.
+    public func tracks(for id: Int64, limit: Int = 0) -> [QueueItem] {
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(db, """
-            SELECT position, title, artist, album, art_url, uri, duration, metadata
+            SELECT position, title, artist, album, art_url, uri, duration, metadata,
+                   origin_sid, origin_item_id
             FROM saved_queue_tracks WHERE queue_id = ? ORDER BY position
+            LIMIT ?
             """, -1, &stmt, nil) == SQLITE_OK else { return [] }
         sqlite3_bind_int64(stmt, 1, id)
+        sqlite3_bind_int64(stmt, 2, limit > 0 ? Int64(limit) : -1)
         var out: [QueueItem] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
             out.append(QueueItem(
@@ -499,7 +587,10 @@ public final class SavedQueueRepository {
                 albumArtURI: sqlite3_column_text(stmt, 4).map { String(cString: $0) },
                 duration: sqlite3_column_text(stmt, 6).map { String(cString: $0) } ?? "",
                 uri: sqlite3_column_text(stmt, 5).map { String(cString: $0) },
-                metadata: sqlite3_column_text(stmt, 7).map { String(cString: $0) }
+                metadata: sqlite3_column_text(stmt, 7).map { String(cString: $0) },
+                originSid: sqlite3_column_type(stmt, 8) == SQLITE_NULL
+                    ? nil : Int(sqlite3_column_int(stmt, 8)),
+                originItemID: sqlite3_column_text(stmt, 9).map { String(cString: $0) }
             ))
         }
         return out

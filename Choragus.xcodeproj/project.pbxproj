@@ -14,6 +14,8 @@
 		A10003 /* RoomListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003 /* RoomListView.swift */; };
 		A10004 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10004 /* NowPlayingView.swift */; };
 		A10005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10005 /* Assets.xcassets */; };
+		A100L1 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B100L1 /* Localizable.xcstrings */; };
+		A100L2 /* AppShortcuts.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B100L2 /* AppShortcuts.xcstrings */; };
 		A10010 /* SonosKit in Frameworks */ = {isa = PBXBuildFile; productRef = D10010 /* SonosKit */; };
 		A10011 /* QueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011 /* QueueView.swift */; };
 		A10012 /* GroupEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012 /* GroupEditorView.swift */; };
@@ -61,12 +63,18 @@
 		A10047 /* SettingsScrobblingTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10047 /* SettingsScrobblingTab.swift */; };
 		A10060 /* PlexDirectBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10060 /* PlexDirectBrowseView.swift */; };
 		A10061 /* LineInBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10061 /* LineInBrowseView.swift */; };
+		A100S1 /* BrowseSortPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100S1 /* BrowseSortPicker.swift */; };
+		A100S2 /* BrowseChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100S2 /* BrowseChrome.swift */; };
+		A100S3 /* ClickOutside.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100S3 /* ClickOutside.swift */; };
+		A100S4 /* ChoragusQueueMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100S4 /* ChoragusQueueMenu.swift */; };
 		A10062 /* NowPlayingContextPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10062 /* NowPlayingContextPanel.swift */; };
 		A10063 /* SlidingLyricsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10063 /* SlidingLyricsView.swift */; };
 		A10064 /* LyricsKaraokeWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10064 /* LyricsKaraokeWindow.swift */; };
 		A10065 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10065 /* DiagnosticsView.swift */; };
 		A10801 /* NetworkDiagnosticsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10801 /* NetworkDiagnosticsTab.swift */; };
 		A10802 /* DiagnosticsHealthTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10802 /* DiagnosticsHealthTabs.swift */; };
+		A10803 /* PlaylistBuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10803 /* PlaylistBuilderView.swift */; };
+		A10804 /* LimitedTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10804 /* LimitedTextField.swift */; };
 		A10066 /* LiveEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10066 /* LiveEventsView.swift */; };
 		A10067 /* ClubVisWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10067 /* ClubVisWindow.swift */; };
 		A10068 /* ClubStageSets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10068 /* ClubStageSets.swift */; };
@@ -89,6 +97,8 @@
 		B10003 /* RoomListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomListView.swift; sourceTree = "<group>"; };
 		B10004 /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
 		B10005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B100L1 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		B100L2 /* AppShortcuts.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = AppShortcuts.xcstrings; sourceTree = "<group>"; };
 		B10006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10007 /* Choragus.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Choragus.entitlements; sourceTree = "<group>"; };
 		B10008 /* SonosKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = SonosKit; path = Packages/SonosKit; sourceTree = "<group>"; };
@@ -139,12 +149,18 @@
 		B10047 /* SettingsScrobblingTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScrobblingTab.swift; sourceTree = "<group>"; };
 		B10060 /* PlexDirectBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexDirectBrowseView.swift; sourceTree = "<group>"; };
 		B10061 /* LineInBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineInBrowseView.swift; sourceTree = "<group>"; };
+		B100S1 /* BrowseSortPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseSortPicker.swift; sourceTree = "<group>"; };
+		B100S2 /* BrowseChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseChrome.swift; sourceTree = "<group>"; };
+		B100S3 /* ClickOutside.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClickOutside.swift; sourceTree = "<group>"; };
+		B100S4 /* ChoragusQueueMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoragusQueueMenu.swift; sourceTree = "<group>"; };
 		B10062 /* NowPlayingContextPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingContextPanel.swift; sourceTree = "<group>"; };
 		B10063 /* SlidingLyricsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlidingLyricsView.swift; sourceTree = "<group>"; };
 		B10064 /* LyricsKaraokeWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsKaraokeWindow.swift; sourceTree = "<group>"; };
 		B10065 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		B10801 /* NetworkDiagnosticsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkDiagnosticsTab.swift; sourceTree = "<group>"; };
 		B10802 /* DiagnosticsHealthTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsHealthTabs.swift; sourceTree = "<group>"; };
+		B10803 /* PlaylistBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBuilderView.swift; sourceTree = "<group>"; };
+		B10804 /* LimitedTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitedTextField.swift; sourceTree = "<group>"; };
 		B10066 /* LiveEventsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsView.swift; sourceTree = "<group>"; };
 		B10067 /* ClubVisWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClubVisWindow.swift; sourceTree = "<group>"; };
 		B10068 /* ClubStageSets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClubStageSets.swift; sourceTree = "<group>"; };
@@ -192,6 +208,8 @@
 				E10002 /* Views */,
 				E10003 /* ViewModels */,
 				B10005 /* Assets.xcassets */,
+				B100L1 /* Localizable.xcstrings */,
+				B100L2 /* AppShortcuts.xcstrings */,
 				B10006 /* Info.plist */,
 				B10007 /* Choragus.entitlements */,
 				08A8536E2FB99F44009E2133 /* TestFixtureCapture.swift */,
@@ -232,12 +250,18 @@
 				B10031 /* MusicServicesView.swift */,
 				B10060 /* PlexDirectBrowseView.swift */,
 				B10061 /* LineInBrowseView.swift */,
+				B100S1 /* BrowseSortPicker.swift */,
+				B100S2 /* BrowseChrome.swift */,
+				B100S3 /* ClickOutside.swift */,
+				B100S4 /* ChoragusQueueMenu.swift */,
 				B10062 /* NowPlayingContextPanel.swift */,
 				B10063 /* SlidingLyricsView.swift */,
 				B10064 /* LyricsKaraokeWindow.swift */,
 				B10065 /* DiagnosticsView.swift */,
 				B10801 /* NetworkDiagnosticsTab.swift */,
 				B10802 /* DiagnosticsHealthTabs.swift */,
+				B10803 /* PlaylistBuilderView.swift */,
+				B10804 /* LimitedTextField.swift */,
 				B10066 /* LiveEventsView.swift */,
 				B10067 /* ClubVisWindow.swift */,
 				B10068 /* ClubStageSets.swift */,
@@ -340,6 +364,18 @@
 			knownRegions = (
 				en,
 				Base,
+				de,
+				fr,
+				nl,
+				es,
+				it,
+				sv,
+				nb,
+				da,
+				ja,
+				pt,
+				pl,
+				"zh-Hans",
 			);
 			mainGroup = E10000;
 			packageReferences = (
@@ -361,6 +397,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10005 /* Assets.xcassets in Resources */,
+				A100L1 /* Localizable.xcstrings in Resources */,
+				A100L2 /* AppShortcuts.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -410,12 +448,18 @@
 				A10031 /* MusicServicesView.swift in Sources */,
 				A10060 /* PlexDirectBrowseView.swift in Sources */,
 				A10061 /* LineInBrowseView.swift in Sources */,
+				A100S1 /* BrowseSortPicker.swift in Sources */,
+				A100S2 /* BrowseChrome.swift in Sources */,
+				A100S3 /* ClickOutside.swift in Sources */,
+				A100S4 /* ChoragusQueueMenu.swift in Sources */,
 				A10062 /* NowPlayingContextPanel.swift in Sources */,
 				A10063 /* SlidingLyricsView.swift in Sources */,
 				A10064 /* LyricsKaraokeWindow.swift in Sources */,
 				A10065 /* DiagnosticsView.swift in Sources */,
 				A10801 /* NetworkDiagnosticsTab.swift in Sources */,
 				A10802 /* DiagnosticsHealthTabs.swift in Sources */,
+				A10803 /* PlaylistBuilderView.swift in Sources */,
+				A10804 /* LimitedTextField.swift in Sources */,
 				A10066 /* LiveEventsView.swift in Sources */,
 				08A8536F2FB99F44009E2133 /* TestFixtureCapture.swift in Sources */,
 				A10067 /* ClubVisWindow.swift in Sources */,
@@ -505,7 +549,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 35;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Choragus/Info.plist;
@@ -516,7 +560,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 4.14;
+				MARKETING_VERSION = 5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -531,7 +575,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 35;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Choragus/Info.plist;
@@ -542,7 +586,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 4.14;
+				MARKETING_VERSION = 5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;

@@ -184,7 +184,15 @@ final class MockSonosServices: PlaybackServiceProtocol, VolumeServiceProtocol, E
     func restoreQueueSnapshot(group: SonosGroup, localID: Int64) async throws {}
     var stubbedLocalSavedQueues: [LocalSavedQueue] = []
     func saveQueueToChoragus(group: SonosGroup, name: String) async throws -> Int { stubbedQueue.count }
+    func saveChoragusPlaylist(name: String, tracks: [QueueItem]) -> Int64? { nil }
+    func appendToChoragusPlaylist(queueID: Int64, tracks: [QueueItem]) -> Int { 0 }
+    func liveQueueTracks(group: SonosGroup, positions: Set<Int>) async throws -> [QueueItem] {
+        stubbedQueue.filter { positions.contains($0.id) }
+    }
     func localSavedQueues() -> [LocalSavedQueue] { stubbedLocalSavedQueues }
+    func savedQueueFolders() -> [SavedQueueFolder] { [] }
+    func savedQueueTree() -> SavedQueueTree { SavedQueueTree(folders: [], queues: []) }
+    func allQueueSnapshots() -> [(coordinatorID: String, room: String, snapshots: [QueueSnapshot])] { [] }
     func loadLocalSavedQueue(id: Int64, group: SonosGroup, append: Bool) async throws {}
     func renameLocalSavedQueue(id: Int64, to newName: String) {}
     func deleteLocalSavedQueue(id: Int64) {}

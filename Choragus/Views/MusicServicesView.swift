@@ -5,7 +5,7 @@ import AppKit
 
 struct MusicServicesSettingsSection: View {
     @EnvironmentObject var smapiManager: SMAPIAuthManager
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var plexAuth: PlexAuthManager
     @AppStorage(UDKey.tuneInSearchEnabled) private var tuneInEnabled = false
     @AppStorage(UDKey.calmRadioEnabled) private var calmRadioEnabled = false
@@ -22,14 +22,13 @@ struct MusicServicesSettingsSection: View {
     @State private var libraryStatus: String?
     @AppStorage("musicServices.unlinkedExpanded") private var unlinkedExpanded = false
 
-    // Services confirmed working with AppLink auth. Plex (sid=212) was
-    // verified by live `getAppLink` probe (2026-04-24); Audible
-    // (sid=239) confirmed end-to-end on the realigned Choragus
-    // keychain (2026-04-28).
+    // Services confirmed working with AppLink auth: Plex (sid=212),
+    // Audible (sid=239).
     private static let testedAppLinkServices: Set<Int> = [
         ServiceID.spotify,
         ServiceID.plex,
         ServiceID.audible,
+        ServiceID.amazonMusic,
     ]
 
     /// Services where the connected status doesn't depend on the `sn=`
@@ -40,18 +39,18 @@ struct MusicServicesSettingsSection: View {
     ]
 
     /// Services that can never authenticate from a third-party app —
-    /// Sonos's identity gate returns 403 to non-Sonos clients. Pandora
-    /// joined this bucket after the SiriusXM acquisition; the same
-    /// per-household token plumbing that blocks SiriusXM blocks Pandora.
-    /// Users with existing Pandora favorites in their Sonos household
+    /// Sonos's identity gate returns a fault to non-Sonos clients:
+    /// YouTube Music GCP 403, SoundCloud `Client.NOT_AUTHORIZED`.
+    /// SiriusXM is listed on an unverified "empty auth URL" report; its
+    /// descriptor only appears in US/Canada households. Pandora is not
+    /// blocked: its `getAppLink` answers HTTP 200 with a link code.
+    /// Users with existing favorites for a blocked service
     /// can still play them via the generic Favorites browser, which
     /// replays the speaker-supplied DIDL verbatim.
     private static let blockedServices: Set<Int> = [
-        ServiceID.amazonMusic,
         ServiceID.youTubeMusic,
         ServiceID.soundCloud,
         ServiceID.siriusXM,
-        ServiceID.pandora,
     ]
 
     /// Services that work via direct API rather than AppLink OAuth — toggled
@@ -59,7 +58,6 @@ struct MusicServicesSettingsSection: View {
     /// playback still requires Sonos-side connection + favourited song.
     private static let searchOnlyServices: Set<Int> = [
         ServiceID.tuneIn,
-        ServiceID.tuneInNew,
         ServiceID.calmRadio,
         ServiceID.somaFM,
         ServiceID.sunoPseudo,
@@ -82,37 +80,32 @@ struct MusicServicesSettingsSection: View {
         let plexFlavor: PlexFlavor
     }
 
-    /// Pinned rows we always show regardless of household state.
+    /// Pinned rows always shown regardless of household state.
     /// Plex – Local (PIN flow, no household needed) plus the search-only
     /// services that work via public APIs (Apple Music search, TuneIn,
-    /// Calm Radio, Sonos Radio). Blocked services (Amazon, YouTube
-    /// Music, SoundCloud) are NOT pinned — they only surface for
+    /// Calm Radio, Sonos Radio). Blocked services (YouTube Music,
+    /// SoundCloud) are NOT pinned — they only surface for
     /// users who actually have them (detected via account serial
     /// numbers from their Sonos Favorites).
     private static let pinnedServices: [CanonicalService] = [
         .init(key: "212.local", serviceID: ServiceID.plex,       name: "Plex – Local", alternativeIDs: [], plexFlavor: .local),
         .init(key: "204",       serviceID: ServiceID.appleMusic, name: "Apple Music",  alternativeIDs: [], plexFlavor: .none),
-        .init(key: "254",       serviceID: ServiceID.tuneIn,     name: "TuneIn",       alternativeIDs: [ServiceID.tuneInNew], plexFlavor: .none),
+        .init(key: "254",       serviceID: ServiceID.tuneIn,     name: "TuneIn",       alternativeIDs: [], plexFlavor: .none),
         .init(key: "144",       serviceID: ServiceID.calmRadio,  name: "Calm Radio",   alternativeIDs: [], plexFlavor: .none),
         .init(key: "516",       serviceID: ServiceID.somaFM,     name: "SomaFM",       alternativeIDs: [], plexFlavor: .none),
         .init(key: "suno",      serviceID: ServiceID.sunoPseudo, name: "suno.ai",      alternativeIDs: [], plexFlavor: .none),
         .init(key: "303",       serviceID: ServiceID.sonosRadio, name: "Sonos Radio",  alternativeIDs: [], plexFlavor: .none),
-        // Pandora is pinned so it surfaces as `.blocked` (red,
-        // Unavailable) for everyone, regardless of household state.
-        // After the SiriusXM acquisition Pandora moved behind the same
-        // Sonos-locked auth gate as Amazon / YouTube Music / SiriusXM:
-        // third-party AppLink isn't accepted, so showing a Connect
-        // button would be misleading. Existing Pandora favorites still
-        // play via the generic Favorites browser.
-        .init(key: "519",       serviceID: ServiceID.pandora,    name: "Pandora",      alternativeIDs: [], plexFlavor: .none),
+        // Pandora is not pinned: it connects through AppLink like any
+        // other service, and only households that list it (US) have a
+        // SMAPI address to connect to.
     ]
 
     /// Builds the actual list of rows to display.
     ///
     /// Layered build:
     ///   1. Pinned curated rows (Plex – Local, search-only services).
-    ///   2. Plex – Cloud, if there's any signal it's set up.
-    ///   3. Authenticated services (we hold a token).
+    ///   2. Plex – Remote, if there is any signal it is set up.
+    ///   3. Authenticated services (a token is held).
     ///   4. Services with discovered account serial numbers (user has
     ///      a Favorite that references them — proof they linked it).
     ///   5. Everything else from Sonos's full service catalogue,
@@ -162,7 +155,7 @@ struct MusicServicesSettingsSection: View {
         let plexInHousehold = smapiManager.availableServices.contains { $0.id == ServiceID.plex }
         if hasSMAPIPlexToken || hasPlexSerial || plexInHousehold {
             out.append(.init(key: "212.cloud", serviceID: ServiceID.plex,
-                             name: "Plex – Cloud", alternativeIDs: [], plexFlavor: .cloud))
+                             name: "Plex – Remote", alternativeIDs: [], plexFlavor: .cloud))
         }
         var coveredIDs: Set<Int> = []
         // Also dedupe by name. Pinned services use a hardcoded sid (e.g.
@@ -195,7 +188,7 @@ struct MusicServicesSettingsSection: View {
         }
         // Catalog tail — every other service Sonos knows about.
         // These render gray ("Not connected") or red ("Unavailable").
-        // Filter by both id AND name so a service we already pinned at
+        // Filter by both id AND name so a service already pinned at
         // one sid doesn't appear a second time at a different sid.
         let catalog = smapiManager.availableServices
             .filter { !coveredIDs.contains($0.id) && !coveredNames.contains($0.name.lowercased()) }
@@ -219,9 +212,8 @@ struct MusicServicesSettingsSection: View {
     }
 
     /// Best-effort service name lookup. Prefers a descriptor (gives the
-    /// real Sonos label like "Pocket Casts"), falls back to our
-    /// hard-coded `knownNames`, then to a generic "Service N" if we've
-    /// never heard of it.
+    /// real Sonos label like "Pocket Casts"), falls back to the
+    /// hard-coded `knownNames`, then to a generic "Service N".
     private func serviceName(for serviceID: Int) -> String {
         if let desc = smapiManager.availableServices.first(where: { $0.id == serviceID }) {
             return desc.name
@@ -231,7 +223,7 @@ struct MusicServicesSettingsSection: View {
         if let canonical = MusicServiceCatalog.shared.canonicalDisplayName(forSid: serviceID) {
             return canonical
         }
-        return ServiceID.knownNames[serviceID] ?? "Service \(serviceID)"
+        return ServiceID.knownNames[serviceID] ?? L10n.serviceNumberFormat(serviceID)
     }
 
     /// Per-row UI state — drives both the indicator dot and the action UI.
@@ -253,12 +245,9 @@ struct MusicServicesSettingsSection: View {
     }
 
     /// Resolves the per-row state for a given service ID. The household
-    /// check is strict: until Sonos descriptors come back we treat the
-    /// service as not-in-household. The previous "forgiving" default
-    /// flashed every service as connectable on cold-start, which let
-    /// users tap Connect on services they don't have (TIDAL, Deezer…)
-    /// and produced confusing errors. The list now stays gray until
-    /// `loadDescriptorsIfNeeded` resolves.
+    /// check is strict: until `loadDescriptorsIfNeeded` resolves the
+    /// service is treated as not-in-household, so a cold start does not
+    /// offer Connect on services the user lacks (TIDAL, Deezer…).
     private func state(for service: CanonicalService) -> ServiceRowState {
         // Plex flavors have independent auth state — local checks
         // PlexAuthManager, cloud checks SMAPI tokens. Each row tells
@@ -303,14 +292,11 @@ struct MusicServicesSettingsSection: View {
         // Tested AppLink services (Spotify, Plex) — known to work,
         // confidence-blue.
         if !Self.testedAppLinkServices.isDisjoint(with: classIDs) { return .connectableTested }
-        // Everything else: we genuinely don't know. The previous code
-        // returned .notInHousehold (gray) here based on a serial-number
-        // check, but absence of an sn doesn't mean absence from the
-        // household — it just means we haven't seen a Favorite for
-        // that service yet (Audible audiobooks, Pocket Casts shows,
-        // etc. often have URIs that don't match our `sid=…&sn=…`
-        // extraction pattern). Treat everything unknown as
-        // .connectableUntested so the user gets a "try it and report"
+        // Everything else is unknown. Absence of an sn does not mean
+        // absence from the household — only that no Favorite for the
+        // service has been seen (Audible, Pocket Casts URIs often do
+        // not match the `sid=…&sn=…` extraction pattern). Treat unknown
+        // as .connectableUntested so the user gets a "try it and report"
         // affordance instead of a misleading "not connected" gray.
         return .connectableUntested
     }
@@ -520,7 +506,7 @@ struct MusicServicesSettingsSection: View {
             // on — adding a folder is only useful once the system has
             // indexed it (#75).
             LibrarySharesSection()
-                .environmentObject(sonosManager)
+                .choragusServices(sonosManager)
                 .padding(.top, 8)
         }
         .padding(.top, 4)
@@ -627,6 +613,16 @@ struct MusicServicesSettingsSection: View {
                 }
                 .padding(.leading, 18)
             }
+            // What Plex – Remote depends on, stated here rather than as
+            // a bare "no available servers" fault later: Plex's Sonos
+            // service lists only servers with a direct public path.
+            if service.plexFlavor == .cloud {
+                Text(L10n.plexRemoteNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 18)
+            }
         }
         .padding(.vertical, 2)
     }
@@ -662,8 +658,8 @@ struct MusicServicesSettingsSection: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
         case .connectableTested, .connectableUntested:
-            // Always render Connect — descriptors load lazily so we can't
-            // gate the button on `availableServices` being populated.
+            // Always render Connect — descriptors load lazily, so the button
+            // cannot be gated on `availableServices` being populated.
             // `connectService(...)` resolves the descriptor at tap time,
             // triggering a load if needed.
             Button(L10n.connect) { connectService(service: service) }
@@ -690,7 +686,7 @@ struct MusicServicesSettingsSection: View {
         // promoted pinned row (household catalog assigned a different sid)
         // must keep its toggle wired to the same setting.
         let ids = classificationIDs(for: service)
-        if ids.contains(ServiceID.tuneIn) || ids.contains(ServiceID.tuneInNew) { return $tuneInEnabled }
+        if ids.contains(ServiceID.tuneIn) { return $tuneInEnabled }
         if ids.contains(ServiceID.calmRadio)  { return $calmRadioEnabled }
         if ids.contains(ServiceID.somaFM)     { return $somaFMEnabled }
         if ids.contains(ServiceID.sunoPseudo) { return $sunoEnabled }
@@ -704,7 +700,7 @@ struct MusicServicesSettingsSection: View {
         // state — per-row hints just duplicate that. Two exceptions:
         // needs-favorite (action OUTSIDE the app to flip the dot green)
         // and .blocked (favorites-replay path the user wouldn't otherwise
-        // know about — Pandora/SiriusXM/Amazon/YouTube Music/SoundCloud
+        // know about — Pandora/SiriusXM/YouTube Music/SoundCloud
         // can't authenticate, but speaker-saved favorites still play).
         switch state {
         case .authenticated(let needsFavorite) where needsFavorite:
@@ -759,15 +755,15 @@ struct MusicServicesSettingsSection: View {
 
     /// Re-scans favorites for `sid=…&sn=…` account bindings each time the
     /// pane appears. Discovery otherwise only runs from Browse, so the
-    /// guide's favorite-a-song step never updated the dot for a user who
-    /// stayed in Settings (issue #57: favorited repeatedly, no change).
+    /// guide's favorite-a-song step would not update the dot for a user
+    /// who stays in Settings (issue #57).
     private func refreshSerialNumbers() {
         guard smapiManager.isEnabled, !sonosManager.groups.isEmpty else { return }
         Task { await smapiManager.discoverSerialNumbers(using: sonosManager) }
     }
 
     /// Resolves the descriptor for the given service and starts auth.
-    /// Plex – Local takes the PIN flow; everything else (Plex – Cloud
+    /// Plex – Local takes the PIN flow; everything else (Plex – Remote
     /// included) uses the SMAPI AppLink path.
     private func connectService(service: CanonicalService) {
         if service.plexFlavor == .local {
@@ -780,7 +776,7 @@ struct MusicServicesSettingsSection: View {
             return
         }
         guard let speaker = sonosManager.groups.first?.coordinator else {
-            smapiManager.authError = "No Sonos speaker found on the network."
+            smapiManager.authError = L10n.errNoSonosSpeakerFound
             return
         }
         isLoadingDescriptors = true
@@ -794,7 +790,7 @@ struct MusicServicesSettingsSection: View {
                 startAuth(descriptor: descriptor)
             } else {
                 smapiManager.authError =
-                    "This service isn't currently registered in your Sonos household. Add it in the official Sonos app first."
+                    L10n.serviceNotInHousehold
             }
         }
     }
@@ -941,13 +937,13 @@ struct MusicServicesHelpView: View {
 // MARK: - Plex PIN auth sheet
 
 /// Walks the user through the Plex OAuth-style PIN flow:
-///   1. We ask plex.tv for a strong PIN — a long random token, NOT a
+///   1. Request a strong PIN from plex.tv — a long random token, NOT a
 ///      typeable 4-character code. (Strong PINs are required for the
 ///      OAuth-style flow; weak ones are deprecated.)
-///   2. User clicks "Sign in with Plex" — we open `app.plex.tv/auth`
+///   2. User clicks "Sign in with Plex" — `app.plex.tv/auth` opens
 ///      with the token embedded in the URL fragment. They sign in /
 ///      authorize inside Plex's own web UI.
-///   3. We poll `/api/v2/pins/<id>` every 2s. Once Plex flips
+///   3. Poll `/api/v2/pins/<id>` every 2s. Once Plex flips
 ///      `authToken` from null to a string, the manager stores it.
 ///   4. On success the manager publishes `isAuthenticated = true`,
 ///      which triggers `onChange` here to dismiss the sheet.
@@ -1031,10 +1027,221 @@ struct PlexPinAuthSheet: View {
         .padding(20)
         .frame(width: 460, height: 360)
         .onChange(of: plexAuth.isAuthenticated) { _, isAuth in
-            // Dismiss as soon as the manager flips to authenticated —
-            // user gets the satisfaction of a fast close instead of
-            // having to click "Done".
+            // Dismiss as soon as the manager flips to authenticated;
+            // no "Done" click needed.
             if isAuth { onClose() }
         }
+    }
+}
+
+
+/// Settings for UPnP/DLNA media servers: master toggle, discovery mode, and
+/// the manual add/remove list. Lives in Music Services because the servers
+/// surface in Browse alongside the other sources.
+struct MediaServersSettingsSection: View {
+    @Environment(SonosManager.self) private var sonosManager
+    @AppStorage(UDKey.mediaServersEnabled) private var mediaServersEnabled = true
+    @AppStorage(UDKey.mediaServersManualOnly) private var manualOnly = false
+    @State private var addAddress = ""
+    @State private var addFailed = false
+    @State private var isAdding = false
+
+    var body: some View {
+        // The section card already carries the title; repeating it inside
+        // the card read as two sections.
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.mediaServersExplainer)
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Toggle(L10n.mediaServersEnableToggle, isOn: $mediaServersEnabled)
+                .onChange(of: mediaServersEnabled) { _, _ in rediscover() }
+
+            if mediaServersEnabled {
+                Picker("", selection: $manualOnly) {
+                    Text(L10n.mediaServersShowAll).tag(false)
+                    Text(L10n.mediaServersManualOnly).tag(true)
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                .onChange(of: manualOnly) { _, _ in rediscover() }
+
+                // One card per server. Everything under the icon shares one
+                // leading inset, the name stays on one line, and the details
+                // (host, advertised name) live on their own caption line so
+                // nothing shifts when a name is long.
+                ForEach(sonosManager.mediaServers) { server in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "externaldrive.badge.wifi")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 16)
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                Text(server.name)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                Spacer(minLength: 8)
+                                if sonosManager.mediaServerCheckProgress[server.id] == nil {
+                                    Button(L10n.mediaServersRecheck) {
+                                        Task { await sonosManager.verifyMediaServerReachability(id: server.id) }
+                                    }
+                                    .controlSize(.small)
+                                }
+                                Button {
+                                    Task { await sonosManager.removeMediaServer(id: server.id) }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.plain)
+                                .help(L10n.removeAction)
+                            }
+                            HStack(spacing: 6) {
+                                Text(server.baseURL.host ?? "")
+                                if server.isRenamed {
+                                    Text("·")
+                                    Text(L10n.mediaServersAdvertisedAs(server.advertisedName))
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            MediaServerReachabilityLine(server: server)
+                            HStack(spacing: 8) {
+                                Text(L10n.mediaServersTitleLabel)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 96, alignment: .leading)
+                                MediaServerTitleField(server: server)
+                            }
+                            .padding(.top, 2)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Divider().padding(.vertical, 4)
+
+                HStack(spacing: 8) {
+                    Text(L10n.mediaServersAddLabel)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 96, alignment: .leading)
+                    TextField(L10n.mediaServersAddPlaceholder, text: $addAddress)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 220)
+                        .onSubmit(addServer)
+                    Button(action: addServer) {
+                        if isAdding {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "plus.circle")
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(addAddress.trimmingCharacters(in: .whitespaces).isEmpty || isAdding)
+                }
+                if addFailed {
+                    Text(L10n.mediaServersNoServerFound)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private func addServer() {
+        let address = addAddress.trimmingCharacters(in: .whitespaces)
+        guard !address.isEmpty, !isAdding else { return }
+        addFailed = false
+        isAdding = true
+        Task {
+            let added = await sonosManager.addMediaServer(address: address)
+            isAdding = false
+            if added == nil {
+                addFailed = true
+            } else {
+                addAddress = ""
+            }
+        }
+    }
+
+    private func rediscover() {
+        Task { await sonosManager.discoverMediaServers() }
+    }
+}
+
+/// Optional display name for one server. The field holds the user's
+/// title, with the advertised name as its placeholder; committing an empty
+/// field reverts to the advertised name. Committed on Return or focus
+/// loss, not per keystroke, because a rename rebuilds the Browse sidebar.
+struct MediaServerTitleField: View {
+    @Environment(SonosManager.self) private var sonosManager
+    let server: MediaServer
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField(server.advertisedName, text: $draft, prompt: Text(L10n.mediaServersTitlePlaceholder))
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: 220)
+            .focused($focused)
+            .onAppear { draft = MediaServerService.CustomTitles.title(for: server.id) ?? "" }
+            .onChange(of: server.id) { _, _ in draft = MediaServerService.CustomTitles.title(for: server.id) ?? "" }
+            .onSubmit(commit)
+            .onChange(of: focused) { _, nowFocused in if !nowFocused { commit() } }
+            .help(L10n.mediaServersTitlePlaceholder)
+    }
+
+    private func commit() {
+        let title = String(draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                               .prefix(MediaServerService.CustomTitles.maxLength))
+        guard title != (MediaServerService.CustomTitles.title(for: server.id) ?? "") else { return }
+        draft = title
+        Task { await sonosManager.renameMediaServer(id: server.id, title: title) }
+    }
+}
+
+/// One sentence of reachability state per server, naming the failing
+/// speakers and address — the facts needed to fix a firewall rule.
+struct MediaServerReachabilityLine: View {
+    @Environment(SonosManager.self) private var sonosManager
+    let server: MediaServer
+
+    var body: some View {
+        Group {
+            if let (done, total) = sonosManager.mediaServerCheckProgress[server.id] {
+                Text(String(format: L10n.mediaServersChecking, done, total))
+            } else if let verdicts = sonosManager.mediaServerReachability[server.id] {
+                let unreachable = verdicts.filter { $0.state == .unreachable }
+                let offline = verdicts.filter { $0.state == .speakerOffline }
+                VStack(alignment: .leading, spacing: 1) {
+                    if unreachable.isEmpty {
+                        Text(String(format: L10n.mediaServersAllReachable,
+                                    verdicts.count - offline.count))
+                    } else {
+                        let rooms = unreachable.map(\.roomName).joined(separator: ", ")
+                        // Host only. The port belongs in the help text's
+                        // firewall guidance, not in a status sentence.
+                        let probed = sonosManager.mediaServerProbeTarget[server.id]
+                        let target = probed.flatMap { $0.split(separator: ":").first.map(String.init) }
+                            ?? (server.baseURL.host ?? server.name)
+                        Text(String(format: L10n.mediaServersCantReach, rooms, target))
+                            .foregroundStyle(.orange)
+                    }
+                    if !offline.isEmpty {
+                        Text(String(format: L10n.mediaServersSpeakersOffline,
+                                    offline.map(\.roomName).joined(separator: ", ")))
+                    }
+                }
+            } else if let advertised = server.advertisedHostMismatch {
+                Text(String(format: L10n.mediaServersAdvertisedMismatch, advertised))
+                    .foregroundStyle(.orange)
+            } else {
+                Text(L10n.mediaServersNotChecked)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 }

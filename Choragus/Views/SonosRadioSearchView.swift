@@ -4,12 +4,13 @@ import SwiftUI
 import SonosKit
 
 struct SonosRadioSearchView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     let group: SonosGroup?
 
     @State private var searchText = ""
     @State private var items: [BrowseItem] = []
+    @State private var sortOrder: BrowseSortOption = .relevance
     @State private var isLoading = false
     @State private var hasSearched = false
 
@@ -66,7 +67,9 @@ struct SonosRadioSearchView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(items) { item in
+                BrowseSortPicker(items: items, selection: $sortOrder)
+                Divider()
+                List(sortOrder.apply(items)) { item in
                     BrowseItemRow(item: item)
                         .contentShape(Rectangle())
                         .onTapGesture { handleTap(item) }
@@ -90,11 +93,15 @@ struct SonosRadioSearchView: View {
             Button(L10n.playNow) {
                 Task { try? await sonosManager.playBrowseItem(item, in: group) }
             }
-            Button(L10n.playNext) {
-                Task { try? await sonosManager.addBrowseItemToQueue(item, in: group, playNext: true) }
-            }
-            Button(L10n.addToQueue) {
-                Task { try? await sonosManager.addBrowseItemToQueue(item, in: group) }
+            // Radio streams cannot sit in the queue; queue actions only
+            // for on-demand rows, as in every other list.
+            if !URIPrefix.isRadio(uri) {
+                Button(L10n.playNext) {
+                    Task { try? await sonosManager.addBrowseItemToQueue(item, in: group, playNext: true) }
+                }
+                Button(L10n.addToQueue) {
+                    Task { try? await sonosManager.addBrowseItemToQueue(item, in: group) }
+                }
             }
         }
         #if DEBUG

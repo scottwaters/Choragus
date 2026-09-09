@@ -48,6 +48,13 @@ public final class SecretsStore {
         return cache[key]
     }
 
+    /// False while the keychain item cannot be read (locked keychain,
+    /// entitlement mismatch); reads then return nil without meaning "unset".
+    public var isReadable: Bool {
+        ensureLoaded()
+        return loaded
+    }
+
     public func set(_ key: String, _ value: String?) {
         ensureLoaded()
         if let value, !value.isEmpty {

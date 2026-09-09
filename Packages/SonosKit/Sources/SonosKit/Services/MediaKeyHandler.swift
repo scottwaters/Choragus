@@ -35,7 +35,7 @@ public final class MediaKeyHandler: ObservableObject {
     private var lastPublishedNowPlayingKey: String = ""
     /// Tracks the album-art URL most recently published to
     /// `MPNowPlayingInfoCenter`. Used to dedupe artwork fetches and to
-    /// detect when the underlying art changed so we can re-download.
+    /// detect when the underlying art changed and needs a re-download.
     private var lastPublishedArtURL: String = ""
     /// In-flight artwork download. Cancelled when the art URL changes
     /// so a slow LAN fetch for a previous track can't overwrite a fresh
@@ -59,16 +59,9 @@ public final class MediaKeyHandler: ObservableObject {
     /// Play commands the locked-screen guard refused, oldest first. A
     /// person retries a second later; stray sources fire once or burst
     /// milliseconds apart, so repeated presses read as deliberate.
-    private var suppressedPlayPresses: [Date] = []
-
-    /// Suppressed presses needed inside `lockedPlayOverrideWindow`
-    /// before the locked-screen guard yields.
-    private static let lockedPlayOverridePressCount = 3
-    private static let lockedPlayOverrideWindow: TimeInterval = 5
-    /// Presses closer together than this are one device event burst, not
-    /// a person pressing twice — they fold into the preceding press
-    /// instead of counting toward the override.
-    private static let lockedPlayOverrideMinGap: TimeInterval = 0.3
+    /// Locked-screen play override. The rule and its timing live in
+    /// `LockedPlayOverride` so they can be tested without a locked screen.
+    private var lockedPlayOverride = LockedPlayOverride()
 
     /// User opt-out, read live so the Settings toggle needs no relaunch.
     private var mediaKeysEnabled: Bool {
@@ -83,14 +76,14 @@ public final class MediaKeyHandler: ObservableObject {
                         object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.screenLocked = true
-                self?.suppressedPlayPresses.removeAll()
+                self?.lockedPlayOverride.reset()
             }
         }
         dnc.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"),
                         object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.screenLocked = false
-                self?.suppressedPlayPresses.removeAll()
+                self?.lockedPlayOverride.reset()
             }
         }
     }
@@ -202,7 +195,7 @@ public final class MediaKeyHandler: ObservableObject {
             center.playbackState = .stopped
             lastPublishedNowPlayingKey = ""
             lastPublishedArtURL = ""
-            suppressedPlayPresses.removeAll()
+            lockedPlayOverride.reset()
             sonosDiagLog(.info, tag: "MEDIA-KEYS",
                          "Media keys disabled — Now Playing claim released")
         }
@@ -212,26 +205,9 @@ public final class MediaKeyHandler: ObservableObject {
 
     /// Records a play command the locked-screen guard just refused and
     /// reports whether the retry pattern is deliberate enough to let the
-    /// next one through. Returns `true` exactly once per satisfied
-    /// burst — the tally resets so a single grant can't be re-used by a
-    /// trailing duplicate event.
+    /// next one through.
     private func registerSuppressedPlayPress() -> Bool {
-        let now = Date()
-        suppressedPlayPresses.removeAll {
-            now.timeIntervalSince($0) > Self.lockedPlayOverrideWindow
-        }
-        // Duplicates milliseconds apart are one device event burst, not
-        // a person pressing again — fold them into the preceding press.
-        if let last = suppressedPlayPresses.last,
-           now.timeIntervalSince(last) < Self.lockedPlayOverrideMinGap {
-            return false
-        }
-        suppressedPlayPresses.append(now)
-        guard suppressedPlayPresses.count >= Self.lockedPlayOverridePressCount else {
-            return false
-        }
-        suppressedPlayPresses.removeAll()
-        return true
+        lockedPlayOverride.registerRefusedPress()
     }
 
     private func handleTransport(_ action: TransportAction) -> MPRemoteCommandHandlerStatus {
@@ -264,7 +240,7 @@ public final class MediaKeyHandler: ObservableObject {
                              context: [
                                 "action": String(describing: action),
                                 "group": group.name,
-                                "suppressedPresses": String(suppressedPlayPresses.count)
+                                "suppressedPresses": String(lockedPlayOverride.pendingPresses)
                              ])
                 return .commandFailed
             }
@@ -273,8 +249,8 @@ public final class MediaKeyHandler: ObservableObject {
                          context: [
                             "action": String(describing: action),
                             "group": group.name,
-                            "presses": String(Self.lockedPlayOverridePressCount),
-                            "windowSeconds": String(Int(Self.lockedPlayOverrideWindow))
+                            "presses": String(lockedPlayOverride.requiredPresses),
+                            "windowSeconds": String(Int(lockedPlayOverride.window))
                          ])
         }
 
@@ -446,25 +422,31 @@ public final class MediaKeyHandler: ObservableObject {
     /// while it is running, even if it isn't frontmost.
     private func observeSonosManagerForNowPlaying() {
         guard let manager = sonosManager else { return }
-        manager.objectWillChange
+        // The Now Playing mirror needs metadata and transport state, both
+        // of which land in groupTrackMetadata's wake; per-track metadata is
+        // the signal that matters here.
+        manager.groupTrackMetadataPublisher
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                // objectWillChange fires before the value mutation lands;
-                // hop to the next runloop tick so reads see the new state.
-                DispatchQueue.main.async { self?.refreshNowPlayingInfo() }
+                self?.refreshNowPlayingInfo()
+            }
+            .store(in: &cancellables)
+        // Pause / resume from another controller changes no metadata, so
+        // the transport feed drives the playback-rate half of the mirror.
+        manager.groupTransportStatePublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshNowPlayingInfo()
             }
             .store(in: &cancellables)
 
         // Group selection lives in UserDefaults, not on SonosManager, so
         // `objectWillChange` does not fire when the user picks a
-        // different group. Without this notification observer the
-        // system Now Playing widget stayed pinned to the previous
-        // group's metadata until some unrelated state change (next
-        // poll tick, an event) happened to fire objectWillChange.
-        // ContentView and MenuBarController post `.selectedGroupChanged`
-        // right after writing the new id; clear the dedup key so the
-        // refresh isn't skipped if the new group happens to have the
-        // same title/artist/album as the previous group's last state.
+        // different group; without this observer the system Now Playing
+        // widget stays on the previous group's metadata. ContentView and
+        // MenuBarController post `.selectedGroupChanged` right after
+        // writing the new id; clear the dedup key so the refresh isn't
+        // skipped when the new group has the same title/artist/album.
         NotificationCenter.default.publisher(for: .selectedGroupChanged)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -493,9 +475,9 @@ public final class MediaKeyHandler: ObservableObject {
         // metadata before the new track's info lands. Publishing that
         // empty state would flash the app icon for ~1 s between the
         // outgoing artwork and the incoming track. Skip the publish
-        // while the transport is mid-transition AND we already had a
-        // non-empty publish for this group — the next refresh tick
-        // will land within a few hundred ms with the new metadata.
+        // while the transport is mid-transition AND a non-empty publish
+        // for this group already exists — the next refresh tick lands
+        // within a few hundred ms with the new metadata.
         if meta.title.isEmpty && (transport == .transitioning || transport == .playing)
            && lastPublishedNowPlayingKey.hasPrefix("\(group.coordinatorID)|") {
             return
@@ -553,11 +535,9 @@ public final class MediaKeyHandler: ObservableObject {
         // active media app on macOS 11.4+. Without this set,
         // `nowPlayingInfo` alone is insufficient and Music.app wins the
         // key route. Map TransportState → MPNowPlayingPlaybackState.
-        // For an empty group we use `.paused` rather than `.stopped` —
+        // An empty group publishes `.paused` rather than `.stopped` —
         // `.stopped` causes macOS's Now Playing widget to freeze on the
-        // last-displayed art instead of refreshing, which is the
-        // "15–30 s lag" the user reported on group-switch to a silent
-        // group.
+        // last-displayed art instead of refreshing.
         let publishedState: MPNowPlayingPlaybackState =
             meta.title.isEmpty ? .paused : mapPlaybackState(transport)
         center.playbackState = publishedState
@@ -609,8 +589,7 @@ public final class MediaKeyHandler: ObservableObject {
             ImageCache.shared.store(image, for: parsed)
             DispatchQueue.main.async {
                 // Guard against late arrival: if the displayed track
-                // has moved on since we kicked off the fetch, drop the
-                // result on the floor.
+                // has moved on since the fetch started, drop the result.
                 guard self.lastPublishedNowPlayingKey == expectedKey else { return }
                 let center = MPNowPlayingInfoCenter.default()
                 var info = center.nowPlayingInfo ?? [:]

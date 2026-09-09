@@ -8,17 +8,11 @@
 /// Both strategies update state through a delegate callback to SonosManager.
 import Foundation
 
-/// Where a track-metadata update came from. UPnP event subscriptions
-/// are pushed by the speaker the moment its state changes, so they
-/// reflect the latest authoritative state. Reconciliation polls
-/// (`fetchGroupState` -> `getPositionInfo`) are request/response
-/// round-trips whose response can land seconds after the request
-/// was issued — long enough for a Prev/Next click to fly past
-/// inbetween. Letting an in-flight poll's response overwrite a
-/// freshly-pushed event manifested as "queue row one behind the
-/// playing track" because the poll snapshot was the *pre-Prev*
-/// state. SonosManager uses this tag to drop poll responses that
-/// disagree with the latest event when the event is still recent.
+/// Where a track-metadata update came from. UPnP events reflect the
+/// speaker's latest state; a reconciliation poll's response can land
+/// seconds after the request, after a Prev/Next has already moved on.
+/// SonosManager uses this tag to drop poll responses that disagree
+/// with a still-recent event.
 public enum TrackMetadataSource: Sendable {
     case event
     case poll
@@ -27,11 +21,9 @@ public enum TrackMetadataSource: Sendable {
 // MARK: - Protocol
 
 /// Main-actor isolated: strategy implementations hold mutable state
-/// (current groups/devices, SID maps, liveness sets) that was
-/// previously mutated from whatever pool thread ran each async call —
-/// concurrent topology refreshes corrupted a probe-miss Dictionary and
-/// crashed (SIGABRT in `probeLiveness`, 2026-08-06). Isolation
-/// serializes all state access; network awaits still run off-actor.
+/// (current groups/devices, SID maps, liveness sets) that concurrent
+/// topology refreshes would otherwise corrupt. Isolation serializes
+/// all state access; network awaits still run off-actor.
 @MainActor
 public protocol TransportStrategy: AnyObject {
     func start(groups: [SonosGroup], devices: [String: SonosDevice]) async
@@ -53,21 +45,22 @@ public protocol TransportStrategyDelegate: AnyObject {
     func transportDidUpdateState(_ groupID: String, state: TransportState)
     func transportDidUpdateTrackMetadata(_ groupID: String, metadata: TrackMetadata, source: TrackMetadataSource)
     func transportDidUpdatePlayMode(_ groupID: String, mode: PlayMode)
+    /// The commands the coordinator currently accepts (skip / seek / …).
+    /// Sonos publishes `CurrentTransportActions` on every AVTransport
+    /// LastChange, so the delegate can gate its transport UI on what the
+    /// speaker actually allows rather than on a URI-scheme guess.
+    func transportDidUpdateTransportActions(_ groupID: String, actions: TransportActions)
     func transportDidUpdateVolume(_ deviceID: String, volume: Int)
     func transportDidUpdateMute(_ deviceID: String, muted: Bool)
     func transportDidUpdateTopology(_ groups: [ZoneGroupData])
     func transportDidUpdatePosition(_ groupID: String, position: TimeInterval, duration: TimeInterval)
     /// Fired when a `ZoneGroupTopology` UPnP NOTIFY arrives. The
     /// delegate should re-fetch authoritative topology via
-    /// `GetZoneGroupState`. We don't try to parse the event payload —
-    /// its triple-encoded XML structure historically produced incorrect
-    /// group data. The notification is just a "something changed,
-    /// pull the truth" signal. `originDeviceID` is the speaker that
-    /// fired the event — refreshing *from that speaker* gives the most
-    /// self-consistent view (its own state is by definition the truth
-    /// it just published) and avoids the topology-propagation flap that
-    /// hits when refreshing from a sibling speaker that hasn't caught
-    /// up yet.
+    /// `GetZoneGroupState`. The event payload is not parsed — its
+    /// triple-encoded XML yields unreliable group data — so it is a
+    /// "something changed" trigger only. `originDeviceID` is the speaker
+    /// that fired the event; refreshing from that speaker avoids the
+    /// propagation flap seen when a sibling has not yet caught up.
     func transportRequestsTopologyRefresh(originDeviceID: String)
     /// Fired when a `ContentDirectory` NOTIFY reports that the current
     /// playback queue (`Q:0`) for `groupID` changed. The delegate
@@ -94,7 +87,7 @@ public final class HybridEventFirstTransport: TransportStrategy {
     private var currentDevices: [String: SonosDevice] = [:]
     private var isRunning = false
 
-    // Per-session liveness cache: skip the SUBSCRIBE attempt for devices
+    // Liveness cache: skip the SUBSCRIBE attempt for devices
     // that don't respond to a quick `device_description.xml` probe.
     // Stale cached speakers (different network / decommissioned /
     // powered off) would otherwise burn ~10 s timeout each on the
@@ -117,8 +110,8 @@ public final class HybridEventFirstTransport: TransportStrategy {
     private var subscribesInFlight: Set<String> = []
     /// Consecutive failed liveness probes per device. A device must miss two
     /// probes in a row before it's dropped from `liveDeviceIDs` — a single
-    /// 2.5 s timeout under network contention shouldn't sever a working
-    /// subscription (the cause of the 5 s now-playing display lag).
+    /// 2.5 s timeout under network contention must not sever a working
+    /// subscription and push that device onto slow polling.
     private var consecutiveProbeMisses: [String: Int] = [:]
     private static let livenessProbeTimeout: TimeInterval = 2.5
 
@@ -166,10 +159,10 @@ public final class HybridEventFirstTransport: TransportStrategy {
     private static let renderingControlPath = "/MediaRenderer/RenderingControl/Control"
     private static let topologyPath = "/ZoneGroupTopology/Control"
     // Each Sonos device exposes a `ContentDirectory:1` instance under
-    // `/MediaServer/...`. Subscribing tells us when `Q:0` (the active
+    // `/MediaServer/...`. Subscribing signals when `Q:0` (the active
     // queue), `SQ:` (saved queues / Sonos playlists), and library
     // sub-containers mutate — i.e. when the Sonos app, a voice command,
-    // or another client edits the queue out from under us.
+    // or another client edits the queue.
     private static let contentDirectoryPath = "/MediaServer/ContentDirectory/Control"
 
     public init() {}
@@ -187,13 +180,15 @@ public final class HybridEventFirstTransport: TransportStrategy {
         // Handler installed BEFORE the socket binds: the callback port is
         // stable across launches, so a speaker holding an orphaned
         // prior-session subscription can NOTIFY the instant the bind
-        // completes — assigning the closure afterwards raced that
-        // delivery (unsynchronized closure write vs NW-queue read).
+        // completes; assigning the closure afterwards races that delivery.
         listener.onEvent = { [weak self] sid, seq, body in
             Task { @MainActor [weak self] in
                 self?.handleEvent(sid: sid, seq: seq, body: body)
             }
         }
+        // Restrict event delivery to discovered speakers. Set before
+        // the socket binds, so a peer cannot slip an event in during startup.
+        listener.setAllowedPeers(Set(devices.values.map { $0.ip }))
         do {
             try listener.start()
             if let callbackURL = listener.callbackURL {
@@ -246,7 +241,11 @@ public final class HybridEventFirstTransport: TransportStrategy {
         }
         subscriptionManager = nil
 
-        eventListener?.stop()
+        // Waits for the socket to release: the network-change rebuild calls
+        // start() immediately after this, and an unreleased fixed port sends
+        // the new listener to an ephemeral one that VLAN firewall rules
+        // do not cover.
+        await eventListener?.stopAndWait()
         eventListener = nil
 
         clearAllSIDs()
@@ -255,12 +254,9 @@ public final class HybridEventFirstTransport: TransportStrategy {
     public func restartForNetworkChange() async {
         guard isRunning else { return }
         // Coalesce bursts. Path changes arrive in quick succession while
-        // an interface settles (two 3 s apart observed 2026-07-22); a
-        // second rebuild entering while the first was mid-subscribe
-        // cancelled all of the first's in-flight SUBSCRIBEs and left the
-        // pipeline with no subscriptions until the second finished. One
-        // rebuild runs at a time; changes arriving during it fold into
-        // one trailing re-run.
+        // an interface settles; a second rebuild entering mid-subscribe
+        // would cancel the first's in-flight SUBSCRIBEs. One rebuild runs
+        // at a time; changes arriving during it fold into one trailing re-run.
         if isRebuildingForNetworkChange {
             networkRebuildPending = true
             return
@@ -278,14 +274,17 @@ public final class HybridEventFirstTransport: TransportStrategy {
     }
 
     public func onGroupsChanged(_ groups: [SonosGroup], devices: [String: SonosDevice]) async {
-        // Snapshot the OLD membership before mutating `currentGroups` —
-        // computing it afterwards made `removedDevices` always empty, so
-        // subscriptions to departed devices (and their SID mappings) were
-        // never cleaned up and leaked across topology changes.
+        // Snapshot the OLD membership before mutating `currentGroups`;
+        // computing it afterwards leaves `removedDevices` empty and leaks
+        // subscriptions (and SID mappings) to departed devices.
         let oldGroupIDs = Set(currentGroups.map(\.id))
         let oldDeviceIDs = Set(currentGroups.flatMap(\.members).map(\.id))
         currentGroups = groups
         currentDevices = devices
+        // Keep the listener's accepted-peer set in step with discovery: a
+        // speaker added to the household must be able to deliver events, and
+        // one that has left should stop being accepted.
+        eventListener?.setAllowedPeers(Set(devices.values.map { $0.ip }))
 
         // Unsubscribe from devices no longer in any group
         let newDeviceIDs = Set(groups.flatMap(\.members).map(\.id))
@@ -322,9 +321,7 @@ public final class HybridEventFirstTransport: TransportStrategy {
 
         // Subscribe to ZoneGroupTopology once per household. A topology
         // subscription only reports the household of the device it is made
-        // against, so a single subscription left the other household's
-        // group changes invisible until an SSDP-triggered refresh — and
-        // which household was covered depended on unordered `groups.first`.
+        // against, so one subscription per household is required.
         let coveredHouseholds = Set(serviceSnapshot.compactMap { sid, service -> String? in
             guard service == "topology", let deviceID = deviceSnapshot[sid] else { return nil }
             let device = devices[deviceID] ?? currentDevices[deviceID]
@@ -355,10 +352,7 @@ public final class HybridEventFirstTransport: TransportStrategy {
 
         // Subscribe to ContentDirectory on each coordinator. The queue
         // (`Q:0`) lives on the coordinator, not on grouped members, so
-        // one subscription per group is sufficient. Without this, queue
-        // edits made from outside Choragus (Sonos app, voice, another
-        // client) were only picked up when the user happened to hit
-        // Refresh.
+        // one subscription per group is sufficient.
         for group in groups {
             guard let coordinator = group.coordinator else { continue }
             let alreadySubscribed = deviceSnapshot.contains(where: { $0.value == coordinator.id && serviceSnapshot[$0.key] == "contentDirectory" })
@@ -410,10 +404,8 @@ public final class HybridEventFirstTransport: TransportStrategy {
     /// 2.5 s timeout each, 8-way bounded concurrency. Result is a set
     /// of `device.id`s that responded; the SUBSCRIBE gate consults this
     /// set so dead speakers don't burn their full ~10 s SUBSCRIBE
-    /// timeout AND don't get a callback registered against a URL we
-    /// can't reach back on. Devices stay in the sidebar — eviction is
-    /// out of scope here (live discovery will refresh them when they
-    /// come back).
+    /// timeout or register a callback against an unreachable URL.
+    /// Devices stay in the sidebar; live discovery refreshes them.
     private func probeLiveness(devices: [String: SonosDevice]) async {
         let unique = Array(devices.values)
         guard !unique.isEmpty else {
@@ -447,11 +439,10 @@ public final class HybridEventFirstTransport: TransportStrategy {
             }
             return hits
         }
-        // Hysteresis: keep a previously-live device through ONE missed probe.
-        // A single 2.5 s timeout (common under transient network contention)
-        // would otherwise drop the device, skip its SUBSCRIBE, and force its
-        // now-playing/transport state onto slow polling — the 5 s display lag.
-        // A device must miss two probes in a row to actually be dropped.
+        // Hysteresis: keep a live device through ONE missed probe. A single
+        // 2.5 s timeout under transient contention would otherwise drop the
+        // device, skip its SUBSCRIBE, and force its transport state onto
+        // slow polling. Two consecutive misses drop it.
         var newLive: Set<String> = []
         for d in unique {
             if alive.contains(d.id) {
@@ -480,7 +471,7 @@ public final class HybridEventFirstTransport: TransportStrategy {
                 return device.id
             }
         } catch {
-            // timeout / connection refused / unreachable — treat as dead for this session
+            // timeout / connection refused / unreachable — treat as dead
         }
         return nil
     }
@@ -544,7 +535,7 @@ public final class HybridEventFirstTransport: TransportStrategy {
         // and the `r:streamInfo` codec descriptor that Sonos publishes
         // never reaches `enrichFromDIDL`. Sidestep the parser entirely
         // by string-matching the descriptor directly out of the raw
-        // event body. The body holds it triple-escaped — we look for
+        // event body. The body holds it triple-escaped: look for
         // the deepest-escape form (`&amp;lt;r:streamInfo&amp;gt;...`)
         // which sits in the val= attribute of `<CurrentTrackMetaData>`,
         // then fall back to single-escape (`&lt;r:streamInfo&gt;...`)
@@ -588,6 +579,10 @@ public final class HybridEventFirstTransport: TransportStrategy {
             delegate?.transportDidUpdatePlayMode(group.coordinatorID, mode: mode)
         }
 
+        if let actions = event.currentTransportActions {
+            delegate?.transportDidUpdateTransportActions(group.coordinatorID, actions: actions)
+        }
+
         // Parse track metadata from DIDL
         if let didlXML = event.currentTrackMetaData, !didlXML.isEmpty,
            didlXML != "NOT_IMPLEMENTED",
@@ -617,6 +612,11 @@ public final class HybridEventFirstTransport: TransportStrategy {
             }
             if let numTracks = event.numberOfTracks {
                 metadata.queueSize = numTracks
+            }
+            // The speaker's own queue position; QueuePositionResolver rule 1
+            // needs it on the event path, not only the polling path.
+            if let track = event.currentTrack {
+                metadata.trackNumber = track
             }
             // Sidestep — the raw-body streamInfo parsed above carries
             // the Atmos codec flag that the DIDL parser couldn't see
@@ -686,19 +686,11 @@ public final class HybridEventFirstTransport: TransportStrategy {
 
     @MainActor
     private func handleTopologyEvent(body: String, deviceID: String) {
-        // Don't try to parse the event payload — its triple-encoded XML
-        // structure historically produced incorrect group data. Treat
-        // the event as a trigger only and have the delegate pull the
-        // authoritative ZoneGroupState via SOAP. Without this signal,
-        // grouping/ungrouping changes made from Sonos's app weren't
-        // reflected here until the 30-second SSDP rescan caught them.
-        // Pass the originating device so the delegate can refresh
-        // from the speaker that actually fired the event — that
-        // speaker's `GetZoneGroupState` response is by construction
-        // consistent with the change it just published. Refreshing
-        // from a sibling speaker that hasn't yet propagated the change
-        // was the source of the group/ungroup flap observed in the
-        // wild.
+        // The event payload is not parsed (triple-encoded XML, unreliable
+        // group data); it is a trigger for the delegate to pull
+        // ZoneGroupState via SOAP. Pass the originating device so the
+        // refresh hits the speaker that published the change — a sibling
+        // that has not yet propagated it produces a group/ungroup flap.
         delegate?.transportRequestsTopologyRefresh(originDeviceID: deviceID)
     }
 
@@ -813,7 +805,7 @@ public final class HybridEventFirstTransport: TransportStrategy {
 
     /// The callback URL being used for events
     public var callbackURLString: String {
-        eventListener?.callbackURL?.absoluteString ?? "Not available"
+        eventListener?.callbackURL?.absoluteString ?? L10n.notAvailable
     }
 }
 

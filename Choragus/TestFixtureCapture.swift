@@ -100,7 +100,7 @@ enum TestFixtureCapture {
     private static func promptForFixturesDirectory() -> URL? {
         let panel = NSOpenPanel()
         panel.title = "Choose Test Fixtures Directory"
-        panel.message = "Grant Choragus write access to the integration-harness fixtures directory."
+        panel.message = "Grant Choragus write access to the test fixtures directory."
         panel.prompt = "Grant Access"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true

@@ -60,15 +60,14 @@ enum AppleMusicDestination: Hashable {
     case genreCharts(genreID: String, genreName: String)
     case stationSearch
     case stationList(title: String, stations: [AppleMusicStation])
-    /// Paged catalog-search drill-down — pages 25 at a time by offset
-    /// instead of carrying a fixed 25-item snapshot.
+    /// Paged catalog-search drill-down, 25 at a time by offset.
     case searchList(kind: AppleMusicSearchListKind, term: String, title: String)
 
     enum LibraryListKind: Hashable { case songs, albums, artists, playlists }
 }
 
 struct MusicKitAppleMusicView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
 
     let group: SonosGroup?
@@ -97,10 +96,10 @@ struct MusicKitAppleMusicView: View {
     @StateObject private var bulkTracker = AppleMusicBulkActionTracker()
 
     var body: some View {
-        // Manual in-place stack — matches `BrowseView`'s breadcrumb
-        // approach. Using `NavigationStack` here pushed detail views as
-        // a top-level navigation context that took over the whole app
-        // instead of staying inside the parent browse pane.
+        // Manual in-place stack, matching `BrowseView`'s breadcrumbs. A
+        // `NavigationStack` here pushes detail views as a top-level
+        // context that takes over the whole app instead of staying inside
+        // the browse pane.
         VStack(spacing: 0) {
             if path.isEmpty {
                 header
@@ -464,10 +463,9 @@ struct MusicKitAppleMusicView: View {
                         ForEach(recentlyPlayed.albums) { album in albumRow(album) }
                         ForEach(recentlyPlayed.playlists) { p in playlistRow(p) }
                     }
-                    // Personal recommendations — each row drills into a
-                    // dedicated detail view rather than flattening every
-                    // item inline (which was producing the unscrollably
-                    // long "Made for You / New Releases / etc." stack).
+                    // Personal recommendations — one drill-down row each;
+                    // flattening every item inline makes the root browse
+                    // unscrollably long.
                     let visibleRecs = recommendations.filter { !$0.albums.isEmpty || !$0.playlists.isEmpty || !$0.stations.isEmpty }
                     if !visibleRecs.isEmpty {
                         sectionHeader(L10n.amMadeForYou)
@@ -673,9 +671,9 @@ struct MusicKitAppleMusicView: View {
 
     @ViewBuilder
     private var resultsList: some View {
-        // Category tabs page the catalog by offset (25/page) rather than
-        // showing the fixed 25-item search snapshot. The snapshot still
-        // drives the empty-state check so "no results" stays instant.
+        // Category tabs page the catalog by offset (25/page). The search
+        // snapshot still drives the empty-state check so "no results"
+        // stays instant.
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         switch searchCategory {
         case .all: allResultsList

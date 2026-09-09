@@ -69,7 +69,7 @@ final class UpdateChecker {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-                let message = "GitHub returned HTTP \(http.statusCode)."
+                let message = L10n.updateCheckHTTPError(status: http.statusCode)
                 sonosDebugLog("[UPDATE] \(message)")
                 if !silentWhenCurrent { await showError(message) }
                 return

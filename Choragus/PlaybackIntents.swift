@@ -1,16 +1,10 @@
 /// PlaybackIntents.swift — Shortcuts / Spotlight / Siri integration via
 /// the App Intents framework (macOS 13+; deployment target is 14).
 ///
-/// Each intent resolves a room name (free-form string parameter) against
-/// the live `SonosManager.groups` topology — case-insensitive match on
-/// the group's display name (which is the same name shown in the
-/// sidebar). If no group matches the user gets a localised error;
-/// Shortcuts surfaces it as a recoverable failure rather than crashing
-/// the action.
-///
-/// v1 covers the six core playback verbs. Favourite / playlist playback
-/// and a typed `RoomGroup` `AppEntity` are deferred to v2 — see
-/// `ChoragusShortcuts` for the gallery surface.
+/// Each intent resolves its entity parameter against the live
+/// `SonosManager` topology at execution time. If nothing matches, the
+/// user gets a localised error that Shortcuts surfaces as a recoverable
+/// failure.
 import AppIntents
 import Foundation
 import SonosKit
@@ -109,6 +103,54 @@ struct GroupPresetQuery: EntityQuery {
     }
 }
 
+// MARK: - Physical input entity + query
+
+/// A speaker's line-in or TV input, as offered in the Shortcuts picker.
+/// Backed by `PhysicalInput` so the intent lists exactly the speakers
+/// the Browse "Line-In" list does and plays them the same way.
+struct PhysicalInputEntity: AppEntity {
+    /// Bare ZonePlayer id of the speaker that owns the input.
+    var id: String
+    /// "Kitchen · Analog input" / "Lounge · TV (HDMI / Optical)" — room
+    /// first so the picker sorts by room. Labels follow the in-app
+    /// language (`L10n`); the intent titles around them follow the
+    /// system locale (`Localizable.xcstrings`).
+    var name: String
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation {
+        TypeDisplayRepresentation(name: "Sonos Input")
+    }
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(name)")
+    }
+
+    static var defaultQuery = PhysicalInputQuery()
+
+    init(_ input: PhysicalInput) {
+        id = input.deviceID
+        name = "\(input.roomName) \u{00B7} \(input.kind == .tv ? L10n.lineInTVInput : L10n.lineInAnalogInput)"
+    }
+}
+
+struct PhysicalInputQuery: EntityQuery {
+    @MainActor
+    func entities(for identifiers: [String]) async throws -> [PhysicalInputEntity] {
+        await IntentResolution.waitForManager()
+        guard let manager = SonosManager.current else { return [] }
+        return PhysicalInput.inputs(in: manager.devices)
+            .filter { identifiers.contains($0.deviceID) }
+            .map(PhysicalInputEntity.init)
+    }
+
+    @MainActor
+    func suggestedEntities() async throws -> [PhysicalInputEntity] {
+        await IntentResolution.waitForManager()
+        guard let manager = SonosManager.current else { return [] }
+        return PhysicalInput.inputs(in: manager.devices).map(PhysicalInputEntity.init)
+    }
+}
+
 // MARK: - Shared helpers
 
 private enum IntentResolution {
@@ -134,10 +176,11 @@ private enum IntentResolution {
         return manager.groups.first { $0.coordinatorID == room.id }
     }
 
-    /// Localised "room not found" error for Shortcuts to display.
+    /// Localised "room not found" error for Shortcuts to display
+    /// (in-app language, like every other L10n string).
     static func roomNotFoundError(_ room: RoomGroupEntity) -> Error {
         NSError(domain: "ChoragusIntents", code: 404, userInfo: [
-            NSLocalizedDescriptionKey: "The room \"\(room.name)\" is no longer in your Sonos system. Open Choragus and re-pick a room for this shortcut."
+            NSLocalizedDescriptionKey: L10n.intentRoomNotFoundFormat(room.name)
         ])
     }
 
@@ -162,7 +205,22 @@ private enum IntentResolution {
 
     static func presetNotFoundError(_ preset: GroupPresetEntity) -> Error {
         NSError(domain: "ChoragusIntents", code: 404, userInfo: [
-            NSLocalizedDescriptionKey: "The preset \"\(preset.name)\" no longer exists. Open Choragus and re-pick a preset for this shortcut."
+            NSLocalizedDescriptionKey: L10n.intentPresetNotFoundFormat(preset.name)
+        ])
+    }
+
+    /// Resolves the entity back to the live input. Returns nil when the
+    /// owning speaker has left the system since the shortcut was built.
+    @MainActor
+    static func resolveInput(_ input: PhysicalInputEntity) async -> PhysicalInput? {
+        await waitForManager()
+        guard let manager = SonosManager.current else { return nil }
+        return PhysicalInput.inputs(in: manager.devices).first { $0.deviceID == input.id }
+    }
+
+    static func inputNotFoundError(_ input: PhysicalInputEntity) -> Error {
+        NSError(domain: "ChoragusIntents", code: 404, userInfo: [
+            NSLocalizedDescriptionKey: L10n.intentInputNotFoundFormat(input.name)
         ])
     }
 }
@@ -319,9 +377,8 @@ struct ChoragusSetVolumeIntent: AppIntent {
         }
         guard let manager = SonosManager.current else { return .result() }
         let clamped = max(0, min(100, level))
-        // Apply to every member of the group. No master-scale magic
-        // in v1 — Shortcuts users typically expect "set to N" to mean
-        // every speaker sits at N, not a proportional spread.
+        // Every member sits at N — "set to N" from Shortcuts means an
+        // absolute level, not a proportional spread.
         for member in group.members {
             try? await manager.setVolume(device: member, volume: clamped)
         }
@@ -353,6 +410,37 @@ struct ChoragusActivatePresetIntent: AppIntent {
             return .result()
         }
         await presets.applyPreset(resolved, using: manager)
+        return .result()
+    }
+}
+
+// MARK: - Select Input
+
+struct ChoragusSelectInputIntent: AppIntent {
+    static var title: LocalizedStringResource = "Select Input"
+    static var description: IntentDescription = IntentDescription(
+        "Play a speaker's line-in or TV input in a room. Selecting an input that is already playing leaves it playing, so this can run on a schedule.")
+
+    @Parameter(title: "Input", description: "The speaker input to play: analog line-in or TV.")
+    var input: PhysicalInputEntity
+
+    @Parameter(title: "Room", description: "The room or group that plays the input.")
+    var room: RoomGroupEntity
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Play \(\.$input) in \(\.$room)")
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        guard let group = await IntentResolution.resolveGroup(room) else {
+            throw IntentResolution.roomNotFoundError(room)
+        }
+        guard let resolved = await IntentResolution.resolveInput(input) else {
+            throw IntentResolution.inputNotFoundError(input)
+        }
+        guard let manager = SonosManager.current else { return .result() }
+        try await manager.playInput(resolved, in: group)
         return .result()
     }
 }
@@ -429,6 +517,17 @@ struct ChoragusShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Activate Preset",
             systemImageName: "rectangle.stack.fill"
+        )
+        // One placeholder per phrase: the input is spoken, Siri asks
+        // for the room as a follow-up.
+        AppShortcut(
+            intent: ChoragusSelectInputIntent(),
+            phrases: [
+                "Play \(.applicationName) input \(\.$input)",
+                "Select \(.applicationName) input \(\.$input)"
+            ],
+            shortTitle: "Select Input",
+            systemImageName: "cable.connector.horizontal"
         )
     }
 }

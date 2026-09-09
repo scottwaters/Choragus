@@ -45,10 +45,9 @@ public final class SMAPIClient {
 
     /// Per-host request timeout. Plex's SMAPI relay routes through
     /// plex.tv → user's PMS, with cold-start latencies in the tens of
-    /// seconds while the server wakes up. The previous 15s ceiling
-    /// produced "Plex returned nothing" errors that were really just
-    /// timeouts. Other services keep the tighter default — long
-    /// timeouts hide real failures.
+    /// seconds while the server wakes up; a 15s ceiling reports those
+    /// as "Plex returned nothing". Other services keep the tighter
+    /// default — long timeouts hide real failures.
     private static func timeout(forURL url: URL) -> TimeInterval {
         let host = url.host ?? ""
         if host.hasSuffix(".plex.tv") || host == "plex.tv" {
@@ -99,8 +98,7 @@ public final class SMAPIClient {
     /// Result of a getAppLink call. Some services (e.g. Plex) mint a
     /// session-scoped `linkDeviceId` during getAppLink and then reject
     /// getDeviceAuthToken unless that exact value is echoed back — the
-    /// speaker's RINCON device id will not do. Spotify ignores this
-    /// field so using the speaker id happened to work.
+    /// speaker's RINCON device id will not do. Spotify ignores this field.
     public struct AppLinkResult {
         public let regUrl: String
         public let linkCode: String
@@ -174,9 +172,7 @@ public final class SMAPIClient {
     /// service minted one during getAppLink/getDeviceLinkCode (e.g. Plex). The
     /// element is omitted otherwise: TIDAL's getDeviceAuthToken faults
     /// `Client.NOT_LINKED_FAILURE` when a linkDeviceId it didn't issue is
-    /// present, and Spotify ignores the field, so dropping the old
-    /// speaker-`deviceID` fallback is spec-correct and unblocks DeviceLink
-    /// services without regressing AppLink ones.
+    /// present, and Spotify ignores the field.
     public func getDeviceAuthToken(
         serviceURI: String,
         householdID: String,
@@ -276,6 +272,7 @@ public final class SMAPIClient {
     /// Returns category IDs like ["tracks", "artists", "albums", "playlists"].
     public func getSearchCategories(serviceURI: String, token: SMAPIToken) async throws -> [(id: String, title: String)] {
         let result = try await getMetadata(serviceURI: serviceURI, token: token, id: "search", index: 0, count: 50)
+        sonosDebugLog("[SMAPI] search categories \(URL(string: serviceURI)?.host ?? ""): \(result.items.map { "\($0.id)=\($0.title)" }.joined(separator: ", "))")
         return result.items.map { ($0.id, $0.title) }
     }
 
@@ -515,13 +512,21 @@ public final class SMAPIClient {
         }
         let httpResponse = response as? HTTPURLResponse
         let responseStr = String(data: data, encoding: .utf8) ?? ""
+        // One line per non-2xx or SOAP-fault reply: which action, to which
+        // host, what came back. Bug-report diagnostics for service
+        // integrations — a service that answers 200 with zero items is
+        // otherwise indistinguishable from one that faulted.
+        if let code = httpResponse?.statusCode,
+           !(200...299).contains(code) || responseStr.contains("<faultcode>") {
+            let fault = extractValue(from: responseStr, tag: "faultstring") ?? ""
+            sonosDebugLog("[SMAPI] \(action.split(separator: "#").last ?? "") \(url.host ?? "") HTTP \(code) bytes=\(data.count) fault=\(fault.prefix(120))")
+        }
         if let code = httpResponse?.statusCode, !(200...299).contains(code) {
             // 500 carrying a token-refresh / link-retry fault is part of the
             // SMAPI auth protocol — return the body so callers parse and
             // retry. Every OTHER non-2xx (401/403/404/503, often an HTML
-            // body) previously flowed into the XML parsers, which silently
-            // returned empty lists — surfaced to the user as "no results"
-            // instead of an actionable failure.
+            // body) must not reach the XML parsers, which would silently
+            // return empty lists ("no results" instead of a failure).
             if code == 500,
                responseStr.contains("TokenRefreshRequired") || responseStr.contains("NOT_LINKED_RETRY") {
                 return responseStr
@@ -548,7 +553,7 @@ public final class SMAPIClient {
                 // present as playable or browsable — Spotify returns
                 // rows like "Unable to access playlist" for auth /
                 // region failures, and the absent-canPlay default of
-                // true made them tappable tracks (#77).
+                // true would make them tappable tracks.
                 canPlay: (extractValue(from: element, tag: "itemType") == "error") ? false
                     : (element.contains("canPlay") ? extractValue(from: element, tag: "canPlay") == "true" : true),
                 canBrowse: element.contains("canEnumerate") ? extractValue(from: element, tag: "canEnumerate") == "true" : element.contains("mediaCollection"),
@@ -662,10 +667,10 @@ public enum SMAPIError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .invalidURL: return "Invalid service URL"
-        case .soapFault(let detail): return "Service error: \(detail.prefix(200))"
-        case .notAuthenticated: return "Not signed in to this service"
-        case .authFailed(let reason): return "Authentication failed: \(reason)"
+        case .invalidURL: return L10n.errSMAPIInvalidURL
+        case .soapFault(let detail): return L10n.errSMAPIServiceError(String(detail.prefix(200)))
+        case .notAuthenticated: return L10n.errSMAPINotSignedIn
+        case .authFailed(let reason): return L10n.errSMAPIAuthFailed(reason)
         }
     }
 }

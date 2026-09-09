@@ -44,7 +44,7 @@ fileprivate func visLog(_ msg: String) {
 }
 
 struct ClubVisWindow: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var anchorTracker: AnchorTracker
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     @EnvironmentObject var metadataServicesHolder: MusicMetadataServiceHolder
@@ -64,7 +64,7 @@ struct ClubVisWindow: View {
     let groupID: String
 
     /// Lazily constructed once the group is in hand. Held in a tiny
-    /// `ObservableObject` wrapper so we can build it from `.task`
+    /// `ObservableObject` wrapper so it can be built from `.task`
     /// without colliding with `@StateObject`'s default-init phase.
     @StateObject private var queueHolder = ClubVisQueueHolder()
 
@@ -78,8 +78,7 @@ struct ClubVisWindow: View {
     /// the wall view. The `preloaded` trim must never evict a
     /// displayed image — the canvas draws from `preloaded`, so an
     /// evicted-while-displayed URL blanks its tile and the next
-    /// diffFill mass-repairs (observed: 39 fades in one diff, wall
-    /// fps collapsed to ~7).
+    /// diffFill mass-repairs, collapsing wall fps.
     @State private var wallDisplayBox = WallDisplayBox()
     /// Staged reveal: the lighting layer fades in AFTER the wall is
     /// up — room first, then the rig comes on. 0 while hidden/behind
@@ -92,16 +91,15 @@ struct ClubVisWindow: View {
     /// TilePoolBox).
     @State private var poolBox = TilePoolBox()
     /// Periodic off-main sample of ImageCache URLs for the
-    /// cache-backfill tier. Sampling live inside the pool compute
-    /// held the ImageCache disk queue for over a second per rebuild;
-    /// a queued barrier write then parked every main-side art read
-    /// behind it (observed: 1.0 s stall + tile fades running 680 ms
-    /// long during the second rebuild of a track change).
+    /// cache-backfill tier. Sampling inside the pool compute holds
+    /// the ImageCache disk queue for over a second per rebuild, and a
+    /// queued barrier write then parks every main-side art read
+    /// behind it.
     @State private var cacheBackfillSample: [URL] = []
     /// Consecutive fetch/decode failures per art URL this session.
-    /// URLs at the cap are skipped by `downloadMissingPoolArt` —
-    /// observed: the same ~10 dead URLs (unreachable speaker's getaa,
-    /// zero-byte CDN jpegs) re-fetched on every rebuild, forever.
+    /// URLs at the cap are skipped by `downloadMissingPoolArt`; dead
+    /// URLs (unreachable speaker's getaa, zero-byte CDN jpegs) would
+    /// otherwise be re-fetched on every rebuild.
     @State private var artFetchFailures: [URL: Int] = [:]
     private static let artFetchFailureCap = 3
     /// URL sets of the current and previous pools — the retention
@@ -136,8 +134,8 @@ struct ClubVisWindow: View {
 
     /// Identity for the WallView — when this changes, SwiftUI tears
     /// down the old WallView and creates a new one (which runs
-    /// wholesaleFill on its empty state). Only updated when we WANT
-    /// a fresh layout (natural end-of-track via pre-fade). Manual
+    /// wholesaleFill on its empty state). Only updated when a fresh
+    /// layout is wanted (natural end-of-track via pre-fade). Manual
     /// track changes leave wallId alone so the existing WallView's
     /// diff path handles per-tile content changes — no full reset.
     @State private var wallId: UInt32 = 0
@@ -153,19 +151,15 @@ struct ClubVisWindow: View {
     /// Opacity of the rebuild "black cover" layered on top of the
     /// wall + lighting. 0 = wall visible, 1 = solid black covering
     /// everything below the now-playing card. Animated during a
-    /// rebuild instead of fading the wall view itself — fading the
-    /// wall meant the `.id(wallId)` change happened during the
-    /// opacity tween and SwiftUI's view-recreation could briefly
-    /// render the new wall at full opacity (the user-visible
-    /// "off → on → fade-in" flicker on source change). With the
-    /// cover approach, the wall stays at opacity 1 and the seed
-    /// swap happens behind a fully-opaque black layer.
+    /// rebuild instead of fading the wall view itself: fading the
+    /// wall lets the `.id(wallId)` recreation render the new wall at
+    /// full opacity mid-tween (an off → on → fade-in flicker). The
+    /// cover keeps the wall at opacity 1 and hides the seed swap.
     /// Black cover overlaid on the wall — opaque on first appearance,
     /// then faded out by the initial-cover-fade task once wholesaleFill
     /// has had a chance to populate slotURLs. Without this default the
-    /// wall materialised instantly on launch (wholesaleFill commits
-    /// slotURLs directly, no fade animation), which the user reported
-    /// as "no fade in".
+    /// wall materialises instantly on launch (wholesaleFill commits
+    /// slotURLs directly, no fade).
     @State private var wallCoverOpacity: Double = 1.0
     @State private var hasInitialCoverFaded: Bool = false
 
@@ -194,11 +188,9 @@ struct ClubVisWindow: View {
     /// callers (track URI change → similarArtists fetch →
     /// settledArtURL set → iTunes resolve → another settledArtURL
     /// set → downloadNowPlayingArt → its internal rebuildTiles)
-    /// were each triggering a fresh chooseTiles + pool publish in
-    /// quick succession (7+ in 2 s in the captured log). Each pool
-    /// publish triggered diffFill, which created 30+ fades, which
-    /// stacked up to 110+ in-flight tile fades. Debouncing
-    /// collapses bursts into a single rebuild.
+    /// each trigger a chooseTiles + pool publish; each publish runs
+    /// diffFill and creates dozens of fades that stack up in flight.
+    /// Debouncing collapses a burst into one rebuild.
     @State private var rebuildTilesDebounceTask: Task<Void, Never>?
     /// Fire time of the pending debounced rebuild — earliest wins.
     @State private var rebuildTilesDeadline: Date?
@@ -208,17 +200,15 @@ struct ClubVisWindow: View {
 
     /// Cancellable task for the settledArtURL → download → heroBump
     /// chain. settledArtURL can flip 3 × per track (DIDL → history
-    /// art → iTunes resolve), and the previous code spawned a fresh
-    /// Task each time → 3 concurrent downloads + rebuildTiles + hero
-    /// bumps. Cancelling the prior task collapses the burst into one.
+    /// art → iTunes resolve); a fresh Task per flip means concurrent
+    /// downloads + rebuildTiles + hero bumps. Cancelling the prior
+    /// task collapses the burst into one.
     @State private var settledArtTask: Task<Void, Never>?
 
-    /// Pinned ambient URL sample. `chooseTiles` used to re-shuffle
-    /// `entries` on every call, producing a different ambient set
-    /// every rebuildTiles. With 5,000+ history entries and 800
-    /// sampled, ~84 % of the previous sample wasn't in the new one;
-    /// diffFill flagged those URLs as "evicted" and faded them out
-    /// — every track change re-shuffled the wall. Pinned for the
+    /// Pinned ambient URL sample. A fresh shuffle per `chooseTiles`
+    /// call would replace most of the ambient set on every rebuild;
+    /// diffFill would flag those URLs as evicted and fade them out,
+    /// re-shuffling the wall on every track change. Pinned for the
     /// lifetime of the current `wallId`; cleared when `wallId`
     /// changes via the `pinnedAmbientForWallId` mismatch.
     @State private var pinnedAmbientSample: [URL] = []
@@ -258,15 +248,12 @@ struct ClubVisWindow: View {
     /// key still matches the current settled track.
 
     /// Resolved slot rects — cached. The packer is non-trivial
-    /// (cluster check is O(N²) over already-placed large rects) and
-    /// running it on every body re-eval was a major source of
-    /// fade-in stutter: any `@Published` change on `debugState` —
-    /// e.g. `publishDebugState` updating poolRows on rebuildTiles —
-    /// would re-evaluate `ClubVisWindow.body`, recompute the entire
-    /// layout, hand a fresh `[WallSlot]` to `ClubVisWallView`, and
-    /// thrash the canvas. Now we recompute only when `layoutSeed`
-    /// actually changes (debug "Rebuild wall", forceWallRebuild,
-    /// cadence rebuild).
+    /// (cluster check is O(N²) over already-placed large rects);
+    /// running it on every body re-eval (any `@Published` change on
+    /// `debugState` re-evaluates `ClubVisWindow.body`) hands a fresh
+    /// `[WallSlot]` to `ClubVisWallView` and thrashes the canvas.
+    /// Recomputed only when `layoutSeed` changes (debug "Rebuild
+    /// wall", forceWallRebuild, cadence rebuild).
     @State private var resolvedSlots: [WallSlot] = []
 
     private func recomputeSlots() {
@@ -315,8 +302,8 @@ struct ClubVisWindow: View {
 
     /// Per-track seed — derived from the current track URI / title
     /// (or groupID on the very first frame before metadata is set).
-    /// Mixing `trackChangeSwapTrigger` here was tempting but causes
-    /// a double-recreate (one when trackURI changes, one when the
+    /// Mixing in `trackChangeSwapTrigger` causes a double-recreate
+    /// (one when trackURI changes, one when the
     /// trigger increments inside .task). URI hash alone changes per
     /// track and is sufficient to vary the seed.
     private var packerSeed: UInt32 {
@@ -330,8 +317,8 @@ struct ClubVisWindow: View {
     private var nowPlayingArtURL: URL? {
         // Use the same canonical accessor as Now Playing — it prefers the
         // resolved per-song cover (`radioTrackArtURL`) over the station logo
-        // for radio. Reading raw `displayedArtURL` left the hero stuck on the
-        // station art after the song's art resolved.
+        // for radio. Reading raw `displayedArtURL` leaves the hero on the
+        // station art after the song's art resolves.
         artCoordinator.resolver(for: groupID).artURLForDisplay(trackMetadata: trackMetadata)
     }
 
@@ -450,7 +437,7 @@ struct ClubVisWindow: View {
         .task {
             // Build the queue VM once the group is alive.
             if let g = group, queueHolder.vm == nil {
-                let vm = QueueViewModel(sonosManager: sonosManager, group: g)
+                let vm = QueueViewModel(sonosManager: sonosManager, queue: sonosManager.queue, group: g)
                 queueHolder.vm = vm
                 await vm.loadQueue()
                 vm.updateCurrentTrack()
@@ -464,8 +451,7 @@ struct ClubVisWindow: View {
             // when `playHistoryManager.genreVersion` republishes.
             // Run rebuild immediately on open — the wall populates
             // from whatever is already known about the running track,
-            // then refines as backfill resolves. Earlier explicit
-            // blanking ran the wall empty for an excess time.
+            // then refines as backfill resolves.
             Task { @MainActor in
                 // On Vis open, run a heavier first-pass backfill (300
                 // artists vs 100 default) and seed the priority list
@@ -496,7 +482,7 @@ struct ClubVisWindow: View {
             // Keyed on (trackURI, artist) — not URI alone — because
             // service streams (Apple Music HLS-static, Spotify, etc.)
             // land the URI first and the DIDL with artist arrives a
-            // few hundred ms later. If we only watched the URI, an
+            // few hundred ms later. Keyed on the URI alone, an
             // empty-artist first event would take the SKIP branch
             // below and the About panel would never populate until
             // the next track. Composite key re-fires when the artist
@@ -592,9 +578,8 @@ struct ClubVisWindow: View {
                     // Detached Task — `.task(id:)` cancellation
                     // doesn't reach here. Guard against landing a
                     // stale prior-artist's bio AFTER the user has
-                    // moved on to a new track. Previously this
-                    // produced "Blondie playing, Killers bio shown"
-                    // when fetch latencies overlapped track changes.
+                    // moved on to a new track; overlapping fetch
+                    // latencies otherwise land the wrong artist's bio.
                     guard trackMetadata.artist == artist else {
                         visLog("about — artistInfo DISCARDED artist=\(artist) (now=\(trackMetadata.artist)) — late arrival")
                         return
@@ -661,14 +646,12 @@ struct ClubVisWindow: View {
             //   1. Optimistic-append: items inline → fast-path; just
             //      append + diff-update tiles.
             //   2. Full-reload: queue was replaced. Reload the queue
-            //      view-model + diff-update tiles. Earlier this path
-            //      also forced a full wall rebuild (cover fade-IN +
-            //      wallId swap + 6-second fade-OUT cycle) every time
-            //      a queue mutation arrived, which was visually
-            //      disruptive. Queue-only changes update the Up Next
-            //      list and refresh the tile pool in place; rebuilds
-            //      stay reserved for actual track changes / mode
-            //      flips driven by `.task(id: trackURI)`.
+            //      view-model + diff-update tiles. Queue-only changes
+            //      update the Up Next list and refresh the tile pool
+            //      in place — a full wall rebuild per queue mutation
+            //      is visually disruptive — so rebuilds stay reserved
+            //      for track changes / mode flips driven by
+            //      `.task(id: trackURI)`.
             guard let vm = queueHolder.vm else { return }
             if let items = note.userInfo?[QueueChangeKey.optimisticItems] as? [QueueItem] {
                 visLog("queueChanged — optimistic append (\(items.count) items), no rebuild")
@@ -705,8 +688,7 @@ struct ClubVisWindow: View {
                 // then `.onAppear` immediately reassigns wallId to
                 // `packerSeed` and the second body render replaces it
                 // with `.id(packerSeed)`. The transient `.id(0)` instance
-                // spawned its own swap loop (visible as parallel `swap
-                // loop started — id=1` and `id=2` lines on launch).
+                // spawns its own swap loop.
                 if wallId != 0 {
                     ClubVisWallView(
                         pool: pool,
@@ -766,11 +748,10 @@ struct ClubVisWindow: View {
             .saturation(0.10)
 
             // Darkening pass BELOW the lights — the wall is dimmed to
-            // venue darkness first and light is added on top. With this
-            // multiply above the lighting layer it multiplied the lit
-            // result toward grey and no blob survived (verified via
-            // screenshot pair 2026-08-07). Opacity via the debug
-            // window's Lighting > Black multiply slider.
+            // venue darkness first and light is added on top. Above the
+            // lighting layer the multiply pulls the lit result toward
+            // grey and no blob survives. Opacity via the debug window's
+            // Lighting > Black multiply slider.
             Color.black
                 .blendMode(.multiply)
                 .opacity(debugState.lighting.blackMultiplyOpacity)
@@ -823,9 +804,8 @@ struct ClubVisWindow: View {
             // regardless of what `isRadioPlayback` says. Sonos populates
             // `stationName` for Spotify Radio / Apple Music DJ even
             // though the queue is still meaningful — gating on the
-            // radio predicate hid the list across those tracks ("The
-            // Riddle" via Spotify Radio was the trigger). Empty queue
-            // (true radio) renders nothing → list naturally hidden.
+            // radio predicate hides the list across those tracks. Empty
+            // queue (true radio) renders nothing → list naturally hidden.
             if let vm = queueHolder.vm, !vm.queueItems.isEmpty {
                 let queueY: CGFloat = visShowAboutPanel
                     ? (100 + 210)              // top: 100..520
@@ -875,10 +855,8 @@ struct ClubVisWindow: View {
     /// causes (track change, queue edit). Background metadata churn
     /// passes a long delay: the genre backfill bumps `genreVersion`
     /// once per ARTIST it writes, and a 100-artist pass at 250 ms
-    /// produced a rebuild every ~3.5 s for minutes — each costing a
-    /// >1 s main-thread stall (observed 2026-08-08: 221 rebuilds,
-    /// caller=genreVersion, MAIN-STALL ~1.1 s each — the wall stutter
-    /// and hitched fades).
+    /// would produce a rebuild every few seconds for minutes, each a
+    /// >1 s main-thread stall.
     private func scheduleRebuildTiles(_ callerHint: String,
                                       delay: Duration = .milliseconds(250)) {
         // Earliest requested fire time wins: a slow (genre) request
@@ -888,9 +866,9 @@ struct ClubVisWindow: View {
             + Double(delay.components.attoseconds) / 1e18)
         // Spacing floor: chooseTiles costs >1 s on the main thread,
         // and launch fires half a dozen triggers back-to-back (body,
-        // similarArtists, queue/hero art, entries.count — observed
-        // 12 rebuilds in 25 s stacking into 3-5 s stalls). Rebuilds
-        // run at most once per 3 s; a burst collapses into one.
+        // similarArtists, queue/hero art, entries.count) that stack
+        // into multi-second stalls. Rebuilds run at most once per
+        // 3 s; a burst collapses into one.
         let floor = lastRebuildTilesAt.addingTimeInterval(3.0)
         if floor > candidate { candidate = floor }
         if rebuildTilesDebounceTask != nil,
@@ -947,13 +925,12 @@ struct ClubVisWindow: View {
         pool = chosen
         poolBox.pool = chosen
         // Merge new resolutions on top of the existing dict — never
-        // evict URLs we may still be fading out of, otherwise a
+        // evict URLs that may still be fading out, otherwise a
         // mid-fade slot loses its `oldImg` and pops to blank.
         preloaded.merge(resolvedNew) { _, new in new }
 
-        // Trim `preloaded` to the last two pools' URLs. The
-        // merge-only policy grew it monotonically (observed: 17k
-        // NSImages after a long session); a mid-fade slot can still
+        // Trim `preloaded` to the last two pools' URLs. A merge-only
+        // policy grows it without bound; a mid-fade slot can still
         // reference the PREVIOUS pool's image, anything older is
         // unreachable.
         let poolSet = Set(allURLs)
@@ -982,8 +959,8 @@ struct ClubVisWindow: View {
             Task { @MainActor in await downloadQueueArtwork() }
         }
         // Backfill any pool URL that isn't yet in `preloaded`. The
-        // chooseTiles cache gate is gone, so the pool now includes
-        // history URLs the user has never visited; this downloader
+        // pool includes history URLs the user has never visited;
+        // this downloader
         // fetches them so blank tiles fill in instead of sitting
         // black forever.
         Task { @MainActor in await downloadMissingPoolArt(allURLs: allURLs) }
@@ -992,12 +969,12 @@ struct ClubVisWindow: View {
     /// Single download primitive used by every art-fetching path.
     /// Returns true if `preloaded[url]` is populated when the call
     /// completes — either because the bytes were already in
-    /// ImageCache (we just copied the reference) or because the
+    /// ImageCache (the reference is copied) or because the
     /// download succeeded. Returns false on network / decode error.
     /// URLSession with bounded per-request and per-resource timeouts.
-    /// `URLSession.shared` defaults to 60 s, which let a single stuck
-    /// Sonos `getaa` proxy URL block a fetch for ~48 s — long enough
-    /// to stall pool warming on every track change. 8 s per request
+    /// `URLSession.shared` defaults to 60 s, so a single stuck Sonos
+    /// `getaa` proxy URL can block a fetch for most of a minute and
+    /// stall pool warming on every track change. 8 s per request
     /// is plenty for legitimate 100 KB album art over LAN; anything
     /// slower is a stuck request that should be abandoned.
     private static let artFetchSession: URLSession = {
@@ -1026,7 +1003,7 @@ struct ClubVisWindow: View {
             // Decode + cache transcode off-main: NSImage(data:) plus
             // ImageCache.store's TIFF→JPEG encode cost tens of ms per
             // image ON MAIN — a post-rebuild warm burst of dozens
-            // stacked into the observed periodic ~1.5 s stalls.
+            // stacks into second-long stalls.
             let decoded = await Task.detached(priority: .utility,
                                               operation: { () -> NSImage? in
                 guard let img = NSImage(data: data) else { return nil }
@@ -1063,8 +1040,8 @@ struct ClubVisWindow: View {
     /// Failure bookkeeping. Crossing the cap benches the URL: any
     /// stale cached image is purged (so it can't resurface with wrong
     /// content later) and a coalesced rebuild reassigns the slots
-    /// that were holding the now-benched URL — previously they sat
-    /// as blank tiles for the rest of the session.
+    /// that were holding the now-benched URL, which otherwise sit
+    /// blank for the rest of the session.
     private func recordArtFailure(_ url: URL) {
         let count = artFetchFailures[url, default: 0] + 1
         artFetchFailures[url] = count
@@ -1073,16 +1050,16 @@ struct ClubVisWindow: View {
         ImageCache.shared.remove(for: url)
         // Guarded write: a benched URL whose fetch failed was never
         // IN `preloaded`, and a no-op @State dictionary write still
-        // invalidates the wall canvas — a 14-URL bench burst produced
-        // 14 back-to-back full redraws (observed 1.57 s stall).
+        // invalidates the wall canvas — a bench burst would trigger
+        // one full redraw per URL.
         if preloaded[url] != nil {
             preloaded[url] = nil
         }
         preloadedIndex.keys.remove(url)
         // Rebuild only when the benched URL is actually on screen —
         // benching an off-screen candidate needs no reassignment.
-        // (At launch a burst of dead URLs benched back-to-back and
-        // each scheduled a rebuild: repeated >1 s chooseTiles stalls.)
+        // (At launch a burst of dead URLs benches back-to-back; one
+        // rebuild each means repeated >1 s chooseTiles stalls.)
         if wallDisplayBox.urls.contains(url) {
             scheduleRebuildTiles("artBenched", delay: .seconds(2))
         }
@@ -1100,11 +1077,9 @@ struct ClubVisWindow: View {
         guard !unique.isEmpty else { return }
         visLog("downloadMissingPoolArt — \(unique.count) URLs to fetch")
         // Fetch + decode + cache-store run entirely off the main
-        // actor, and the results commit to `preloaded` ONCE. The
-        // previous per-image commits invalidated the wall canvas per
-        // landed download — a warm burst re-rendered all ~200 tiles
-        // dozens of times (observed as back-to-back ~1.4 s
-        // MAIN-STALLs for the duration of the burst).
+        // actor, and the results commit to `preloaded` ONCE. Per-image
+        // commits would invalidate the wall canvas per landed download
+        // and re-render all ~200 tiles dozens of times per warm burst.
         let results = await Self.fetchArtBatch(urls: unique)
         var landed: [URL: NSImage] = [:]
         var failedURLs: [URL] = []
@@ -1175,11 +1150,10 @@ struct ClubVisWindow: View {
                 && artFetchFailures[$0, default: 0] < Self.artFetchFailureCap
         }
         guard !urls.isEmpty else { return }
-        // Batch, off-main, ONE preloaded commit — the previous
-        // sequential per-URL loop performed one @State write (and so
-        // one wall-canvas invalidation) per queue item; a 222-item
-        // queue of cache hits stalled main ~1.4 s behind the rebuild
-        // cover.
+        // Batch, off-main, ONE preloaded commit — a per-URL loop
+        // performs one @State write (one wall-canvas invalidation)
+        // per queue item, which stalls main for a second on a long
+        // queue.
         let results = await Self.fetchArtBatch(urls: urls)
         var landed: [URL: NSImage] = [:]
         var failedURLs: [URL] = []
@@ -1208,8 +1182,8 @@ struct ClubVisWindow: View {
         guard let url = settledArtURL else {
             // Track transitions clear the art for a moment. Keep the
             // previous set through that window so the NEXT match
-            // crossfades old set → new set directly — the immediate
-            // fallback here made every song change detour through
+            // crossfades old set → new set directly — an immediate
+            // fallback here makes every song change detour through
             // amber (old → fallback → new, two fades). Only a
             // SUSTAINED no-art state (radio source, art genuinely
             // absent) resolves to the fallback.
@@ -1231,8 +1205,8 @@ struct ClubVisWindow: View {
             }
         }
         // Disk fallback reads detached — a main-actor ImageCache read
-        // here blocked ~1.2 s on the disk queue while the pool build's
-        // detached enumeration + resolution reads held it.
+        // here blocks on the disk queue while the pool build's
+        // detached enumeration + resolution reads hold it.
         var heroImage = preloaded[url]
         if heroImage == nil {
             heroImage = await Task.detached(priority: .utility) {
@@ -1254,10 +1228,9 @@ struct ClubVisWindow: View {
     private func matchStageSet(url: URL, image: NSImage) async {
         guard lastMatchedArtURL != url else { return }
         // Settle debounce. During a track transition the hero art
-        // flip-flaps (new track's cover, then a stale flip-back,
-        // then the settled cover — observed twice in one second),
-        // and every flip re-lit the room: the lighting appeared to
-        // jump between states. Match only the art that is still the
+        // flip-flaps (new cover, stale flip-back, settled cover)
+        // and every flip would re-light the room. Match only the
+        // art that is still the
         // hero 1.5 s later; superseded requests drop out here.
         pendingStageMatchURL = url
         try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -1322,7 +1295,7 @@ struct ClubVisWindow: View {
             // Index by the raw stored URI AND the recovered
             // Suno/TIDAL cover URL — the pool carries the recovered
             // form for direct-URL tracks (stripped DIDL), which
-            // previously matched nothing here and rendered pool rows
+            // otherwise matches nothing here and renders pool rows
             // with a URL but "—" for every metadata column.
             var keys: [String] = []
             if let raw = entry.albumArtURI, !raw.isEmpty { keys.append(raw) }
@@ -1484,19 +1457,18 @@ struct ClubVisWindow: View {
     /// Pure pool computation — no @State access; safe off-main.
     /// Returns the pool plus a fresh ambient sample when one was
     /// generated (caller commits it to the pinned @State on main).
-    /// `nonisolated` is LOAD-BEARING: the View struct's MainActor
+    /// `nonisolated` is load-bearing: the View struct's MainActor
     /// inference otherwise isolates this static too, and the
-    /// Task.detached wrapper hops straight back to the main actor —
-    /// the "off-main" compute ran ON main (observed: 1.7-1.9 s
-    /// MAIN-STALLs exactly spanning each chooseTiles OFF-MAIN log).
+    /// Task.detached wrapper hops straight back to the main actor,
+    /// so the "off-main" compute runs on main.
     nonisolated private static func computeTilePool(_ input: ChooseTilesInput) -> (pool: TilePool, freshAmbient: [URL]?) {
         let trackMetadata = input.trackMetadata
         // Per `UDKey.visHistorySource`: ".group" (default) restricts
         // history to plays whose `groupName` includes ANY room
         // currently in the active group — not the exact group-name
         // string. PlayHistoryEntry.groupName is the " + "-joined
-        // name at log time (e.g. "Office + Float Play 5"), so we
-        // tokenise it and intersect with the current group's member
+        // name at log time (e.g. "Office + Float Play 5"), so it is
+        // tokenised and intersected with the current group's member
         // room names. ".all" pools across every group.
         //
         // Auto-fallback: if the room-match filter still yields too
@@ -1567,10 +1539,10 @@ struct ClubVisWindow: View {
         }
 
         // Art URL per entry, computed ONCE. `usableArt` costs a URL
-        // parse plus Suno/TIDAL catalog lookups per call; the tier /
-        // sprinkle / ambient passes below previously re-ran it over
-        // the full history each (4 × ~10k entries ≈ the >1 s
-        // main-thread stall behind every wall rebuild).
+        // parse plus Suno/TIDAL catalog lookups per call; re-running
+        // it in each of the tier / sprinkle / ambient passes below
+        // costs 4 × ~10k entries — a >1 s main-thread stall per wall
+        // rebuild.
         let entryArt: [(entry: PlayHistoryEntry, url: URL)] = entries.compactMap { entry in
             usableArt(entry.albumArtURI, sourceURI: entry.sourceURI).map { (entry, $0) }
         }
@@ -1842,7 +1814,7 @@ struct ClubVisWindow: View {
     /// rebuild. Pre-loads the URLs likely to appear on the new wall
     /// during the fade-out window so the wall fades in already
     /// populated — no piecewise piecemeal load after the fade.
-    /// `source` is logged so we can see which trigger fired (and
+    /// `source` is logged to show which trigger fired (and
     /// which got dropped by the in-progress guard).
     /// Cooldown — any rebuild request whose call site fires within
     /// `rebuildCooldown` seconds of the previous rebuild's END is
@@ -1880,8 +1852,8 @@ struct ClubVisWindow: View {
         let oldSeed = layoutSeed
         let newSeed = UInt32.random(in: 0...UInt32.max)
 
-        // Pre-compute the new wall's slots so we know roughly how
-        // many URLs we need to have cached before fade-in.
+        // Pre-compute the new wall's slots to estimate how many
+        // URLs must be cached before fade-in.
         var config = WallSlotPacker.Config.default
         #if DEBUG
         let s = BackOfTheClubDebugState.shared
@@ -1907,7 +1879,7 @@ struct ClubVisWindow: View {
         // preferred → tier1 → tier2 → tier3 → random → ambient →
         // cacheBackfill, so the front N URLs of that concatenation
         // approximates what will land on screen. Slot count + small
-        // margin so we cover everything that might be assigned.
+        // margin to cover everything that might be assigned.
         let priorityURLs = Array(
             (pool.preferred + pool.genreTier1 + pool.genreTier2 + pool.genreTier3
              + pool.random + pool.ambient + pool.cacheBackfill)
@@ -1928,16 +1900,13 @@ struct ClubVisWindow: View {
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         visLog("rebuild step — seq=\(seqId) cover fade-IN END (elapsedMs=\(Int(Date().timeIntervalSince(coverInStart)*1000)) coverOpacity=\(String(format: "%.2f", wallCoverOpacity)))")
 
-        // Cap the download wait. The earlier withTaskGroup{ await
-        // downloadTask.value, sleep(cap) }.next + cancelAll variant
-        // looked like it bounded the wait at `cap`, but withTaskGroup
-        // only returns once *all* child tasks finish — and the
-        // `await downloadTask.value` child waits for downloadTask
-        // itself, which is unbounded (single getaa fetch was logged
-        // taking 48 s). So the rebuild stalled at black for the full
-        // download duration. Plain Task.sleep is the bounded form;
-        // downloadTask continues in the background and its results
-        // are picked up by subsequent rebuildTiles calls.
+        // Cap the download wait with a plain Task.sleep. Racing
+        // `downloadTask.value` against a sleep inside withTaskGroup
+        // does not bound the wait — the group only returns once *all*
+        // children finish, and a stuck getaa fetch would hold the
+        // rebuild at black for its full duration. downloadTask
+        // continues in the background and its results are picked up
+        // by subsequent rebuildTiles calls.
         let totalCapSeconds: TimeInterval = 8.0
         let remainingCap = max(0, totalCapSeconds - Date().timeIntervalSince(rebuildStart))
         if remainingCap > 0 {
@@ -1974,8 +1943,8 @@ struct ClubVisWindow: View {
         // Hold rebuildInProgress for the full fade-in duration so
         // back-to-back triggers (queueChanged arriving mid-fade-in)
         // can't slip past the guard. Without this await the function
-        // returned at ~3.5 s while the visual sequence ran another
-        // 3 s, allowing a second rebuild to interrupt the fade-in.
+        // returns before the visual sequence ends and a second
+        // rebuild can interrupt the fade-in.
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         visLog("rebuild step — seq=\(seqId) cover fade-OUT END (elapsedMs=\(Int(Date().timeIntervalSince(coverOutStart)*1000)) coverOpacity=\(String(format: "%.2f", wallCoverOpacity)))")
         // Wall is up — bring the lights on.
@@ -2051,9 +2020,7 @@ final class PreloadedIndex {
 
 /// Live pool reference for the same reason as PreloadedIndex: the
 /// swap loop's captured `let pool` is the launch-time (empty) pool,
-/// so swap/seed/hero candidate selection starved. The rebuild storm
-/// used to mask this by recreating the wall view (fresh capture)
-/// every few minutes.
+/// so swap/seed/hero candidate selection starves.
 final class TilePoolBox {
     fileprivate var pool: TilePool = .empty
 }
@@ -2165,10 +2132,9 @@ private struct ClubVisWallView: View {
     /// card on the main view uses. Hero anchor binds to this so
     /// the wall's largest tile always matches what the user sees in
     /// the now-playing card. Falls back to `pool.preferred.first`
-    /// when nil. Without this, queue mode set `preferred[0]` to the
-    /// queue's first item (not the now-playing track), so the hero
-    /// drifted from now-playing whenever the playing track wasn't
-    /// queue position 0.
+    /// when nil. In queue mode `preferred[0]` is the queue's first
+    /// item, not the now-playing track, so a preferred-only hero
+    /// drifts whenever the playing track isn't queue position 0.
     let nowPlayingHeroURL: URL?
     /// True while `performRebuildSequence` is running. Wall pauses
     /// its swap loop, suppresses .onChange handlers, and clears
@@ -2211,12 +2177,11 @@ private struct ClubVisWallView: View {
     /// Slots holding the guaranteed artist About photos — selected by
     /// `selectPhotoSlots`, protected from the periodic 1×1 rotation.
     @State private var photoSlotIndices: [Int] = []
-    /// First-fill marker. The original wholesale-vs-diff branch used
-    /// `slotURLs.isEmpty && fades.isEmpty`, but a hero swap fired from
-    /// the parent before `.task` runs would put one entry in `fades`,
-    /// causing the branch to pick `diffFill` on first appearance. The
-    /// diffFill bulk-commit path then filled all blank slots without
-    /// fades — visible as the "blink" the user reported on launch.
+    /// First-fill marker. Branching on `slotURLs.isEmpty &&
+    /// fades.isEmpty` fails when a hero swap fired from the parent
+    /// before `.task` runs puts an entry in `fades`: first appearance
+    /// then picks `diffFill`, whose bulk-commit path fills blank
+    /// slots without fades (a visible blink on launch).
     @State private var hasInitialFilled: Bool = false
     /// Hero URL deferred while the anchor was mid-fade. Drained by
     /// the anchor fade-commit handler when its fade ends.
@@ -2237,29 +2202,24 @@ private struct ClubVisWallView: View {
     /// (rebuildTiles fires from .task block, downloadNowPlayingArt
     /// chain, settledArtURL cascade, similarArtists fetch — each
     /// publishes a new pool). Without debouncing, each pool change
-    /// runs a full diffFill which creates 20–40 new tile fades; the
-    /// fades pile up to 100+ in-flight ones (visible in the log as
-    /// fades=98, fades=110, fades=116). Coalescing the diff to a
+    /// runs a full diffFill which creates 20–40 new tile fades, and
+    /// the fades pile up to 100+ in flight. Coalescing the diff to a
     /// single run 500 ms after the last pool change collapses the
     /// burst into one fade pass.
     @State private var diffFillDebounceTask: Task<Void, Never>?
     /// Cancellable task for the 2-second-delayed seed-swap that
-    /// fires on `seedSwapTrigger` change. Multiple track-change
-    /// bumps in quick succession used to schedule independent
-    /// Tasks, each firing its own seed-swap → multiple tile fades
-    /// per track change. Cancelling collapses to one.
+    /// fires on `seedSwapTrigger` change. Track-change bumps in
+    /// quick succession would otherwise schedule independent Tasks,
+    /// each firing its own seed-swap. Cancelling collapses to one.
     @State private var seedSwapDebounceTask: Task<Void, Never>?
     /// Lazy `NSImage → CGImage` cache. Held as a `@State`-backed class
     /// so internal mutation (cache fills) doesn't republish through
-    /// SwiftUI's value-equality observation. Every `Canvas` tick used
-    /// to call `GraphicsContext.draw(Image(nsImage:), in:)` per visible
-    /// tile, which routed through `NSImageContents.displayList →
-    /// CGImageForProposedRect → bestRepresentationForRect → hints
-    /// validation` for every tile every frame — ~5 s of `NSImage`
-    /// resolution work on a 41 s sample (≈ 12 % of wall, the single
-    /// hottest path in the visualisation). Pre-resolving once per URL
-    /// and drawing via `Image(decorative: cgImage, …)` bypasses the
-    /// `NSImage` path entirely.
+    /// SwiftUI's value-equality observation. Drawing `Image(nsImage:)`
+    /// per visible tile per `Canvas` tick routes through
+    /// `NSImageContents.displayList → CGImageForProposedRect →
+    /// bestRepresentationForRect` every frame — the hottest path in
+    /// the visualisation. Pre-resolving once per URL and drawing via
+    /// `Image(decorative: cgImage, …)` bypasses `NSImage` entirely.
     @State private var cgImageCache = CGImageCache()
     /// Bumped (coalesced) when an off-main tile-bitmap render lands —
     /// the static canvas keys a repaint off it.
@@ -2270,9 +2230,9 @@ private struct ClubVisWallView: View {
     /// without triggering SwiftUI re-renders (the `@State` only tracks
     /// the wrapping reference). Indexed by the tile-pool URL key.
     /// Pre-scaled, decoded tile bitmaps keyed by (pixel size, url).
-    /// The draw pass previously decoded + scaled ~200 full-resolution
-    /// covers per canvas invalidation (measured ~1.5 s on every hero
-    /// swap). Now a miss kicks an off-main render and returns nil —
+    /// Decoding + scaling ~200 full-resolution covers per canvas
+    /// invalidation costs over a second per hero swap. A miss kicks
+    /// an off-main render and returns nil —
     /// the tile paints on the next invalidation once ready — and the
     /// canvas only ever blits display-sized decoded bitmaps.
     /// Thread-safe: draw reads on main, renders land detached.
@@ -2392,8 +2352,8 @@ private struct ClubVisWallView: View {
                 let p = FadeState.eased(frac)
                 return (1.0 - p, p)
             case .blackHold(let out, let hold, let fadeIn):
-                // Eased ramps on both segments — the previous linear
-                // ramps had a visible kink at each end of the dip.
+                // Eased ramps on both segments — linear ramps have a
+                // visible kink at each end of the dip.
                 if out > 0, elapsed <= out {
                     return (1.0 - FadeState.eased(elapsed / out), 0)
                 }
@@ -2417,11 +2377,9 @@ private struct ClubVisWallView: View {
         // Two-layer composite. The STATIC canvas draws every settled
         // tile and re-renders only on a state change (no timeline);
         // the FADE overlay ticks at 24 fps and draws ONLY the slots
-        // currently fading. The previous single canvas redrew all
-        // 200+ tiles every tick whenever ANY fade ran — measured as
-        // the jank on wall change / hero fade / photo placement
-        // (scrolling text, on its own cheap timeline, stayed smooth,
-        // which is what isolated the per-tick tile cost).
+        // currently fading. A single canvas would redraw all 200+
+        // tiles every tick whenever ANY fade runs — the jank on wall
+        // change / hero fade / photo placement.
         ZStack {
             Canvas { ctx, _ in
                 // Dependency anchor: bumped (coalesced) when an
@@ -2430,8 +2388,8 @@ private struct ClubVisWallView: View {
                 _ = bitmapVersion
                 for (i, slot) in slots.enumerated() where fades[i] == nil {
                     // 1 pt inset — the back wall packs posters tightly
-                    // with hairline gaps. Larger insets (the previous
-                    // 4 pt) read as a moodboard, not a back wall.
+                    // with hairline gaps. Larger insets read as a
+                    // moodboard, not a back wall.
                     let rect = slot.rect.insetBy(dx: 1, dy: 1)
                     if let url = slotURLs[i],
                        let img = preloaded[url],
@@ -2544,10 +2502,10 @@ private struct ClubVisWallView: View {
             if Date().timeIntervalSince(lastWholesaleAt) < Self.settleSeconds {
                 return
             }
-            // Cancel any prior pending seed-swap task. Multiple
-            // rapid track-change bumps used to fan out into
+            // Cancel any prior pending seed-swap task. Rapid
+            // track-change bumps would otherwise fan out into
             // independent 2-s-delayed Tasks, each firing a
-            // separate seed-swap and adding a tile fade.
+            // separate seed-swap.
             seedSwapDebounceTask?.cancel()
             seedSwapDebounceTask = Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -2620,8 +2578,8 @@ private struct ClubVisWallView: View {
         // array into the OLD WallView instance before .id(wallId)
         // tears it down. If `.onChange(of: pool)` fires in that
         // window (e.g. a track change), diffFill() would index
-        // slots[stale-idx] and crash. Filtering both maps here is
-        // the belt-and-suspenders fix that survives the race.
+        // slots[stale-idx] and crash. Filtering both maps here
+        // survives the race.
         let validRange = 0..<slots.count
         slotURLs = slotURLs.filter { validRange.contains($0.key) }
         fades = fades.filter { validRange.contains($0.key) }
@@ -2631,8 +2589,8 @@ private struct ClubVisWallView: View {
             // Only mark filled when wholesaleFill actually populated
             // slots. The first .task call often runs before the pool
             // is hydrated (initial pool=empty) — wholesaleFill no-ops,
-            // and if we set the flag anyway the next assignInitialSlots
-            // routes to diffFill which bulk-commits blanks without
+            // and setting the flag anyway routes the next
+            // assignInitialSlots to diffFill which bulk-commits blanks without
             // fades. Defer the flag until the wholesale produced art.
             if !slotURLs.isEmpty {
                 hasInitialFilled = true
@@ -2665,20 +2623,18 @@ private struct ClubVisWallView: View {
         // URLs to 4×4 slots and leave no queue art on any 3×3.
         var pinned: [Int: URL] = [:]
         // Pin the 4×4 anchor to `nowPlayingHeroURL` when set so the
-        // wall is fully baked-correct under the cover. Without this,
-        // wholesaleFill assigned the anchor whatever was at
-        // `preferred[0]` (in queue mode that's the queue's first
-        // item, not the now-playing track), then a follow-up hero
-        // fade crossfaded the anchor to the correct URL — visible as
-        // an in-progress fade when the initial cover lifted.
+        // wall is fully baked-correct under the cover. Otherwise the
+        // anchor takes `preferred[0]` (in queue mode the queue's first
+        // item, not the now-playing track) and a follow-up hero fade
+        // is still running when the initial cover lifts.
         if let first4x4 = sortedIdx.first(where: { slots[$0].sizeClass == 4 }) {
             // Cache-only: an uncached hero is NOT pinned — the
             // anchor takes pool art and the pendingHeroURL machinery
             // crossfades the hero in once its image lands. There is
             // deliberately NO queue-item stand-in: pinning
-            // preferred[0] (the queue's FIRST track) made the anchor
-            // flash that cover before fading to the actual current
-            // track on every fill (reported: Elvis Costello flash).
+            // preferred[0] (the queue's FIRST track) flashes that
+            // cover before the fade to the current track on every
+            // fill.
             if let heroURL = nowPlayingHeroURL, preloadedIndex.keys.contains(heroURL) {
                 pinned[first4x4] = heroURL
                 // De-dup: if the hero URL is in preferred, remove it
@@ -2745,10 +2701,10 @@ private struct ClubVisWallView: View {
         // populated tiles. The view's initial `pool` is `.empty`,
         // and the first .task call fires before the parent's
         // rebuildTiles has produced a real pool — so wholesaleFill
-        // runs with nothing to assign. Stamping anyway suppressed
+        // runs with nothing to assign. Stamping anyway suppresses
         // the very next pool-change handler (which carries the real
-        // pool) for 15 s, leaving a permanently blank wall until
-        // the user happened to change tracks again. Empty fills
+        // pool) for the settle window, leaving a blank wall until
+        // the next track change. Empty fills
         // leave the stamp at .distantPast so the next legitimate
         // pool change runs assignInitialSlots normally.
         if !slotURLs.isEmpty {
@@ -2790,9 +2746,8 @@ private struct ClubVisWallView: View {
             // → cacheBackfill. similarArtists (queue-artists' full
             // history) is LAST because for focused queues like a
             // single-artist soundtrack the user has dozens of that
-            // artist's covers in history, and putting it ahead of
-            // genres caused the wall to look entirely on-artist —
-            // exactly the "queue art overwhelming" symptom.
+            // artist's covers in history, and ahead of genres it
+            // makes the wall look entirely on-artist.
             switch size {
             case 4, 3, 2:
                 return takeFront(&t1) ?? takeFront(&t2) ?? takeFront(&t3)
@@ -2853,14 +2808,13 @@ private struct ClubVisWallView: View {
             if let url = fade.newURL { currentlyShown.insert(url) }
         }
         // Only evict URLs that are GONE from both the current pool
-        // AND the preloaded image cache. The previous policy
-        // (subtract from allNew alone) flagged 28+ URLs per
-        // diffFill on every track change because `topGenres`
-        // recomputes per track, shuffling the t1/t2/t3 membership;
-        // any slot URL that was assigned from the previous t1
-        // would suddenly be "evicted" even though its image was
-        // already cached in `preloaded`. Keeping cached-image URLs
-        // means pool churn no longer drives mass tile replacement.
+        // AND the preloaded image cache. Subtracting from allNew
+        // alone flags dozens of URLs per diffFill on every track
+        // change: `topGenres` recomputes per track and shuffles the
+        // t1/t2/t3 membership, so a slot URL from the prior t1 reads
+        // as evicted even though its image is cached in `preloaded`.
+        // Keeping cached-image URLs stops pool churn from driving
+        // mass tile replacement.
         let evicted = currentlyShown.filter { url in
             !allNew.contains(url) && preloaded[url] == nil
         }
@@ -2915,9 +2869,9 @@ private struct ClubVisWallView: View {
         // If the wall is mostly empty (e.g. a race where wallView
         // re-creation left slotURLs cleared while pool change
         // triggered diffFill), commit URLs directly — same as
-        // wholesaleFill — instead of creating N tile fades. The
-        // mass-fade approach was visible to the user as "blank
-        // through fade-IN, then 200 tiles pop in at once".
+        // wholesaleFill — instead of creating N tile fades, which
+        // read as blank through the fade-in and then 200 tiles
+        // popping in at once.
         let bulkCommit = sortedBlank.count > 20
         if bulkCommit {
             visLog("diffFill — bulk-commit \(sortedBlank.count) blank slots (no fades)")
@@ -3300,24 +3254,22 @@ private struct ClubVisWallView: View {
     /// Track-change hero swap — fades the ANCHOR 4×4 (always the
     /// first 4×4 in `slots`, geometrically the centre tile) to the
     /// new now-playing art. The anchor is the single canonical
-    /// "now playing" tile, so on every track change we update it
-    /// in place — never spread the hero across multiple large
-    /// tiles. Any other slot that happens to be showing the new
-    /// hero URL (e.g. coincidental queue-art overlap in queue
-    /// mode) is simultaneously demoted to a fresh URL so we never
-    /// end up with duplicate art after the swap.
+    /// "now playing" tile, updated in place on every track change —
+    /// never spread the hero across multiple large tiles. Any other
+    /// slot that happens to be showing the new hero URL (e.g.
+    /// coincidental queue-art overlap in queue mode) is
+    /// simultaneously demoted to a fresh URL so no duplicate art
+    /// remains after the swap.
     private func triggerNowPlayingHeroSwap() {
         if BackOfTheClubDebugState.shared.isWallRebuilding {
             visLog("triggerNowPlayingHeroSwap NOOP — rebuild in progress")
             return
         }
-        // Prefer the canonical now-playing URL (same one the now-
-        // playing card on the main view uses). Falls back to the
-        // pool's preferred[0] when the parent hasn't resolved a URL
-        // yet (e.g. very first frame before settledArtURL settles).
-        // No preferred[0] fallback: in queue mode that is the queue's
-        // FIRST track, and fading the anchor to it before the settled
-        // hero arrives produced a wrong-cover flash on track changes.
+        // Canonical now-playing URL (same one the now-playing card on
+        // the main view uses). No preferred[0] fallback while the
+        // parent hasn't resolved a URL yet: in queue mode that is the
+        // queue's FIRST track, and fading the anchor to it before the
+        // settled hero arrives flashes the wrong cover on track changes.
         // The settle path re-fires this via heroUpdateTrigger.
         guard let heroURL = nowPlayingHeroURL else {
             visLog("triggerNowPlayingHeroSwap NOOP — heroURL not settled yet")
@@ -3334,7 +3286,7 @@ private struct ClubVisWallView: View {
             return
         }
         // If the cover is opaque, the user can't see a fade. Commit
-        // the URL directly so we don't have a fade still running
+        // the URL directly so no fade is still running
         // when the cover lifts. Threshold 0.5: anything ≥ this
         // hides the wall enough that a fade is invisible (and any
         // residual reveal during cover fade-OUT is brief enough to
@@ -3439,10 +3391,7 @@ private struct ClubVisWallView: View {
 }
 
 /// One packed cell on the 16×9 grid. `sizeClass` is 1, 2, or 3 (the
-/// cell side count), mirroring the play-count rank that earned the
-/// slot. Currently used only for tile placement, but kept on the
-/// struct so future overlays (e.g. play-count badges) can read it
-/// without re-deriving from `rect.width`.
+/// cell side count).
 private struct WallSlot: Equatable {
     let rect: CGRect
     let sizeClass: Int
@@ -3453,9 +3402,8 @@ private enum WallSlotPacker {
     /// with 1×1. Largest cells placed first so they reliably find
     /// space in the unoccupied grid. The wall layout caps any 1×1
     /// run at length 2 in any row or column — that requires roughly
-    /// 28+ × 3×3 tiles to break up
-    /// the 25×14 grid; the original 12 left ~5-cell 1×1 stretches
-    /// visible in the rendered wall. After greedy random placement,
+    /// 28+ 3×3 tiles on the 25×14 grid; fewer leave ~5-cell 1×1
+    /// stretches. After greedy random placement,
     /// `breakLong1x1Runs` does a constraint-driven sweep and force-
     /// places extra 3×3s on any remaining run of length ≥ 3.
     ///
@@ -3575,8 +3523,7 @@ private enum WallSlotPacker {
     }
 
     /// Returns true if placing `candidate` violates the placement
-    /// rules. Two specific rules enforced (replaced the older
-    /// generic "≤2 cluster" check):
+    /// rules. Two specific rules enforced:
     ///   1. A 4×4 may never be edge-adjacent to another 4×4.
     ///   2. A 3×3 may be edge-adjacent to AT MOST 2 large tiles
     ///      (4×4 or 3×3 — they all count as "large").
@@ -3628,9 +3575,9 @@ private enum WallSlotPacker {
 
     /// Goal-directed greedy run-breaker.
     ///
-    /// Replaces the older "find a run, try one position above/left
-    /// of it" heuristic which fails when local geometry is tight or
-    /// the cluster rule blocks the only obvious placement.
+    /// A local "find a run, try one position above/left of it"
+    /// heuristic fails when geometry is tight or the cluster rule
+    /// blocks the only obvious placement.
     ///
     /// Algorithm (a 2D bin-packing variant — best-first search with
     /// a global cost function, as used in polyomino tiling):
@@ -3649,8 +3596,8 @@ private enum WallSlotPacker {
     /// Trade-off: if the adjacency rules and "no 3-runs" rule are
     /// genuinely in conflict for a given seed, the algorithm halts
     /// with residual violations rather than relaxing rules. The
-    /// global view typically resolves what the old single-position
-    /// run-breaker could not.
+    /// global view typically resolves what a single-position
+    /// run-breaker cannot.
     private static func breakLong1x1Runs(rng: inout SeededRNG, cols: Int, rows: Int,
                                          cellSize: CGFloat,
                                          originX: CGFloat, originY: CGFloat,
@@ -3747,12 +3694,12 @@ private enum WallSlotPacker {
     /// Tries to place a `side × side` super-cell with top-left at
     /// (c, r), nudging by ±1 in each direction if the requested
     /// origin is out of bounds or overlaps. Returns true on success.
-    /// NOW enforces the adjacency rules (`wouldOversizeCluster`) —
-    /// previously did not, which let the run-breaker drop 3×3s next
-    /// to existing 4×4s/3×3s and produce visible clusters of 3+
-    /// large tiles. Trade-off: some 1×1 runs longer than 2 will
-    /// remain when the geometry can't accommodate a rule-compliant
-    /// breaker tile. Adjacency rules now win over the 1×1-run cap.
+    /// Enforces the adjacency rules (`wouldOversizeCluster`) so the
+    /// run-breaker cannot drop 3×3s next to existing 4×4s/3×3s and
+    /// form clusters of 3+ large tiles. Trade-off: some 1×1 runs
+    /// longer than 2 remain when the geometry can't accommodate a
+    /// rule-compliant breaker tile; adjacency rules win over the
+    /// 1×1-run cap.
     private static func tryPlaceSuperCell(at c: Int, r: Int, side: Int,
                                           cols: Int, rows: Int, cellSize: CGFloat,
                                           originX: CGFloat, originY: CGFloat,
@@ -4064,8 +4011,6 @@ private struct ClubVisLightingView: View {
     /// Global light-energy scalar applied to every blob and sweep
     /// alpha at draw time (clamped to 1.0). One knob for overall
     /// intensity — the roster's relative alpha structure is preserved.
-    /// 1.35 was mathematically visible but visually flat against the
-    /// Zune reference; beams now saturate their cores.
     fileprivate static let lightIntensity = 1.7
     /// Extra alpha scalar on emitters carrying the hue-outlier tone
     /// (see `emphasisSlot`).
@@ -4097,8 +4042,8 @@ private struct ClubVisLightingView: View {
     /// weight is 0 (spread schemes, single-hue ladders, achromatic
     /// members). The ramps matter: emphasis is evaluated on the
     /// crossfade-resolved tones every frame, and a binary threshold
-    /// made the boosted emitters step in one frame mid-fade —
-    /// observed as the lights blinking on song change.
+    /// would step the boosted emitters in one frame mid-fade (lights
+    /// blinking on song change).
     fileprivate static func emphasisSlot(tones: ResolvedTones)
         -> (slot: ToneRole, weight: Double)? {
         let slots: [(ToneRole, StageTone)] =
@@ -4147,17 +4092,17 @@ private struct ClubVisLightingView: View {
         // 12 fps. Each tick rasterizes the blob field TWICE (the
         // colorize and glow passes are separate full-window
         // Canvases) and composites both through full-window blend
-        // modes — at 24 fps that fixed cost alone stuttered every
-        // other layer. 12 fps halves it; the gradients are smooth
+        // modes — at 24 fps that fixed cost stutters every other
+        // layer. 12 fps halves it; the gradients are smooth
         // by construction so motion reads fine at this rate.
         TimelineView(.animation(minimumInterval: 1.0 / 12.0)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             let tones = Self.resolvedTones(at: t, state: debugState)
-            // Vibrancy-graded pass opacities. The colorize pass at a
-            // fixed 0.85 tinted the ENTIRE wall with whatever peaks a
-            // near-achromatic cover scraped past the saturation gate
-            // — observed as a muddy sepia wall on a mostly-white/black
-            // cover. Colorize lerps 0.35 → 0.85 with vibrancy; the
+            // Vibrancy-graded pass opacities. A fixed colorize opacity
+            // tints the ENTIRE wall with whatever peaks a
+            // near-achromatic cover scrapes past the saturation gate
+            // (muddy sepia on a mostly-white/black cover). Colorize
+            // lerps 0.35 → 0.85 with vibrancy; the
             // glow pass lerps the opposite way (0.65 → 0.55) so dim
             // covers still read lit, just neutrally.
             let vibrancy = Self.resolvedVibrancy(at: t, state: debugState)
@@ -4169,9 +4114,8 @@ private struct ClubVisLightingView: View {
                 // the view adds the canvas output to the wall; the
                 // same blend inside the context stacks overlapping
                 // blobs additively.
-                // Colorize + glow double pass — the LightingLab
-                // harness (tools/LightingLab) showed a single screen
-                // pass lifts luminance and greys out; a `.color` hue
+                // Colorize + glow double pass — a single screen pass
+                // lifts luminance and greys out; a `.color` hue
                 // layer makes the light OWN its region at full
                 // saturation (the Zune reference look) while the
                 // moderated screen pass adds the glow.
@@ -4272,25 +4216,13 @@ private struct ClubVisLightingView: View {
         let radius = (blob.radius
             + sin(t * blob.radiusSpeed + phase) * blob.radiusAmount) * w
         let color = Self.richColor(for: blob.role, tones: tones)
-        // Blurred solid fill, not gradient shading: radial-gradient
-        // shading in GraphicsContext rendered nothing on macOS
-        // (probe-verified 2026-08-07 — solid .color fills in the same
-        // canvas drew fine). The blur also produces the reference's
-        // soft edge more faithfully than gradient stops.
-        // Concentric falloff fills with a CAPPED blur. A blur radius
-        // proportional to blob radius reached 300-950 px on the wash
-        // blobs and the Canvas filter rasterized to nothing at that
-        // size (probe-verified); three nested ellipses at falling
-        // alpha carry the falloff, and a capped blur only softens the
-        // ring edges.
-        // Ring falloff with NO blur filter: the per-layer blur
-        // rasterization (two passes x ten layers per frame) stalled the
-        // main thread for seconds. Six rings under the colorize blend
-        // read as soft against the wall texture at zero filter cost.
         // True radial gradient — smooth by construction, no banding,
-        // no blur cost. The earlier gradient-draws-nothing failure was
-        // specific to `ctx.blendMode = .plusLighter`; under default
-        // in-canvas blending gradient shading renders correctly.
+        // no blur cost. Gradient shading draws nothing under
+        // `ctx.blendMode = .plusLighter`; under default in-canvas
+        // blending it renders correctly. No blur filter: per-layer
+        // blur rasterization (two passes × ten layers per frame)
+        // stalls the main thread for seconds, and the Canvas filter
+        // rasterizes to nothing at wash-blob radii.
         ctx.fill(
             Path(ellipseIn: CGRect(x: x - radius, y: y - radius,
                                    width: radius * 2, height: radius * 2)),
@@ -4381,8 +4313,8 @@ private struct ClubVisLightingView: View {
         let anchorY = min(max(sweep.anchorY + seedJitter(seed, key: key, channel: 2) * 0.10, 0.62), 0.92)
         let x = size.width * (0.5 + smoothNoise(t * sweep.speed + posSeed) * 0.42)
         // Vertical travel: sweeps range up from the stage row toward
-        // the centre band on upward swings. 0.18 crowded the centre
-        // (with the centre wash and the emphasised emitter also
+        // the centre band on upward swings. A larger travel crowds
+        // the centre (the centre wash and the emphasised emitter sit
         // there) — the blooms own the top, sweeps own the lower half.
         let y = size.height * (anchorY + smoothNoise(t * sweep.speed * 0.7 + posSeed + 7) * 0.14)
         let angle = smoothNoise(t * sweep.speed * 1.3 + rotSeed) * 0.9
@@ -4398,7 +4330,7 @@ private struct ClubVisLightingView: View {
             layer.rotate(by: .radians(angle))
             // Oval via y-scale so a circular radial gradient renders
             // the angled beam footprint smoothly (see blob comment on
-            // gradient shading vs the removed ring ladder).
+            // gradient shading).
             layer.scaleBy(x: 1.0, y: sweep.aspect)
             layer.fill(
                 Path(ellipseIn: CGRect(x: -major, y: -major,
@@ -4523,10 +4455,7 @@ private struct ClubVisLightingView: View {
     }
     /// Glow strengthens as vibrancy falls: a muted cover's tint pass
     /// is weak, so the glow pass alone must carry visible light.
-    /// Curve history: 0.65 − 0.10v left a v = 0.20 cover at ~25/255
-    /// in blob cores (unlit); 0.85 − 0.30v was measurable but still
-    /// visually flat against the Zune reference. Full-strength glow
-    /// at v = 0 tapering to 0.70 at v = 1.
+    /// Full-strength glow at v = 0 tapering to 0.70 at v = 1.
     fileprivate static func glowOpacity(vibrancy: Double) -> Double {
         1.0 - 0.30 * vibrancy
     }
@@ -4544,9 +4473,8 @@ private struct ClubVisBlobCanvas: View {
         Canvas { ctx, size in
             let emphasis = ClubVisLightingView.emphasisSlot(tones: tones)
             // Uniform base wash: the wash BLOB is a radial gradient
-            // centred mid-wall, so the corners and edges sat almost
-            // unlit (reported: wash should be even across the whole
-            // wall). A flat full-canvas fill in the wash tone carries
+            // centred mid-wall, so the corners and edges would sit
+            // almost unlit. A flat full-canvas fill in the wash tone carries
             // the scheme's colour to every tile; the blobs and sweeps
             // add the structured light on top. Slow breathing pulse
             // keeps it feeling live rather than painted on.
@@ -4626,18 +4554,17 @@ private struct ClubVisNowPlayingCard: View {
                         )
                         .animation(.easeInOut(duration: 0.4), value: artDarkenOpacity)
                 }
-                // 2.0 s ease-in-out — earlier 0.8 s read as a quick
-                // wipe; this stretches the crossfade so the previous
-                // track's art fades through ~50% as the new one
-                // climbs from the same midpoint, producing a gentler
-                // dissolve.
+                // 2.0 s ease-in-out — a short crossfade reads as a
+                // wipe; this lets the previous track's art fade
+                // through ~50% as the new one climbs from the same
+                // midpoint.
                 .animation(.easeInOut(duration: 2.0), value: albumArtURL)
                 .frame(width: 224, height: 224)
                 .shadow(color: .black.opacity(0.6), radius: 22, y: 6)
                 .task(id: albumArtURL) {
                     // Sample average luminance once the URL's image
                     // is in ImageCache. CachedAsyncImage stores into
-                    // the cache after downloading, so we poll for up
+                    // the cache after downloading, so poll for up
                     // to 5 s; defaults to 0.5 (no darkening) if the
                     // image never lands.
                     guard let url = albumArtURL else { artLuma = 0.5; return }
@@ -4659,9 +4586,9 @@ private struct ClubVisNowPlayingCard: View {
 
                 // Always reserve the progress-bar's vertical space —
                 // toggling between visible/hidden as duration moves
-                // between 0 and >0 (e.g. radio→track) caused the
-                // VStack above to reflow and the album art to shift
-                // by ~21 pt. .opacity keeps the layout stable.
+                // between 0 and >0 (e.g. radio→track) makes the
+                // VStack above reflow and shifts the album art.
+                // .opacity keeps the layout stable.
                 progressBar
                     .frame(width: 224)
                     .opacity(trackMetadata.duration > 0 ? 1 : 0)
@@ -4816,7 +4743,7 @@ private struct ClubVisUpNextList: View {
 /// Slow-scrolling artist About panel slotted in the bottom-right of
 /// the stage, beneath the Up Next list. Bio scrolls vertically like
 /// credits — the text starts below the visible area, drifts upward
-/// at ~10 pt/s, and loops once it has fully cleared the top. Tags
+/// at `scrollSpeed`, and loops once it has fully cleared the top. Tags
 /// pin to the bottom of the panel so they stay readable regardless
 /// of the bio scroll position. Background and corner radius match
 /// `ClubVisUpNextList` so the right column reads as one column of
@@ -4824,8 +4751,7 @@ private struct ClubVisUpNextList: View {
 private struct ClubVisAboutPanel: View {
     let artistInfo: ArtistInfo?
 
-    /// Pixels per second of upward bio scroll. Halved from earlier
-    /// 10 pt/s — user feedback was the scroll was too fast to read.
+    /// Pixels per second of upward bio scroll; slow enough to read.
     private static let scrollSpeed: Double = 5.0
 
     /// Pause held at the end of one full scroll cycle (text fully
@@ -4881,9 +4807,9 @@ private struct ClubVisAboutPanel: View {
     private func scrollingBio(text: String) -> some View {
         // Measure the rendered text height with GeometryReader inside
         // a `.background` preference so the scroll cycle uses the
-        // ACTUAL height instead of a chars-per-line estimate. The
-        // estimate truncated the cycle prematurely on long bios so
-        // only the first paragraph was visible before looping.
+        // ACTUAL height instead of a chars-per-line estimate, which
+        // truncates the cycle on long bios so only the first
+        // paragraph shows before looping.
         ScrollingBioBody(text: text,
                          scrollSpeed: Self.scrollSpeed,
                          endPause: Self.endPause)
@@ -4904,11 +4830,10 @@ private struct ClubVisAboutPanel: View {
 /// - `.transaction { $0.animation = nil }` strips inherited implicit
 ///   animations so the per-frame offset can't pick up SwiftUI's
 ///   ~0.25 s default interpolation and fight the TimelineView motion.
-/// - Display-refresh `TimelineView(.animation)` (was 30 fps).
-/// - The previous `.mask(LinearGradient)` is replaced with two
-///   stationary `.blendMode(.destinationOut)` gradients inside a
-///   `.compositingGroup()` parent. Functionally identical edge fade
-///   without the per-frame offscreen mask pass.
+/// - Display-refresh `TimelineView(.animation)`.
+/// - Two stationary `.blendMode(.destinationOut)` gradients inside a
+///   `.compositingGroup()` parent instead of `.mask(LinearGradient)`:
+///   identical edge fade without the per-frame offscreen mask pass.
 private struct ScrollingBioBody: View {
     let text: String
     let scrollSpeed: Double
@@ -4916,10 +4841,9 @@ private struct ScrollingBioBody: View {
 
     /// Pre-rendered bio text as a Core Graphics image. Drawn each
     /// frame into a SwiftUI `Canvas` at the current offset — Canvas
-    /// honours sub-pixel positioning, while the previous
-    /// `Image().offset(y:)` path snapped to pixel boundaries and
-    /// produced a visible stair-step jump at the bio's slow
-    /// 5 pt/s scroll.
+    /// honours sub-pixel positioning, whereas `Image().offset(y:)`
+    /// snaps to pixel boundaries and stair-steps at the bio's slow
+    /// scroll.
     @State private var bioCGImage: CGImage? = nil
     @State private var textHeight: Double = 0
     /// Backing scale the bitmap was rendered at — used to draw it
@@ -4936,10 +4860,9 @@ private struct ScrollingBioBody: View {
     @State private var startTime: Double = Date().timeIntervalSinceReferenceDate
     /// Crossfade opacity for artist transitions. On text change,
     /// the existing bitmap fades to 0, the new bitmap renders, and
-    /// the opacity fades back to 1. Avoids the "title updates,
-    /// bitmap takes 1 s to catch up" snap the user reported.
+    /// the opacity fades back to 1.
     @State private var bioOpacity: Double = 1.0
-    /// Track the last text we rendered so the .task(id:) closure
+    /// Last text rendered, so the .task(id:) closure
     /// can know whether to play the cross-fade or just do a fresh
     /// render (no fade on first appear with empty prior state).
     @State private var lastRenderedText: String = ""
@@ -4990,18 +4913,15 @@ private struct ScrollingBioBody: View {
             // when the parent view's identity churns on parent
             // re-evaluations — SwiftUI re-runs the closure on every
             // id change, including the implicit initial-fire.
-            // `.onChange` was missing some text changes after the
-            // Equatable shortcut started skipping body re-evals on
-            // unrelated state changes.
+            // `.onChange` misses text changes once the Equatable
+            // shortcut skips body re-evals on unrelated state changes.
             .task(id: text) {
                 // Synchronous render — no `await Task.sleep` or
-                // `withAnimation` between the @State writes. The
-                // earlier fade choreography (await + withAnimation
-                // bracketing the bioCGImage write) caused SwiftUI
-                // to skip propagating the new `cg` parameter into
-                // the inner `BioCanvasContent` sub-view, so the
-                // Canvas kept drawing the previous bitmap. Cross-
-                // fade dropped — correctness over polish.
+                // `withAnimation` between the @State writes:
+                // bracketing the bioCGImage write with them makes
+                // SwiftUI skip propagating the new `cg` parameter
+                // into `BioCanvasContent`, so the Canvas keeps
+                // drawing the previous bitmap.
                 startTime = Date().timeIntervalSinceReferenceDate
                 renderBioIfNeeded(width: width, force: true)
                 bioOpacity = 1.0
@@ -5082,8 +5002,8 @@ private struct BioCanvasContent: View {
     let cg: CGImage?
     /// Monotonic version stamp bumped each render. Forces SwiftUI's
     /// struct-property diff to see this view as "changed" whenever
-    /// the parent re-renders the bitmap — CGImage alone wasn't
-    /// reliable because it's a CoreFoundation type and SwiftUI's
+    /// the parent re-renders the bitmap — CGImage alone is
+    /// unreliable: it's a CoreFoundation type and SwiftUI's
     /// invalidation can skip it.
     let bitmapVersion: Int
     let textHeight: Double
@@ -5215,9 +5135,9 @@ final class BackOfTheClubDebugState: ObservableObject {
     @Published var similarArtists: [String] = []
     @Published var queueGenreTokens: [String] = []
     /// Full artist bio currently displayed (or available for display)
-    /// in the Back of the Club About panel. Surfaced so we can
-    /// compare against what the Now Playing About tab shows and
-    /// confirm both views are reading the same cached string.
+    /// in the Back of the Club About panel. Surfaced for comparison
+    /// against the Now Playing About tab (both should read the same
+    /// cached string).
     @Published var nowPlayingBio: String = ""
     /// Lighting parameters surfaced to the debug window —
     /// `ClubVisWindow.stage` reads the black multiply opacity every
@@ -5446,8 +5366,8 @@ final class BackOfTheClubDebugState: ObservableObject {
     }
 
     /// Live-tunable packer config — `WallSlotPacker.pack` reads from
-    /// here when called from `ClubVisWindow.slots`. Debug UI lets us
-    /// iterate on counts and rule caps without recompiles.
+    /// here when called from `ClubVisWindow.slots`. Debug UI
+    /// iterates on counts and rule caps without recompiles.
     @Published var packerCount4x4: Int = 2
     @Published var packerCount3x3: Int = 4
     @Published var packerCount2x2: Int = 8
@@ -5492,8 +5412,8 @@ final class BackOfTheClubDebugState: ObservableObject {
 
     /// True while a wall rebuild is in flight. Read by WallView's
     /// swap loop each tick to skip swaps during the cover
-    /// transitions. NOT @Published — we don't want UI re-renders
-    /// every time it flips, only the swap loop's per-tick read.
+    /// transitions. NOT @Published — UI re-renders on every flip
+    /// are unwanted; only the swap loop's per-tick read matters.
     /// The let-parameter rebuildInProgress on WallView is captured
     /// by the Task closure at start time and doesn't update; this
     /// singleton field gives the loop a live read instead.
@@ -5553,7 +5473,7 @@ struct BackOfTheClubDebugWindow: View {
     /// match narration.
     /// Names aligned with the matcher's colour groups (see
     /// StageSetMatcher.hueGroup) so the narration and the peak
-    /// discounting agree — the 30°-sector names called 25° "red".
+    /// discounting agree (30°-sector names would call 25° "red").
     static func hueName(_ h: Double) -> String {
         let hn = StageSetMatcher.normalizedHue(h)
         switch StageSetMatcher.hueGroup(hn) {

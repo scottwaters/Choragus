@@ -28,12 +28,12 @@ public enum LastFMError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .missingCredentials: return "Last.fm API credentials are not configured."
-        case .missingSession:     return "Not signed in to Last.fm."
+        case .missingCredentials: return L10n.errLastFMNoCredentials
+        case .missingSession:     return L10n.errLastFMNotSignedIn
         case .http(let c, let b): return "Last.fm HTTP \(c): \(b)"
         case .service(let c, let m): return "Last.fm error \(c): \(m)"
         case .decoding(let m):    return "Last.fm response parse error: \(m)"
-        case .invalidURL:         return "Invalid Last.fm URL."
+        case .invalidURL:         return L10n.errLastFMInvalidURL
         }
     }
 

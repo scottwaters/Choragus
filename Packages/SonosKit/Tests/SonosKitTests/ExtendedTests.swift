@@ -163,6 +163,34 @@ final class URIPrefixExtendedTests: XCTestCase {
             "x-sonosapi-hls-static:song:1669713219?sid=204"))
     }
 
+    func testHLSStaticAmazonTrackIsATrackNotRadio() {
+        // Amazon Music tracks (sid=201) play via hls-static with a
+        // catalogue path instead of a `song:` id. Classing them as
+        // radio blanks title/artist, hides the queue and skips the
+        // URI-keyed art cache.
+        XCTAssertFalse(URIPrefix.isRadio(
+            "x-sonosapi-hls-static:catalog%2ftracks%2fB01DPX12SW%2f?sid=201&flags=0&sn=1"))
+        XCTAssertTrue(URIPrefix.isAmazonTrack(
+            "x-sonosapi-hls-static:catalog%2ftracks%2fB01DPX12SW%2f?sid=201&flags=0&sn=1"))
+        XCTAssertFalse(URIPrefix.isAmazonTrack(
+            "x-sonosapi-hls-static:song%3a1669713219?sid=204&flags=8232&sn=17"))
+    }
+
+    func testHLSStaticAmazonStationTrackIsATrackNotRadio() {
+        // While an Amazon station (`x-sonosapi-radio:catalog:station:…`)
+        // plays, GetPositionInfo reports each song as
+        // `catalog:track:asin:<asin>`. Classing that as radio made the
+        // poll path wipe title/artist (no r:streamContent) and flap
+        // against the event path, which carried the full DIDL.
+        let uri = "x-sonosapi-hls-static:catalog%3atrack%3aasin%3aB01M6X75I5?sid=201&flags=0&sn=5"
+        XCTAssertFalse(URIPrefix.isRadio(uri))
+        XCTAssertTrue(URIPrefix.isHLSStaticTrack(uri))
+        XCTAssertTrue(URIPrefix.isAmazonTrack(uri))
+        // The station container itself stays radio.
+        XCTAssertTrue(URIPrefix.isRadio(
+            "x-sonosapi-radio:catalog%3astation%3akey%3aA2W1BPRE6V4O9I?sid=201&flags=8300&sn=5"))
+    }
+
     func testIsRadioEmptyString() {
         XCTAssertFalse(URIPrefix.isRadio(""))
     }

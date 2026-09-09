@@ -22,18 +22,21 @@ extension SonosManager {
         accentColor.color
     }
 
-    /// The effective accent color (resolved or macOS default).
-    private var effectiveAccent: Color {
+    /// The theme accent for highlights and selection tints, or the macOS
+    /// accent when the theme is set to System. Views draw with this rather
+    /// than `Color.accentColor`: that constant is the bundle / system
+    /// accent and does not follow the `.tint` applied at the window root.
+    var themeAccent: Color {
         resolvedAccentColor ?? .accentColor
     }
 
     /// Resolved playing zone icon color. System = use accent color.
     var resolvedPlayingZoneColor: Color {
-        playingZoneColor.color ?? effectiveAccent
+        playingZoneColor.color ?? themeAccent
     }
 
     /// Resolved inactive zone icon color. System = use accent color.
     var resolvedInactiveZoneColor: Color {
-        inactiveZoneColor.color ?? effectiveAccent
+        inactiveZoneColor.color ?? themeAccent
     }
 }

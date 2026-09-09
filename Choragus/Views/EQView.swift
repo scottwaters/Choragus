@@ -2,7 +2,7 @@ import SwiftUI
 import SonosKit
 
 struct EQView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(\.eqService) private var eqService
     let group: SonosGroup
 
     @State private var selectedDeviceID: String?
@@ -90,9 +90,10 @@ struct EQView: View {
     private func loadEQ() async {
         guard let device = selectedDevice else { return }
         do {
-            bass = Double(try await sonosManager.getBass(device: device))
-            treble = Double(try await sonosManager.getTreble(device: device))
-            loudness = try await sonosManager.getLoudness(device: device)
+            guard let eqService else { return }
+            bass = Double(try await eqService.getBass(device: device))
+            treble = Double(try await eqService.getTreble(device: device))
+            loudness = try await eqService.getLoudness(device: device)
             isLoading = false
         } catch {
             sonosDebugLog("[EQ] Load EQ settings failed: \(error)")
@@ -101,16 +102,16 @@ struct EQView: View {
 
     private func saveBass() async {
         guard let device = selectedDevice else { return }
-        try? await sonosManager.setBass(device: device, bass: Int(bass))
+        try? await eqService?.setBass(device: device, bass: Int(bass))
     }
 
     private func saveTreble() async {
         guard let device = selectedDevice else { return }
-        try? await sonosManager.setTreble(device: device, treble: Int(treble))
+        try? await eqService?.setTreble(device: device, treble: Int(treble))
     }
 
     private func saveLoudness() async {
         guard let device = selectedDevice else { return }
-        try? await sonosManager.setLoudness(device: device, enabled: loudness)
+        try? await eqService?.setLoudness(device: device, enabled: loudness)
     }
 }

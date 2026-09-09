@@ -9,9 +9,8 @@ import Foundation
 /// originating service path; consumed by `SonosManager.playBrowseItem`
 /// to dispatch to the right play sequence. Each strategy is a closed,
 /// single-place description of how a given service's items reach the
-/// speaker — adding/changing one strategy can no longer accidentally
-/// alter another service's behaviour, which has been a recurring
-/// regression class (TuneIn DIDL dropped while optimising SMAPI etc.).
+/// speaker, so changing one strategy cannot alter another service's
+/// behaviour.
 public enum BrowsePlaybackStrategy: String, Equatable, Sendable {
     /// Send the item's URI as-is, with its DIDL metadata. Default for
     /// TuneIn music stations (s-prefix guide IDs), Sonos favorites with
@@ -58,6 +57,10 @@ public struct BrowseItem: Identifiable, Equatable {
     public var serviceDescriptor: String? // SA_RINCON descriptor from desc element
     public var releaseDate: Date? // Release date from service API (iTunes, Spotify, etc.)
     public var playbackStrategy: BrowsePlaybackStrategy = .directURIWithDIDL
+    /// The unmapped `upnp:class` from the server's DIDL. `BrowseItemClass`
+    /// folds every non-audio class into `.unknown`, which erases the one
+    /// distinction media-server filtering needs (videoItem / imageItem).
+    public var rawUPnPClass: String?
 
     /// Release year extracted from releaseDate, or nil if unknown
     public var releaseYear: Int? {
@@ -91,7 +94,14 @@ public struct BrowseItem: Identifiable, Equatable {
     }
 
     /// True when the item exists in Sonos favorites but needs a streaming service
-    /// (Spotify, Apple Music, etc.) to actually play — we can't play these via UPnP alone
+    /// (Spotify, Apple Music, etc.) to actually play — not playable via UPnP alone
+    /// A station row: plays whole on the transport and has no level
+    /// beneath it (an Amazon album or artist station, a radio station
+    /// with its stream URI). Classed as a container, but not drilled into.
+    public var isStation: Bool {
+        itemClass == .radioStation && resourceURI.map(URIPrefix.isRadio) == true
+    }
+
     public var requiresService: Bool {
         !isContainer && (resourceURI == nil || resourceURI?.isEmpty == true)
     }

@@ -34,6 +34,10 @@ final class SunoWebController: ObservableObject {
     /// Invoked when the user clicks the play button on a playlist / album card
     /// (a `/playlist/<id>` link) — the playlist is fetched and played.
     var onPlaylist: ((URL) -> Void)?
+    /// Append a playlist's songs to the queue rather than replacing it.
+    var onQueuePlaylist: ((URL) -> Void)?
+    /// Append every song on the current page to the queue.
+    var onQueueAll: (([URL]) -> Void)?
 
     fileprivate weak var webView: WKWebView?
 
@@ -147,13 +151,19 @@ struct SunoWebView: NSViewRepresentable {
             }
             switch kind {
             case "playlist":
-                if let url { menu.addItem(item("Play Playlist on Sonos", #selector(menuPlaylist(_:)), url)) }
+                if let url {
+                    menu.addItem(item(L10n.playPlaylistOnSonos, #selector(menuPlaylist(_:)), url))
+                    menu.addItem(item(L10n.addPlaylistToSonosQueue, #selector(menuQueuePlaylist(_:)), url))
+                }
             case "playall":
-                if !hrefs.isEmpty { menu.addItem(item("Play All on Sonos", #selector(menuPlayAll(_:)), hrefs)) }
+                if !hrefs.isEmpty {
+                    menu.addItem(item(L10n.playAllOnSonos, #selector(menuPlayAll(_:)), hrefs))
+                    menu.addItem(item(L10n.addAllToSonosQueue, #selector(menuQueueAll(_:)), hrefs))
+                }
             default:
                 if let url {
-                    menu.addItem(item("Play Now on Sonos", #selector(menuPlay(_:)), url))
-                    menu.addItem(item("Add to Sonos Queue", #selector(menuQueue(_:)), url))
+                    menu.addItem(item(L10n.playNowOnSonos, #selector(menuPlay(_:)), url))
+                    menu.addItem(item(L10n.addToSonosQueue, #selector(menuQueue(_:)), url))
                 }
             }
             guard !menu.items.isEmpty else { return }
@@ -170,6 +180,14 @@ struct SunoWebView: NSViewRepresentable {
 
         @objc private func menuPlayAll(_ sender: NSMenuItem) {
             if let urls = sender.representedObject as? [URL] { controller.onPlayAll?(urls) }
+        }
+
+        @objc private func menuQueuePlaylist(_ sender: NSMenuItem) {
+            if let url = sender.representedObject as? URL { controller.onQueuePlaylist?(url) }
+        }
+
+        @objc private func menuQueueAll(_ sender: NSMenuItem) {
+            if let urls = sender.representedObject as? [URL] { controller.onQueueAll?(urls) }
         }
 
         @objc private func menuQueue(_ sender: NSMenuItem) {
@@ -320,6 +338,11 @@ struct SunoWebView: NSViewRepresentable {
         // play still worked (play diverts via the audio hook, not this resolver).
         var inSong=node.closest&&node.closest('a[href*="/song/"]');
         if(inSong)return {kind:'song',url:inSong.href};
+        // A playlist card is wrapped in <a href="/playlist/…">, so the
+        // descendant search below finds no playlist link inside it and
+        // falls through to the cover image, whose uuid is artwork, not a clip.
+        var inPlaylist=node.closest&&node.closest('a[href*="/playlist/"],a[href*="/album/"]');
+        if(inPlaylist)return {kind:'playlist',url:inPlaylist.href};
         // Preference order while climbing: (1) the smallest container with
         // exactly one /song/ link; (2) the nearest /song/ link from a block
         // that has several — a featured/hero tile is IMAGE-ONLY (no anchor of
@@ -357,10 +380,17 @@ struct SunoWebView: NSViewRepresentable {
           }
           el=el.parentElement;hops++;
         }
+        // On a playlist page, a play affordance outside a song row is the
+        // header Play button, meaning the whole playlist; the climb above
+        // cannot tell, since the header's container also holds every row.
+        // Resolve by page URL rather than by scraping rows: the list is
+        // virtualised, so allSongHrefs() sees only what is on screen.
+        if(location.pathname.indexOf('/playlist/')===0||location.pathname.indexOf('/album/')===0){
+          return {kind:'playlist',url:location.href};
+        }
         if(songFallback)return {kind:'song',url:songFallback};
         if(imgFallback)return {kind:'song',url:imgFallback};
         if(location.pathname.indexOf('/song/')===0)return {kind:'song',url:location.href};
-        if(location.pathname.indexOf('/playlist/')===0)return {kind:'playall'};
         return null;
       }
       document.addEventListener('click',function(e){

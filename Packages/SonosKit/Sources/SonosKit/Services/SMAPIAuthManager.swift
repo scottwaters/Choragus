@@ -6,6 +6,9 @@ import Combine
 public final class SMAPIAuthManager: ObservableObject {
     public let client = SMAPIClient.shared
     public let tokenStore = SMAPITokenStore()
+    /// The app's instance, for kit-side callers that run outside a view
+    /// (App Intents, the MCP server). Set by the app at launch.
+    nonisolated(unsafe) public static weak var current: SMAPIAuthManager?
 
     @Published public var availableServices: [SMAPIServiceDescriptor] = []
     @Published public var isAuthenticating = false
@@ -47,7 +50,7 @@ public final class SMAPIAuthManager: ObservableObject {
         tokenStoreSubscription = tokenStore.objectWillChange.sink { [weak self] in
             self?.objectWillChange.send()
             // objectWillChange fires before the dict mutation lands;
-            // hop to the next runloop tick so we read the new state.
+            // hop to the next runloop tick to read the new state.
             DispatchQueue.main.async { [weak self] in self?.pushAuthTokenSnapshot() }
         }
         // Initial seed in case tokens were already loaded from disk
@@ -85,10 +88,9 @@ public final class SMAPIAuthManager: ObservableObject {
     ///
     /// Service-descriptor fetching is delegated to `MusicServiceCatalog`,
     /// which owns the SOAP call and the per-household sid → name table.
-    /// We then derive `availableServices` from the catalog's published
-    /// descriptors so existing UI code (BrowseView, MusicServicesView)
-    /// keeps reading from this manager without needing to migrate to the
-    /// catalog directly. The ambassador speaker IP is bound on the
+    /// `availableServices` is derived from the catalog's published
+    /// descriptors so UI code (BrowseView, MusicServicesView) can keep
+    /// reading from this manager. The ambassador speaker IP is bound on the
     /// catalog so its periodic / miss-triggered refresh paths know where
     /// to call.
     public func loadServices(speakerIP: String, musicServicesList: [MusicService]) async {
@@ -117,9 +119,8 @@ public final class SMAPIAuthManager: ObservableObject {
 
     /// Known services that don't support third-party AppLink auth
     private static let unsupportedAppLink: Set<Int> = [
-        37,  // SiriusXM — returns empty auth URL; same Sonos identity-gate refusal as Amazon / YouTube Music
+        37,  // SiriusXM — returns empty auth URL; same Sonos identity-gate refusal as YouTube Music (unverified — Amazon carried this note and turned out to work, see docs/SERVICES.md)
         144, // Calm Radio — AppLink auth fails; use dedicated browse view instead
-        201, // Amazon Music — returns empty auth URL; requires Amazon's own OAuth
         204, // Apple Music — requires native iOS/macOS SDK for OAuth
         284, // YouTube Music — returns empty auth URL; requires Google's own OAuth
         333, // TuneIn (New) — auth polling returns server errors; use existing Sonos account instead
@@ -159,6 +160,12 @@ public final class SMAPIAuthManager: ObservableObject {
                 extractSN(from: entry.sourceURI, into: &snMap)
             }
         }
+        // And whatever each group is playing now: a service linked in the
+        // Sonos app minutes ago has no favorite and no history yet, but
+        // the track the user started there carries the serial.
+        for metadata in manager.groupTrackMetadata.values {
+            extractSN(from: metadata.trackURI, into: &snMap)
+        }
 
         if !snMap.isEmpty {
             serviceSerialNumbers = snMap
@@ -190,8 +197,7 @@ public final class SMAPIAuthManager: ObservableObject {
     /// generic fallback of `1`.
     ///
     /// Generic fallback is `1` because most SMAPI services reject
-    /// SetAVTransportURI with `sn=0` (issue #28 / Radio Paradise — sid
-    /// not in the catalog defaulted to 0 and faulted with UPnP 402).
+    /// SetAVTransportURI with `sn=0` (UPnP 402, Radio Paradise among them).
     /// The few services that legitimately use `sn=0` (TuneIn anonymous,
     /// Sonos Radio, Calm Radio) declare `defaultSerialNumber: 0` in
     /// their catalog `ServiceRules`, so the generic-fallback branch
@@ -221,7 +227,7 @@ public final class SMAPIAuthManager: ObservableObject {
         sonosDebugLog("[SMAPI] startAuth tapped: \(service.name) (id=\(service.id), uri=\(service.secureUri))")
         guard let deviceID, !deviceID.isEmpty, !householdID.isEmpty else {
             sonosDebugLog("[SMAPI] startAuth aborted — missing device identity (deviceID=\(deviceID ?? "<nil>") householdID=\(householdID))")
-            authError = "Device identity not loaded. Try restarting the app."
+            authError = L10n.errSMAPIDeviceIdentity
             return nil
         }
 
@@ -366,7 +372,7 @@ public final class SMAPIAuthManager: ObservableObject {
         // Timeout — suppressed when the loop drained because of
         // cancellation rather than a real timeout.
         guard !Task.isCancelled else { return }
-        authError = "Authentication timed out. Please try again."
+        authError = L10n.errSMAPIAuthTimedOut
         sonosDiagLog(.error, tag: "SMAPI",
                      "Authentication timed out after polling window",
                      context: [
@@ -439,8 +445,6 @@ public final class SMAPIAuthManager: ObservableObject {
         objectWillChange.send()
     }
 
-    // Service-descriptor fetching + parsing now lives in
-    // `MusicServiceCatalog` / `MusicServiceCatalogParser`. `loadServices`
-    // above delegates to the catalog and reads back the parsed
-    // descriptors.
+    // Service-descriptor fetching + parsing lives in
+    // `MusicServiceCatalog` / `MusicServiceCatalogParser`.
 }

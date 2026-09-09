@@ -9,12 +9,10 @@ import SonosKit
 import Sparkle
 
 /// True iff the current build's `Info.plist` carries a non-empty
-/// `SUFeedURL`. Sparkle 2 needs that URL to know where to look for
-/// updates; without it the framework can't operate, and we fall back
-/// to the GitHub-API `UpdateChecker` notification path. The keys are
-/// substituted at release time from environment-driven build settings
-/// (`SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_KEY`). Forks and ad-hoc dev
-/// builds leave them empty so Sparkle stays inert.
+/// `SUFeedURL`. Without it Sparkle stays inert and the GitHub-API
+/// `UpdateChecker` notification path is used. The keys are substituted at
+/// release time from `SPARKLE_FEED_URL` / `SPARKLE_PUBLIC_KEY`; forks and
+/// ad-hoc dev builds leave them empty.
 private var sparkleFeedURLConfigured: Bool {
     let raw = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String ?? ""
     let trimmed = raw.trimmingCharacters(in: .whitespaces)
@@ -29,6 +27,10 @@ private var sparkleFeedURLConfigured: Bool {
 
 extension Notification.Name {
     static let openSettings = Notification.Name("openSettings")
+    /// Asks an already-open Settings window to switch tab (object: Int tag).
+    static let settingsSelectTab = Notification.Name("settingsSelectTab")
+    /// Asks an already-open Help window to show a topic (object: HelpTopic rawValue).
+    static let helpSelectTopic = Notification.Name("helpSelectTopic")
     static let menuPlayPause = Notification.Name("menuPlayPause")
     static let menuNextTrack = Notification.Name("menuNextTrack")
     static let menuPreviousTrack = Notification.Name("menuPreviousTrack")
@@ -41,27 +43,28 @@ extension Notification.Name {
 
 /// Keeps the app running when the main window is closed so it stays available
 /// in the menu bar / dock and can be reopened (Window > Open Choragus, ⌘0, or
-/// the menu-bar control). Without this, closing the single-instance `Window`
-/// scene terminated the whole app.
+/// the menu-bar control).
 final class ChoragusAppDelegate: NSObject, NSApplicationDelegate {
+
+    /// Set by the app's composition root at first appearance. An explicit
+    /// reference rather than `SonosManager.current`, so the shutdown path
+    /// does not reach its own state through a process-wide global.
+    weak var manager: SonosManager?
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
 
-    /// State restoration can resurrect the main window somewhere no one can
-    /// see it: on a Space that isn't currently displayed (loginwindow
-    /// relaunches after a reboot land on whatever Space macOS remembered,
-    /// while the user is looking at Desktop 1), or on coordinates that no
-    /// longer exist because the two identical monitors swapped identities at
-    /// boot. Every window-server metric still reports the window "on screen",
-    /// so nothing downstream notices. Rescue it once launch has settled.
+    /// State restoration can resurrect the main window on a Space that isn't
+    /// displayed (login relaunch) or on coordinates that no longer exist
+    /// (displays swapped identity at boot), while every window-server metric
+    /// still reports it "on screen". Rescue it once launch has settled.
     ///
     /// The SwiftUI scene mounts asynchronously and `WindowFrameAutosaver`
-    /// applies the saved frame a runloop tick after that, so the check can't
-    /// run immediately. A single fixed delay is fragile at reboot login —
-    /// exactly when the machine is most loaded — so re-check at 1 s / 3 s /
-    /// 6 s and stop at the first attempt that finds the window. Rescuing at
-    /// most once means a window the user closes later is never yanked back.
+    /// applies the saved frame a tick later, so a single fixed delay is
+    /// fragile at reboot login. Re-check at 1 s / 3 s / 6 s and stop at the
+    /// first attempt that finds the window, so a window the user closes later
+    /// is never pulled back.
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.rescueMainWindowWhenSettled()
     }
@@ -105,12 +108,10 @@ final class ChoragusAppDelegate: NSObject, NSApplicationDelegate {
         // doesn't steal focus. Collection behavior is restored a tick
         // later — the move happens during ordering.
         //
-        // Deliberately NOT gated on `isOnActiveSpace`: a window restored
-        // visible on another Space or display is at the user's chosen
-        // location — yanking it to the active Space on every relaunch
-        // moved the window when nothing was wrong (reported: "put it in
-        // its current location"). The ghost this rescue exists for (#73)
-        // is never ordered in at all, so `isVisible` alone identifies it.
+        // Not gated on `isOnActiveSpace`: a window restored visible on
+        // another Space or display is at the user's chosen location. The
+        // ghost this rescue exists for (#73) is never ordered in at all, so
+        // `isVisible` alone identifies it.
         if !window.isVisible {
             let saved = window.collectionBehavior
             window.collectionBehavior.insert(.moveToActiveSpace)
@@ -123,11 +124,11 @@ final class ChoragusAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Best-effort GENA unsubscribe on quit. Orphaned subscriptions make the
-    /// speaker burn a connect-timeout per dead callback before delivering to
-    /// live subscribers (measured 6–14 s NOTIFY latency). ⌘Q now cleans up;
-    /// hard kills still orphan, bounded by the 10-minute lease.
+    /// speaker burn a connect-timeout per dead callback before delivering
+    /// NOTIFY to live subscribers. Hard kills still orphan, bounded by the
+    /// 10-minute lease.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let manager = SonosManager.current else { return .terminateNow }
+        guard let manager else { return .terminateNow }
         Task { @MainActor in
             await manager.unsubscribeAllForShutdown()
             sender.reply(toApplicationShouldTerminate: true)
@@ -140,29 +141,60 @@ final class ChoragusAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+
+// MARK: - Service injection
+
+extension View {
+    /// Injects `SonosManager` and its extracted collaborators as one unit.
+    ///
+    /// Every root that hosts Choragus views must apply this. `NSHostingController`
+    /// roots and separate `Scene`s inherit nothing from the main window, and a
+    /// missing `@Environment(T.self)` for an `@Observable` type is a runtime trap
+    /// with no compile-time signal. One modifier means a root cannot be
+    /// half-injected and a new collaborator is a one-line change here.
+    func choragusServices(_ manager: SonosManager) -> some View {
+        environment(manager)
+            .environment(manager.topology)
+            .environment(manager.volume)
+            .environment(manager.library)
+            .environment(manager.queue)
+            .environment(\.eqService, manager.eq)
+    }
+}
+
+/// `EQServiceProtocol` reaches views through an `EnvironmentKey` rather than
+/// `.environment(object)`: its conformer `RenderingControlService` is not
+/// `@Observable`, and EQ is a set of verbs with no observable state.
+///
+/// The value is optional only because `EnvironmentKey.defaultValue` is
+/// non-isolated and `EQServiceProtocol` is `@MainActor`, so a stand-in cannot
+/// be constructed here. A missed injection is caught by the
+/// `@Environment(TopologyStore.self)` trap in `.choragusServices`, not here.
+private struct EQServiceKey: EnvironmentKey {
+    static let defaultValue: (any EQServiceProtocol)? = nil
+}
+
+extension EnvironmentValues {
+    var eqService: (any EQServiceProtocol)? {
+        get { self[EQServiceKey.self] }
+        set { self[EQServiceKey.self] = newValue }
+    }
+}
+
 @main
 struct ChoragusApp: App {
 
     @NSApplicationDelegateAdaptor(ChoragusAppDelegate.self) private var appDelegate
 
-    /// Window title. In Debug builds appends the per-build tag
-    /// injected into the custom `ChoragusBuildTag` Info.plist key
-    /// (e.g. "Choragus B1437") so the running build is identifiable
-    /// when several have accumulated in macOS's Local Network
-    /// permissions list.
+    /// Window title. Debug builds append the tag from the custom
+    /// `ChoragusBuildTag` Info.plist key so the running build is
+    /// identifiable. Builds that don't set `CHORAGUS_BUILD_TAG` leave the
+    /// literal `$(CHORAGUS_BUILD_TAG)` placeholder; the `hasPrefix("$(")`
+    /// check falls back to plain "Choragus".
     ///
-    /// Release builds (and any build that doesn't set the
-    /// `CHORAGUS_BUILD_TAG` xcodebuild variable) leave the literal
-    /// `$(CHORAGUS_BUILD_TAG)` placeholder in the bundled plist; the
-    /// `hasPrefix("$(")` check below detects that and falls back to
-    /// plain "Choragus".
-    ///
-    /// The previous version read CFBundleVersion. That changed on
-    /// every dev build because the script set CURRENT_PROJECT_VERSION
-    /// to a per-minute timestamp, and macOS's TCC re-prompts for
-    /// Local Network access on every CFBundleVersion change. The
-    /// custom key is invisible to TCC and keeps the LAN permission
-    /// stable across rebuilds.
+    /// A custom key rather than CFBundleVersion: macOS TCC re-prompts for
+    /// Local Network access on every CFBundleVersion change, and the custom
+    /// key is invisible to TCC.
     private static var windowTitle: String {
         _ = SchemaCompat.hashSeed.hashValue
         _ = _resolveCompatibilityRevision()
@@ -176,37 +208,33 @@ struct ChoragusApp: App {
         #endif
     }
 
-    @StateObject private var sonosManager = SonosManager()
+    @State private var sonosManager = SonosManager()
     @StateObject private var presetManager = PresetManager()
     @StateObject private var playHistoryManager = PlayHistoryManager()
     @StateObject private var playlistScanner = PlaylistServiceScanner()
     @StateObject private var smapiManager = SMAPIAuthManager()
     @StateObject private var plexAuth = PlexAuthManager.shared
     @StateObject private var lastFMScrobbler = LastFMScrobbler()
-    /// Holds scrobble-manager init deferred until playHistoryManager is ready.
-    /// Using @StateObject with a lazy init workaround: we build it inside a
-    /// container and pass it in.
+    /// Defers scrobble-manager construction until playHistoryManager is ready.
     @StateObject private var scrobbleManagerHolder = ScrobbleManagerHolder()
-    /// Lyrics + Last.fm metadata services share a single SQLite cache
-    /// in the same DB file as play history. Built once, injected as
-    /// MainActor-isolated holders so the SwiftUI environment can carry
-    /// non-ObservableObject types without ceremony.
+    /// Lyrics + Last.fm metadata services share a single SQLite cache in the
+    /// play-history DB file. Injected as MainActor-isolated holders so the
+    /// SwiftUI environment can carry non-ObservableObject types.
     @StateObject private var metadataServicesHolder = MetadataServicesHolder()
     @StateObject private var artCoordinatorHolder = ArtCoordinatorHolder()
 
-    /// Sparkle 2 observer. Started only on builds whose `Info.plist`
-    /// has been release-signed with a non-empty `SUFeedURL`. Dev / fork
-    /// builds get an inert observer with `updater == nil` and rely on
-    /// `UpdateChecker.swift`'s GitHub-API "view release on web" alert
-    /// instead. Holds the `SPUStandardUpdaterController` strongly so the
-    /// underlying Sparkle controller's lifetime tracks the App.
+    /// Sparkle 2 observer. Started only on builds with a non-empty
+    /// `SUFeedURL`; dev / fork builds get an inert observer with
+    /// `updater == nil` and use the GitHub-API `UpdateChecker` instead.
+    /// Holds the `SPUStandardUpdaterController` strongly so its lifetime
+    /// tracks the App.
     @StateObject private var sparkleObserver = SparkleUpdaterObserver.makeForApp()
 
     var body: some Scene {
         Window("Choragus", id: "main") {
             ContentView()
                 .background(MainWindowOpenerCapture())
-                .environmentObject(sonosManager)
+                .choragusServices(sonosManager)
                 .environmentObject(sonosManager.positionTracker)
                 .environmentObject(sonosManager.anchorTracker)
                 .environmentObject(presetManager)
@@ -226,15 +254,17 @@ struct ChoragusApp: App {
                     // Spotlight / Siri) which run outside the SwiftUI
                     // environment and need reachable references.
                     SonosManager.current = sonosManager
+                    appDelegate.manager = sonosManager
                     PresetManager.current = presetManager
-                    // Wire Apple Music catalog as the preferred artwork source.
-                    // nil-return (not operational / no match) falls through to
-                    // the existing iTunes Search path, so this is purely
-                    // additive. The closures capture the provider STRONGLY —
-                    // `makeCurrent()` returns a fresh instance and nothing
-                    // else retains it; a weak capture deallocated it the
-                    // moment onAppear returned, permanently disabling every
-                    // Apple Music art/genre lookup.
+                    SMAPIAuthManager.current = smapiManager
+                    installMCPAppHooks(sonosManager: sonosManager)
+                    ChoragusMCPServer.shared.applySettings()
+                    // Wire Apple Music catalog as the preferred artwork source;
+                    // a nil return falls through to the iTunes Search path.
+                    // The closures must capture the provider strongly —
+                    // `makeCurrent()` returns a fresh instance that nothing
+                    // else retains, so a weak capture is deallocated as soon
+                    // as onAppear returns.
                     let amProvider = AppleMusicProviderFactory.makeCurrent()
                     AlbumArtSearchService.appleMusicAlbumArtLookup = { [amProvider] artist, album in
                         guard !album.isEmpty else { return nil }
@@ -254,27 +284,20 @@ struct ChoragusApp: App {
                         return (details.artworkURL?.absoluteString, details.genreNames)
                     }
                     MusicMetadataService.appleMusicAlbumEnrichment = { [amProvider] artist, album in
-                        // Use song-level lookup with first track from the album
-                        // to surface the album's catalog genres (the song
-                        // detail carries genre tags; standalone album lookup
-                        // returns only artwork).
+                        // Song-level lookup: song details carry genre tags,
+                        // standalone album lookup returns only artwork.
                         guard let song = await amProvider.lookupSong(title: album, artist: artist) else { return nil }
                         return (song.artworkURL?.absoluteString, song.genreNames)
                     }
-                    // Register defaults for new toggles before any
-                    // view reads them — keeps them ON for fresh
-                    // installs / fresh sandbox containers.
+                    // Register defaults before any view reads them.
                     UserDefaults.standard.register(defaults: [
-                        // Off by default — surprising on a trackpad
-                        // and easy to enable from Settings if wanted.
+                        // Off by default — surprising on a trackpad.
                         UDKey.scrollVolumeEnabled: false,
                         UDKey.middleClickMuteEnabled: true,
-                        // On by default — the keyboard media row is the
-                        // expected control surface. Users hit by stray
-                        // Bluetooth AVRCP play commands turn it off.
+                        // On by default; users hit by stray Bluetooth AVRCP
+                        // play commands turn it off.
                         UDKey.mediaKeysEnabled: true,
-                        // Lyrics nudged 2 s earlier by default — Sonos
-                        // position polling lags true playback by ~1–2 s
+                        // Sonos position polling lags true playback by ~1–2 s
                         // and most LRCs are tuned to as-sung timing.
                         UDKey.lyricsGlobalOffset: -2.0,
                     ])
@@ -282,11 +305,14 @@ struct ChoragusApp: App {
                         .appendingPathComponent("diagnostics.sqlite").path
                     DiagnosticsService.shared.attach(repository: DiagnosticsRepository(dbPath: diagnosticsPath))
                     sonosManager.playHistoryManager = playHistoryManager
-                    // SMAPI URI resolver — direct-play branch invokes
-                    // this for `x-sonosapi-stream:` URIs from search /
-                    // browse so the speaker receives the resolved
-                    // direct stream URL (the only shape current Sonos
-                    // firmware accepts on AVTransport for SMAPI radio).
+                    PlexPlaybackReporter.shared.positionProvider = { [weak sonosManager] id in
+                        sonosManager?.positionAnchor(coordinatorID: id)
+                    }
+                    sonosManager.plexPlaybackReporter = PlexPlaybackReporter.shared
+                    // SMAPI URI resolver for `x-sonosapi-stream:` URIs from
+                    // search / browse: current Sonos firmware only accepts
+                    // the resolved direct stream URL on AVTransport for
+                    // SMAPI radio.
                     sonosManager.smapiURIResolver = { [weak smapiManager] sid, itemID in
                         try await smapiManager?.resolveMediaURI(serviceID: sid, itemID: itemID)
                     }
@@ -295,17 +321,16 @@ struct ChoragusApp: App {
                     MainThreadHeartbeat.shared.start()
                     #endif
                     MenuBarController.shared.setup(sonosManager: sonosManager)
-                    // Hardware media keys (F7/F8/F9) via MPRemoteCommandCenter
-                    // and a sandbox-safe volume chord (⌃⌥↑/↓/M) via local
-                    // NSEvent monitor. The transport half honours
-                    // `UDKey.mediaKeysEnabled`; the volume chord is always on.
+                    // Media keys (F7/F8/F9) via MPRemoteCommandCenter honour
+                    // `UDKey.mediaKeysEnabled`; the volume chord (⌃⌥↑/↓/M)
+                    // via local NSEvent monitor is always on.
                     MediaKeyHandler.shared.start(sonosManager: sonosManager)
-                    // Load SMAPI services if enabled
                     if smapiManager.isEnabled, let speaker = sonosManager.groups.first?.coordinator {
                         Task { await smapiManager.loadServices(speakerIP: speaker.ip, musicServicesList: sonosManager.musicServicesList) }
                     }
                     WindowManager.shared.playHistoryManager = playHistoryManager
                     WindowManager.shared.sonosManager = sonosManager
+                    WindowManager.shared.smapiManager = smapiManager
                     WindowManager.shared.lyricsService = metadataServicesHolder
                         .ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager)
                         .lyrics
@@ -318,18 +343,11 @@ struct ChoragusApp: App {
                     WindowManager.shared.artCoordinator = artCoordinatorHolder
                         .ensureReady(sonosManager: sonosManager, playHistory: playHistoryManager)
                     WindowManager.shared.colorScheme = colorScheme
-                    // Sparkle (when active) handles its own scheduled
-                    // checks via `SUEnableAutomaticChecks` /
-                    // `SUScheduledCheckInterval`. The GitHub-API
-                    // `UpdateChecker` is the dev / fork fallback —
-                    // notification-only, no install path — and only
-                    // runs when Sparkle isn't configured.
-                    //
-                    // Sparkle is started AFTER the main window is on
-                    // screen so its first-run permission prompt
-                    // (modal sheet) doesn't block initial app rendering.
-                    // Brief async hop so the window has actually
-                    // mounted before we kick the updater off.
+                    // Sparkle handles its own scheduled checks; the GitHub-API
+                    // `UpdateChecker` is the notification-only fallback when
+                    // Sparkle isn't configured. Sparkle starts after the main
+                    // window has mounted so its first-run permission prompt
+                    // (modal sheet) doesn't block initial rendering.
                     if sparkleObserver.updater != nil {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                             sparkleObserver.startUpdaterAfterMainWindow()
@@ -337,20 +355,16 @@ struct ChoragusApp: App {
                     } else {
                         UpdateChecker.shared.checkInBackgroundIfDue()
                     }
-                    // Backfill missing/ephemeral artwork from iTunes for
-                    // recent history entries. Throttled and capped, so
-                    // running it on every launch is cheap; the
-                    // attempted-key cache stops it re-searching tracks
-                    // that already failed.
+                    // Backfill missing/ephemeral artwork for recent history
+                    // entries. Throttled and capped; the attempted-key cache
+                    // stops re-searching tracks that already failed.
                     Task.detached { @MainActor in
                         try? await Task.sleep(nanoseconds: 3_000_000_000)
                         await playHistoryManager.backfillMissingArtwork()
                     }
-                    // Genre backfill via MusicMetadataService.artistInfo
-                    // (Wikipedia / MusicBrainz / Last.fm). Powers the
-                    // Club Vis genre-matched tile pool. Same launch-time
-                    // pattern as the artwork backfill — staggered after
-                    // it so the network bursts don't pile up.
+                    // Genre backfill for the Club Vis genre-matched tile
+                    // pool, staggered after the artwork backfill so the
+                    // network bursts don't pile up.
                     Task.detached { @MainActor in
                         try? await Task.sleep(nanoseconds: 5_000_000_000)
                         let services = metadataServicesHolder.ensureReady(
@@ -361,34 +375,25 @@ struct ChoragusApp: App {
                 }
                 .onChange(of: sonosManager.appearanceMode) {
                     WindowManager.shared.colorScheme = colorScheme
+                    Self.applyAppAppearance(sonosManager.appearanceMode)
                 }
-                // Per-panel minimum widths are enforced from inside
-                // ContentView (`.frame(minWidth: requiredMinWidth, …)`)
-                // so the window floor tracks browse / queue visibility.
-                // Setting a static minimum here would lock the floor at
-                // that value and override the dynamic one.
+                .onAppear {
+                    Self.applyAppAppearance(sonosManager.appearanceMode)
+                }
+                // No static minimum here: ContentView enforces a dynamic
+                // `minWidth` that tracks browse / queue visibility.
                 .navigationTitle(Self.windowTitle)
-                .preferredColorScheme(colorScheme)
         }
         .windowStyle(.titleBar)
         .defaultSize(width: 900, height: 550)
 
-        // Standard macOS Preferences window — separate non-modal scene
-        // wired automatically by SwiftUI to the system "Settings…" menu
-        // item with ⌘, and to the `@Environment(\.openSettings)` action
-        // used inside `ContentView`. Replaced an earlier `.sheet`-based
-        // presentation that locked the main window into a modal state,
-        // which (a) blocked the user from interacting with other
-        // Choragus windows while Settings was open and (b) prevented
-        // Sparkle's "Install and Relaunch" alert from surfacing during
-        // an in-app update because it tried to attach to the same
-        // already-modal window. The Settings scene needs the same
-        // environment-object injections as the main WindowGroup so
-        // every preferences pane that reads SonosManager / SMAPIAuth /
-        // Plex / scrobbling state finds its provider.
+        // Non-modal Settings scene, wired by SwiftUI to the "Settings…"
+        // menu item (⌘,) and `@Environment(\.openSettings)`. Must stay
+        // non-modal: a modal main window blocks Sparkle's "Install and
+        // Relaunch" alert. Needs the same injections as the main window.
         Settings {
             SettingsView()
-                .environmentObject(sonosManager)
+                .choragusServices(sonosManager)
                 .environmentObject(sonosManager.positionTracker)
                 .environmentObject(sonosManager.anchorTracker)
                 .environmentObject(presetManager)
@@ -403,21 +408,16 @@ struct ChoragusApp: App {
                 .environmentObject(metadataServicesHolder.ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager).lyricsCoordinator)
                 .environmentObject(artCoordinatorHolder.ensureReady(sonosManager: sonosManager, playHistory: playHistoryManager))
                 .environmentObject(sparkleObserver)
-                .preferredColorScheme(colorScheme)
         }
 
         .commands {
             // No document model, so hide File > New. Keep the Edit menu
-            // (undo/redo, cut/copy/paste, select-all) intact — Settings has
-            // text fields for credentials, and replacing those groups breaks
-            // ⌘V keyboard-shortcut resolution even if the menu items aren't
-            // used otherwise.
+            // intact — replacing those groups breaks ⌘V resolution in
+            // Settings credential fields.
             CommandGroup(replacing: .newItem) {}
 
-            // Reopen / focus the main window from the standard Window menu.
-            // File > New is hidden (no document model), so when the main
-            // window is closed there was no standard-menu path back to it —
-            // only the menu-bar-extra popover (issue #60 follow-up).
+            // Reopen / focus the main window from the standard Window menu
+            // (issue #60).
             CommandGroup(after: .windowList) {
                 Button(L10n.openChoragus) {
                     MainWindowHolder.shared.show()
@@ -432,9 +432,8 @@ struct ChoragusApp: App {
                 }
             }
 
-            // Check for Updates — sits just below the About item in the app menu.
-            // Routes to Sparkle when the release-time SUFeedURL is set;
-            // otherwise drops to the GitHub-API notification fallback.
+            // Check for Updates — Sparkle when SUFeedURL is set, otherwise
+            // the GitHub-API notification fallback.
             CommandGroup(after: .appInfo) {
                 if sparkleObserver.updater != nil {
                     CheckForUpdatesMenuItem(observer: sparkleObserver)
@@ -445,8 +444,7 @@ struct ChoragusApp: App {
                 }
             }
 
-            // Help menu — replaces the default to surface real help content and
-            // a link to the project's GitHub repository.
+            // Help menu — help window plus GitHub links.
             CommandGroup(replacing: .help) {
                 Button(L10n.choragusHelp) {
                     WindowManager.shared.openHelp()
@@ -464,17 +462,12 @@ struct ChoragusApp: App {
                 }
             }
 
-            // Settings menu item — automatically wired by the
-            // `Settings { }` scene above. SwiftUI replaces the default
-            // "Settings…" item with one bound to that scene and the
-            // ⌘, shortcut. Removing our previous CommandGroup
-            // override; the system handles it now.
+            // Settings menu item is wired automatically by the `Settings { }`
+            // scene above.
 
-            // View — panel toggles. Items are injected into the system-provided
-            // View menu (via the .sidebar placement) instead of creating a
-            // duplicate top-level "View" menu. Shortcuts chosen to avoid Apple
-            // Music/Finder conflicts: ⌘B (Browse), ⌥⌘U (Up Next / queue),
-            // ⇧⌘S (Stats).
+            // View — panel toggles, injected into the system View menu via
+            // the .sidebar placement. Shortcuts avoid Apple Music / Finder
+            // conflicts: ⌘B (Browse), ⌥⌘U (Up Next / queue), ⇧⌘S (Stats).
             CommandGroup(after: .sidebar) {
                 Divider()
 
@@ -497,17 +490,15 @@ struct ChoragusApp: App {
                     NotificationCenter.default.post(name: .menuShowStats, object: nil)
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
-                // Karaoke (⌘K) and Back of the Club (⌘J) live under
-                // the dedicated `CommandMenu(L10n.visualisationMenu)`
-                // top-level menu, not the View menu, so they're
-                // grouped with future visualisations rather than mixed
-                // with panel toggles.
+
+                Button(L10n.alarms) {
+                    WindowManager.shared.openAlarms()
+                }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
             }
 
-            // Top-level Visualisation menu. Karaoke + Back of the
-            // Club (and any future visualisations) live here so the
-            // feature is discoverable independently of the View
-            // menu's panel toggles.
+            // Top-level Visualisation menu — Karaoke (⌘K) and Back of the
+            // Club (⌘J), kept separate from the View menu's panel toggles.
             CommandMenu(L10n.visualisationMenu) {
                 Button(L10n.karaoke) {
                     WindowManager.shared.openKaraokeLyricsForActiveGroup()
@@ -556,6 +547,19 @@ struct ChoragusApp: App {
         case .dark: return .dark
         }
     }
+
+    /// Theme is applied at the AppKit level, not via per-scene
+    /// `preferredColorScheme`: with two windows open, a `nil` scheme from
+    /// one does not clear the scheme the other still supplies (System
+    /// renders as a mixed theme). `NSApp.appearance = nil` reverts every
+    /// window atomically; per-window schemes (karaoke) still override.
+    static func applyAppAppearance(_ mode: AppearanceMode) {
+        switch mode {
+        case .system: NSApp.appearance = nil
+        case .light:  NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:   NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
 }
 
 /// Menu item bound to the App-level `SparkleUpdaterObserver`. The
@@ -600,15 +604,12 @@ final class SparkleUpdaterObserver: ObservableObject {
     /// without an app relaunch.
     @Published var betaChannelEnabled: Bool = UserDefaults.standard.bool(forKey: UDKey.sparkleBetaChannelEnabled)
 
-    /// Convenience factory used by the App-level `@StateObject` initializer.
-    /// Reads `SUFeedURL` from `Info.plist`; when absent / unsubstituted /
-    /// blank, returns an inert observer.
+    /// Factory for the App-level `@StateObject`. Returns an inert observer
+    /// when `SUFeedURL` is absent / unsubstituted / blank.
     ///
-    /// `startingUpdater: false` so Sparkle's first-run permission
-    /// prompt doesn't fire during App init — that prompt was modal-
-    /// blocking the main window from rendering until the user
-    /// responded. Caller must invoke `startUpdaterAfterMainWindow()`
-    /// from the main `WindowGroup`'s `.onAppear` instead.
+    /// `startingUpdater: false` so Sparkle's modal first-run permission
+    /// prompt doesn't fire during App init and block the main window from
+    /// rendering. Caller must invoke `startUpdaterAfterMainWindow()`.
     static func makeForApp() -> SparkleUpdaterObserver {
         guard sparkleFeedURLConfigured else {
             return SparkleUpdaterObserver(controller: nil)
@@ -625,9 +626,8 @@ final class SparkleUpdaterObserver: ObservableObject {
     }
 
     /// Starts the updater. Idempotent. Called from the main window's
-    /// `.onAppear` so the first-run permission prompt (if any) opens
-    /// against an already-rendered app window instead of holding the
-    /// window offscreen until the user responds.
+    /// `.onAppear` so the first-run permission prompt opens against an
+    /// already-rendered window.
     func startUpdaterAfterMainWindow() {
         guard let controller else { return }
         controller.startUpdater()
@@ -648,12 +648,9 @@ final class SparkleUpdaterObserver: ObservableObject {
         observations.append(updater.observe(\.lastUpdateCheckDate, options: [.new]) { [weak self] _, _ in
             Task { @MainActor in self?.lastUpdateCheckDate = updater.lastUpdateCheckDate }
         })
-        // Sparkle's first-run permission prompt and any external
-        // change to these defaults (Settings panel in another window,
-        // sparkle CLI tooling, manual `defaults write`) need to flow
-        // back into our `@Published` mirror, otherwise the Settings
-        // toggle reads stale and the user thinks their click didn't
-        // take effect.
+        // Sparkle's first-run permission prompt and external changes to
+        // these defaults (`defaults write`, another window) must flow back
+        // into the `@Published` mirror or the Settings toggles read stale.
         observations.append(updater.observe(\.automaticallyChecksForUpdates, options: [.new]) { [weak self] _, change in
             Task { @MainActor in self?.automaticallyChecksForUpdates = change.newValue ?? false }
         })
@@ -706,12 +703,73 @@ final class SparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate {
     }
 }
 
-/// Holds the `ScrobbleManager` as an `ObservableObject` that gets lazily
-/// initialized with its dependencies on first access. `ScrobbleManager` needs
-/// `PlayHistoryManager` (for the repository) and a list of concrete
-/// `ScrobbleService` implementations — those aren't available during
-/// `@StateObject`'s default-construction phase, so we defer instantiation
-/// until the view body runs (where the other managers are already alive).
+extension ChoragusApp {
+    /// Windows, lyrics, artist and album metadata and scrobbling live in
+    /// the app target; the MCP server calls them back through these
+    /// closures so SonosKit stays free of app dependencies.
+    @MainActor
+    func installMCPAppHooks(sonosManager: SonosManager) {
+        let server = ChoragusMCPServer.shared
+        server.windowOpener = { window, group in
+            let windows = WindowManager.shared
+            NSApp.activate(ignoringOtherApps: true)
+            switch window {
+            case "club_vis":
+                if let group { windows.openClubVis(group: group); return true }
+                return windows.openClubVisForActiveGroup()
+            case "karaoke":
+                if let group { windows.openKaraokeLyrics(group: group); return true }
+                return windows.openKaraokeLyricsForActiveGroup()
+            case "playlist_manager":
+                if let group { windows.openQueueLibrary(group: group); return true }
+                return windows.openQueueLibraryForActiveGroup()
+            case "listening_stats": windows.openPlayHistory(); return true
+            case "alarms": windows.openAlarms(); return true
+            case "diagnostics": windows.openDiagnostics(); return true
+            case "home_theater_eq": windows.openHomeTheaterEQ(); return true
+            case "playlist_builder": windows.openPlaylistBuilder(); return true
+            case "help": windows.openHelp(); return true
+            default: return false
+            }
+        }
+        let services = metadataServicesHolder.ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager)
+        server.lyricsProvider = { [service = services.lyrics.service] artist, title, album, uri in
+            guard let lyrics = await service.fetch(artist: artist, title: title, album: album, trackURI: uri) else { return nil }
+            return (lyrics.plainText, lyrics.synced, lyrics.isInstrumental)
+        }
+        server.artistInfoProvider = { [service = services.metadata.service] name in
+            guard let info = await service.artistInfo(name: name) else { return nil }
+            var out: [String: Any] = ["artist": info.name, "tags": info.tags, "similar_artists": info.similarArtists]
+            if let bio = info.bio { out["biography"] = bio }
+            if let listeners = info.listeners { out["listeners"] = listeners }
+            if let url = info.wikipediaURL { out["wikipedia"] = url }
+            return out
+        }
+        server.albumInfoProvider = { [service = services.metadata.service] artist, album in
+            guard let info = await service.albumInfo(artist: artist, album: album) else { return nil }
+            var out: [String: Any] = ["album": info.title, "artist": info.artist, "tags": info.tags,
+                                      "tracks": info.tracks.map(\.title)]
+            if let released = info.releaseDate { out["released"] = released }
+            if let summary = info.summary { out["summary"] = summary }
+            return out
+        }
+        let scrobbler = scrobbleManagerHolder.ensureReady(playHistory: playHistoryManager, lastfm: lastFMScrobbler)
+        server.scrobbleStatusProvider = { [scrobbler] in
+            ["services": scrobbler.services.map { service in
+                let stats = scrobbler.stats(for: service)
+                return ["name": service.displayName,
+                        "enabled": scrobbler.isServiceEnabled(service),
+                        "pending": scrobbler.pendingCount(for: service),
+                        "sent": stats.sent, "ignored": stats.ignored, "failed": stats.failed]
+            }]
+        }
+        server.scrobbleSender = { [scrobbler] in await scrobbler.scrobblePending() }
+    }
+}
+
+/// Lazily constructs the `ScrobbleManager` on first access. Its dependencies
+/// (`PlayHistoryManager`, `ScrobbleService` implementations) aren't available
+/// during `@StateObject` default construction, only once the view body runs.
 @MainActor
 final class ScrobbleManagerHolder: ObservableObject {
     private var instance: ScrobbleManager?
@@ -727,10 +785,8 @@ final class ScrobbleManagerHolder: ObservableObject {
     }
 }
 
-/// Boots the metadata cache + lyrics + Last.fm-info services lazily.
-/// Cache lives in the same SQLite file as play history so users only
-/// have one DB to back up / clear. Both downstream services share
-/// the cache instance.
+/// Lazily boots the metadata cache + lyrics + Last.fm-info services. The
+/// cache shares the play-history SQLite file so there is one DB to back up.
 @MainActor
 final class MetadataServicesHolder: ObservableObject {
     struct Services {
@@ -749,9 +805,8 @@ final class MetadataServicesHolder: ObservableObject {
         let metadata = MusicMetadataService(tokenStore: lastfm.tokenStore, cache: cache)
         let prewarm = MetadataPrewarmService(lyricsService: lyrics, metadataService: metadata)
         let lyricsCoordinator = LyricsCoordinator(lyricsService: lyrics)
-        // Wire the prewarmer immediately so lyrics+about hydrate in the
-        // background for every track that plays, regardless of panel
-        // collapse state or which group is on screen.
+        // Prewarmer hydrates lyrics + about for every track that plays,
+        // regardless of panel state or which group is on screen.
         prewarm.attach(to: sonosManager)
         let services = Services(
             lyrics: LyricsServiceHolder(service: lyrics),
@@ -764,13 +819,9 @@ final class MetadataServicesHolder: ObservableObject {
     }
 }
 
-/// Opens the custom Choragus About window. Replaces
-/// `orderFrontStandardAboutPanel` because that panel is fixed at ~280 pt
-/// wide — too cramped for the etymology block, tagline, and credits sections.
-///
-/// Internal (not private) so the Settings → Software Updates pane can
-/// open it from the clickable version label there. Also wired to the
-/// app-menu About item.
+/// Opens the custom About window. `orderFrontStandardAboutPanel` is fixed
+/// at ~280 pt wide, too narrow for the etymology and credits sections.
+/// Internal so the Settings → Software Updates pane can open it too.
 @MainActor
 func showAboutPanel() {
     ChoragusAboutWindow.show()
@@ -803,22 +854,14 @@ enum ChoragusAboutWindow {
     }
 }
 
-/// SwiftUI rendering of the About content. Sized for breathing room: the
-/// Greek glyph isn't fighting the etymology, the credits sections aren't
-/// crammed into a 280 pt column, and links wrap naturally.
+/// SwiftUI rendering of the About content.
 private struct ChoragusAboutView: View {
-    /// Forces the body to re-evaluate when the user changes the app
-    /// language. Without this, the AppKit-hosted About window keeps
-    /// showing the language that was active the first time it opened —
-    /// SwiftUI doesn't know `L10n.*`'s underlying UserDefaults read
-    /// changed, because nothing in the view tree was observing it.
+    /// Forces the body to re-evaluate on language change. The AppKit-hosted
+    /// window has nothing else observing the UserDefaults key `L10n.*` reads.
     @AppStorage(UDKey.appLanguage) private var appLanguage: String = "en"
 
-    /// Same UserDefaults trick for theme. The About window is hosted
-    /// in an AppKit `NSWindow` with no `@EnvironmentObject` link to
-    /// `SonosManager`, so we observe the persistence key directly and
-    /// re-apply `preferredColorScheme` on every change. Switching the
-    /// Theme picker in Settings then updates the About window live.
+    /// Same for theme: no `@EnvironmentObject` link to `SonosManager` here,
+    /// so the persistence key is observed directly.
     @AppStorage(UDKey.appearanceMode) private var appearanceModeRaw: String = "System"
 
     private var currentColorScheme: ColorScheme? {
@@ -860,8 +903,8 @@ private struct ChoragusAboutView: View {
                 .interpolation(.high)
                 .frame(width: 128, height: 128)
 
-            // Wordmark with light/dark luminosity variants — matches the
-            // karaoke header so the brand mark is consistent across surfaces.
+            // Wordmark with light/dark luminosity variants, shared with the
+            // karaoke header.
             Image("ChoragusTextLogo")
                 .resizable()
                 .scaledToFit()
@@ -873,10 +916,7 @@ private struct ChoragusAboutView: View {
                 .tracking(1.5)
                 .foregroundStyle(.secondary)
 
-            // Serif-italic tagline mirrors the classical Greek brand
-            // concept (the χορηγός as patron of the chorus). New York
-            // is bundled with macOS 11+ and pairs well with the SF-based
-            // wordmark above.
+            // Serif-italic tagline for the classical Greek brand concept.
             Text(L10n.aboutTagline)
                 .font(.system(.title3, design: .serif).italic())
                 .multilineTextAlignment(.center)
@@ -1001,17 +1041,14 @@ private struct ChoragusAboutView: View {
     }
 }
 
-/// Horizontally arranged links that wrap to a new line when the row is
-/// narrower than the combined link widths. SwiftUI's `HStack` truncates
-/// instead of wrapping; building this with `Text` concatenation gives us
-/// natural line breaks while keeping each token clickable.
+/// Link row that wraps on width. `HStack` truncates instead of wrapping;
+/// `Text` concatenation gives natural line breaks with each token clickable.
 private struct FlowingLinkRow: View {
     let links: [(label: String, url: String)]
 
     var body: some View {
-        // `Text` concatenation supports inline tappable links via Markdown
-        // when the string is built with `LocalizedStringKey`. We assemble
-        // a single Text so it wraps naturally on width.
+        // Markdown links stay tappable inside a concatenated `Text` when
+        // built with `LocalizedStringKey`.
         var combined = Text("")
         for (i, link) in links.enumerated() {
             if i > 0 {
@@ -1027,12 +1064,11 @@ private struct FlowingLinkRow: View {
     }
 }
 
-/// Captures SwiftUI's `openWindow` action so the menu-bar "Open Choragus"
-/// popover and the Window-menu command can reopen the single-instance main
-/// `Window` scene after it has been closed (issue #60). `openWindow(id:)` on a
-/// `Window` scene fronts the window if it is open and rebuilds it fresh if
-/// closed — unlike resurrecting the old `NSWindow`, which re-showed a stale
-/// SwiftUI view tree (queue / browse panels not redrawing on reopen).
+/// Captures SwiftUI's `openWindow` action so the menu-bar popover and the
+/// Window-menu command can reopen the main `Window` scene after it has been
+/// closed (issue #60). `openWindow(id:)` fronts the window if open and
+/// rebuilds it if closed; re-showing a closed `NSWindow` brings back a stale
+/// SwiftUI view tree.
 final class MainWindowHolder {
     static let shared = MainWindowHolder()
     var opener: OpenWindowAction?

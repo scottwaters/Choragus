@@ -6,7 +6,16 @@ import SonosKit
 import AppKit
 
 struct DiagnosticsView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    /// Tab to show first; the AI Agent access indicator in the main
+    /// toolbar opens straight onto its own tab.
+    let initialTab: Tab
+
+    init(initialTab: Tab = .log) {
+        self.initialTab = initialTab
+        _activeTab = State(initialValue: initialTab)
+    }
+
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var liveLog: LiveEventLog
     @State private var entries: [DiagnosticEntry] = []
     @State private var levelFilter: LevelFilter = .all
@@ -37,7 +46,7 @@ struct DiagnosticsView: View {
     }
 
     enum Tab: String, CaseIterable, Identifiable {
-        case log, liveEvents, speakers, network
+        case log, liveEvents, speakers, network, mcp
         var id: String { rawValue }
         var displayName: String {
             switch self {
@@ -45,6 +54,7 @@ struct DiagnosticsView: View {
             case .liveEvents: return L10n.diagTabLiveEvents
             case .speakers:   return L10n.diagTabSpeakers
             case .network:    return L10n.diagTabNetwork
+            case .mcp:       return L10n.diagTabMCP
             }
         }
     }
@@ -82,6 +92,8 @@ struct DiagnosticsView: View {
                 speakersTab
             case .network:
                 NetworkDiagnosticsTab(model: networkModel)
+            case .mcp:
+                MCPDiagnosticsTab()
             }
         }
         .frame(minWidth: 720, minHeight: 520)
@@ -280,18 +292,12 @@ struct DiagnosticsView: View {
                 .help(L10n.diagSaveEncryptedLogHelp)
             }
 
-            // When the build carries a maintainer public key (release
-            // build, or dev build with the env var passed through),
-            // expose the encrypted-bundle path. The encrypted bundle
-            // is opaque to GitHub's CDN
-            // and to anyone but the maintainer, so a single button
-            // routing to the public Issues form covers both general
-            // bugs and security-class reports — the security split
-            // only matters when the body is in cleartext, which is
-            // never the case here.
-            //
-            // Dev / fork builds with no key fall back to the public-
-            // tier-scrubbed paths so the report buttons aren't dead.
+            // When the build carries a maintainer public key, expose the
+            // encrypted-bundle path. The bundle is opaque to anyone but the
+            // maintainer, so one button to the public Issues form covers
+            // both general bugs and security-class reports.
+            // Builds with no key fall back to the public-tier-scrubbed
+            // paths so the report buttons aren't dead.
             if BugReportEncryptor.isConfigured {
                 Button {
                     presentEncryptedReportPreview(target: .publicIssue)
@@ -446,7 +452,7 @@ struct DiagnosticsView: View {
             .width(min: 110, ideal: 150)
 
             TableColumn(L10n.diagSpeakerColumnIP) { row in
-                Text("\(row.device.ip):\(row.device.port)")
+                Text("\(row.device.ip):\(String(row.device.port))")
                     .font(.callout.monospaced())
                     .textSelection(.enabled)
             }
@@ -670,7 +676,8 @@ struct DiagnosticsView: View {
         do {
             envelope = try BugReportBundle.assemble(
                 entries: payloadEntries,
-                devices: devicePayload
+                devices: devicePayload,
+                mcp: BugReportBundle.scrubForPublicOutput(ChoragusMCPServer.shared.diagnosticsPayloadWithPayloads(activityLimit: MCPActivityLog.keepLimit))
             )
         } catch {
             encryptedReportError = error.localizedDescription
@@ -757,13 +764,8 @@ struct DiagnosticsView: View {
     /// happen on user confirmation inside `previewSheet`.
     ///
     /// Preview uses `bundleText` (the public-output scrub) so the
-    /// preview matches what `submitEncryptedReport` actually writes
-    /// into the encrypted body. Earlier this used `bundleTextWithPayload`
-    /// (no public scrub) while the bundle itself was also unscrubbed —
-    /// the preview matched the wire content but both still leaked
-    /// `sn=`, LAN IPs, and home paths despite the "encrypted-to-the-
-    /// maintainer" framing implying minimisation. Now both paths apply
-    /// `scrubForPublicOutput`.
+    /// preview matches what `submitEncryptedReport` writes into the
+    /// encrypted body; both paths apply `scrubForPublicOutput`.
     private func presentEncryptedReportPreview(target: EncryptedReportTarget) {
         let rows = selection.isEmpty
             ? filteredEntries
@@ -794,7 +796,7 @@ struct DiagnosticsView: View {
             // scroll horizontally; the whole bundle scrolls vertically.
             // `.fixedSize(horizontal: true, vertical: true)` stops
             // SwiftUI from compressing the Text width to fit the
-            // container, which is what was producing the wordwrap.
+            // container, which would word-wrap it.
             ScrollView([.horizontal, .vertical]) {
                 Text(pending.bundleText)
                     .font(.system(.caption, design: .monospaced))
@@ -893,31 +895,24 @@ struct DiagnosticsView: View {
         do {
             envelope = try BugReportBundle.assemble(
                 entries: payloadEntries,
-                devices: devicePayload
+                devices: devicePayload,
+                mcp: BugReportBundle.scrubForPublicOutput(ChoragusMCPServer.shared.diagnosticsPayloadWithPayloads(activityLimit: MCPActivityLog.keepLimit))
             )
         } catch {
             encryptedReportError = error.localizedDescription
             return
         }
 
-        // Land the file in ~/Downloads so it's where Finder reveals
-        // and where the user expects "I just saved a thing".
-        //
-        // The trailing `.log` suffix is here so GitHub's attachment
-        // uploader accepts the file on drag-drop without a manual
-        // rename — the underlying contents are still the
-        // `ChoragusBugBundle` JSON envelope, and the maintainer-side
-        // decrypter doesn't care about the filename. Issue #19's
-        // reporter discovered this workaround themselves and noted
-        // it ("I added a `.log` extension so I could upload it
-        // here") — baking it in removes the friction. The double
-        // extension also signals to the user that the file is opaque
-        // / app-specific even though it's named like a log.
+        // Land the file in ~/Downloads, where Finder reveals it.
+        // The trailing `.log` suffix lets GitHub's attachment uploader
+        // accept the file on drag-drop without a rename; the contents
+        // remain the `ChoragusBugBundle` JSON envelope and the
+        // maintainer-side decrypter ignores the filename.
         let stamp = Self.fileNameFormatter.string(from: Date())
         let filename = "Choragus-Bug-Bundle-v\(versionTag)-\(stamp).choragus-bundle.log"
         let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
         guard let target = downloads?.appendingPathComponent(filename) else {
-            encryptedReportError = "Could not locate Downloads folder."
+            encryptedReportError = L10n.couldNotLocateDownloadsFolder
             return
         }
 
@@ -957,18 +952,16 @@ struct DiagnosticsView: View {
         }
 
         guard var components = URLComponents(string: baseURL) else { return nil }
-        // Title intentionally NOT pre-filled — reporters were leaving
-        // the canned default in place, producing dozens of issues with
-        // identical generic titles. A blank title field forces the
-        // user to write something specific to their problem.
+        // Title intentionally not pre-filled: a canned default yields
+        // identical generic issue titles; a blank field forces a
+        // specific one.
         components.queryItems = [
             URLQueryItem(name: "body", value: body),
         ]
         // GitHub silently truncates very long URL query bodies and
-        // some browsers refuse URLs over ~8 KB. The body here is a
-        // short fixed template — well under the limit — but check
-        // anyway in case future template growth or filename length
-        // pushes us over, and degrade to a bare URL if it does.
+        // some browsers refuse URLs over ~8 KB. The body is a short
+        // fixed template, but check anyway and degrade to a bare URL
+        // if it exceeds the limit.
         if let url = components.url, url.absoluteString.count < 7000 {
             return url
         }
@@ -1053,3 +1046,291 @@ struct DiagnosticsView: View {
     }()
 }
 
+
+
+// MARK: - Agent access (MCP)
+
+/// Server state and tokens in a banner, then the request log as a table
+/// like the other tabs; selecting a row shows its full request and
+/// response payloads below, selectable and copyable.
+struct MCPDiagnosticsTab: View {
+    @ObservedObject private var server = ChoragusMCPServer.shared
+    @ObservedObject private var activity = MCPActivityLog.shared
+    @State private var selection: MCPActivityEntry.ID?
+    @State private var filter: OutcomeFilter = .all
+    @State private var payload: MCPPayload?
+    @State private var payloadFor: MCPActivityEntry.ID?
+
+    private enum OutcomeFilter: String, CaseIterable, Identifiable {
+        case all, failures
+        var id: String { rawValue }
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    private var rows: [MCPActivityEntry] {
+        filter == .all ? activity.entries : activity.entries.filter(\.isFailure)
+    }
+    private var selected: MCPActivityEntry? { activity.entries.first { $0.id == selection } }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            banner
+            Divider()
+            header
+            Divider()
+            table
+            Divider()
+            detail
+        }
+        .onChange(of: selection) { _, id in
+            payload = nil
+            payloadFor = id
+            guard let id, let entry = activity.entries.first(where: { $0.id == id }), entry.hasPayload else { return }
+            Task {
+                let loaded = await activity.payloads.load(id: id)
+                if payloadFor == id { payload = loaded }
+            }
+        }
+    }
+
+    // MARK: Banner
+
+    private var banner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 14) {
+                statusLabel
+                Text(server.endpointURL).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                Text("\(L10n.mcpAllowLAN): \(server.allowsLAN ? "on" : "off")").foregroundStyle(.secondary)
+                Text("\(L10n.mcpMaxVolume): \(server.maxVolume)").foregroundStyle(.secondary)
+                Spacer()
+            }
+            .font(.callout)
+            HStack(spacing: 14) {
+                Text(L10n.mcpTokens).foregroundStyle(.secondary)
+                let tokens = server.tokens.tokens
+                if tokens.isEmpty { Text(L10n.mcpNoTokens).foregroundStyle(.tertiary) }
+                ForEach(tokens) { token in
+                    HStack(spacing: 4) {
+                        Text(token.name).fontWeight(.medium)
+                        Text(token.scope.rawValue).foregroundStyle(.secondary)
+                        Text(L10n.mcpTokenCallsFormat(activity.callsByClient[token.name] ?? 0)).foregroundStyle(.tertiary)
+                    }
+                }
+                Spacer()
+            }
+            .font(.caption)
+            if !server.lockouts.isEmpty || activity.failedAuthCount > 0 {
+                HStack(spacing: 12) {
+                    Text(L10n.mcpFailedAuthFormat(activity.failedAuthCount))
+                    ForEach(server.lockouts, id: \.address) { lockout in
+                        Label(L10n.mcpLockedOutFormat(lockout.address, lockout.until.formatted(date: .omitted, time: .shortened)),
+                              systemImage: "lock.fill")
+                    }
+                }
+                .font(.caption).foregroundStyle(.orange)
+            }
+            let builds = server.diagnosticsPayload(activityLimit: 0).builds
+            if !builds.isEmpty {
+                HStack(spacing: 12) {
+                    Text(L10n.mcpBuilds).foregroundStyle(.secondary)
+                    ForEach(builds, id: \.jobID) { build in
+                        Text("\(build.name): \(build.status) \(build.done)/\(build.total)")
+                    }
+                }
+                .font(.system(.caption, design: .monospaced))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.secondary.opacity(0.06))
+    }
+
+    @ViewBuilder
+    private var statusLabel: some View {
+        switch server.status {
+        case .running(let port):
+            Label("\(L10n.mcpStatusRunning) · \(port)", systemImage: "circle.fill").foregroundStyle(.green)
+        case .stopped:
+            Label(L10n.mcpStatusStopped, systemImage: "circle").foregroundStyle(.secondary)
+        case .failed(let reason):
+            Label(L10n.mcpStatusFailedFormat(reason), systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+        }
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            Picker("", selection: $filter) {
+                Text(L10n.diagFilterAll).tag(OutcomeFilter.all)
+                Text(L10n.diagFilterErrors).tag(OutcomeFilter.failures)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 240)
+            Spacer()
+            Text(L10n.diagEntriesCountFormat(rows.count, activity.entries.count))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button(L10n.mcpActivityClear) { activity.clear(); selection = nil }
+                .controlSize(.small)
+                .disabled(activity.entries.isEmpty)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: Table
+
+    private var table: some View {
+        Table(rows, selection: $selection) {
+            TableColumn(L10n.diagColumnTime) { entry in
+                Text(Self.timeFormatter.string(from: entry.date))
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .width(min: 70, ideal: 80, max: 100)
+            TableColumn(L10n.mcpColumnToken) { entry in
+                Text(entry.client).font(.callout).lineLimit(1)
+            }
+            .width(min: 70, ideal: 110, max: 160)
+            TableColumn(L10n.mcpColumnAction) { entry in
+                Text(entry.action).font(.system(.callout, design: .monospaced)).lineLimit(1)
+            }
+            .width(min: 120, ideal: 170, max: 240)
+            TableColumn(L10n.mcpColumnOutcome) { entry in
+                Label(entry.outcome.rawValue, systemImage: entry.isFailure ? "xmark.circle.fill" : "checkmark.circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(entry.isFailure ? Color.orange : Color.green)
+            }
+            .width(min: 90, ideal: 120, max: 150)
+            TableColumn(L10n.mcpColumnDuration) { entry in
+                Text("\(entry.milliseconds) ms").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            .width(min: 60, ideal: 70, max: 90)
+            TableColumn(L10n.mcpColumnSummary) { entry in
+                Text(entry.summary).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .contextMenu(forSelectionType: MCPActivityEntry.ID.self) { ids in
+            if let id = ids.first, let entry = activity.entries.first(where: { $0.id == id }) {
+                Button(L10n.mcpCopyRequest) { Task { copy((await activity.payloads.load(id: id))?.request ?? entry.summary) } }
+                Button(L10n.mcpCopyResponse) { Task { copy((await activity.payloads.load(id: id))?.response ?? "") } }
+                    .disabled(!entry.hasPayload)
+                Button(L10n.diagCopyRow) { copy(rowText(entry)) }
+            }
+        }
+    }
+
+    // MARK: Detail
+
+    private var detail: some View {
+        Group {
+            if let entry = selected {
+                HStack(alignment: .top, spacing: 0) {
+                    payloadPane(title: L10n.mcpRequest, text: payload?.request ?? entry.summary)
+                    Divider()
+                    payloadPane(title: L10n.mcpResponse, text: payload?.response ?? (entry.hasPayload && payload == nil ? "…" : "—"))
+                }
+            } else {
+                Text(L10n.mcpSelectRow)
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(minHeight: 160, idealHeight: 220, maxHeight: 320)
+    }
+
+    private func payloadPane(title: String, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Button { copy(text) } label: { Image(systemName: "doc.on.doc") }
+                    .buttonStyle(.borderless)
+                    .help(L10n.copy)
+            }
+            ScrollView {
+                Text(text)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func rowText(_ entry: MCPActivityEntry) -> String {
+        "\(Self.timeFormatter.string(from: entry.date))\t\(entry.client)\t\(entry.action)\t\(entry.outcome.rawValue)\t\(entry.milliseconds) ms\t\(entry.summary)"
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+/// The request log shared by Settings → Agent access and Diagnostics.
+struct MCPActivityList: View {
+    @ObservedObject private var server = ChoragusMCPServer.shared
+    @ObservedObject private var activity = MCPActivityLog.shared
+    var rows = 50
+    /// Settings shows a short box; Diagnostics gives the log the rest of the window.
+    var fillsHeight = false
+
+    private static let time: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(L10n.mcpActivity).font(.callout).foregroundStyle(.secondary)
+                Spacer()
+                if !activity.entries.isEmpty {
+                    Button(L10n.mcpActivityClear) { activity.clear() }.controlSize(.small)
+                }
+            }
+            ForEach(server.lockouts, id: \.address) { lockout in
+                Label(L10n.mcpLockedOutFormat(lockout.address, lockout.until.formatted(date: .omitted, time: .shortened)),
+                      systemImage: "lock.fill").font(.caption).foregroundStyle(.orange)
+            }
+            if activity.entries.isEmpty {
+                Text(L10n.mcpActivityEmpty).font(.caption).foregroundStyle(.tertiary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(activity.entries.prefix(rows)) { entry in
+                            HStack(spacing: 6) {
+                                Text(Self.time.string(from: entry.date)).foregroundStyle(.secondary).frame(width: 56, alignment: .leading)
+                                Text(entry.client).lineLimit(1).truncationMode(.tail).frame(width: 64, alignment: .leading)
+                                Text(entry.action).fontWeight(.medium).lineLimit(1).truncationMode(.middle).frame(width: 126, alignment: .leading)
+                                Text(entry.summary).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .layoutPriority(1)
+                                    .help(entry.summary)
+                                Text("\(entry.milliseconds)ms").foregroundStyle(.tertiary).frame(width: 46, alignment: .trailing)
+                                Image(systemName: entry.isFailure ? "xmark.circle.fill" : "checkmark.circle.fill")
+                                    .foregroundStyle(entry.isFailure ? .orange : .green)
+                                    .help(entry.outcome.rawValue)
+                            }
+                            .font(.system(.caption, design: .monospaced))
+                        }
+                    }
+                    .padding(6)
+                }
+                .frame(maxHeight: fillsHeight ? .infinity : CGFloat(min(rows, 12)) * 18 + 12)
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+}

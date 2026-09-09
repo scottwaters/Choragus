@@ -1,6 +1,17 @@
 import Foundation
 
-public final class RenderingControlService {
+/// The RenderingControl capabilities `VolumeController` needs. Narrow on
+/// purpose: the controller depends on reading and writing volume and mute,
+/// not on the whole SOAP service, and a stub satisfies it in tests.
+public protocol RenderingControlling: Sendable {
+    func getVolume(device: SonosDevice) async throws -> Int
+    func setVolume(device: SonosDevice, volume: Int) async throws
+    func getMute(device: SonosDevice) async throws -> Bool
+    func setMute(device: SonosDevice, muted: Bool) async throws
+    func getOutputFixed(device: SonosDevice) async -> Bool
+}
+
+public final class RenderingControlService: RenderingControlling, EQServiceProtocol {
     private let soap: SOAPClient
     private static let path = "/MediaRenderer/RenderingControl/Control"
     private static let service = "RenderingControl"
@@ -33,7 +44,7 @@ public final class RenderingControlService {
 
     /// Whether the device's line-out volume is set to Fixed. Connect / Port /
     /// Amp line-outs can be locked to a fixed level in the Sonos app; when
-    /// fixed, `SetVolume` faults UPnP 501 (issue #50). Returns false on any
+    /// fixed, `SetVolume` faults UPnP 501. Returns false on any
     /// error so a transient failure doesn't disable the slider.
     public func getOutputFixed(device: SonosDevice) async -> Bool {
         guard let result = try? await soap.send(

@@ -9,7 +9,7 @@ import SwiftUI
 import SonosKit
 
 struct LyricsKaraokeWindow: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var anchorTracker: AnchorTracker
     @EnvironmentObject var lyricsCoordinator: LyricsCoordinator
     // Observed directly so user-driven art changes ("Search Artwork",
@@ -104,11 +104,9 @@ struct LyricsKaraokeWindow: View {
 
     // MARK: - Sections
 
-    /// Header sizing — bumped ~50 % above the original 96 pt baseline
-    /// so the album art and track details have presence in the karaoke
-    /// window's wide aspect ratio without crowding the lyrics. The
-    /// constant flows through to album art, brand icon, wordmark
-    /// height (75 % of art), and the text scale.
+    /// Header sizing for the karaoke window's wide aspect ratio. Flows
+    /// through to album art, brand icon, wordmark height (75 % of art),
+    /// and the text scale.
     private static let headerArtSize: CGFloat = 144
 
     private var header: some View {
@@ -146,24 +144,16 @@ struct LyricsKaraokeWindow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Brand block on the right edge of the header. Wordmark
-            // sits to the left of the icon (reads naturally LTR);
-            // icon matches the album-art square on the opposite side
-            // for visual symmetry. Wordmark is rendered at 75 % of
-            // the album-art height so it has presence without
-            // dominating. Both assets carry a `luminosity dark`
-            // appearance variant and auto-swap with the active
-            // colour scheme.
+            // Brand block on the right edge of the header: wordmark, then
+            // icon sized to the album-art square. Both assets carry a
+            // `luminosity dark` variant and swap with the colour scheme.
             Image("ChoragusTextLogo")
                 .resizable()
                 .scaledToFit()
-                // Match Club Vis wordmark height (64 pt). Width is
-                // intentionally unconstrained so `.scaledToFit()`
-                // picks the asset's natural aspect width instead of
-                // a fixed 320 pt frame — a fixed frame leaves
-                // whitespace on either side of the asset and visually
-                // pulls the trailing edge in from the 28 pt
-                // horizontal padding the album art sits at.
+                // Match Club Vis wordmark height (64 pt). Width stays
+                // unconstrained: a fixed frame leaves whitespace beside
+                // the asset and pulls the trailing edge in from the 28 pt
+                // padding the album art sits at.
                 .frame(height: 64)
                 .opacity(0.55)
                 .accessibilityLabel("Choragus")
@@ -186,7 +176,7 @@ struct LyricsKaraokeWindow: View {
         // crossfade runs at the layer level.
         ZStack {
             if let url = albumArtURL {
-                CachedAsyncImage(url: url, cornerRadius: 0, priority: .background, fillFrame: true)
+                CachedAsyncImage(url: url, cornerRadius: 0, priority: .background, contentMode: .fill)
                     .blur(radius: 60)
                     .opacity(0.30)
                     .scaleEffect(1.1)

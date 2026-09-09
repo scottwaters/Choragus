@@ -28,7 +28,7 @@ final class XMLResponseParserTests: XCTestCase {
         XCTAssertEqual(groups[1].members[0].zoneName, "Bedroom")
     }
 
-    /// Issue #63: a room named "Foo & Bar" arrives as `ZoneName="Foo &amp; Bar"`
+    /// A room named "Foo & Bar" arrives as `ZoneName="Foo &amp; Bar"`
     /// (valid XML — the SOAP layer already unescaped the outer encoding).
     /// A second unescape produced a bare `&`, the parser rejected the whole
     /// document, and every speaker in the household vanished.
@@ -503,6 +503,44 @@ final class SavedQueueRepositoryTests: XCTestCase {
                   metadata: metadata)
     }
 
+    // MARK: Deleted Items
+
+    func testSoftDeleteHidesFromListAndKeepsFolderForRestore() {
+        let repo = makeRepo()
+        let folder = repo.createFolder(name: "Rock")!
+        let id = repo.save(name: "Rush", tracks: [track(1, "YYZ")])!
+        repo.moveQueue(id: id, toFolder: folder)
+        repo.softDelete(id: id)
+        XCTAssertTrue(repo.list().isEmpty)
+        XCTAssertEqual(repo.listDeleted().map(\.id), [id])
+        XCTAssertNotNil(repo.listDeleted().first?.deletedAt)
+        XCTAssertEqual(repo.tracks(for: id).count, 1)
+        repo.restore(id: id)
+        XCTAssertEqual(repo.list().first?.folderIDs, [folder])
+        XCTAssertTrue(repo.listDeleted().isEmpty)
+    }
+
+    func testSoftDeleteIgnoresSnapshots() {
+        let repo = makeRepo()
+        let id = repo.save(name: "__cghist__1", tracks: [track(1, "T")], snapshot: true)!
+        repo.softDelete(id: id)
+        XCTAssertTrue(repo.listDeleted().isEmpty)
+        XCTAssertEqual(repo.snapshotRowIDs(), [id])
+    }
+
+    func testPurgeDeletedHonoursTheCutoff() {
+        let repo = makeRepo()
+        let old = repo.save(name: "Old", tracks: [track(1, "A")])!
+        let recent = repo.save(name: "Recent", tracks: [track(1, "B")])!
+        repo.softDelete(id: old, at: Date().addingTimeInterval(-40 * 86_400))
+        repo.softDelete(id: recent, at: Date().addingTimeInterval(-2 * 86_400))
+        repo.purgeDeleted(before: Date().addingTimeInterval(-30 * 86_400))
+        XCTAssertEqual(repo.listDeleted().map(\.id), [recent])
+        XCTAssertTrue(repo.tracks(for: old).isEmpty)
+        repo.purgeAllDeleted()
+        XCTAssertTrue(repo.listDeleted().isEmpty)
+    }
+
     func testMetadataRoundTrip() {
         let repo = makeRepo()
         let didl = "<DIDL-Lite><item id=\"x\"><dc:title>T</dc:title></item></DIDL-Lite>"
@@ -533,7 +571,7 @@ final class SavedQueueRepositoryTests: XCTestCase {
         XCTAssertEqual(repo.list().map(\.id), [visible])
         XCTAssertEqual(repo.tracks(for: hidden).map(\.title), ["Undo"])
         XCTAssertEqual(repo.snapshotRowIDs(), [hidden])
-        repo.delete(id: hidden)
+        repo.purge(id: hidden)
         XCTAssertTrue(repo.snapshotRowIDs().isEmpty)
         XCTAssertTrue(repo.tracks(for: hidden).isEmpty)
     }
@@ -549,10 +587,10 @@ final class SavedQueueRepositoryTests: XCTestCase {
         XCTAssertEqual(repo.list().first?.name, "New")
     }
 
-    func testDeleteCascadesTracks() {
+    func testPurgeCascadesTracks() {
         let repo = makeRepo()
         let id = repo.save(name: "Gone", tracks: [track(1, "T")])!
-        repo.delete(id: id)
+        repo.purge(id: id)
         XCTAssertTrue(repo.list().isEmpty)
         XCTAssertTrue(repo.tracks(for: id).isEmpty)
     }

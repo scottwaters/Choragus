@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 struct PlayHistoryView: View {
     @EnvironmentObject var historyManager: PlayHistoryManager
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
 
     private enum HistoryPlayMode { case now, next, queue }
 
@@ -122,10 +122,10 @@ struct PlayHistoryView: View {
             searchText: searchText.isEmpty ? nil : searchText,
             sortNewestFirst: sortNewestFirst
         )
-        // Room matching is done here (not in SQL) so "Office" matches by token
-        // membership — i.e. "Office", "Office + Float", … but NOT "Office Front"
+        // Room matching is done here (not in SQL) so "Den" matches by token
+        // membership — i.e. "Den", "Den + Kitchen", … but NOT "Den Annex"
         // — and Exact matches the full grouping. The selection may itself be a
-        // grouping ("Office + Float"), so split it into tokens too.
+        // grouping ("Den + Kitchen"), so split it into tokens too.
         if let room = filterRoom {
             let tokens = room.components(separatedBy: " + ")
             results = results.filter { e in
@@ -381,7 +381,7 @@ struct PlayHistoryView: View {
                     .foregroundStyle(filterStarred ? .yellow : .secondary)
             }
             .buttonStyle(.plain)
-            .tooltip(filterStarred ? "Show all tracks" : "Show starred only")
+            .tooltip(filterStarred ? L10n.showAllTracks : L10n.showStarredOnly)
 
             Spacer()
 

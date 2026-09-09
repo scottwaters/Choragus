@@ -12,11 +12,13 @@ import SwiftUI
 import SonosKit
 
 struct FirstRunWelcomeView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     let onOpenSettings: () -> Void
     let onDismiss: () -> Void
 
     var body: some View {
+        // @Environment has no projected value; @Bindable restores $-bindings.
+        @Bindable var sonosManager = sonosManager
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 Image(systemName: "hifispeaker.2.fill")

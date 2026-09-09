@@ -1,0 +1,68 @@
+# Correctness gate. This never builds a release: signing identities and the
+# notary credential live only on the maintainer's machine, so notarization
+# and packaging stay in the local release script.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    name: SonosKit tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Run package tests
+        run: swift test --package-path Packages/SonosKit
+
+  build-app:
+    name: App target compiles
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      # The package can be green while the app target does not compile —
+      # that is the exact failure this job exists to catch.
+      - name: Build without signing
+        run: |
+          xcodebuild build \
+            -project Choragus.xcodeproj \
+            -scheme Choragus \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/ci-derived \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" | tail -40
+          exit ${PIPESTATUS[0]}
+
+  hygiene:
+    name: L10n and content checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: L10n catalog
+        # Mirrors L10nCatalogTests without a Swift toolchain: every key in
+        # every locale, no duplicate keys (a JSON parser would silently keep
+        # the last one), accessors and catalog keys in one-to-one agreement.
+        run: |
+          python3 - <<'PY'
+          import json, re, sys, collections
+          LOCALES = {"en","de","fr","nl","es","it","sv","nb","da","ja","pt","pl","zh-Hans"}
+          path = "Packages/SonosKit/Sources/SonosKit/Resources/Localizable.xcstrings"
+          dupes = []
+          def hook(pairs):
+              seen = collections.Counter(k for k, _ in pairs)
+              dupes.extend(k for k, n in seen.items() if n > 1)
+              return dict(pairs)
+          strings = json.load(open(path), object_pairs_hook=hook)["strings"]
+          gaps = [f"{k}:{l}" for k, e in strings.items() for l in LOCALES
+                  if not e.get("localizations", {}).get(l, {}).get("stringUnit", {}).get("value")]
+          src = open("Packages/SonosKit/Sources/SonosKit/Localization/L10n.swift").read()
+          accessors = set(re.findall(r'tr\("([^"]+)"\)', src))
+          unresolved = sorted(accessors - strings.keys()); orphaned = sorted(strings.keys() - accessors)
+          for label, items in [("Duplicate keys", dupes), ("Missing translations", gaps),
+                               ("Accessors without a catalog key", unresolved), ("Catalog keys without an accessor", orphaned)]:
+              if items: print(f"{label}: {items[:20]}"); sys.exit(1)
+          print(f"{len(strings)} keys x {len(LOCALES)} locales, clean")
+          PY

@@ -2,10 +2,9 @@
 /// playlists across sources (Choragus-local, Sonos household, smart queues
 /// from play history; streaming-service sources are a later pass).
 ///
-/// Visual language borrows from the well-reviewed 2026 artwork-grid managers
-/// (Doppler / Marvis / Playlist Mosaic) and the Zune/Metro aesthetic this app
-/// already uses for ClubVis: bold oversized typography, content over chrome,
-/// mosaic covers auto-built from member-track art. Each saved queue is a tile;
+/// Visual language: the Zune/Metro aesthetic shared with ClubVis — bold
+/// oversized typography, content over chrome, mosaic covers auto-built
+/// from member-track art. Each saved queue is a tile;
 /// opening one reveals an artwork track list with play-to-room / clone /
 /// rename / delete / export actions and a target-room picker.
 import SwiftUI
@@ -46,8 +45,8 @@ struct QueueLibraryCard: Identifiable, Equatable {
             switch self {
             case .choragus: return "Choragus"
             case .sonos:    return "Sonos"
-            case .smart:    return "Smart"
-            case .history:  return "History"
+            case .smart:    return L10n.smartQueuesLabel
+            case .history:  return L10n.historyLabel
             }
         }
         var badgeIcon: String {
@@ -72,11 +71,18 @@ struct QueueLibraryCard: Identifiable, Equatable {
     let name: String
     let kind: Kind
     let trackCount: Int
+    /// Store creation time (Choragus queues + history snapshots); nil for
+    /// Sonos playlists and smart queues, which sort after dated cards.
+    var createdAt: Date? = nil
     /// Folders this queue belongs to (many-to-many); empty == top level.
     let folderIDs: [Int64]
     var coverURLs: [String]
     /// For history cards: the room the snapshot belongs to (grouping + filter).
     var roomName: String? = nil
+    /// Choragus playlists in Deleted Items: listed only under that filter,
+    /// restorable until the retention window ends.
+    var deletedAt: Date? = nil
+    var isDeleted: Bool { deletedAt != nil }
 
     var isChoragus: Bool { if case .choragus = kind { return true }; return false }
     var localID: Int64? { if case .choragus(let id) = kind { return id }; return nil }
@@ -94,7 +100,7 @@ final class QueueLibraryViewModel: ObservableObject {
     let manager: SonosManager
 
     enum Filter: Equatable {
-        case all, choragus, sonos, smart, history, folder(Int64)
+        case all, choragus, sonos, smart, history, deleted, folder(Int64)
     }
 
     @Published var cards: [QueueLibraryCard] = []
@@ -120,7 +126,11 @@ final class QueueLibraryViewModel: ObservableObject {
         changeObserver = NotificationCenter.default.addObserver(
             forName: .choragusSavedQueuesChanged, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in await self?.load() }
+            // Debounced: folder operations fire several notifications in
+            // a row, and each un-coalesced `load()` runs a network browse
+            // plus per-card cover fetches, with overlapping passes
+            // interleaving `cards` writes.
+            Task { @MainActor in self?.scheduleFullReload() }
         }
         // The main-window live queue changing (add / remove / reorder / play)
         // produces new ephemeral History snapshots and can shift smart-queue
@@ -138,6 +148,20 @@ final class QueueLibraryViewModel: ObservableObject {
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
         if let queueObserver { NotificationCenter.default.removeObserver(queueObserver) }
         localRefreshTask?.cancel()
+        fullReloadTask?.cancel()
+    }
+
+    private var fullReloadTask: Task<Void, Never>?
+
+    /// Debounced full reload (local cards + Sonos browse), cancelling
+    /// any pending one so a burst of store notifications costs one pass.
+    private func scheduleFullReload() {
+        fullReloadTask?.cancel()
+        fullReloadTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.load()
+        }
     }
 
     /// Rebuilds only the local-derived cards (smart / Choragus / history),
@@ -192,16 +216,83 @@ final class QueueLibraryViewModel: ObservableObject {
             ?? SonosGroup(id: targetGroupID, coordinatorID: targetGroupID, members: [])
     }
 
+    enum SortMode: String, CaseIterable {
+        case name
+        case newest
+    }
+    @Published var sortMode: SortMode = .name
+
+    /// Column the list view is sorted on; a click on the same header
+    /// flips the direction, a click on another header sorts ascending.
+    enum TableSortColumn: String, CaseIterable {
+        case name, source, room, tracks
+    }
+    @Published var tableSortColumn: TableSortColumn = .name
+    @Published var tableSortAscending = true
+
+    func toggleTableSort(_ column: TableSortColumn) {
+        if tableSortColumn == column {
+            tableSortAscending.toggle()
+        } else {
+            tableSortColumn = column
+            tableSortAscending = true
+        }
+    }
+
+    /// `displayedCards` in the list view's column order. Ties fall back
+    /// to name so the order is stable across reloads.
+    var tableCards: [QueueLibraryCard] {
+        let rows = displayedCards
+        let column = tableSortColumn
+        func key(_ c: QueueLibraryCard) -> String {
+            switch column {
+            case .name: return c.name.replacingOccurrences(of: "\n", with: " ")
+            case .source: return c.kind.sourceLabel
+            case .room: return c.roomName ?? ""
+            case .tracks: return ""
+            }
+        }
+        let sorted = rows.sorted { a, b in
+            let primary: ComparisonResult
+            if column == .tracks {
+                primary = a.trackCount == b.trackCount ? .orderedSame
+                    : (a.trackCount < b.trackCount ? .orderedAscending : .orderedDescending)
+            } else {
+                primary = key(a).localizedCaseInsensitiveCompare(key(b))
+            }
+            if primary != .orderedSame { return primary == .orderedAscending }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
+        return tableSortAscending ? sorted : sorted.reversed()
+    }
+
     var displayedCards: [QueueLibraryCard] {
         let needle = filterText.trimmingCharacters(in: .whitespaces)
-        return cards.filter { card in
+        let filtered = cards.filter { card in
             matchesFilter(card) && (needle.isEmpty || card.name.localizedCaseInsensitiveContains(needle))
+        }
+        switch sortMode {
+        case .name:
+            return filtered
+        case .newest:
+            // Dated cards newest-first; undated (Sonos, smart) keep
+            // their existing order after them.
+            return filtered.sorted { a, b in
+                switch (a.createdAt, b.createdAt) {
+                case (let l?, let r?): return l > r
+                case (.some, .none): return true
+                case (.none, .some): return false
+                case (.none, .none): return false
+                }
+            }
         }
     }
 
     private func matchesFilter(_ card: QueueLibraryCard) -> Bool {
+        if card.isDeleted { return filter == .deleted }
         switch filter {
         case .all:      return true
+        case .deleted:  return false
         case .choragus: return card.isChoragus
         case .sonos:    if case .sonos = card.kind { return true }; return false
         case .smart:    if case .smart = card.kind { return true }; return false
@@ -214,8 +305,11 @@ final class QueueLibraryViewModel: ObservableObject {
     }
 
     func count(for filter: Filter) -> Int {
+        if filter == .deleted { return cards.filter(\.isDeleted).count }
+        let cards = cards.filter { !$0.isDeleted }
         switch filter {
         case .all:      return cards.count
+        case .deleted:  return 0
         case .choragus: return cards.filter { $0.isChoragus }.count
         case .sonos:    return cards.filter { if case .sonos = $0.kind { return true }; return false }.count
         case .smart:    return cards.filter { if case .smart = $0.kind { return true }; return false }.count
@@ -257,26 +351,36 @@ final class QueueLibraryViewModel: ObservableObject {
     private func buildLocalCards() -> [QueueLibraryCard] {
         var built: [QueueLibraryCard] = []
         for kind in SonosManager.SmartQueueKind.allCases {
-            let count = manager.smartQueueTracks(kind: kind, room: roomFilter, limit: 500).count
+            let tracks = manager.smartQueueTracks(kind: kind, room: roomFilter, limit: 500)
+            let count = tracks.count
             let name = roomFilter.map { "\(kind.title) · \($0)" } ?? kind.title
+            let covers = SonosManager.smartQueueCoverArt(from: tracks)
             built.append(QueueLibraryCard(id: "smart:\(kind.rawValue)", name: name, kind: .smart(kind),
                                           trackCount: count, folderIDs: [],
-                                          coverURLs: manager.smartQueueCoverArt(kind: kind, room: roomFilter)))
+                                          coverURLs: covers))
         }
         for saved in manager.localSavedQueues() {
             built.append(QueueLibraryCard(id: "C:\(saved.id)", name: saved.name, kind: .choragus(saved.id),
-                                          trackCount: saved.trackCount, folderIDs: saved.folderIDs,
+                                          trackCount: saved.trackCount, createdAt: saved.createdAt,
+                                          folderIDs: saved.folderIDs,
                                           coverURLs: manager.choragusCoverArt(localID: saved.id)))
+        }
+        for saved in manager.deletedSavedQueues() {
+            built.append(QueueLibraryCard(id: "D:\(saved.id)", name: saved.name, kind: .choragus(saved.id),
+                                          trackCount: saved.trackCount, createdAt: saved.createdAt,
+                                          folderIDs: [], coverURLs: manager.choragusCoverArt(localID: saved.id),
+                                          deletedAt: saved.deletedAt))
         }
         for entry in manager.allQueueSnapshots() {
             for snap in entry.snapshots {
-                // Date and time on separate lines — the single-line form was
-                // truncated to "… at 5:08…" in the tile and unreadable.
+                // Date and time on separate lines — a single line truncates
+                // to "… at 5:08…" in the tile.
                 let date = snap.savedAt.formatted(date: .abbreviated, time: .omitted)
                 let time = snap.savedAt.formatted(date: .omitted, time: .shortened)
                 let when = "\(date)\n\(time)"
                 built.append(QueueLibraryCard(id: "hist:\(snap.localID)", name: when, kind: .history(snap.localID),
-                                              trackCount: snap.trackCount, folderIDs: [], coverURLs: [], roomName: entry.room))
+                                              trackCount: snap.trackCount, createdAt: snap.savedAt,
+                                              folderIDs: [], coverURLs: [], roomName: entry.room))
             }
         }
         return built
@@ -312,17 +416,26 @@ final class QueueLibraryViewModel: ObservableObject {
         let built = buildLocalCards() + sonosCards
         cards = built
 
-        // Resolve covers (network) and update in place.
+        // Resolve covers (network) and update in place. Equality-gated:
+        // resolved art usually matches the cache-seeded value, and an
+        // unguarded no-op write re-renders every observer per card.
+        // One browse at a time on purpose: a Sonos playlist cover is a
+        // ContentDirectory browse and the speaker answers those serially,
+        // so parallel requests each take longer and the pass ends no
+        // sooner. The grid shows cache-seeded covers meanwhile.
         for card in built {
+            let art: [String]
             switch card.kind {
             case .sonos(let objectID):
-                let art = await manager.savedQueueCoverArt(objectID: objectID)
-                if let idx = cards.firstIndex(where: { $0.id == card.id }) { cards[idx].coverURLs = art }
+                art = await manager.savedQueueCoverArt(objectID: objectID)
             case .choragus(let id), .history(let id):
-                let art = await manager.choragusCoverArtResolved(localID: id)
-                if let idx = cards.firstIndex(where: { $0.id == card.id }) { cards[idx].coverURLs = art }
+                art = await manager.choragusCoverArtResolved(localID: id)
             case .smart:
-                break
+                continue
+            }
+            if let idx = cards.firstIndex(where: { $0.id == card.id }),
+               cards[idx].coverURLs != art {
+                cards[idx].coverURLs = art
             }
         }
         // Persist the resolved Sonos cards for instant display next open.
@@ -345,11 +458,17 @@ final class QueueLibraryViewModel: ObservableObject {
             }
         }
         // Resolve local-library art (stored/parsed getaa URLs 404).
-        return await manager.resolveLocalArt(in: raw)
+        return await manager.enricher.resolveLocalArt(in: raw)
     }
 
     func play(_ card: QueueLibraryCard, append: Bool) async {
         let group = targetGroup
+        // The manager refuses a batch add while one is running; tell
+        // the user why nothing new started.
+        guard !manager.isBatchAddInFlight(for: group) else {
+            flash(L10n.stillAddingToFormat(group.name))
+            return
+        }
         do {
             switch card.kind {
             case .choragus(let id): try await manager.loadLocalSavedQueue(id: id, group: group, append: append)
@@ -363,7 +482,7 @@ final class QueueLibraryViewModel: ObservableObject {
                     try await manager.restoreQueueSnapshot(group: group, localID: localID)
                 }
             }
-            flash(append ? "Added \u{201C}\(card.name)\u{201D} to \(group.name)" : "Playing \u{201C}\(card.name)\u{201D} on \(group.name)")
+            flash(append ? L10n.addedItemToFormat(card.name, group.name) : L10n.playingItemOnFormat(card.name, group.name))
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUELIB", userFacing: true)
         }
@@ -379,7 +498,7 @@ final class QueueLibraryViewModel: ObservableObject {
             case .smart(let kind): _ = manager.freezeSmartQueueToChoragus(kind: kind, room: roomFilter, name: card.name)
             }
             await load()
-            flash("Saved to Choragus as \u{201C}\(cloneName)\u{201D}")
+            flash(L10n.savedToChoragusAsFormat(cloneName))
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUELIB", userFacing: true)
         }
@@ -406,8 +525,25 @@ final class QueueLibraryViewModel: ObservableObject {
         await load()
     }
 
+    func restore(_ card: QueueLibraryCard) {
+        guard let id = card.localID, card.isDeleted else { return }
+        manager.restoreDeletedSavedQueue(id: id)
+        Task { await load() }
+    }
+
+    func deletePermanently(_ card: QueueLibraryCard) {
+        guard let id = card.localID, card.isDeleted else { return }
+        manager.permanentlyDeleteSavedQueue(id: id)
+        Task { await load() }
+    }
+
+    func emptyDeletedItems() {
+        manager.emptyDeletedSavedQueues()
+        Task { await load() }
+    }
+
     func move(_ card: QueueLibraryCard, toFolder folderID: Int64?) {
-        guard let id = card.localID else { return }
+        guard let id = card.localID, !card.isDeleted else { return }
         manager.moveSavedQueue(id: id, toFolder: folderID)
         Task { await load() }
     }
@@ -439,7 +575,7 @@ final class QueueLibraryViewModel: ObservableObject {
     }
     func copyFolder(_ folder: SavedQueueFolder) {
         _ = manager.copySavedQueueFolder(id: folder.id)
-        flash("Duplicated \u{201C}\(folder.name)\u{201D}")
+        flash(L10n.duplicatedItemFormat(folder.name))
         Task { await load() }
     }
     func moveFolder(_ folderID: Int64, under parent: Int64?) {
@@ -474,18 +610,19 @@ final class QueueLibraryViewModel: ObservableObject {
     /// Handles a drop onto a queue card: a track copies in, another queue's
     /// tracks merge in. Returns false for invalid combinations.
     func handleDrop(_ payload: QueueDragPayload, onto target: QueueLibraryCard) -> Bool {
-        guard case .choragus(let targetID) = target.kind else { return false }
+        guard case .choragus(let targetID) = target.kind, !target.isDeleted else { return false }
         switch payload {
         case .track(_, let item):
             manager.appendTracksToChoragusQueue(id: targetID, tracks: [item])
-            flash("Added \u{201C}\(item.title)\u{201D} to \(target.name)")
+            flash(L10n.addedItemToFormat(item.title, target.name))
             return true
         case .card(let srcID):
-            guard srcID != target.id, let src = cards.first(where: { $0.id == srcID }) else { return false }
+            guard srcID != target.id, let src = cards.first(where: { $0.id == srcID }),
+                  !src.isDeleted else { return false }
             Task {
                 let tracks = await self.tracks(for: src)
                 self.manager.appendTracksToChoragusQueue(id: targetID, tracks: tracks)
-                self.flash("Copied \u{201C}\(src.name)\u{201D} into \(target.name)")
+                self.flash(L10n.copiedItemToFormat(src.name, target.name))
                 await self.load()
             }
             return true
@@ -497,23 +634,23 @@ final class QueueLibraryViewModel: ObservableObject {
     /// Handles a queue card dropped onto a folder (or top level): moves the
     /// Choragus queue. Ignores track payloads.
     func handleDrop(_ payload: QueueDragPayload, ontoFolder folderID: Int64?) -> Bool {
-        let dest = folderID.flatMap { fid in folders.first(where: { $0.id == fid })?.name } ?? "Top level"
+        let dest = folderID.flatMap { fid in folders.first(where: { $0.id == fid })?.name } ?? L10n.topLevel
         switch payload {
         case .card(let srcID):
-            guard let src = cards.first(where: { $0.id == srcID }), src.isChoragus,
+            guard let src = cards.first(where: { $0.id == srcID }), src.isChoragus, !src.isDeleted,
                   let id = src.localID else { return false }
             // Many-to-many: plain drag onto a folder ADDS membership (stays in
             // its other folders); ⌥Option drops an independent copy; dropping on
             // top level (nil) clears all memberships.
             if NSEvent.modifierFlags.contains(.option) {
-                manager.copySavedQueue(id: id, toFolder: folderID)
-                flash("Copied \u{201C}\(src.name)\u{201D} to \(dest)")
+                guard manager.copySavedQueue(id: id, toFolder: folderID) != nil else { return false }
+                flash(L10n.copiedItemToFormat(src.name, dest))
             } else if let folderID {
                 manager.addSavedQueueToFolder(id: id, folderID: folderID)
-                flash("Added \u{201C}\(src.name)\u{201D} to \(dest)")
+                flash(L10n.addedItemToFormat(src.name, dest))
             } else {
                 manager.setSavedQueueFolders(id: id, folderIDs: [])
-                flash("Moved \u{201C}\(src.name)\u{201D} to Top level")
+                flash(L10n.movedItemToFormat(src.name, L10n.topLevel))
             }
             Task { await load() }
             return true
@@ -521,7 +658,7 @@ final class QueueLibraryViewModel: ObservableObject {
             guard fid != folderID else { return false }   // repo also guards cycles
             guard let f = folders.first(where: { $0.id == fid }) else { return false }
             manager.moveSavedQueueFolder(id: fid, under: folderID)
-            flash("Moved \u{201C}\(f.name)\u{201D} to \(dest)")
+            flash(L10n.movedItemToFormat(f.name, dest))
             Task { await load() }
             return true
         case .track:
@@ -565,20 +702,26 @@ struct QueueLibraryWindow: View {
     @State private var newFolderText = ""
     @State private var showNewFolder = false
     @State private var newFolderParent: Int64?
-    @State private var tableSelection: QueueLibraryCard.ID?
     /// Drop-target highlight: the folder (or top-level row) a queue is hovering
     /// over mid-drag. `dropTargetFolder == someID` highlights that folder.
     @State private var dropTargetFolder: Int64?
     @State private var dropTargetTopLevel = false
     /// Window-level layout toggle; defaults to the artwork grid.
     @AppStorage("choragus.queueLibraryView") private var viewModeRaw = QueueLibraryViewMode.icon.rawValue
+    @State private var showEmptyDeletedConfirm = false
     private var viewMode: QueueLibraryViewMode { QueueLibraryViewMode(rawValue: viewModeRaw) ?? .icon }
+
+    /// Theme accent for row highlights (see `SonosManager.themeAccent`).
+    private var accent: Color { vm.manager.themeAccent }
 
     init(manager: SonosManager, group: SonosGroup) {
         _vm = StateObject(wrappedValue: QueueLibraryViewModel(manager: manager, group: group))
     }
 
-    private let columns = [GridItem(.adaptive(minimum: 172, maximum: 220), spacing: 20)]
+    /// Top-aligned: a card whose name fits one line is shorter than its
+    /// neighbours, and the grid's default centre alignment dropped it a
+    /// few points down the row so its art no longer lined up.
+    private let columns = [GridItem(.adaptive(minimum: 172, maximum: 220), spacing: 20, alignment: .top)]
 
     var body: some View {
         NavigationSplitView {
@@ -598,6 +741,10 @@ struct QueueLibraryWindow: View {
             }
         }
         .task { await vm.load() }
+        // The user's accent reaches every `Color.accentColor` and the
+        // table's selection colour; without it this window shows the
+        // system accent while the main window follows the theme.
+        .tint(vm.manager.resolvedAccentColor)
         .alert(L10n.rename, isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField(L10n.name, text: $renameText)
             Button(L10n.cancel, role: .cancel) { renaming = nil }
@@ -626,14 +773,15 @@ struct QueueLibraryWindow: View {
         List {
             Section {
                 row(.all, L10n.allSources, "square.grid.2x2", .secondary)
-                row(.smart, "Smart", "sparkles", .orange)
+                row(.smart, L10n.smartQueuesLabel, "sparkles", .orange)
                 // Dropping a queue here moves it out to top level.
                 plainRow(.choragus, "Choragus", "internaldrive.fill", .accentColor, dropActive: dropTargetTopLevel)
                     .dropDestination(for: QueueDragPayload.self) { payloads, _ in
                         payloads.contains { vm.handleDrop($0, ontoFolder: nil) }
                     } isTargeted: { dropTargetTopLevel = $0 }
                 row(.sonos, "Sonos", "hifispeaker.2.fill", .teal)
-                row(.history, "History", "clock.arrow.circlepath", .purple)
+                row(.history, L10n.historyLabel, "clock.arrow.circlepath", .purple)
+                row(.deleted, L10n.deletedItems, "trash", .secondary)
             }
             Section {
                 ForEach(vm.folderTree, id: \.folder.id) { entry in
@@ -692,7 +840,7 @@ struct QueueLibraryWindow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .listRowBackground(vm.filter == f ? Color.accentColor.opacity(0.18) : Color.clear)
+        .listRowBackground(vm.filter == f ? accent.opacity(0.18) : Color.clear)
     }
 
     /// Row variant WITHOUT a Button for the drop-target rows (Choragus top
@@ -701,10 +849,10 @@ struct QueueLibraryWindow: View {
     /// tappable HStack receives the drop.
     private func plainRow(_ f: QueueLibraryViewModel.Filter, _ label: String, _ icon: String, _ tint: Color, leading: CGFloat = 0, dropActive: Bool = false) -> some View {
         // ONE listRowBackground covering both drop-hover and selection. Two
-        // separate `.listRowBackground` modifiers conflict (the inner wins), so
-        // the drop tint never showed — fold both into a single value.
-        let bg: Color = dropActive ? Color.accentColor.opacity(0.32)
-            : (vm.filter == f ? Color.accentColor.opacity(0.18) : Color.clear)
+        // separate `.listRowBackground` modifiers conflict (the inner wins) and
+        // the drop tint never shows — fold both into a single value.
+        let bg: Color = dropActive ? accent.opacity(0.32)
+            : (vm.filter == f ? accent.opacity(0.18) : Color.clear)
         return HStack {
             Image(systemName: icon).foregroundStyle(tint).frame(width: 18)
             Text(label).lineLimit(1)
@@ -725,6 +873,14 @@ struct QueueLibraryWindow: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField(L10n.filterQueuePlaceholder, text: $vm.filterText).textFieldStyle(.plain)
                 if vm.isLoading { ProgressView().controlSize(.small) }
+                Picker("", selection: $vm.sortMode) {
+                    Label(L10n.sortByName, systemImage: "textformat")
+                        .tag(QueueLibraryViewModel.SortMode.name)
+                    Label(L10n.sortByNewest, systemImage: "calendar")
+                        .tag(QueueLibraryViewModel.SortMode.newest)
+                }
+                .labelsHidden()
+                .frame(maxWidth: 110)
                 // Room filter only applies to Smart queues (they're the only
                 // room-scoped source), so it's shown only on that view. The
                 // playback target room is chosen in the detail sheet, not here.
@@ -739,6 +895,21 @@ struct QueueLibraryWindow: View {
                     .frame(maxWidth: 150)
                     .help(L10n.filterByRoomLabel)
                     .onChange(of: vm.roomFilter) { Task { await vm.load() } }
+                }
+                if vm.filter == .deleted {
+                    Text(L10n.deletedItemsRetentionFormat(Timing.deletedSavedQueueRetentionDays))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Button(L10n.emptyDeletedItems, role: .destructive) { showEmptyDeletedConfirm = true }
+                        .controlSize(.small)
+                        .disabled(vm.count(for: .deleted) == 0)
+                        .confirmationDialog(
+                            L10n.emptyDeletedItemsConfirmFormat(vm.count(for: .deleted)),
+                            isPresented: $showEmptyDeletedConfirm, titleVisibility: .visible
+                        ) {
+                            Button(L10n.emptyDeletedItems, role: .destructive) { vm.emptyDeletedItems() }
+                        }
                 }
                 Picker("", selection: $viewModeRaw) {
                     Image(systemName: "square.grid.2x2").tag(QueueLibraryViewMode.icon.rawValue)
@@ -799,19 +970,39 @@ struct QueueLibraryWindow: View {
 
     /// Grid tile with tap-to-open, context menu, and drag/drop wiring: a tile
     /// can be dragged (as a whole queue) and is a drop target for a track or
-    /// another queue when it's a Choragus-local queue.
+    /// another queue when it's a Choragus-local queue. A card in Deleted
+    /// Items is neither a drag source nor a drop target.
     @ViewBuilder
     private func tile(_ card: QueueLibraryCard) -> some View {
-        QueueLibraryTile(card: card)
+        let base = QueueLibraryTile(card: card)
             .onTapGesture { selected = card }
             .contextMenu { cardMenu(card) }
-            .draggable(QueueDragPayload.card(cardID: card.id)) {
-                dragChip(icon: card.kind.badgeIcon, tint: card.kind.badgeColor,
-                         text: card.name.replacingOccurrences(of: "\n", with: " "))
+        if card.isDeleted {
+            base
+        } else {
+            base
+                .draggable(QueueDragPayload.card(cardID: card.id)) {
+                    dragChip(icon: card.kind.badgeIcon, tint: card.kind.badgeColor,
+                             text: card.name.replacingOccurrences(of: "\n", with: " "))
+                }
+                .dropDestination(for: QueueDragPayload.self) { payloads, _ in
+                    payloads.contains { vm.handleDrop($0, onto: card) }
+                }
+        }
+    }
+
+    /// Drag wiring for a card's row handles; a card in Deleted Items has
+    /// no drag source.
+    @ViewBuilder
+    private func cardDragHandle<Content: View>(_ card: QueueLibraryCard, name: String,
+                                               @ViewBuilder content: () -> Content) -> some View {
+        if card.isDeleted {
+            content()
+        } else {
+            content().draggable(QueueDragPayload.card(cardID: card.id)) {
+                dragChip(icon: card.kind.badgeIcon, tint: card.kind.badgeColor, text: name)
             }
-            .dropDestination(for: QueueDragPayload.self) { payloads, _ in
-                payloads.contains { vm.handleDrop($0, onto: card) }
-            }
+        }
     }
 
     /// Small drag image so the pointer and drop target stay visible (the
@@ -829,47 +1020,104 @@ struct QueueLibraryWindow: View {
 
     // MARK: Table view (flat list of queues; single-click opens the detail)
 
+    /// Flat list of queues. A `List` rather than a `Table`: the table's
+    /// selection colour is the system accent and goes grey once the detail
+    /// panel takes focus, and it cannot be themed. A List row carries its
+    /// own background, so the open queue stays highlighted in the user's
+    /// accent for as long as its panel is open, matching the sidebar.
     private var tableView: some View {
-        Table(vm.displayedCards, selection: $tableSelection) {
-            TableColumn(L10n.name) { card in
-                HStack(spacing: 8) {
-                    // Mixed-album mosaic, thumbnail size.
-                    MosaicCover(urls: card.coverURLs)
-                        .frame(width: 30, height: 30)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                    Image(systemName: card.kind.badgeIcon)
-                        .foregroundStyle(card.kind.badgeColor).font(.caption2)
-                    // History names carry a newline (date / time); flatten to
-                    // one line for the table cell.
-                    Text(card.name.replacingOccurrences(of: "\n", with: " ")).lineLimit(1)
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                sortHeader(L10n.name, .name).frame(maxWidth: .infinity, alignment: .leading)
+                sortHeader(L10n.sourceLabel, .source).frame(width: Self.sourceColumnWidth, alignment: .leading)
+                sortHeader(L10n.roomLabel, .room).frame(width: Self.roomColumnWidth, alignment: .leading)
+                sortHeader(L10n.tracks, .tracks, trailing: true).frame(width: Self.tracksColumnWidth, alignment: .trailing)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 20).padding(.vertical, 6)
+            Divider()
+            List {
+                ForEach(vm.tableCards) { card in
+                    tableRow(card)
+                        .listRowBackground(
+                            (selected?.id == card.id ? accent.opacity(0.18) : Color.clear)
+                        )
+                        .listRowSeparator(.hidden)
                 }
-                .draggable(QueueDragPayload.card(cardID: card.id)) {
-                    dragChip(icon: card.kind.badgeIcon, tint: card.kind.badgeColor,
-                             text: card.name.replacingOccurrences(of: "\n", with: " "))
+            }
+            .listStyle(.plain)
+        }
+    }
+
+    /// Column header: click sorts on the column, a second click flips the
+    /// direction; the active column shows a chevron for the direction.
+    private func sortHeader(_ label: String, _ column: QueueLibraryViewModel.TableSortColumn,
+                            trailing: Bool = false) -> some View {
+        let active = vm.tableSortColumn == column
+        return Button { vm.toggleTableSort(column) } label: {
+            HStack(spacing: 3) {
+                if trailing, active {
+                    Image(systemName: vm.tableSortAscending ? "chevron.up" : "chevron.down").font(.system(size: 8, weight: .bold))
+                }
+                Text(label).foregroundStyle(active ? .primary : .secondary)
+                if !trailing, active {
+                    Image(systemName: vm.tableSortAscending ? "chevron.up" : "chevron.down").font(.system(size: 8, weight: .bold))
                 }
             }
-            TableColumn(L10n.sourceLabel) { card in
-                Text(card.kind.sourceLabel).foregroundStyle(.secondary)
-            }.width(90)
-            TableColumn(L10n.roomLabel) { card in
-                Text(card.roomName ?? "").foregroundStyle(.secondary).lineLimit(1)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private static let sourceColumnWidth: CGFloat = 90
+    private static let roomColumnWidth: CGFloat = 150
+    private static let tracksColumnWidth: CGFloat = 60
+
+    private func tableRow(_ card: QueueLibraryCard) -> some View {
+        let name = card.name.replacingOccurrences(of: "\n", with: " ")
+        return HStack(spacing: 8) {
+            // Grip on rows that can be dragged into a folder (Choragus
+            // queues); other rows keep the space so names align. Grip and
+            // thumbnail are the drag handles: a draggable over the whole
+            // row takes the mouse-down, so a click on the name never
+            // reaches row selection.
+            cardDragHandle(card, name: name) {
+                Group {
+                    if card.isChoragus && !card.isDeleted {
+                        Image(systemName: "line.3.horizontal")
+                            .foregroundStyle(.tertiary)
+                            .help(L10n.dragToFolderHint)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(width: 14, height: 30)
             }
-            TableColumn(L10n.tracks) { card in
-                Text(card.trackCount > 0 ? "\(card.trackCount)" : "—")
-                    .foregroundStyle(.secondary).monospacedDigit()
-            }.width(60)
-        }
-        .contextMenu(forSelectionType: QueueLibraryCard.ID.self) { ids in
-            if let id = ids.first, let card = vm.displayedCards.first(where: { $0.id == id }) {
-                cardMenu(card)
+            // Mixed-album mosaic, thumbnail size.
+            cardDragHandle(card, name: name) {
+                MosaicCover(urls: card.coverURLs)
+                    .frame(width: 30, height: 30)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
             }
+            Image(systemName: card.kind.badgeIcon)
+                .foregroundStyle(card.kind.badgeColor).font(.caption2)
+            // History names carry a newline (date / time); flattened to
+            // one line for the row.
+            Text(name).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(card.kind.sourceLabel).foregroundStyle(.secondary)
+                .frame(width: Self.sourceColumnWidth, alignment: .leading)
+            Text(card.roomName ?? "").foregroundStyle(.secondary).lineLimit(1)
+                .frame(width: Self.roomColumnWidth, alignment: .leading)
+            Text(card.trackCount > 0 ? "\(card.trackCount)" : "\u{2014}")
+                .foregroundStyle(.secondary).monospacedDigit()
+                .frame(width: Self.tracksColumnWidth, alignment: .trailing)
         }
-        .onChange(of: tableSelection) {
-            guard let id = tableSelection,
-                  let card = vm.displayedCards.first(where: { $0.id == id }) else { return }
-            selected = card
-            tableSelection = nil
-        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onTapGesture { selected = card }
+        .contextMenu { cardMenu(card) }
     }
 
     @ViewBuilder
@@ -877,6 +1125,16 @@ struct QueueLibraryWindow: View {
         Button(L10n.queueReplace) { Task { await vm.play(card, append: false) } }
         Button(L10n.queueAppend) { Task { await vm.play(card, append: true) } }
         Divider()
+        if card.isDeleted {
+            Button(L10n.restore) { vm.restore(card) }
+            Button(L10n.deletePermanently, role: .destructive) { vm.deletePermanently(card) }
+        } else {
+            deletableCardMenu(card)
+        }
+    }
+
+    @ViewBuilder
+    private func deletableCardMenu(_ card: QueueLibraryCard) -> some View {
         Button(L10n.cloneToChoragus) { Task { await vm.clone(card) } }
         if card.isChoragus {
             Button(L10n.rename) { renameText = card.name; renaming = card }
@@ -912,32 +1170,6 @@ struct QueueLibraryWindow: View {
 
 // MARK: - Add to Choragus Queue (reusable context-menu item)
 
-/// Submenu for adding an album/track to a Choragus-local saved queue from any
-/// context menu. Lists existing queues plus "New Queue". Pass the manager
-/// explicitly — SwiftUI context menus don't reliably inherit the environment.
-struct AddToChoragusQueueMenu: View {
-    let item: BrowseItem
-    let manager: SonosManager
-
-    var body: some View {
-        Menu {
-            Button(L10n.newQueueEllipsis) {
-                let name = item.title.isEmpty ? "New Queue" : item.title
-                Task { _ = await manager.createChoragusQueue(item: item, name: name) }
-            }
-            let queues = manager.localSavedQueues()
-            if !queues.isEmpty {
-                Divider()
-                ForEach(queues) { q in
-                    Button(q.name) { Task { _ = await manager.addToChoragusQueue(item: item, queueID: q.id) } }
-                }
-            }
-        } label: {
-            Label(L10n.addToChoragusQueue, systemImage: "internaldrive.fill")
-        }
-    }
-}
-
 // MARK: - Tile (Zune-styled: bold type, content over chrome)
 
 struct QueueLibraryTile: View {
@@ -957,16 +1189,20 @@ struct QueueLibraryTile: View {
                         .padding(6)
                 }
             // Zune: bold, oversized, content-forward name. Two lines so the
-            // history cards' date / time both show (was truncated at one line).
-            Text(card.name)
-                .font(.system(size: 16, weight: .heavy))
-                .lineLimit(2)
-                .truncationMode(.tail)
-            Text(card.trackCount > 0 ? "\(card.kind.sourceLabel.uppercased()) · \(card.trackCount)" : card.kind.sourceLabel.uppercased())
+            // history cards' date / time both show.
+            // Source and count sit above the name: the name is the only
+            // line that varies in height, so keeping it last leaves the
+            // art and the caption on the same line across a row.
+            let source = card.isDeleted ? L10n.deletedItems : card.kind.sourceLabel
+            Text(card.trackCount > 0 ? "\(source.uppercased()) · \(card.trackCount)" : source.uppercased())
                 .font(.caption2.weight(.semibold))
                 .tracking(0.5)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+            Text(card.name)
+                .font(.system(size: 16, weight: .heavy))
+                .lineLimit(2)
+                .truncationMode(.tail)
         }
     }
 }
@@ -978,34 +1214,43 @@ struct QueueLibraryTile: View {
 struct MosaicCover: View {
     let urls: [String]
 
+    /// Grid tiles are ~200 pt wide, so a cell is ≤ 100 pt; 240 px covers
+    /// that at 2× with margin and keeps 300 cells under 70 MB decoded.
+    static let cellMaxPixelSize = 240
+
+    /// No GeometryReader: the mosaic is a fixed 1/2/3/4-cell arrangement
+    /// whose cells size themselves from the container through
+    /// `aspectRatio` + `fill`, so laying out a grid of 74 tiles (300
+    /// cells) is one pass. With a GeometryReader per tile, every width
+    /// change — opening the detail panel, resizing the window — costs
+    /// 80–180 ms on the main thread.
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            switch min(urls.count, 4) {
-            case 0:
-                placeholder
-            case 1:
-                cell(urls[0], w, h)
-            case 2:
-                HStack(spacing: 1) { cell(urls[0], w/2, h); cell(urls[1], w/2, h) }
-            case 3:
-                HStack(spacing: 1) {
-                    cell(urls[0], w/2, h)
-                    VStack(spacing: 1) { cell(urls[1], w/2, h/2); cell(urls[2], w/2, h/2) }
-                }
-            default:
-                VStack(spacing: 1) {
-                    HStack(spacing: 1) { cell(urls[0], w/2, h/2); cell(urls[1], w/2, h/2) }
-                    HStack(spacing: 1) { cell(urls[2], w/2, h/2); cell(urls[3], w/2, h/2) }
-                }
+        switch min(urls.count, 4) {
+        case 0:
+            placeholder
+        case 1:
+            cell(urls[0])
+        case 2:
+            HStack(spacing: 1) { cell(urls[0]); cell(urls[1]) }
+        case 3:
+            HStack(spacing: 1) {
+                cell(urls[0])
+                VStack(spacing: 1) { cell(urls[1]); cell(urls[2]) }
+            }
+        default:
+            VStack(spacing: 1) {
+                HStack(spacing: 1) { cell(urls[0]); cell(urls[1]) }
+                HStack(spacing: 1) { cell(urls[2]); cell(urls[3]) }
             }
         }
     }
 
-    private func cell(_ url: String, _ w: CGFloat, _ h: CGFloat) -> some View {
-        CachedAsyncImage(url: URL(string: url), cornerRadius: 0, priority: .interactive)
-            .frame(width: w, height: h)
+    private func cell(_ url: String) -> some View {
+        Color.clear
+            .overlay {
+                CachedAsyncImage(url: URL(string: url), cornerRadius: 0, priority: .interactive, contentMode: .fill,
+                                 maxPixelSize: Self.cellMaxPixelSize)
+            }
             .clipped()
     }
 
@@ -1103,6 +1348,14 @@ struct QueueLibraryDetail: View {
         }
     }
 
+    /// "167 tracks · 9:41:03" — playtime omitted when no row carries a
+    /// duration (Sonos playlists browsed as items), `~` when only some do.
+    private var trackCountLabel: String {
+        let count = "\(tracks.count) \(L10n.tracks)"
+        let playtime = QueuePlaytime(items: tracks)
+        return playtime.isEmpty ? count : "\(count) · \(playtime.label)"
+    }
+
     // MARK: Artwork list (drag-reorder + context menu when editable)
 
     private var listView: some View {
@@ -1131,7 +1384,7 @@ struct QueueLibraryDetail: View {
                     .frame(maxWidth: 220)
                     .background(.ultraThinMaterial, in: Capsule())
                 }
-                .contextMenu { if editable { rowMenu(track) } }
+                .contextMenu { trackMenu(track) }
             }
             .onMove(perform: editable ? move : nil)
             .onDelete(perform: editable ? delete : nil)
@@ -1149,7 +1402,7 @@ struct QueueLibraryDetail: View {
             TableColumn(L10n.albumLabel) { t in Text(t.album).foregroundStyle(.secondary).lineLimit(1) }
             TableColumn(L10n.sourceLabel) { t in Text(ServiceName.resolve(uri: t.uri)).foregroundStyle(.tertiary).lineLimit(1) }
             TableColumn("") { t in
-                if editable { Menu { rowMenu(t) } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize() }
+                Menu { trackMenu(t) } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize()
             }.width(34)
         }
     }
@@ -1157,6 +1410,36 @@ struct QueueLibraryDetail: View {
     // MARK: Edit operations (Choragus-local only)
 
     private func rowIndex(_ track: QueueItem) -> Int { tracks.firstIndex { $0.id == track.id } ?? 0 }
+
+    /// Play actions on every row (the queue's target room), then the
+    /// reorder / remove actions when the queue is editable.
+    @ViewBuilder
+    private func trackMenu(_ track: QueueItem) -> some View {
+        let item = track.browseItem(id: "QLIB:\(card.id)/\(track.id)")
+        Button(L10n.playNow) { play(item) { try await vm.manager.playBrowseItem($0, in: vm.targetGroup) } }
+        Button(L10n.playNext) { play(item) { _ = try await vm.manager.addBrowseItemToQueue($0, in: vm.targetGroup, playNext: true) } }
+        Button(L10n.addToQueue) { play(item) { _ = try await vm.manager.addBrowseItemToQueue($0, in: vm.targetGroup, playNext: false) } }
+        if editable {
+            Divider()
+            rowMenu(track)
+        }
+    }
+
+    /// Runs a play action on the row's browse item; a row with no URI
+    /// (a history row whose source has gone) reports rather than
+    /// silently doing nothing.
+    private func play(_ item: BrowseItem?, _ action: @escaping (BrowseItem) async throws -> Void) {
+        guard let item else {
+            vm.statusMessage = L10n.trackHasNoPlayableURI
+            return
+        }
+        Task {
+            do { try await action(item) } catch {
+                vm.statusMessage = error.localizedDescription
+                sonosDebugLog("[QLIB] track play action failed: \(error)")
+            }
+        }
+    }
 
     @ViewBuilder
     private func rowMenu(_ track: QueueItem) -> some View {
@@ -1204,6 +1487,10 @@ struct QueueLibraryDetail: View {
                 Label(card.kind.sourceLabel.uppercased(), systemImage: card.kind.badgeIcon)
                     .font(.caption2.weight(.bold)).tracking(0.5)
                     .foregroundStyle(card.kind.badgeColor)
+                if !loading, !tracks.isEmpty {
+                    Text(trackCountLabel)
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 HStack(spacing: 8) {
                     Text(L10n.roomLabel).font(.caption).foregroundStyle(.secondary)
                     Picker("", selection: $vm.targetGroupID) {

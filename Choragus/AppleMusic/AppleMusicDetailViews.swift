@@ -761,7 +761,7 @@ struct AppleMusicStationSearchView: View {
                                     }
                                 }
                                 if station.isLive {
-                                    Text("LIVE")
+                                    Text(L10n.live.uppercased())
                                         .font(.caption.weight(.bold))
                                         .padding(.horizontal, 6).padding(.vertical, 2)
                                         .background(Color.red.opacity(0.85), in: Capsule())
@@ -839,7 +839,7 @@ struct AppleMusicStationListView: View {
                                 }
                             }
                             if station.isLive {
-                                Text("LIVE")
+                                Text(L10n.live.uppercased())
                                     .font(.caption.weight(.bold))
                                     .padding(.horizontal, 6).padding(.vertical, 2)
                                     .background(Color.red.opacity(0.85), in: Capsule())
@@ -898,7 +898,7 @@ struct AppleMusicRecommendationDetailView: View {
                 }
             }
             if station.isLive {
-                Text("LIVE")
+                Text(L10n.live.uppercased())
                     .font(.caption.weight(.bold))
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Color.red.opacity(0.85), in: Capsule())

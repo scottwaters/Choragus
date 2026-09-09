@@ -24,54 +24,48 @@ Norwegian Nynorsk (`nn`) and Traditional Chinese (`zh-Hant`) are not currently s
 
 ## Where translations live
 
-`Packages/SonosKit/Sources/SonosKit/Localization/L10n.swift` is the only translation file. Entries are Swift dictionaries keyed by string-id, each value a sub-dictionary keyed by locale code. The table is split across `translations0…translationsN` chunks of about 25 keys, merged once on first lookup: as one literal it grew large enough to stall the SIL optimiser under `-O`, and a Release build never finished. Add new keys to any chunk; keep chunks small.
+`Packages/SonosKit/Sources/SonosKit/Resources/Localizable.xcstrings` is the only translation file: an Apple String Catalog, JSON, one entry per key with a `stringUnit` per locale. Xcode's catalog editor opens it directly and shows any locale that is missing a value.
 
-```swift
-"playPause": [
-    "en": "Play / Pause",
-    "de": "Wiedergabe / Pause",
-    // … all 13 locales
-],
+```json
+"playPause" : {
+  "extractionState" : "manual",
+  "localizations" : {
+    "en" : { "stringUnit" : { "state" : "translated", "value" : "Play / Pause" } },
+    "de" : { "stringUnit" : { "state" : "translated", "value" : "Wiedergabe / Pause" } }
+  }
+}
 ```
 
-A matching `public static var` accessor on the `L10n` struct gives call sites a shorthand:
+A matching `public static var` accessor on `L10n` (`Packages/SonosKit/Sources/SonosKit/Localization/L10n.swift`) gives call sites a shorthand:
 
 ```swift
 public static var playPause: String { tr("playPause") }
 ```
 
-`tr(_:)` reads the active locale from `UserDefaults[UDKey.appLanguage]` and falls back to English on miss.
+`tr(_:)` reads the active locale from `UserDefaults[UDKey.appLanguage]` and falls back to English, then to the key. The catalog is a package resource (`resources: [.process("Resources")]`, `defaultLocalization: "en"`), reached through `Bundle.module`:
+
+- **Xcode builds** (the app, `xcodebuild`) compile the catalog into one `Localizable.strings` table per `<locale>.lproj` in `SonosKit_SonosKit.bundle`; `tr` resolves the locale's bundle and calls `localizedString(forKey:value:table:)`.
+- **SwiftPM command-line builds** (`swift build`, `swift test`, CI) copy the catalog as is; `tr` decodes the catalog JSON once on first use instead. Same data, same lookup rules.
+
+Keys stay in the catalog and lookup stays under the app's own language setting, so a user can run Choragus in Japanese on an English Mac.
 
 ## Invariants
 
 Every new user-visible string must:
 
 1. Add a `public static var` accessor (or `public static func` for format strings) to `L10n`.
-2. Add a translation entry to the `translations` dictionary covering **all 13 locales**.
+2. Add the key to `Localizable.xcstrings` with a value for **all 13 locales** (Xcode's catalog editor, or edit the JSON).
 3. Reference via `L10n.keyName` from view code, never a hardcoded literal.
+
+`L10nCatalogTests` pins all of it on every `swift test`: every key carries every locale, no key is duplicated, every accessor resolves to a catalog key and every catalog key has an accessor, and every locale consumes the same format placeholders as English. The CI workflow (`.github/workflows/ci.yml`, hygiene job) runs the same checks without a Swift toolchain.
 
 ### No duplicate keys
 
-Swift 6 asserts on duplicate dictionary-literal keys at first dictionary access — `EXC_BREAKPOINT` before the app ever draws a window. v3.6 shipped with two `"never"` entries that crashed every install on Swift 6 toolchains.
-
-The recommended pre-commit gate:
-
-```bash
-grep -nE '^[[:space:]]+"[a-zA-Z][a-zA-Z0-9_]*":[[:space:]]*\[' \
-  Packages/SonosKit/Sources/SonosKit/Localization/L10n.swift \
-  | awk -F'"' '{print $2}' | sort | uniq -c | awk '$1 > 1 {print}'
-```
-
-Any output is a duplicate. Fix before committing. A second sweep should also check for duplicate `public static var` accessors:
-
-```bash
-grep -nE '^\s+public static var [a-zA-Z][a-zA-Z0-9_]*' L10n.swift \
-  | awk '{print $4}' | sort | uniq -d
-```
+A duplicate key in the catalog JSON is silently collapsed to the last value by any JSON parser, so the test and the CI gate both count raw key lines against parsed keys. Before the catalog (v3.6 to v5.0) the translations were Swift dictionary literals, where a duplicate key trapped at first access; that failure mode is gone.
 
 ### No malformed unicode escapes
 
-L10n entries use `\u{XXXX}` escapes for non-ASCII characters so the file stays diff-friendly and never depends on the editor's encoding. A truncated escape like `\u{00DFen` (missing the closing `}` before the next character) is a compile error, not a runtime error — the build will fail loudly. If a build error mentions `Expected '}' in \u{...}`, the offending line is in the new strings you just added.
+The catalog stores characters as UTF-8, not escapes. `AppLanguage.displayName` and the few strings that remain in Swift use `\u{XXXX}` escapes; a truncated escape there is a compile error, not a runtime one.
 
 ### Format strings
 
@@ -216,22 +210,33 @@ As of v3.7 every paragraph in the in-app Help window is localised across all 13 
 - Sonos product conventions: "Home Theater" stays English in French (matches sonos.com/fr-fr); zh-Hans uses 音箱 (Sonos PRC convention) rather than 扬声器 (generic).
 - "Preset" stays as a borrowed term in Polish (`Preset`) for the Sonos preset concept rather than the literal `Ustawienie` (setting).
 
+## Shortcuts and Siri (App Intents)
+
+App Intents metadata is the one place `L10n` cannot reach: intent titles, descriptions, parameter names, parameter summaries, entity type names and Siri phrases must be string literals so the `appintentsmetadataprocessor` can extract them at build time, and the system resolves them against the app bundle's string catalogs in the **system** locale, not the in-app language.
+
+- `Choragus/Localizable.xcstrings` — intent titles, descriptions, parameter titles and descriptions, `ParameterSummary` strings (`"Play on ${room}"`), `TypeDisplayRepresentation` names and `shortTitle`s. Keys are the English literals as written in `PlaybackIntents.swift`.
+- `Choragus/AppShortcuts.xcstrings` — the spoken phrases (`"Play ${applicationName} in ${room}"`).
+- `knownRegions` in the project lists all 13 languages so the catalogs compile to per-language `.lproj` folders.
+
+Two consequences:
+
+- Dynamic text inside an intent (entity display names, thrown error messages) still goes through `L10n` and follows the in-app language. A user whose Mac runs German but who set Choragus to English sees German action titles around English room labels. Accepted: the picker labels match what the app's sidebar shows.
+- Declaring the regions also lets AppKit-provided strings (standard menu items, open/save panels, alert buttons) follow the system language instead of staying English. Before v5.0 the bundle declared only `en`.
+
+Adding an intent string: write the literal in Swift, add the same literal as a key in the matching catalog with all 12 translations. A key missing from the catalog falls back to the literal; a key that drifts from the literal silently falls back too, so keep them byte-identical.
+
 ## Translator workflow
 
-There's no external translation file (no `.xcloc`, no `.po`). All translations live in `L10n.swift`. The chunked dictionary literals are the source of truth.
+The catalog is the source of truth and is what Apple's tooling expects:
 
-When adding a single new key, the easiest path is:
+- **Xcode**: open `Localizable.xcstrings`; the editor lists every key with a column per locale and flags the ones without a value.
+- **XLIFF round-trip**: `xcodebuild -exportLocalizations -localizationPath <dir> -exportLanguage de` on the package produces an `.xcloc` for a translator; `-importLocalizations` merges it back.
+- **By hand**: the JSON is stable and sorted, so a small change is a small diff.
+
+When adding a single new key:
 
 1. Add the `public static var` accessor.
-2. Add the dict entry with placeholder values for the 12 non-English locales:
-   ```swift
-   "newKey": [
-       "en": "The English copy.",
-       "de": "<placeholder>", "fr": "<placeholder>", // …
-   ],
-   ```
-3. Run the dup-key gate.
-4. Build — it should succeed.
-5. Replace the placeholders with translations. Re-running the dup-key gate after each batch.
+2. Add the key to the catalog with a value for every locale (`"state": "translated"`).
+3. `swift test --filter L10nCatalogTests` — it names any locale, accessor or placeholder that does not line up.
 
 Bulk additions (Help rewrite, Settings reorganisation) typically batch keys in groups of ~10 per dict-edit so the diff stays reviewable.

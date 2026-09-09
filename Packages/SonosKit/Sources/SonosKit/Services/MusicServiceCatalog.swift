@@ -34,8 +34,7 @@ import Combine
 
 public struct ServiceDescriptor: Equatable, Sendable, Identifiable {
     /// Runtime sid as reported by the speaker for this household.
-    /// May differ from any compile-time constant (the bug that motivated
-    /// the catalog).
+    /// May differ from any compile-time constant.
     public let id: Int
     public let name: String
     public let uri: String
@@ -63,6 +62,52 @@ public struct ServiceDescriptor: Equatable, Sendable, Identifiable {
     }
 }
 
+/// How a service's SMAPI object id maps onto the id embedded in play URIs.
+///
+/// Most services play the object id back verbatim — a Spotify
+/// `spotify:track:<id>` is also the id inside
+/// `x-sonos-spotify:spotify%3atrack%3a<id>`. Amazon Music does not: its
+/// SMAPI ids are `catalog:<kind>:asin:<ASIN>`, while the playable id is a
+/// catalogue *path*. Using the object id verbatim faults UPnP 714.
+public enum ItemIDStyle: String, Equatable, Sendable {
+    /// Object id goes into the URI unchanged.
+    case verbatim
+    /// Amazon Music on S1: rewrite `catalog:track:asin:X` to
+    /// `catalog/tracks/X/` and `catalog:album:asin:X` to
+    /// `catalog/albums/X/#album_desc`.
+    case amazonCatalogPath
+    /// Amazon Music on S2: the object id as-is, minus the `#erefid-…`
+    /// fragment search results carry. The speaker's own queue rows read
+    /// `x-sonos-http:catalog%3atrack%3aasin%3a<ASIN>.mpd`.
+    case amazonAsin
+}
+
+/// How a service's collections (albums, playlists, artists, stations)
+/// are handed to the speaker.
+public enum ContainerPlayForm: String, Equatable, Sendable {
+    /// `x-rincon-cpcontainer:<prefix><id>?…&flags=8300` enqueued as a
+    /// playlist container. The Sonos default.
+    case cpContainer
+    /// Amazon Music on S2: `x-sonosapi-radio:sp:container:station:<id>`
+    /// set directly on the transport with DIDL prefix `000c0000` and
+    /// class audioBroadcast — the form the Sonos app itself uses.
+    /// Single tracks in the local queue fault
+    /// UPnP 701 in every form on S2, so the collection is the unit of
+    /// playback there.
+    case stationWrapper
+}
+
+/// Which `desc` (cdudn) the service's DIDL carries.
+public enum CdudnForm: String, Equatable, Sendable {
+    /// Token-bearing when the controller holds an AppLink token,
+    /// anonymous otherwise.
+    case tokenWhenHeld
+    /// Always `SA_RINCON<type>_`: the speaker resolves the household's
+    /// own account binding. Amazon S2 plays with it, and the controller's
+    /// AppLink token is not the speaker's account id.
+    case anonymous
+}
+
 public struct ServiceRules: Equatable, Sendable {
     public let canonicalName: String
     public let trackURIScheme: String
@@ -75,6 +120,19 @@ public struct ServiceRules: Equatable, Sendable {
     public let didlContainerIdPrefix: String
     public let supportsAppLink: Bool
     public let defaultSerialNumber: Int
+    public let itemIDStyle: ItemIDStyle
+    /// Whether a search/browse item is resolved through SMAPI `getMediaURI`
+    /// before play and enqueued as the returned direct URL with empty DIDL.
+    /// Right for controller-authenticated services whose speakers hold no
+    /// account binding (TIDAL, Audible). Wrong for Amazon Music: its
+    /// `getMediaURI` returns a signed CloudFront HLS manifest the speaker
+    /// enqueues but cannot play (UPnP 701 on Play), and faults
+    /// `ItemNotFound` for stations altogether. Amazon's raw
+    /// `x-sonosapi-hls-static:` / `x-sonosapi-radio:` URIs with DIDL are
+    /// what the speaker plays.
+    public let resolvesViaGetMediaURI: Bool
+    public let containerPlayForm: ContainerPlayForm
+    public let cdudnForm: CdudnForm
 
     public init(canonicalName: String,
                 trackURIScheme: String = URIPrefix.sonosHTTP,
@@ -86,7 +144,11 @@ public struct ServiceRules: Equatable, Sendable {
                 didlStreamIdPrefix: String = "10092020",
                 didlContainerIdPrefix: String = "1004206c",
                 supportsAppLink: Bool = false,
-                defaultSerialNumber: Int = 0) {
+                defaultSerialNumber: Int = 0,
+                itemIDStyle: ItemIDStyle = .verbatim,
+                resolvesViaGetMediaURI: Bool = true,
+                containerPlayForm: ContainerPlayForm = .cpContainer,
+                cdudnForm: CdudnForm = .tokenWhenHeld) {
         self.canonicalName = canonicalName
         self.trackURIScheme = trackURIScheme
         self.trackURIExtension = trackURIExtension
@@ -98,6 +160,10 @@ public struct ServiceRules: Equatable, Sendable {
         self.didlContainerIdPrefix = didlContainerIdPrefix
         self.supportsAppLink = supportsAppLink
         self.defaultSerialNumber = defaultSerialNumber
+        self.itemIDStyle = itemIDStyle
+        self.resolvesViaGetMediaURI = resolvesViaGetMediaURI
+        self.containerPlayForm = containerPlayForm
+        self.cdudnForm = cdudnForm
     }
 
     /// cdudn (Service Account binding token) for DIDL `desc` elements.
@@ -115,11 +181,10 @@ public struct ServiceRules: Equatable, Sendable {
     ///   when the controller has authenticated the service via AppLink
     ///   and holds the per-household token in the local SMAPI store.
     ///
-    /// The legacy literal `-0-Token` form is rejected by Sonos for
-    /// services that require a binding (issue #28 / Radio Paradise),
-    /// so it is no longer emitted.
+    /// The literal `-0-Token` form is rejected by Sonos for services
+    /// that require a binding (Radio Paradise), so it is never emitted.
     public func cdudn(rinconServiceType type: Int, authToken: String? = nil) -> String {
-        if let token = authToken, !token.isEmpty {
+        if cdudnForm == .tokenWhenHeld, let token = authToken, !token.isEmpty {
             return "SA_RINCON\(type)_X_#Svc\(type)-\(token)-Token"
         }
         return "SA_RINCON\(type)_"
@@ -155,8 +220,8 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
     private var snapshotDescriptors: [ServiceDescriptor] = []
     // Dynamic canonical table (lock-guarded). A canonical service can hold
     // MORE THAN ONE sid — Sonos assigns the id per household/region/registration
-    // (Spotify is 9 in most systems, 12 in others), so we group ids by service
-    // rather than hardcode one. Seeded from the well-known online id set, then
+    // (Spotify is 9 in most systems, 12 in others), so ids are grouped by
+    // service rather than hardcoded. Seeded from the well-known online id set, then
     // augmented at every `ListAvailableServices` refresh with whatever ids this
     // household actually reports.
     private var canonicalRelatedSids: [String: Set<Int>] = [:]  // lower(name) -> ids
@@ -164,6 +229,8 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
     private var canonicalDisplayByKey: [String: String] = [:]   // lower(name) -> display
 
     private let staticRulesByName: [String: ServiceRules]
+    /// S1-only variants, keyed like `staticRulesByName`.
+    private let s1RulesByName: [String: ServiceRules]
     private var refreshInFlight: Task<Void, Never>?
     private let fetcher: ListAvailableServicesFetching
 
@@ -195,6 +262,7 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
 
     public init(fetcher: ListAvailableServicesFetching = LiveListAvailableServicesFetcher()) {
         self.staticRulesByName = Self.buildStaticRulesTable()
+        self.s1RulesByName = Self.buildS1RulesTable()
         self.fetcher = fetcher
         rebuildCanonicalTable([])  // seed-only until the first refresh
     }
@@ -222,8 +290,19 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
     }
 
     public func rules(forSid sid: Int) -> ServiceRules? {
+        rules(forSid: sid, generation: .unknown)
+    }
+
+    /// Rules for a service as played by a household of `generation`.
+    /// The default table describes S2 (and unknown); `s1RulesByName`
+    /// holds the services whose S1 form differs. Only Amazon Music does
+    /// today: S1 plays `x-sonosapi-hls-static:catalog/tracks/<asin>/`,
+    /// S2 plays `x-sonos-http:catalog:track:asin:<asin>.mpd`.
+    public func rules(forSid sid: Int, generation: SonosSystemVersion) -> ServiceRules? {
         guard let name = descriptor(forSid: sid)?.name else { return nil }
-        return staticRulesByName[name.lowercased()]
+        let key = name.lowercased()
+        if generation == .s1, let s1 = s1RulesByName[key] { return s1 }
+        return staticRulesByName[key]
     }
 
     /// Best-effort RINCON service type for a sid. Falls back to
@@ -236,10 +315,10 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
 
     // MARK: - Canonical service resolution (multi-id, dynamic)
 
-    /// The canonical, display-cased service name for any sid we can resolve —
+    /// The canonical, display-cased service name for any resolvable sid —
     /// from the household descriptor's own name, the seeded id set, or a
-    /// URI-scheme match. nil only for a sid we genuinely don't recognise (the
-    /// caller then falls back to "Service N").
+    /// URI-scheme match. nil for an unrecognised sid (the caller then
+    /// falls back to "Service N").
     public func canonicalDisplayName(forSid sid: Int) -> String? {
         lock.lock(); defer { lock.unlock() }
         guard let key = canonicalKeyBySid[sid] else { return nil }
@@ -276,15 +355,36 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
                 .replacingOccurrences(of: "x-sonos-", with: "")
                 .replacingOccurrences(of: "x-rincon-", with: "")
                 .replacingOccurrences(of: ":", with: "")
-            if token.count > 3, label.contains(token) { return key }
+            // Same guard as the name-word pass below: `x-sonosapi-radio:`
+            // reduces to "radio" and `x-sonosapi-stream:` to "stream", which
+            // match any vendor whose host says what it serves rather than who
+            // it is (RadioApp vs Pandora, HearDis! vs TuneIn).
+            if token.count > 3, !Self.genericHostTokens.contains(token),
+               label.contains(token) { return key }
         }
-        // 2) Canonical name's first word in the host label.
+        // 2) Canonical name's first word in the host label — but only when
+        //    that word identifies a service. "Sonos Radio" contributes the
+        //    token "sonos", and vendors conventionally name their Sonos
+        //    integration endpoint `sonos.<vendor>.com`; matching on it folds
+        //    unrelated services into Sonos Radio's identity and makes their
+        //    Settings toggles govern each other.
         for key in staticRulesByName.keys {
-            if let nameTok = key.split(separator: " ").first.map(String.init),
-               nameTok.count > 3, label.contains(nameTok) { return key }
+            guard let nameTok = key.split(separator: " ").first.map(String.init),
+                  nameTok.count > 3,
+                  !Self.genericHostTokens.contains(nameTok),
+                  label.contains(nameTok)
+            else { continue }
+            return key
         }
         return nil
     }
+
+    /// Words that appear in a canonical service name but say nothing about
+    /// WHICH service a host belongs to. Matching on these folds unrelated
+    /// services together.
+    private static let genericHostTokens: Set<String> = [
+        "sonos", "radio", "music", "player", "stream", "media", "audio",
+    ]
 
     /// First DNS label of a URL/host string, lower-cased.
     static func hostFirstLabel(_ uri: String) -> String {
@@ -312,10 +412,25 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
         for d in descriptors {
             for key in related.keys { related[key]?.remove(d.id) }
         }
+        // Descriptors that map to a canonical service by something other than
+        // their own name are worth recording: a wrong match folds an unrelated
+        // service into another's identity, which surfaces as the wrong control
+        // in Settings and as one toggle appearing to govern several services.
+        var foldedByHost: [String: [String]] = [:]
         for d in descriptors {
             guard let key = canonicalKey(forDescriptor: d) else { continue }
             related[key, default: []].insert(d.id)
             if display[key] == nil { display[key] = d.name }   // prefer seeded display
+            if d.name.lowercased() != key {
+                foldedByHost[key, default: []].append("\(d.name)(\(d.id))")
+            }
+        }
+        for (key, folded) in foldedByHost where folded.count > 0 {
+            sonosDiagLog(.info, tag: "CATALOG",
+                         "Descriptors folded into a canonical service by host match",
+                         context: ["canonical": key,
+                                   "count": String(folded.count),
+                                   "services": folded.prefix(12).joined(separator: ", ")])
         }
         var bySid: [Int: String] = [:]
         for (key, ids) in related { for id in ids { bySid[id] = key } }
@@ -328,10 +443,10 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
 
     /// Resolve a track URI scheme for a runtime sid. Falls back to
     /// `x-sonos-http:` and logs a diagnostic when the catalog has no
-    /// rules for the sid — that's the failure mode of issue #19, where
-    /// the speaker reports a Spotify sid the catalog hasn't seen yet.
-    public func trackURIScheme(forSid sid: Int) -> String {
-        if let scheme = rules(forSid: sid)?.trackURIScheme {
+    /// rules for the sid (the speaker reports a Spotify sid the catalog
+    /// has not seen yet).
+    public func trackURIScheme(forSid sid: Int, generation: SonosSystemVersion = .unknown) -> String {
+        if let scheme = rules(forSid: sid, generation: generation)?.trackURIScheme {
             return scheme
         }
         let known = allDescriptors()
@@ -345,38 +460,50 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
         return URIPrefix.sonosHTTP
     }
 
-    public func trackURIExtension(forSid sid: Int) -> String {
-        rules(forSid: sid)?.trackURIExtension ?? ""
+    public func trackURIExtension(forSid sid: Int, generation: SonosSystemVersion = .unknown) -> String {
+        rules(forSid: sid, generation: generation)?.trackURIExtension ?? ""
     }
 
-    public func trackPlaybackFlags(forSid sid: Int) -> Int {
-        rules(forSid: sid)?.trackPlaybackFlags ?? 8224
+    public func trackPlaybackFlags(forSid sid: Int, generation: SonosSystemVersion = .unknown) -> Int {
+        rules(forSid: sid, generation: generation)?.trackPlaybackFlags ?? 8224
     }
 
     /// DIDL `item id` prefix lookup. Per-service when the catalog has
     /// rules; generic Sonos defaults otherwise. Same pattern as
     /// `trackURIScheme(forSid:)` — the catalog wins, the universal
     /// prefix is the fallback.
-    public func didlTrackIdPrefix(forSid sid: Int) -> String {
-        rules(forSid: sid)?.didlTrackIdPrefix ?? "10032020"
+    public func didlTrackIdPrefix(forSid sid: Int, generation: SonosSystemVersion = .unknown) -> String {
+        rules(forSid: sid, generation: generation)?.didlTrackIdPrefix ?? "10032020"
     }
 
     public func didlStreamIdPrefix(forSid sid: Int) -> String {
         rules(forSid: sid)?.didlStreamIdPrefix ?? "10092020"
     }
 
-    public func didlContainerIdPrefix(forSid sid: Int) -> String {
-        rules(forSid: sid)?.didlContainerIdPrefix ?? "1004206c"
+    /// See `ServiceRules.resolvesViaGetMediaURI`. Services without a
+    /// rules entry keep the historical resolve-then-enqueue behaviour.
+    public func resolvesViaGetMediaURI(forSid sid: Int) -> Bool {
+        rules(forSid: sid)?.resolvesViaGetMediaURI ?? true
+    }
+
+    public func didlContainerIdPrefix(forSid sid: Int, generation: SonosSystemVersion = .unknown) -> String {
+        rules(forSid: sid, generation: generation)?.didlContainerIdPrefix ?? "1004206c"
+    }
+
+    /// How this service's object ids map onto play-URI ids.
+    public func itemIDStyle(forSid sid: Int, generation: SonosSystemVersion = .unknown) -> ItemIDStyle {
+        rules(forSid: sid, generation: generation)?.itemIDStyle ?? .verbatim
     }
 
     /// cdudn for the runtime sid. Resolves the RINCON service type
     /// (catalog descriptor or `(sid << 8) + 7` fallback), then delegates
     /// to the static rule's cdudn template.
-    public func cdudn(forSid sid: Int, authToken: String? = nil) -> String {
+    public func cdudn(forSid sid: Int, authToken: String? = nil,
+                      generation: SonosSystemVersion = .unknown) -> String {
         // Apple Music: the local-device descriptor, NOT the service-account
         // form. With the SA_RINCON service descriptor the speaker validates
-        // the account against Apple PER TRACK at enqueue (measured 1.16 s vs
-        // 0.15 s per AddURIToQueue, 2026-06-11); the official Sonos app's
+        // the account against Apple PER TRACK at enqueue (1.16 s vs 0.15 s
+        // per AddURIToQueue); the official Sonos app's
         // queue entries carry no service descriptor at all — the `sn=` in
         // the hls-static URI binds the account at play time. Verified to
         // enqueue fast AND play.
@@ -384,7 +511,7 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
             return "RINCON_AssociatedZPUDN"
         }
         let type = rinconServiceType(forSid: sid)
-        if let rule = rules(forSid: sid) {
+        if let rule = rules(forSid: sid, generation: generation) {
             return rule.cdudn(rinconServiceType: type, authToken: authToken)
         }
         // No rule entry — apply the default template directly.
@@ -395,9 +522,7 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
     }
 
     /// Returns the sid this household uses for a canonical service name,
-    /// if the descriptor has been loaded. Useful for code paths that
-    /// were built around compile-time constants and need to migrate to
-    /// runtime resolution.
+    /// if the descriptor has been loaded.
     public func sid(forName name: String) -> Int? {
         descriptor(forName: name)?.id
     }
@@ -438,8 +563,8 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
 
     /// Refresh if the given sid isn't currently known. The "miss at
     /// play time" path: the speaker just minted a track URI with a sid
-    /// the catalog hasn't seen, and we need to resolve it before
-    /// building the play URI ourselves.
+    /// the catalog hasn't seen, and it must be resolved before
+    /// building the play URI.
     @MainActor
     public func ensureSidKnown(_ sid: Int) async {
         if descriptor(forSid: sid) != nil { return }
@@ -468,9 +593,8 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
 
     /// Diff incoming descriptors against the current cache. Logs any
     /// drift (a service whose sid changed between refreshes) so it's
-    /// visible in diagnostics. Drift is rare but real — happens if a
-    /// user removes-and-re-adds an account in the Sonos app, which is
-    /// exactly the symptom path that produced issue #19's failure mode.
+    /// visible in diagnostics. Drift happens when a user removes and
+    /// re-adds an account in the Sonos app.
     @MainActor
     func applyRefresh(_ incoming: [ServiceDescriptor]) {
         let prior = snapshotDescriptors
@@ -497,6 +621,32 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
 
     /// Seeded once at init. Keys are canonical names, lowercased, so
     /// matches against descriptor names are case-insensitive.
+    /// Services whose S1 play form differs from the S2 default.
+    static func buildS1RulesTable() -> [String: ServiceRules] {
+        let entries: [ServiceRules] = [
+            // Amazon Music on S1: tracks as
+            // `x-sonosapi-hls-static:catalog%2ftracks%2f<asin>%2f` with
+            // `flags=0` and DIDL id prefix `10030000`, both taken from
+            // that household's Amazon favorites. The verbatim object id
+            // and the `x-sonos-http:` form fault UPnP 714 there.
+            ServiceRules(
+                canonicalName: ServiceName.amazonMusic,
+                trackURIScheme: URIPrefix.sonosApiHLSStatic,
+                trackURIExtension: "",
+                trackPlaybackFlags: 0,
+                streamURIScheme: URIPrefix.sonosApiRadio,
+                streamPlaybackFlags: 8300,
+                didlTrackIdPrefix: "10030000",
+                didlStreamIdPrefix: "100c2068",
+                supportsAppLink: true,
+                defaultSerialNumber: 1,
+                itemIDStyle: .amazonCatalogPath,
+                resolvesViaGetMediaURI: false
+            ),
+        ]
+        return Dictionary(uniqueKeysWithValues: entries.map { ($0.canonicalName.lowercased(), $0) })
+    }
+
     static func buildStaticRulesTable() -> [String: ServiceRules] {
         let entries: [ServiceRules] = [
             ServiceRules(
@@ -510,7 +660,7 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
             ServiceRules(
                 canonicalName: ServiceName.appleMusic,
                 // HLS-static matches the official app's enqueue form; the
-                // legacy `x-sonos-http:…mp4` form forced a per-track Apple
+                // `x-sonos-http:…mp4` form forces a per-track Apple
                 // validation at enqueue time (slow bulk adds).
                 trackURIScheme: URIPrefix.sonosApiHLSStatic,
                 trackURIExtension: "",
@@ -526,13 +676,32 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
                 supportsAppLink: true,
                 defaultSerialNumber: 1
             ),
+            // Amazon Music, S2 form. Tracks use the id form the
+            // S2 Sonos app streams — `x-sonosapi-hls-static:` with the
+            // verbatim `catalog:track:asin:<ASIN>` id and `flags=0`. On an
+            // Amazon Music Prime account every single-track form faults
+            // UPnP 701 (Prime is station-only); that is reported as
+            // `StaleDataError.serviceTierRefused`, not modelled here.
+            // Albums, playlists and artists play the way the Sonos app
+            // plays them: `x-sonosapi-radio:sp:container:station:<id>` set
+            // on the transport, DIDL prefix `000c0000`, anonymous cdudn.
+            // The S1 form lives in `buildS1RulesTable`.
             ServiceRules(
                 canonicalName: ServiceName.amazonMusic,
-                trackURIScheme: URIPrefix.sonosHTTP,
+                trackURIScheme: URIPrefix.sonosApiHLSStatic,
                 trackURIExtension: "",
-                trackPlaybackFlags: 8224,
-                supportsAppLink: false,
-                defaultSerialNumber: 1
+                trackPlaybackFlags: 0,
+                streamURIScheme: URIPrefix.sonosApiRadio,
+                streamPlaybackFlags: 8300,
+                didlTrackIdPrefix: "10030000",
+                didlStreamIdPrefix: "100c2068",
+                didlContainerIdPrefix: "000c0000",
+                supportsAppLink: true,
+                defaultSerialNumber: 1,
+                itemIDStyle: .amazonAsin,
+                resolvesViaGetMediaURI: false,
+                containerPlayForm: .stationWrapper,
+                cdudnForm: .anonymous
             ),
             ServiceRules(
                 canonicalName: ServiceName.tidal,
@@ -606,12 +775,19 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
                 supportsAppLink: false,
                 defaultSerialNumber: 0
             ),
+            // Pandora — `getAppLink` answers HTTP 200 with a link code, so
+            // AppLink is on. Playback rules are untested: captures of the
+            // Sonos app show stations as `x-sonosapi-radio:` with
+            // `flags=8300` and a real `sn`; the `-0-Token` form faults SOAP 402.
             ServiceRules(
                 canonicalName: ServiceName.pandora,
                 trackURIScheme: URIPrefix.sonosApiRadio,
                 trackURIExtension: "",
                 trackPlaybackFlags: 8224,
-                supportsAppLink: false,
+                streamURIScheme: URIPrefix.sonosApiRadio,
+                streamPlaybackFlags: 8300,
+                didlStreamIdPrefix: "100c2068",
+                supportsAppLink: true,
                 defaultSerialNumber: 1
             ),
             ServiceRules(
@@ -630,10 +806,8 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
             //   x-sonosapi-radio:channel%3a0%3a2%3aresume?sid=308&flags=8232&sn=26
             // and the embedded <r:resMD> DIDL uses item-id prefix
             // 100c2028 plus parentID="10fe2064bitrate%3aradio128".
-            // The previous defaults (`x-sonosapi-stream:`, flags=8224,
-            // didl prefix `10092020`) produced UPnP fault 402 because
-            // every field was wrong for this service. Pandora uses a
-            // similar `x-sonosapi-radio:` shape, hence the precedent.
+            // `x-sonosapi-stream:` / flags=8224 / prefix `10092020` fault
+            // UPnP 402 for this service.
             ServiceRules(
                 canonicalName: ServiceName.radioParadise,
                 trackURIScheme: URIPrefix.sonosApiRadio,
@@ -660,9 +834,7 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
 
 /// Indirection so `MusicServiceCatalog` is testable without a live
 /// speaker — tests inject a stub fetcher returning a canned descriptor
-/// list. Production uses `LiveListAvailableServicesFetcher`, which
-/// drives the same SOAP call that `SMAPIAuthManager` and
-/// `MusicServicesService` previously each owned a copy of.
+/// list. Production uses `LiveListAvailableServicesFetcher`.
 public protocol ListAvailableServicesFetching: Sendable {
     func fetch(speakerIP: String) async throws -> [ServiceDescriptor]
 }

@@ -27,7 +27,7 @@ private struct PlexNavLevel: Identifiable {
 }
 
 struct PlexDirectBrowseView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     @EnvironmentObject var plexAuth: PlexAuthManager
     let group: SonosGroup?
@@ -99,35 +99,10 @@ struct PlexDirectBrowseView: View {
     /// queue the whole list in one click instead of right-clicking each
     /// row.
     private var bulkActionBar: some View {
-        HStack(spacing: 6) {
-            Button {
-                Task { await playAllNow() }
-            } label: {
-                Label(L10n.playAll, systemImage: "play.fill")
-            }
-            .controlSize(.small)
-            Button {
-                Task { await addAllToQueue(playNext: false) }
-            } label: {
-                Label(L10n.addAllToQueue, systemImage: "text.append")
-            }
-            .controlSize(.small)
-            Button {
-                Task { await addAllToQueue(playNext: true) }
-            } label: {
-                Label(L10n.playNext, systemImage: "text.insert")
-            }
-            .controlSize(.small)
-            Spacer()
-            // Item count — left as a numeric-only label to avoid the
-            // pluralisation gymnastics the existing L10n flat-dictionary
-            // doesn't support cleanly. The number itself is universal.
-            Text("\(items.count)")
-                .font(.footnote)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        BrowseBulkActionBar(count: items.count,
+                            playAll: { Task { await playAllNow() } },
+                            addAll: { Task { await addAllToQueue(playNext: false) } },
+                            playNext: { Task { await addAllToQueue(playNext: true) } })
     }
 
     // MARK: - Header & search
@@ -139,7 +114,7 @@ struct PlexDirectBrowseView: View {
     private var header: some View {
         HStack(spacing: 0) {
             if stack.count > 1 {
-                Button { stack.removeLast() } label: {
+                Button { if stack.count > 1 { stack.removeLast() } } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "chevron.backward")
                             .font(.system(size: 14, weight: .semibold))
@@ -265,17 +240,17 @@ struct PlexDirectBrowseView: View {
     @ViewBuilder
     private func contextMenu(for item: PlexMediaItem) -> some View {
         if item.isContainer {
-            Button(L10n.playAllNow) {
+            Button(L10n.playNow) {
                 Task { await playAllChildren(of: item) }
             }
-            Button(L10n.addAllToQueue) {
-                Task { await addToQueue(item, playNext: false) }
-            }
-            Button(L10n.playAllNext) {
+            Button(L10n.playNext) {
                 Task { await addToQueue(item, playNext: true) }
             }
+            Button(L10n.addToQueue) {
+                Task { await addToQueue(item, playNext: false) }
+            }
             Divider()
-            Button(L10n.open) {
+            Button(L10n.browse) {
                 handleTap(item)
             }
         } else {
@@ -295,13 +270,13 @@ struct PlexDirectBrowseView: View {
                 Task {
                     guard let auth = try? await authParams(),
                           let bi = makeBrowseItem(item, baseURI: auth.base, token: auth.token) else { return }
-                    _ = await sonosManager.createChoragusQueue(item: bi, name: item.title.isEmpty ? "New Queue" : item.title)
+                    _ = await sonosManager.createChoragusQueue(item: bi, name: item.title.isEmpty ? L10n.newQueue : item.title)
                 }
             }
-            let queues = sonosManager.localSavedQueues()
-            if !queues.isEmpty {
+            let tree = sonosManager.savedQueueTree()
+            if !tree.queues.isEmpty || !tree.folders.isEmpty {
                 Divider()
-                ForEach(queues) { q in
+                ChoragusQueueTreeMenu(tree: tree) { q in
                     Button(q.name) {
                         Task {
                             guard let auth = try? await authParams(),
@@ -408,8 +383,8 @@ struct PlexDirectBrowseView: View {
         fellBackToSMAPI = false
         defer { isLoading = false }
 
-        // Make sure we have a base URI before any browse call —
-        // discovery may not have completed since the PIN auth landed.
+        // A base URI is required before any browse call — discovery
+        // may not have completed since the PIN auth landed.
         let base: String
         do {
             base = try await plexAuth.ensureBaseURI()
@@ -423,13 +398,10 @@ struct PlexDirectBrowseView: View {
             switch level.path {
             case "root":
                 // Synthetic "Playlists" entry sits above the library
-                // sections so user-curated content surfaces first
-                // (most Plex-heavy households drive most listening
-                // from playlists). Library sections filter to
-                // `type == "artist"` — video / photo / movie sections
-                // dead-end because loadCurrent only ever passes
-                // `kind: .artists`, so hiding them is a UX win
-                // independent of the playlists feature.
+                // sections so user-curated content surfaces first.
+                // Library sections filter to `type == "artist"` —
+                // video / photo / movie sections dead-end because
+                // loadCurrent only ever passes `kind: .artists`.
                 let result = try await plexAuth.withRetry { base, token in
                     try await self.client.listLibraries(baseURI: base, authToken: token)
                 }
@@ -461,61 +433,36 @@ struct PlexDirectBrowseView: View {
                 })
                 items = rootItems
             case "playlists":
-                // All audio playlists on the server. Paginated would
-                // be nice but Plex /playlists is typically O(100s) not
-                // O(thousands), so a single page of 500 covers every
-                // real account.
-                let result = try await plexAuth.withRetry { base, token in
-                    try await self.client.browse(
-                        baseURI: base, authToken: token,
-                        sectionID: "", kind: .playlists,
-                        offset: 0, limit: 500
-                    )
-                }
-                items = result.items
+                items = try await fetchAll(kind: .playlists)
             case let p where p.hasPrefix("playlist:"):
                 // Tracks in one playlist. Paginate so multi-thousand-track
                 // playlists ("All Music", "❤️ Tracks") load fully.
                 let ratingKey = String(p.dropFirst("playlist:".count))
-                items = try await fetchAllPlaylistItems(ratingKey: ratingKey)
+                items = try await fetchAll(kind: .playlistItems(ratingKey: ratingKey))
             case let p where p.hasPrefix("section:"):
                 let sectionID = String(p.dropFirst("section:".count))
                 // Music libraries default to artists at the top level —
                 // matches what the Plex web UI shows.
-                let result = try await plexAuth.withRetry { base, token in
-                    try await self.client.browse(
-                        baseURI: base, authToken: token,
-                        sectionID: sectionID, kind: .artists,
-                        offset: 0, limit: 100
-                    )
-                }
-                items = result.items
+                items = try await fetchAll(kind: .artists, sectionID: sectionID)
             case let p where p.hasPrefix("children:"):
                 let ratingKey = String(p.dropFirst("children:".count))
-                let result = try await plexAuth.withRetry { base, token in
-                    try await self.client.browse(
-                        baseURI: base, authToken: token,
-                        sectionID: "", kind: .childrenOf(ratingKey: ratingKey),
-                        offset: 0, limit: 200
-                    )
-                }
-                items = result.items
+                items = try await fetchAll(kind: .childrenOf(ratingKey: ratingKey))
             default:
                 items = []
             }
         } catch {
             sonosDebugLog("[PLEX] browse failed at \(level.path): \(error)")
-            // `withRetry` already performs one refresh+retry pass. If
-            // we're here, both attempts failed — surface the error
-            // banner unchanged.
+            // `withRetry` already performs one refresh+retry pass; both
+            // attempts failed — surface the error banner unchanged.
             loadError = error.localizedDescription
         }
     }
 
-    /// Pages through `/playlists/{rk}/items` 500 at a time until the
-    /// server reports no more. Plex's `totalSize` is the canonical
-    /// count; stop when we've fetched it or when a page returns empty.
-    private func fetchAllPlaylistItems(ratingKey: String) async throws -> [PlexMediaItem] {
+    /// Pages through a listing 500 at a time until the server reports
+    /// no more. Plex's `totalSize` is the canonical count; stop once it
+    /// is reached or a page returns empty. Every level uses this — a
+    /// single capped page truncates large artist lists (#85).
+    private func fetchAll(kind: PlexBrowseKind, sectionID: String = "") async throws -> [PlexMediaItem] {
         var accumulated: [PlexMediaItem] = []
         let pageSize = 500
         var offset = 0
@@ -523,7 +470,7 @@ struct PlexDirectBrowseView: View {
             let page = try await plexAuth.withRetry { base, token in
                 try await self.client.browse(
                     baseURI: base, authToken: token,
-                    sectionID: "", kind: .playlistItems(ratingKey: ratingKey),
+                    sectionID: sectionID, kind: kind,
                     offset: offset, limit: pageSize
                 )
             }
@@ -552,15 +499,14 @@ struct PlexDirectBrowseView: View {
         }
     }
 
-    /// User-driven fallback: hand them off to the SMAPI Plex flow if
-    /// direct refuses to load. We don't auto-fallback because the
-    /// failure modes are quite different — SMAPI may be having its
-    /// own issues, and silently switching channels would be confusing.
+    /// User-driven fallback to the SMAPI Plex flow when direct refuses
+    /// to load. No auto-fallback: the failure modes differ (SMAPI may
+    /// be down independently) and silently switching channels would
+    /// be confusing.
     private func fallbackToSMAPI() async {
         fellBackToSMAPI = true
-        // The simplest "fallback" is to just open the SMAPI search
-        // entry programmatically. Instead of routing through the
-        // sidebar, surface a banner pointing the user there for now.
+        // Surface a banner pointing the user at the SMAPI entry rather
+        // than routing through the sidebar programmatically.
         loadError = L10n.directBrowseUnavailable
     }
 
@@ -596,6 +542,10 @@ struct PlexDirectBrowseView: View {
         guard let partKey = track.partKey, !partKey.isEmpty else { return nil }
         let separator = partKey.contains("?") ? "&" : "?"
         let uri = "\(baseURI)\(partKey)\(separator)X-Plex-Token=\(token)"
+        // The play URL names the part, not the track — remember the
+        // link so playback can be reported to the server (#86).
+        PlexPlaybackReporter.shared.register(partKey: partKey, ratingKey: track.ratingKey,
+                                             durationMs: track.durationMs)
         let artURL: String? = track.thumb.flatMap { thumb in
             "\(baseURI)\(thumb)?X-Plex-Token=\(token)"
         }
@@ -637,14 +587,9 @@ struct PlexDirectBrowseView: View {
         if item.isContainer {
             let childPage: [PlexMediaItem]
             if item.type == "playlist" {
-                childPage = try await fetchAllPlaylistItems(ratingKey: item.ratingKey)
+                childPage = try await fetchAll(kind: .playlistItems(ratingKey: item.ratingKey))
             } else {
-                let result = try await client.browse(
-                    baseURI: baseURI, authToken: plexAuth.authToken,
-                    sectionID: "", kind: .childrenOf(ratingKey: item.ratingKey),
-                    offset: 0, limit: 500
-                )
-                childPage = result.items
+                childPage = try await fetchAll(kind: .childrenOf(ratingKey: item.ratingKey))
             }
             var out: [BrowseItem] = []
             for child in childPage {

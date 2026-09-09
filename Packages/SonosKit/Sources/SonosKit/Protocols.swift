@@ -44,7 +44,17 @@ public protocol ImageCacheProtocol {
     var diskUsageString: String { get }
     var fileCount: Int { get }
 
+    /// Memory tier then disk tier, on the caller's thread. Disk reads
+    /// block the caller; views use `memoryImage` + `diskImage` instead.
     func image(for url: URL) -> NSImage?
+    /// Memory tier only; never touches disk. `maxPixelSize` selects a
+    /// decoded thumbnail variant (see `ImageCache.diskImage`).
+    func memoryImage(for url: URL, maxPixelSize: Int?) -> NSImage?
+    /// Disk tier, read off the caller's thread; fills the memory tier on a hit.
+    /// With `maxPixelSize` the result is a decoded bitmap no larger than that
+    /// on its longer side, which draws at thumbnail sizes without a JPEG
+    /// decode per frame.
+    func diskImage(for url: URL, maxPixelSize: Int?) async -> NSImage?
     func store(_ image: NSImage, for url: URL)
     func clearDisk()
     func clearMemory()
@@ -154,15 +164,56 @@ public protocol EQServiceProtocol {
     func setEQ(device: SonosDevice, eqType: String, value: Int) async throws
 }
 
+/// Resolving a local-library album's artwork through iTunes, for rows whose
+/// stored getaa URL 404s. Narrow so a view model can depend on this alone
+/// rather than on the whole façade — `TrackMetadataEnricher` conforms.
+@MainActor
+public protocol LocalAlbumArtResolving {
+    func resolveLocalAlbumArt(artist: String, album: String) async -> String?
+}
+
+/// What a group is currently playing, for diagnostics that correlate another
+/// subsystem's reading with transport. Deliberately narrower than
+/// `TransportStateProviding`, which also exposes `deviceVolumes` and so cannot
+/// be a dependency of the collaborator that owns them.
+@MainActor
+public protocol NowPlayingContextProviding: AnyObject {
+    func nowPlayingContext(forCoordinator coordinatorID: String) -> (trackURI: String, state: String)?
+}
+
+/// The live-queue operations a queue view needs. `QueueController` conforms.
+/// Exists so a view model depends on an abstraction rather than the concrete
+/// controller.
+@MainActor
+public protocol LiveQueueOperating {
+    func getQueue(group: SonosGroup, start: Int, count: Int) async throws -> (items: [QueueItem], total: Int)
+    func removeFromQueue(group: SonosGroup, trackIndex: Int) async throws
+    func moveTrackInQueue(group: SonosGroup, from: Int, to: Int) async throws
+    @discardableResult
+    func dedupeQueue(group: SonosGroup) async throws -> Int
+}
+
+/// Hosts currently known to be media servers. Narrower than handing over the
+/// server list: the only question asked is whether a queue row's host is one.
+@MainActor
+public protocol MediaServerHostProviding: AnyObject {
+    func knownMediaServerHosts() -> [String]
+}
+
+/// Browse sections owned by a feature other than the local library.
+@MainActor
+public protocol BrowseSectionContributing: AnyObject {
+    func contributedBrowseSections() -> [BrowseSection]
+}
+
 // MARK: - Queue Service (SRP: queue management only)
 
 @MainActor
 public protocol QueueServiceProtocol {
-    func getQueue(group: SonosGroup, start: Int, count: Int) async throws -> (items: [QueueItem], total: Int)
-    func removeFromQueue(group: SonosGroup, trackIndex: Int) async throws
+    // Queue mechanics (reading, removing, reordering) live on
+    // `QueueController`; this protocol carries the transport-coupled half.
     func clearQueue(group: SonosGroup) async throws
     func playTrackFromQueue(group: SonosGroup, trackNumber: Int) async throws
-    func moveTrackInQueue(group: SonosGroup, from: Int, to: Int) async throws
     func saveQueueAsPlaylist(group: SonosGroup, title: String) async throws -> String
     @discardableResult
     func addBrowseItemToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool, atPosition: Int) async throws -> Int
@@ -174,13 +225,20 @@ public protocol QueueServiceProtocol {
     func restoreQueueSnapshot(group: SonosGroup, localID: Int64) async throws
     /// Choragus-side saved queues (local SQLite, independent of the household).
     func saveQueueToChoragus(group: SonosGroup, name: String) async throws -> Int
+    @discardableResult
+    func saveChoragusPlaylist(name: String, tracks: [QueueItem]) -> Int64?
+    @discardableResult
+    func appendToChoragusPlaylist(queueID: Int64, tracks: [QueueItem]) -> Int
+    func liveQueueTracks(group: SonosGroup, positions: Set<Int>) async throws -> [QueueItem]
     func localSavedQueues() -> [LocalSavedQueue]
+    func savedQueueFolders() -> [SavedQueueFolder]
+    /// Folders and queues nested for menus.
+    func savedQueueTree() -> SavedQueueTree
+    /// Every room's history snapshots, room-sorted.
+    func allQueueSnapshots() -> [(coordinatorID: String, room: String, snapshots: [QueueSnapshot])]
     func loadLocalSavedQueue(id: Int64, group: SonosGroup, append: Bool) async throws
     func renameLocalSavedQueue(id: Int64, to newName: String)
     func deleteLocalSavedQueue(id: Int64)
-    /// Removes duplicate tracks (same URI), keeping first occurrences.
-    @discardableResult
-    func dedupeQueue(group: SonosGroup) async throws -> Int
 }
 
 // MARK: - Browsing Service (SRP: content browsing only)
@@ -221,6 +279,12 @@ public protocol GroupingServiceProtocol {
 // MARK: - Alarm Service (SRP: alarm management only)
 
 @MainActor
+/// Something that remembers how long a track is — play history, in
+/// practice — for rows the speaker returns without a duration.
+public protocol QueueDurationSource: AnyObject {
+    func learnedDuration(uri: String?, title: String, artist: String, album: String) -> TimeInterval?
+}
+
 public protocol AlarmServiceProtocol {
     func getAlarms() async throws -> [SonosAlarm]
     func createAlarm(_ alarm: SonosAlarm) async throws -> Int

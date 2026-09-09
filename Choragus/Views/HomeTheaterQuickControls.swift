@@ -5,7 +5,9 @@ import SwiftUI
 import SonosKit
 
 struct HomeTheaterQuickControls: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
+    @Environment(\.eqService) private var eqService
+    @Environment(TopologyStore.self) private var topology
     let group: SonosGroup
 
     @State private var nightMode = false
@@ -15,7 +17,7 @@ struct HomeTheaterQuickControls: View {
 
     /// Same signal the EQ button uses to pick which EQ surface to open.
     private var isHomeTheaterZone: Bool {
-        sonosManager.htSatChannelMaps[group.coordinatorID] != nil
+        topology.htSatChannelMaps[group.coordinatorID] != nil
     }
 
     var body: some View {
@@ -61,7 +63,7 @@ struct HomeTheaterQuickControls: View {
         guard let coordinator = group.coordinator else { return }
         Task {
             do {
-                try await sonosManager.setEQ(device: coordinator,
+                try await eqService?.setEQ(device: coordinator,
                                              eqType: eqType,
                                              value: value ? 1 : 0)
             } catch {
@@ -76,9 +78,10 @@ struct HomeTheaterQuickControls: View {
         loaded = false
         guard isHomeTheaterZone, let coordinator = group.coordinator else { return }
         // A fault means unsupported: treat as off rather than block the row.
-        nightMode = (try? await sonosManager.getEQ(device: coordinator,
+        guard let eqService else { return }
+        nightMode = (try? await eqService.getEQ(device: coordinator,
                                                    eqType: "NightMode")) == 1
-        dialogEnhancement = (try? await sonosManager.getEQ(device: coordinator,
+        dialogEnhancement = (try? await eqService.getEQ(device: coordinator,
                                                            eqType: "DialogLevel")) == 1
         loaded = true
     }

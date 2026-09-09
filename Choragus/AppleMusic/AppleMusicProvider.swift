@@ -13,8 +13,7 @@
 ///
 /// The flags are Swift compilation conditions injected via
 /// `SWIFT_ACTIVE_COMPILATION_CONDITIONS` on the xcodebuild command
-/// line (see `scripts/dev-build.sh` and `scripts/release.sh`). The
-/// committed `project.pbxproj` carries no flags so a fork that runs
+/// line. The committed `project.pbxproj` carries no flags so a fork that runs
 /// bare `xcodebuild -scheme Choragus` lands in the OSS-fork profile
 /// with zero configuration.
 ///
@@ -42,10 +41,10 @@ public struct AppleMusicTrack: Identifiable, Equatable, Hashable, Sendable {
     public var album: String
     public var artworkURL: URL?
     public var durationSec: Int?
-    /// Apple Music album catalog ID. Populated where the source request
-    /// gave us the album relationship — the playback DIDL needs this
-    /// in `parentID="0004206calbum%3a<id>"` to satisfy Sonos's
-    /// queue-advance validation (placeholders like "0" silently fail).
+    /// Apple Music album catalog ID, populated where the source request
+    /// included the album relationship. The playback DIDL needs it in
+    /// `parentID="0004206calbum%3a<id>"` — Sonos queue-advance validation
+    /// silently fails on placeholders like "0".
     public var albumID: String?
     public var releaseDate: Date?
     /// When the user added this track to their Apple Music library.
@@ -518,7 +517,7 @@ public protocol AppleMusicProvider: AnyObject, Sendable {
 
     /// Top albums filtered to those available in Dolby Atmos / Spatial
     /// Audio. Approximation — MusicKit doesn't expose Apple's curated
-    /// "Now in Spatial Audio" list, so we filter the top-charts feed
+    /// "Now in Spatial Audio" list, so the top-charts feed is filtered
     /// by `audioVariants`.
     func spatialAudioAlbums(limit: Int) async -> [AppleMusicAlbum]
 
@@ -584,13 +583,9 @@ public enum AppleMusicProviderFactory {
         #endif
     }
 
-    /// True when the running build can ever render the new MusicKit-
-    /// backed Apple Music UI. Views use this to decide whether to
-    /// hide the legacy SMAPI sections in addition to showing the
-    /// MusicKit ones. Independent of runtime auth — a build that
-    /// shipped with MusicKit support stays UI-eligible even when the
-    /// user has declined the permission prompt (the UI then shows an
-    /// authorisation CTA in place of the sections).
+    /// True when the running build can render the MusicKit-backed Apple
+    /// Music UI. Independent of runtime auth — a declined permission
+    /// prompt shows an authorisation CTA in place of the sections.
     public static var hasMusicKitSupport: Bool {
         #if ENABLE_MUSICKIT && canImport(MusicKit)
         return true

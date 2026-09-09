@@ -8,9 +8,9 @@ import UniformTypeIdentifiers
 
 struct QueueView: View {
     /// External prop — the group currently selected in the sidebar. When the
-    /// user switches speakers, SwiftUI passes a new value here and we need
-    /// to push it into the view model (which otherwise holds onto the
-    /// group captured at StateObject construction) and reload the queue.
+    /// user switches speakers, SwiftUI passes a new value here; it must be
+    /// pushed into the view model (which otherwise holds onto the group
+    /// captured at StateObject construction) and the queue reloaded.
     let group: SonosGroup
 
     @StateObject private var vm: QueueViewModel
@@ -22,23 +22,23 @@ struct QueueView: View {
     @State private var showSaveSheet = false
     @AppStorage(UDKey.appleMusicKitConnected) private var appleMusicKitConnected = false
     private let appleMusicProvider = AppleMusicProviderFactory.makeCurrent()
-    /// Last `trackURI` we acted on. When the metadata stream pushes a
-    /// new URI we schedule an authoritative `loadQueue()` so the
-    /// current-track indicator re-syncs from `getPositionInfo` — same
-    /// path the manual Refresh button uses. Sonos's UPnP events have
-    /// been observed to push wrong / stale URIs in the seconds after
-    /// a Prev/Next click, a queue-row jump, or a seek-then-auto-
-    /// advance combo; the speaker's own polling response is the only
-    /// source we've found that reliably agrees with the Sonos app.
+    /// Last `trackURI` acted on. A new URI from the metadata stream
+    /// schedules an authoritative re-sync of the current-track indicator
+    /// from `getPositionInfo` — same path the manual Refresh button uses.
+    /// Sonos's UPnP events push wrong / stale URIs in the seconds after
+    /// a Prev/Next click, a queue-row jump, or a seek-then-auto-advance
+    /// combo; the speaker's own polling response is the only source
+    /// that reliably agrees with the Sonos app.
     @State private var lastObservedTrackURI: String?
     @State private var trackURIRefreshTask: Task<Void, Never>?
-    /// True once we've performed the one-shot initial scroll-to-current
-    /// for the currently-selected `group`. Reset to `false` whenever the
+    /// True once the one-shot initial scroll-to-current has run for the
+    /// currently-selected `group`. Reset to `false` whenever the
     /// user switches speakers. Without this, the `.onChange(of: vm.current-
     /// Track)` handler can miss the launch case where `currentTrack` is
     /// set before `queueItems` are populated — `scrollTo(id:)` is a no-op
     /// against an id that hasn't materialised in the LazyVStack yet.
     @State private var didInitialScroll = false
+    @State private var healthSummaryDismissed = false
 
     /// Debounce before the authoritative re-sync: long enough to collapse
     /// the STOPPED→PLAYING flap, short enough to keep up with the speaker.
@@ -48,11 +48,11 @@ struct QueueView: View {
     /// track after the URI event.
     private static let trackURIResyncRetry: Duration = .milliseconds(1200)
 
-    @EnvironmentObject private var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
 
     init(group: SonosGroup, sonosManager: SonosManager) {
         self.group = group
-        _vm = StateObject(wrappedValue: QueueViewModel(sonosManager: sonosManager, group: group))
+        _vm = StateObject(wrappedValue: QueueViewModel(sonosManager: sonosManager, queue: sonosManager.queue, group: group))
     }
 
     /// Apple Music catalog song IDs for the queue, in order — but only when
@@ -123,21 +123,44 @@ struct QueueView: View {
     var body: some View {
         VStack(spacing: 0) {
             headerBar
+            if !vm.healthVerdicts.isEmpty, !healthSummaryDismissed {
+                let dead = vm.healthVerdicts.values.filter { $0 == .dead }.count
+                let expired = vm.healthVerdicts.values.filter { $0 == .expired }.count
+                let noInfo = vm.healthVerdicts.values.filter { $0 == .missingMetadata }.count
+                HStack(spacing: 8) {
+                    Text(String(format: L10n.queueHealthSummary, dead, expired, noInfo))
+                        .font(.caption)
+                    Spacer()
+                    if dead + expired > 0 {
+                        Button(L10n.queueHealthRemoveBad) {
+                            Task { await removeUnplayable() }
+                        }
+                        .controlSize(.small)
+                    }
+                    Button { healthSummaryDismissed = true } label: {
+                        Image(systemName: "xmark.circle.fill").font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 5)
+                .background(.quaternary.opacity(0.4))
+            }
             if showFilterBar {
                 filterBar
             }
             Divider()
             content
+            if !vm.queueItems.isEmpty {
+                Divider()
+                QueueFooterView(vm: vm)
+            }
         }
         // Full-window overlay shown whenever the queue is mid-mutation
-        // (a batch add-to-queue or a refresh fetch in flight). The
-        // earlier inline header indicator was easy to miss for the
-        // long Plex / local-library batch adds where the user is left
-        // wondering "is anything happening?". Translucent so the
-        // existing queue stays visible underneath as a reassurance
-        // that the prior state is still there. Excluded when the
-        // queue is empty — that state already has its own dedicated
-        // full-screen progress block in `content`.
+        // (a batch add-to-queue or a refresh fetch in flight). Translucent
+        // so the existing queue stays visible underneath. Excluded when
+        // the queue is empty — that state has its own full-screen
+        // progress block in `content`.
         .overlay {
             if (vm.isLoading || sonosManager.isAddingToQueue) && !vm.queueItems.isEmpty {
                 queueBusyOverlay
@@ -153,19 +176,19 @@ struct QueueView: View {
             vm.group = group
             vm.queueItems = []
             vm.currentTrack = 0
-            // New speaker → new initial-scroll window. The first time
-            // `queueItems` populates for this group we want the one-shot
-            // jump-to-current-track to fire again.
+            // New speaker → new initial-scroll window: the one-shot
+            // jump-to-current-track fires again the first time
+            // `queueItems` populates for this group.
             didInitialScroll = false
             Task { await vm.loadQueue() }
             _ = newID
         }
-        .onReceive(sonosManager.$groupTrackMetadata) { newMap in
+        .onReceive(sonosManager.groupTrackMetadataPublisher) { newMap in
             vm.updateCurrentTrack()
             // Auto-reconcile on any trackURI change. Events are racy
             // (sometimes stale, sometimes wrong, sometimes out-of-
-            // order) so we use them only as a *signal* that something
-            // changed and then ask the speaker authoritatively. The
+            // order) so they serve only as a *signal* that something
+            // changed; the speaker is then asked authoritatively. The
             // short debounce collapses the transient burst (STOPPED →
             // PLAYING flap during Prev/Next, or the Sonos quirk where
             // it briefly emits the prior track again); the bounded
@@ -175,13 +198,15 @@ struct QueueView: View {
             let uri = newMap[group.coordinatorID]?.trackURI
             if uri != lastObservedTrackURI {
                 lastObservedTrackURI = uri
+                healthSummaryDismissed = false
+                vm.noteTrackChangedForHealth()
                 trackURIRefreshTask?.cancel()
                 trackURIRefreshTask = Task {
                     try? await Task.sleep(for: Self.trackURIResyncDebounce)
                     if Task.isCancelled { return }
                     // Lightweight indicator-only sync — no spinner.
                     // Queue items don't change on track advance, so
-                    // we skip the full `Browse(Q:0)` round-trip.
+                    // the full `Browse(Q:0)` round-trip is skipped.
                     let before = vm.currentTrack
                     await vm.refreshCurrentTrack()
                     guard vm.currentTrack == before else { return }
@@ -192,7 +217,7 @@ struct QueueView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .queueChanged)) { note in
-            // Fast path — the sender told us exactly what was appended. Skips
+            // Fast path — the sender supplied exactly what was appended. Skips
             // the Browse(Q:0) round-trip, which is expensive on S1 coordinators.
             if let items = note.userInfo?[QueueChangeKey.optimisticItems] as? [QueueItem] {
                 sonosDiagLog(.info, tag: "QUEUE",
@@ -229,6 +254,17 @@ struct QueueView: View {
 
     // MARK: - Subviews
 
+    /// "12 tracks · 47:12" — the playtime is a lower bound (marked `~`)
+    /// while queue pages are still loading or rows carry no duration.
+    private var trackCountLabel: String {
+        let count = "\(vm.totalTracks) \(L10n.tracks)"
+        let loaded = vm.loadedPlaytime
+        let playtime = QueuePlaytime(knownSeconds: loaded.knownSeconds,
+                                     unknownCount: loaded.unknownCount,
+                                     unloadedCount: max(0, vm.totalTracks - vm.queueItems.count))
+        return playtime.isEmpty ? count : "\(count) · \(playtime.label)"
+    }
+
     private var headerBar: some View {
         HStack(spacing: 6) {
             // Title — lowest priority. Shrinks / truncates first
@@ -239,15 +275,13 @@ struct QueueView: View {
                 .truncationMode(.tail)
                 .layoutPriority(0)
                 .fixedSize(horizontal: false, vertical: false)
-            // The mid-mutation indicator now lives as a full-window
-            // overlay (see `queueBusyOverlay`) so it's hard to miss
-            // during long Plex / local-library batch adds. The header
-            // stays clean.
+            // The mid-mutation indicator is a full-window overlay
+            // (see `queueBusyOverlay`), not a header spinner.
             Spacer(minLength: 0)
             // Track count is informational — drops out before any
             // button gets clipped.
             ViewThatFits(in: .horizontal) {
-                Text("\(vm.totalTracks) \(L10n.tracks)")
+                Text(trackCountLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -264,7 +298,7 @@ struct QueueView: View {
                 Image(systemName: "arrow.clockwise").font(.caption)
             }
             .buttonStyle(.plain)
-            .tooltip("Refresh queue")
+            .tooltip(L10n.refreshQueue)
             .fixedSize()
             .layoutPriority(3)
 
@@ -273,7 +307,7 @@ struct QueueView: View {
                 if !showFilterBar { vm.filterText = "" }
             } label: {
                 Image(systemName: "line.3.horizontal.decrease.circle").font(.caption)
-                    .foregroundStyle(showFilterBar ? Color.accentColor : Color.primary)
+                    .foregroundStyle(showFilterBar ? sonosManager.themeAccent : Color.primary)
             }
             .buttonStyle(.plain)
             .tooltip(L10n.filterQueuePlaceholder)
@@ -350,10 +384,11 @@ struct QueueView: View {
     /// destination); this menu is the read side.
     private var savedQueuesMenu: some View {
         Menu {
-            if vm.localSavedQueues.isEmpty {
+            let tree = vm.savedQueueTree
+            if tree.queues.isEmpty && tree.folders.isEmpty {
                 Text(L10n.noSavedQueues)
             } else {
-                ForEach(vm.localSavedQueues) { saved in
+                ChoragusQueueTreeMenu(tree: tree) { saved in
                     Menu("\(saved.name) (\(saved.trackCount))") {
                         Button(L10n.queueReplace) {
                             Task { await vm.loadLocalSavedQueue(saved, append: false) }
@@ -366,6 +401,30 @@ struct QueueView: View {
                             vm.deleteLocalSavedQueue(saved)
                         }
                     }
+                }
+            }
+            // Automatic history snapshots, one submenu per room, kept
+            // apart from the playlists the user named.
+            let history = vm.sonosManager.allQueueSnapshots()
+            if !history.isEmpty {
+                Divider()
+                Menu {
+                    ForEach(history, id: \.coordinatorID) { entry in
+                        Menu(entry.room) {
+                            ForEach(entry.snapshots) { snap in
+                                Menu("\(snap.savedAt.formatted(date: .abbreviated, time: .shortened)) · \(snap.summary)") {
+                                    Button(L10n.queueReplace) {
+                                        Task { await vm.loadSnapshot(snap, append: false) }
+                                    }
+                                    Button(L10n.queueAppend) {
+                                        Task { await vm.loadSnapshot(snap, append: true) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Label(L10n.queueHistory, systemImage: "clock.arrow.circlepath")
                 }
             }
         } label: {
@@ -430,9 +489,9 @@ struct QueueView: View {
 
     private var addingStatusText: String {
         if sonosManager.isAddingToQueue {
-            let n = sonosManager.addingToQueueProgress
+            let n = sonosManager.queue.addingToQueueProgress
             if n > 0 {
-                return "Adding \(n) tracks…"
+                return L10n.addingTracksFormat(n)
             }
             return L10n.addingToQueueEllipsis
         }
@@ -451,7 +510,7 @@ struct QueueView: View {
             }
             .frame(maxHeight: .infinity)
         } else if (vm.isLoading || sonosManager.isAddingToQueue) && vm.queueItems.isEmpty {
-            // Full-screen spinner when we have nothing to show — first launch,
+            // Full-screen spinner when there is nothing to show — first launch,
             // speaker switch, cleared queue, or an add-to-queue in flight on
             // a currently-empty queue. On a reload where items are already
             // present, the inline header spinner is used instead so the list
@@ -496,26 +555,26 @@ struct QueueView: View {
                     VStack(spacing: 0) {
                         if dropTargetIndex == index {
                             Rectangle()
-                                .fill(Color.accentColor)
+                                .fill(sonosManager.themeAccent)
                                 .frame(height: 2)
                                 .padding(.horizontal, 12)
                         }
 
                         QueueItemRow(item: item,
                                      isCurrentTrack: item.id == vm.currentTrack && vm.isPlayingFromQueue,
+                                     isSelected: vm.selection.contains(item.id),
                                      isPlaying: item.id == vm.currentTrack && vm.isPlayingFromQueue && vm.sonosManager.groupTransportStates[vm.group.coordinatorID]?.isPlaying == true,
-                                     isLoading: vm.playingTrack == item.id)
+                                     isLoading: vm.playingTrack == item.id,
+                                     healthVerdict: vm.healthVerdicts[item.id])
                             .id(item.id)
                             .contentShape(Rectangle())
-                            .onTapGesture {
-                                guard vm.playingTrack == nil else { return } // Don't queue another play while one is pending
-                                Task { await vm.playTrack(item.id) }
-                            }
-                            .contextMenu {
-                                Button(L10n.play) { Task { await vm.playTrack(item.id) } }
-                                Divider()
-                                Button(L10n.removeFromQueue) { Task { await vm.removeTrack(item.id) } }
-                            }
+                            // Double-click plays; a single click selects
+                            // (⌘ toggles, ⇧ extends) so a batch can be
+                            // moved, copied, or removed in one go. One
+                            // handler reads the AppKit event — competing
+                            // SwiftUI tap gestures dropped modifier clicks.
+                            .onTapGesture { handleClick(item.id) }
+                            .contextMenu { rowMenu(for: item) }
                             .onDrag { NSItemProvider(object: "\(item.id)" as NSString) }
                             .onDrop(of: [.text], delegate: QueueDropDelegate(
                                 targetIndex: index, vm: vm,
@@ -527,7 +586,7 @@ struct QueueView: View {
                 }
 
                 Rectangle()
-                    .fill(dropTargetIndex == vm.queueItems.count ? Color.accentColor.opacity(0.3) : Color.clear)
+                    .fill(dropTargetIndex == vm.queueItems.count ? sonosManager.themeAccent.opacity(0.3) : Color.clear)
                     .frame(height: 30)
                     .onDrop(of: [.text], delegate: QueueDropDelegate(
                         targetIndex: vm.queueItems.count, vm: vm,
@@ -535,6 +594,9 @@ struct QueueView: View {
                     ))
             }
         }
+        .focusable()
+        .focusEffectDisabled()
+        .onDeleteCommand { Task { await vm.removeTracks(vm.selection) } }
         .onChange(of: vm.currentTrack) { _, newTrack in
             guard newTrack > 0, vm.isPlayingFromQueue else { return }
             performTrackChangeScroll(proxy: proxy, animated: didInitialScroll)
@@ -552,10 +614,11 @@ struct QueueView: View {
             // `loadQueue`. Neither of the other watchers re-fires for
             // that flip, so this handler is the missing trigger for
             // the launch-from-mid-queue case.
-            guard !didInitialScroll,
-                  newIsPlaying,
-                  vm.queueItems.count > 0,
-                  vm.currentTrack > 0 else { return }
+            guard QueueScrollAnchor.shouldPerformInitialScroll(
+                hasScrolledAlready: didInitialScroll,
+                isPlayingFromQueue: newIsPlaying,
+                currentTrack: vm.currentTrack,
+                queueCount: vm.queueItems.count) else { return }
             performTrackChangeScroll(proxy: proxy, animated: false)
         }
         .onChange(of: vm.isShuffling) {
@@ -566,6 +629,59 @@ struct QueueView: View {
             }
         }
         }
+        // Clicking anywhere else in the window, or pressing Escape, drops
+        // the selection — the same rule AppKit tables follow.
+        .onClickOutside { if !vm.selection.isEmpty { vm.selection = [] } }
+        .onKeyPress(.escape) {
+            guard !vm.selection.isEmpty else { return .ignored }
+            vm.selection = []
+            return .handled
+        }
+    }
+
+    private func play(_ id: Int) {
+        guard vm.playingTrack == nil else { return } // Don't queue another play while one is pending
+        Task { await vm.playTrack(id) }
+    }
+
+    private func handleClick(_ id: Int) {
+        let event = NSApp.currentEvent
+        if event?.clickCount == 2 {
+            play(id)
+            return
+        }
+        let flags = event?.modifierFlags ?? NSEvent.modifierFlags
+        let gesture: QueueViewModel.SelectionGesture =
+            flags.contains(.command) ? .toggle : flags.contains(.shift) ? .extend : .replace
+        vm.select(id, gesture: gesture)
+    }
+
+    /// Row context menu. Acts on the selection when the row is part of
+    /// it, otherwise on the row alone.
+    @ViewBuilder
+    private func rowMenu(for item: QueueItem) -> some View {
+        let targets = vm.actionTargets(for: item.id)
+        let countSuffix = targets.count > 1 ? " (\(targets.count))" : ""
+        let endPosition = (vm.queueItems.last?.id ?? 0) + 1
+        let newName = targets.count == 1 ? item.title : vm.group.name
+        Button(L10n.play) { play(item.id) }
+        Divider()
+        Button(L10n.moveToTop + countSuffix) { Task { await vm.moveTracks(targets, insertBefore: 1) } }
+        Button(L10n.moveToBottom + countSuffix) { Task { await vm.moveTracks(targets, insertBefore: endPosition) } }
+        Menu(L10n.addToChoragusQueue + countSuffix) {
+            Button(L10n.newQueueEllipsis) {
+                Task { await vm.copyTracksToChoragus(targets, queueID: nil, name: newName) }
+            }
+            let tree = vm.sonosManager.savedQueueTree()
+            if !tree.queues.isEmpty || !tree.folders.isEmpty {
+                Divider()
+                ChoragusQueueTreeMenu(tree: tree) { q in
+                    Button(q.name) { Task { await vm.copyTracksToChoragus(targets, queueID: q.id, name: q.name) } }
+                }
+            }
+        }
+        Divider()
+        Button(L10n.removeFromQueue + countSuffix) { Task { await vm.removeTracks(targets) } }
     }
 
     private func handleBrowseDrop(atPosition: Int) -> Bool {
@@ -582,12 +698,10 @@ struct QueueView: View {
     /// runloop turn so the `LazyVStack` has a chance to materialise
     /// the target row's identifier — `ScrollViewReader.scrollTo` is a
     /// silent no-op against ids that aren't yet in the visible /
-    /// pre-materialised window, which produced the launch regression
-    /// where the spinner cleared but the queue stayed at the top.
+    /// pre-materialised window.
     private func performTrackChangeScroll(proxy: ScrollViewProxy, animated: Bool) {
-        let current = vm.currentTrack
-        guard current > 0 else { return }
-        let anchorTrackID = current > 1 ? current - 1 : current
+        guard let anchorTrackID = QueueScrollAnchor.target(
+            currentTrack: vm.currentTrack, queueCount: vm.queueItems.count) else { return }
         DispatchQueue.main.async {
             if animated {
                 withAnimation(.easeInOut(duration: 0.45)) {
@@ -644,8 +758,11 @@ struct QueueDropDelegate: DropDelegate {
             } else {
                 insertBefore = (vm.queueItems.last?.id ?? 0) + 1
             }
-            guard fromTrack != insertBefore else { return }
-            Task { @MainActor in await vm.moveTrack(from: fromTrack, to: insertBefore) }
+            Task { @MainActor in
+                // Dragging a selected row carries the whole selection.
+                let moving = vm.actionTargets(for: fromTrack)
+                await vm.moveTracks(moving, insertBefore: insertBefore)
+            }
         }
         return true
     }
@@ -653,26 +770,32 @@ struct QueueDropDelegate: DropDelegate {
 
 // MARK: - Queue Item Row
 
+extension QueueView {
+    fileprivate func removeUnplayable() async {
+        let positions = vm.healthVerdicts
+            .filter { $0.value == .expired || $0.value == .dead }
+            .keys
+        await vm.removeTracks(Set(positions))
+        vm.healthVerdicts = [:]
+    }
+}
+
 struct QueueItemRow: View {
+    @Environment(SonosManager.self) private var sonosManager
     let item: QueueItem
     let isCurrentTrack: Bool
+    var isSelected: Bool = false
     var isPlaying: Bool = false
     var isLoading: Bool = false
+    var healthVerdict: QueueHealthScanner.Verdict?
 
-    @State private var titleTruncated = false
-    @State private var showTooltip = false
-    @State private var hoverTask: Task<Void, Never>?
+    @State private var showHealthTooltip = false
 
     /// Source system for this track, derived from its resource URI.
     private var source: String { ServiceName.resolve(uri: item.uri) }
 
-    /// Measures whether the title is wider than the space it's given, so the
-    /// hover tooltip only fires for names that actually truncate.
-    private func checkTruncation(available: CGFloat) {
-        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize,
-                                     weight: isCurrentTrack ? .semibold : .regular)
-        let intrinsic = (item.title as NSString).size(withAttributes: [.font: font]).width
-        titleTruncated = intrinsic > available + 1
+    private var isUnplayable: Bool {
+        healthVerdict == .expired || healthVerdict == .dead
     }
 
     var body: some View {
@@ -694,18 +817,34 @@ struct QueueItemRow: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(.body)
-                    .fontWeight(isCurrentTrack ? .semibold : .regular)
-                    .lineLimit(1)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear
-                                .onAppear { checkTruncation(available: geo.size.width) }
-                                .onChange(of: geo.size.width) { _, w in checkTruncation(available: w) }
-                                .onChange(of: item.title) { _, _ in checkTruncation(available: geo.size.width) }
-                        }
-                    )
+                HStack(spacing: 5) {
+                    if let verdict = healthVerdict {
+                        // Same onHover+popover pattern as the truncated-title
+                        // tooltip in this row. The NSView-backed .tooltip()
+                        // never fires here: the row's tap gesture owns hit
+                        // testing, so the AppKit toolTip rect under a
+                        // 12-point glyph is unreachable.
+                        Image(systemName: verdict == .missingMetadata
+                              ? "questionmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(verdict == .missingMetadata ? Color.secondary : Color.orange)
+                            .onHover { showHealthTooltip = $0 }
+                            .popover(isPresented: $showHealthTooltip, arrowEdge: .top) {
+                                Text(verdict == .expired ? L10n.queueHealthBadgeExpired
+                                     : verdict == .dead ? L10n.queueHealthBadgeDead
+                                     : L10n.queueHealthBadgeNoInfo)
+                                    .font(.callout)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                            }
+                    }
+                    // Long titles slide once to reveal themselves on
+                    // hover; static when they fit.
+                    MarqueeText(text: item.title,
+                                font: .body,
+                                fontWeight: isCurrentTrack ? .semibold : .regular,
+                                scrollOnHover: true)
+                }
                 Text(item.artist)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -723,26 +862,6 @@ struct QueueItemRow: View {
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
             }
-            // Near-instant custom tooltip — only for titles that truncate when
-            // the queue panel is narrow (the native .help() delay is ~1.5s).
-            .onHover { inside in
-                hoverTask?.cancel()
-                guard inside, titleTruncated else { showTooltip = false; return }
-                hoverTask = Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 120_000_000)
-                    if !Task.isCancelled { showTooltip = true }
-                }
-            }
-            .popover(isPresented: $showTooltip, arrowEdge: .top) {
-                Text(item.artist.isEmpty ? item.title : "\(item.title) — \(item.artist)")
-                    .font(.callout)
-                    .lineLimit(nil)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .frame(width: 320, alignment: .leading)
-            }
 
             Spacer()
 
@@ -753,7 +872,10 @@ struct QueueItemRow: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 12)
-        .background(isCurrentTrack ? Color.accentColor.opacity(0.1) : Color.clear)
+        // A row that will not play reads as inert; the badge says why.
+        .opacity(isUnplayable ? 0.45 : 1)
+        .background(isSelected ? sonosManager.themeAccent.opacity(0.22)
+                    : isCurrentTrack ? sonosManager.themeAccent.opacity(0.1) : Color.clear)
     }
 }
 
@@ -879,12 +1001,12 @@ struct SaveQueueSheet: View {
 // never touched after the layer is first created, so the bars do not
 // drive `ViewGraph.updateOutputs` or `NSHostingView.layout` per frame.
 //
-// Earlier SwiftUI-native attempts (TimelineView + scaleEffect,
-// TimelineView + Canvas, SF Symbol `.symbolEffect`) all reproduced a
-// 50–60% main-thread CPU spike when the queue was visible because each
-// frame's animation tick fed back through SwiftUI's graph and forced a
-// layout pass on the surrounding LazyVStack of queue rows. Dropping out
-// of SwiftUI for the animation alone removes the cascade.
+// Not SwiftUI-native (TimelineView + scaleEffect / Canvas, SF Symbol
+// `.symbolEffect`): each frame's animation tick feeds back through
+// SwiftUI's graph and forces a layout pass on the surrounding LazyVStack
+// of queue rows — a 50–60% main-thread CPU spike while the queue is
+// visible. Dropping out of SwiftUI for the animation alone removes the
+// cascade.
 private struct NowPlayingBars: NSViewRepresentable {
     func makeNSView(context: Context) -> NowPlayingBarsView {
         NowPlayingBarsView()
@@ -909,7 +1031,7 @@ private final class NowPlayingBarsView: NSView {
         // Layer-hosting pattern: assign the layer first, then opt in
         // to `wantsLayer`. Reverse order (`wantsLayer = true` then
         // `layer = …`) makes AppKit create its own backing layer and
-        // discard ours, which silently drops every animation we add.
+        // discard the assigned one, silently dropping every added animation.
         let host = CALayer()
         self.layer = host
         self.wantsLayer = true
@@ -968,5 +1090,53 @@ private final class NowPlayingBarsView: NSView {
         // don't pulse in unison — each shifts by a quarter-cycle.
         animation.timeOffset = period * 0.25 * Double(index)
         barLayer.add(animation, forKey: Self.animationKey)
+    }
+}
+
+// MARK: - Footer
+
+/// Bottom status line: "Track 12 of 34" on the left, "~1:23:45 remaining
+/// of 2:10:00" on the right. Remaining counts what is left of the current
+/// track plus every row after it. Its own view so the once-a-second
+/// position tick re-renders this line alone, not the queue panel.
+struct QueueFooterView: View {
+    @ObservedObject var vm: QueueViewModel
+    @EnvironmentObject private var positionTracker: PositionTracker
+
+    private var fromQueue: Bool { vm.isPlayingFromQueue && vm.currentTrack > 0 }
+
+    private var total: QueuePlaytime {
+        QueuePlaytime(knownSeconds: vm.loadedPlaytime.knownSeconds,
+                      unknownCount: vm.loadedPlaytime.unknownCount,
+                      unloadedCount: max(0, vm.totalTracks - vm.queueItems.count))
+    }
+
+    private var positionLabel: String {
+        fromQueue ? L10n.queueFooterTrackOfFormat(vm.currentTrack, vm.totalTracks)
+                  : "\(vm.totalTracks) \(L10n.tracks)"
+    }
+
+    private var timeLabel: String {
+        let total = total
+        guard !total.isEmpty else { return "" }
+        guard fromQueue else { return total.label }
+        let elapsed = positionTracker.groupPositions[vm.group.coordinatorID] ?? 0
+        let remaining = QueuePlaytime.remaining(items: vm.queueItems, currentTrack: vm.currentTrack,
+                                                elapsed: elapsed, totalCount: vm.totalTracks)
+        return L10n.queueFooterRemainingFormat(remaining.label, total.label)
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(positionLabel)
+            Spacer(minLength: 8)
+            Text(timeLabel)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 5)
+        .background(.quaternary.opacity(0.25))
     }
 }

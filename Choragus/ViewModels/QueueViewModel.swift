@@ -5,6 +5,9 @@ import SonosKit
 @MainActor
 final class QueueViewModel: ObservableObject {
     var sonosManager: any QueueServices
+    /// Queue mechanics come from the collaborator that owns them, not from
+    /// the façade.
+    let queue: any LiveQueueOperating
     /// Mutable so `QueueView` can push a new selected-speaker group into the
     /// view model when the user switches rooms in the sidebar.
     var group: SonosGroup
@@ -16,23 +19,72 @@ final class QueueViewModel: ObservableObject {
             // same URI can sit at a different position, so the memo that
             // suppresses the title fallback has to go with it.
             authoritativelyResolvedURI = nil
+            // Summed once per load, not per header render — the header
+            // re-evaluates on every transport tick.
+            loadedPlaytime = QueuePlaytime(items: queueItems)
         }
     }
+    /// Playtime of the loaded rows; the header adds the unloaded tail.
+    @Published private(set) var loadedPlaytime = QueuePlaytime(items: [])
     @Published var currentTrack: Int = 0
     @Published var totalTracks: Int = 0
     @Published var isLoading = true
     @Published var saveMessage: String?
     @Published var playingTrack: Int? // Track currently being started (shows spinner)
+    /// Selected rows by queue position. Pruned on every reload (positions
+    /// shift) and cleared by the batch operations that consume it.
+    @Published var selection: Set<Int> = []
+    /// Anchor for shift-click range extension — the last plain click.
+    private var selectionAnchor: Int?
+
+    enum SelectionGesture {
+        case replace   // plain click
+        case toggle    // ⌘-click
+        case extend    // ⇧-click: range from the anchor over the displayed rows
+    }
+
+    func select(_ id: Int, gesture: SelectionGesture) {
+        switch gesture {
+        case .replace:
+            selection = [id]
+            selectionAnchor = id
+        case .toggle:
+            if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+            selectionAnchor = id
+        case .extend:
+            let ids = displayedItems.map(\.id)
+            guard let anchor = selectionAnchor, let a = ids.firstIndex(of: anchor),
+                  let b = ids.firstIndex(of: id) else {
+                selection = [id]; selectionAnchor = id; return
+            }
+            selection.formUnion(ids[min(a, b)...max(a, b)])
+        }
+    }
+
+    /// Rows a row-level action applies to: the selection when the row is
+    /// part of it, otherwise that row alone (macOS convention).
+    func actionTargets(for id: Int) -> Set<Int> {
+        selection.contains(id) ? selection : [id]
+    }
 
     /// Optimistic flag set immediately when user taps a queue track,
     /// before the next poll confirms isQueueSource from the speaker.
     private var userStartedQueuePlayback = false
 
+    /// Last `isQueueSource` that came from a real CurrentURI observation.
+    /// Event-sourced metadata carries the flag as a default, not a report
+    /// (`didReportTransportSource`); trusting that default blanks the queue
+    /// highlight at every track advance until the next settled write.
+    private var lastReportedQueueSource = false
+
     /// True when the speaker is playing from the queue.
     var isPlayingFromQueue: Bool {
         if userStartedQueuePlayback { return true }
-        let meta = sonosManager.groupTrackMetadata[group.coordinatorID]
-        return meta?.isQueueSource == true
+        guard let meta = sonosManager.groupTrackMetadata[group.coordinatorID] else { return false }
+        if meta.didReportTransportSource {
+            return meta.isQueueSource
+        }
+        return lastReportedQueueSource
     }
 
     /// URI whose position came from the speaker's own `trackNumber`. Title
@@ -40,93 +92,63 @@ final class QueueViewModel: ObservableObject {
     /// earlier row and the current track oscillates.
     private var authoritativelyResolvedURI: String?
 
-    init(sonosManager: any QueueServices, group: SonosGroup) {
+    init(sonosManager: any QueueServices, queue: any LiveQueueOperating, group: SonosGroup) {
         self.sonosManager = sonosManager
+        self.queue = queue
         self.group = group
     }
 
     /// Updates current track number from transport metadata
     func updateCurrentTrack() {
+        if let meta = sonosManager.groupTrackMetadata[group.coordinatorID],
+           meta.didReportTransportSource {
+            lastReportedQueueSource = meta.isQueueSource
+        }
+        // A click-to-play is a set-queue → seek → play sequence, and the
+        // speaker reports track 1 between the first two steps. The
+        // optimistic position set by playTrack stands until the operation
+        // finishes, so the indicator does not flick to row 1 and back.
+        guard playingTrack == nil else { return }
         let meta = sonosManager.groupTrackMetadata[group.coordinatorID]
         // Clear optimistic flag once speaker confirms queue playback
         if meta?.isQueueSource == true {
             userStartedQueuePlayback = false
         }
-        let playing = isPlayingFromQueue
 
-        guard playing else { return }
+        // The rule lives in QueuePositionResolver so it can be tested
+        // without a speaker, a view model, or a running app.
+        let resolution = QueuePositionResolver.resolve(
+            report: .init(trackNumber: meta?.trackNumber,
+                          trackURI: meta?.trackURI,
+                          title: meta?.title,
+                          artist: meta?.artist),
+            queue: queueItems,
+            playingFromQueue: isPlayingFromQueue,
+            authoritativelyResolvedURI: authoritativelyResolvedURI)
 
-        // Authoritative source: Sonos's `Track` field from GetPositionInfo
-        // is the 1-based queue position currently playing. Title matching
-        // can't disambiguate when the queue has multiple tracks with the
-        // same title (e.g. several recordings of "Theme From X" on a
-        // movie-soundtracks playlist) — title match always returns the
-        // FIRST occurrence. Use trackNumber whenever the speaker reports
-        // a sane value, fall back to title only when it doesn't.
-        if let trackNum = meta?.trackNumber, trackNum > 0,
-           queueItems.contains(where: { $0.id == trackNum }) {
-            if trackNum != currentTrack {
-                sonosDebugLog("[QUEUE] TrackNumber match: \(trackNum)")
-                currentTrack = trackNum
+        switch resolution {
+        case let .position(position, basis):
+            if position != currentTrack {
+                sonosDebugLog("[QUEUE] Position \(position) via \(basis)")
+                currentTrack = position
             }
-            authoritativelyResolvedURI = meta?.trackURI
-            return
-        }
-
-        // This URI already has a speaker-confirmed position. A title
-        // fallback here can only disagree with it, never improve on it.
-        if let uri = meta?.trackURI, uri == authoritativelyResolvedURI { return }
-
-        // Fallback: title+artist match (used when trackNumber isn't
-        // populated yet — early after a track change, or for service
-        // tracks where Sonos sometimes lags on position reporting).
-        // Ambiguous matches are refused rather than guessed: picking the
-        // first of several identically-titled rows moves the highlight
-        // to the wrong track and fights the authoritative resolution.
-        if let title = meta?.title, !title.isEmpty, !queueItems.isEmpty {
-            let artist = meta?.artist ?? ""
-            let titleAndArtist = queueItems.filter { $0.title == title && $0.artist == artist }
-            if titleAndArtist.count == 1, let match = titleAndArtist.first {
-                if match.id != currentTrack {
-                    sonosDebugLog("[QUEUE] Title+artist fallback: '\(title)' -> queue pos \(match.id)")
-                    currentTrack = match.id
-                }
-                return
+            if QueuePositionResolver.confirmsAuthority(resolution) {
+                authoritativelyResolvedURI = meta?.trackURI
             }
-            let titleOnly = queueItems.filter { $0.title == title }
-            if titleOnly.count == 1, let match = titleOnly.first {
-                if match.id != currentTrack {
-                    sonosDebugLog("[QUEUE] Title-only fallback: '\(title)' -> queue pos \(match.id)")
-                    currentTrack = match.id
-                }
-                return
-            }
-            if titleAndArtist.count > 1 || titleOnly.count > 1 {
-                sonosDebugLog("[QUEUE] Title fallback ambiguous for '\(title)' "
-                              + "(\(max(titleAndArtist.count, titleOnly.count)) matches) — holding position")
-                return
-            }
-        }
-
-        // Final fallback (kept for absolute safety — should rarely fire
-        // because the trackNumber check above already handles this).
-        if let trackNum = meta?.trackNumber, trackNum > 0 {
-            if trackNum != currentTrack {
-                sonosDebugLog("[QUEUE] TrackNumber final fallback: \(trackNum)")
-                currentTrack = trackNum
+        case let .hold(reason):
+            if case .ambiguousTitle(let matches) = reason {
+                sonosDebugLog("[QUEUE] Title fallback ambiguous for "
+                              + "'\(meta?.title ?? "")' (\(matches) matches) — holding position")
             }
         }
     }
 
-    /// Lightweight current-track-only re-sync. Skips the `Browse(Q:0)`
-    /// queue paging that `loadQueue` does and only updates
-    /// `currentTrack` from `getPositionInfo`. Used by `QueueView` to
-    /// reconcile the playing-row indicator after a trackURI change
-    /// without flashing the full-pane loading spinner. The queue
-    /// items themselves don't change on Prev/Next/auto-advance, so
-    /// this is the cheap path; the full `loadQueue` stays for the
-    /// queue-mutation paths (add / remove / move).
+    /// Current-track-only re-sync from `getPositionInfo`, without the
+    /// `Browse(Q:0)` paging or the loading spinner. Used after a trackURI
+    /// change; the full `loadQueue` stays for queue mutations.
     func refreshCurrentTrack() async {
+        // Same transient-seek guard as updateCurrentTrack.
+        guard playingTrack == nil else { return }
         do {
             let posInfo = try await sonosManager.getPositionInfo(group: group)
             guard posInfo.trackNumber > 0 else { return }
@@ -161,61 +183,47 @@ final class QueueViewModel: ObservableObject {
     private var loadGeneration = 0
 
     func loadQueue() async {
-        // Show the spinner whenever we're actually fetching. Covers first
-        // launch, speaker switch (queueItems just got cleared), and the
-        // post-add reload after a batch — all cases where the user should
-        // see that something is happening rather than a stale or empty list.
         let priorTotal = totalTracks
         loadGeneration += 1
         let generation = loadGeneration
         isLoading = true
         defer { if generation == loadGeneration { isLoading = false } }
+        // Verdicts are keyed by position; a reload invalidates them. The
+        // monitor re-runs on its own triggers.
+        healthVerdicts = [:]
         do {
-            // Page-fetch the entire queue. The previous fixed-100 fetch
-            // silently dropped any tracks past index 100, which is what
-            // the user-reported "added tracks visible in Sonos app but
-            // not in Choragus queue, even after refresh" symptom traced
-            // to: a multi-track add lands at the END of the queue, and
-            // any queue already past 100 hides the newly-appended
-            // tracks from view.
-            // 500 per page = roughly 80 round-trips for a fully-loaded
-            // 40 000-track queue. Sonos's `Browse` accepts larger
-            // RequestedCounts but starts truncating mid-page on slower
-            // (S1) coordinators around 600+; 500 is the sweet spot.
+            // Page-fetch the entire queue. Sonos's `Browse` accepts larger
+            // RequestedCounts but starts truncating mid-page on S1
+            // coordinators around 600+.
             let pageSize = 500
             var collected: [QueueItem] = []
             var totalSeen = 0
             var index = 0
             while true {
-                let (page, total) = try await sonosManager.getQueue(group: group, start: index, count: pageSize)
+                let (page, total) = try await queue.getQueue(group: group, start: index, count: pageSize)
                 totalSeen = total
                 collected.append(contentsOf: page)
                 if page.isEmpty { break }
                 index += page.count
                 if index >= total { break }
-                // Hard ceiling on pages so a runaway speaker-side total
-                // (e.g. corrupted state) doesn't loop forever. 50 pages
-                // = 5 000 items, well past Sonos's documented queue cap.
-                // Sonos's documented queue maximum is 40 000 tracks.
-                // Speaker-reported total is the natural terminator
-                // (line above); this is just belt-and-suspenders.
+                // Hard ceiling at Sonos's documented queue maximum so a
+                // runaway speaker-side total doesn't loop forever.
                 if index >= 40_000 { break }
             }
             guard generation == loadGeneration else { return }
             queueItems = collected
             totalTracks = totalSeen
+            selection.formIntersection(collected.map(\.id))
             let posInfo = try await sonosManager.getPositionInfo(group: group)
             guard generation == loadGeneration else { return }
             currentTrack = posInfo.trackNumber
             sonosDiagLog(.info, tag: "QUEUE",
                          "loadQueue done: \(collected.count) shown, total=\(totalSeen), prior=\(priorTotal)")
 
-            // One-shot retry for the post-add commit race: if a reload
-            // was triggered by `.queueChanged` and the speaker hadn't
-            // finished committing the server-side container expansion
-            // yet, the first sweep returns the stale total. 600 ms is
-            // empirically enough for AddURIToQueue + x-rincon-playlist
-            // expansion on S1 hardware.
+            // One-shot retry for the post-add commit race: a reload
+            // triggered by `.queueChanged` can read the stale total before
+            // the speaker finishes committing a container expansion.
+            // 600 ms covers AddURIToQueue + x-rincon-playlist on S1.
             if totalSeen == priorTotal && pendingPostAddRetry {
                 pendingPostAddRetry = false
                 try? await Task.sleep(nanoseconds: 600_000_000)
@@ -223,7 +231,7 @@ final class QueueViewModel: ObservableObject {
                 var retryTotal = 0
                 var retryIndex = 0
                 while true {
-                    let (page, total) = try await sonosManager.getQueue(group: group, start: retryIndex, count: pageSize)
+                    let (page, total) = try await queue.getQueue(group: group, start: retryIndex, count: pageSize)
                     retryTotal = total
                     retryCollected.append(contentsOf: page)
                     if page.isEmpty { break }
@@ -272,15 +280,139 @@ final class QueueViewModel: ObservableObject {
     }
 
     func removeTrack(_ trackIndex: Int) async {
+        await removeTracks([trackIndex])
+    }
+
+    /// Highest position first, so earlier removals do not shift later
+    /// ones; one reload at the end.
+    func removeTracks(_ positions: Set<Int>) async {
+        guard !positions.isEmpty else { return }
+        // Positions above the removed rows shift down; the ids in the
+        // selection would name different rows after the reload.
+        selection = []
         do {
-            try await sonosManager.removeFromQueue(group: group, trackIndex: trackIndex)
-            await loadQueue()
+            for position in positions.sorted(by: >) {
+                try await queue.removeFromQueue(group: group, trackIndex: position)
+            }
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUE")
+        }
+        await loadQueue()
+    }
+
+    /// Moves `positions` as a block to sit before `insertBefore` (1-based;
+    /// `count + 1` = end), preserving their relative order. Each move
+    /// shifts the rows between source and target, so the source position
+    /// is corrected per step: rows above the target are taken lowest first
+    /// and each sits one lower than listed after the rows moved before it;
+    /// rows at or below the target are taken lowest first and land one
+    /// slot later each.
+    func moveTracks(_ positions: Set<Int>, insertBefore: Int) async {
+        guard !positions.isEmpty else { return }
+        if positions.count == 1, positions.contains(insertBefore) { return }
+        selection = []
+        let sorted = positions.sorted()
+        do {
+            for (i, position) in sorted.filter({ $0 < insertBefore }).enumerated() {
+                try await queue.moveTrackInQueue(group: group, from: position - i, to: insertBefore)
+            }
+            for (k, position) in sorted.filter({ $0 >= insertBefore }).enumerated() {
+                try await queue.moveTrackInQueue(group: group, from: position, to: insertBefore + k)
+            }
+        } catch {
+            ErrorHandler.shared.handle(error, context: "QUEUE")
+        }
+        await loadQueue()
+    }
+
+    /// Copies `positions` into a Choragus playlist: an existing one when
+    /// `queueID` is given, otherwise a new one named `name`.
+    func copyTracksToChoragus(_ positions: Set<Int>, queueID: Int64?, name: String) async {
+        do {
+            let tracks = try await sonosManager.liveQueueTracks(group: group, positions: positions)
+            guard !tracks.isEmpty else { return }
+            if let queueID {
+                sonosManager.appendToChoragusPlaylist(queueID: queueID, tracks: tracks)
+            } else {
+                sonosManager.saveChoragusPlaylist(name: name, tracks: tracks)
+            }
+            showSaveMessage(L10n.playlistBuilderSaved(name, tracks.count))
+        } catch {
+            ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
         }
     }
 
     @Published var isClearing = false
+    /// Batched verdicts from the automatic health monitor, by queue position.
+    @Published var healthVerdicts: [Int: QueueHealthScanner.Verdict] = [:]
+    let healthMonitor = QueueHealthMonitor()
+
+    /// Fed by the view's trackURI observer. The monitor debounces, budgets
+    /// and caches internally; this supplies the rows and the media-server
+    /// host check.
+    func noteTrackChangedForHealth() {
+        let rows = queueItems.map { QueueHealthMonitor.Row(id: $0.id, uri: $0.uri, title: $0.title) }
+        guard !rows.isEmpty else { return }
+        let manager = sonosManager
+        let coordinatorID = group.coordinatorID
+        repairBareAppleMusicRowsIfNeeded()
+        healthMonitor.noteTrackChanged(
+            groupID: coordinatorID,
+            rows: rows,
+            currentTrack: currentTrack,
+            isMediaServerHost: { host in
+                MediaServerService.ContentHosts.serverID(servingHost: host) != nil
+            },
+            onVerdicts: { [weak self] verdicts in
+                // A pass that started for a previous coordinator reports
+                // positions in a queue this view no longer shows.
+                guard let self, self.group.coordinatorID == coordinatorID else { return }
+                if self.healthVerdicts != verdicts { self.healthVerdicts = verdicts }
+                self.repairExpiredIfDue(verdicts: verdicts)
+            })
+        _ = manager
+    }
+
+    /// An Apple Music row the speaker wrote bare — no title, no length —
+    /// is normally named by the follow-up that runs after a bulk add. That
+    /// follow-up lives in memory: rows it had to defer (next to playback)
+    /// are lost on relaunch, and a queue loaded before a fix shipped was
+    /// never examined at all. Each track change re-checks the queue, so a
+    /// bare row is picked up whenever playback moves, including the first
+    /// look after launch. The repair verifies each row itself and defers
+    /// what sits next to playback, so a repeat call is harmless; only an
+    /// in-flight repair for this coordinator is not doubled.
+    private func repairBareAppleMusicRowsIfNeeded() {
+        guard let repairing = sonosManager as? SonosManager else { return }
+        guard !repairing.queue.queueRepairActiveGroups.contains(group.coordinatorID) else { return }
+        let bare = queueItems.compactMap { item -> (position: Int, uri: String)? in
+            guard let uri = item.uri, URIPrefix.appleMusicSongID(from: uri) != nil,
+                  item.title.isEmpty || TrackMetadata.isTechnicalName(item.title) else { return nil }
+            return (item.id, uri)
+        }
+        guard !bare.isEmpty else { return }
+        repairing.scheduleAppleMusicQueueRepair(group: group, rows: bare)
+    }
+
+    /// One repair attempt per cooldown window. Un-repairable rows (no
+    /// recorded origin) would otherwise trigger a resolver round-trip on
+    /// every pass forever.
+    private var lastExpiredRepairAttempt: Date?
+
+    private func repairExpiredIfDue(verdicts: [Int: QueueHealthScanner.Verdict]) {
+        guard verdicts.values.contains(.expired) else { return }
+        if let last = lastExpiredRepairAttempt, Date().timeIntervalSince(last) < 600 { return }
+        lastExpiredRepairAttempt = Date()
+        guard let repairing = sonosManager as? SonosManager else { return }
+        let groupID = group.id
+        Task { [weak self] in
+            let repaired = await repairing.repairExpiredQueueEntries(groupID: groupID)
+            if repaired {
+                await self?.loadQueue()
+                self?.healthVerdicts = self?.healthVerdicts.filter { $0.value != .expired } ?? [:]
+            }
+        }
+    }
 
     func clearQueue() async {
         isClearing = true
@@ -306,7 +438,7 @@ final class QueueViewModel: ObservableObject {
             let randomPos = Int.random(in: 1...i)
             if randomPos != i {
                 do {
-                    try await sonosManager.moveTrackInQueue(group: group, from: i, to: randomPos)
+                    try await queue.moveTrackInQueue(group: group, from: i, to: randomPos)
                 } catch {
                     ErrorHandler.shared.handle(error, context: "QUEUE")
                     break
@@ -316,7 +448,7 @@ final class QueueViewModel: ObservableObject {
 
         // Reload queue with new order
         do {
-            let (items, total) = try await sonosManager.getQueue(group: group, start: 0, count: 100)
+            let (items, total) = try await queue.getQueue(group: group, start: 0, count: 100)
             queueItems = items
             totalTracks = total
         } catch {
@@ -329,15 +461,14 @@ final class QueueViewModel: ObservableObject {
     func saveAsPlaylist(name: String) async {
         do {
             _ = try await sonosManager.saveQueueAsPlaylist(group: group, title: name)
-            showSaveMessage("Saved as \"\(name)\"")
+            showSaveMessage(L10n.savedAsFormat(name))
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
         }
     }
 
-    /// Single owner of the transient save-status capsule. The generation token
-    /// ensures an older auto-clear timer never wipes a newer message — the bug
-    /// when the Sonos and Apple Music save paths each ran their own timer.
+    /// Single owner of the transient save-status capsule. The generation
+    /// token stops an older auto-clear timer wiping a newer message.
     private var saveMessageGeneration = 0
     func showSaveMessage(_ message: String) {
         saveMessage = message
@@ -358,14 +489,6 @@ final class QueueViewModel: ObservableObject {
         }
     }
 
-    func moveTrack(from: Int, to: Int) async {
-        do {
-            try await sonosManager.moveTrackInQueue(group: group, from: from, to: to)
-            await loadQueue()
-        } catch {
-            ErrorHandler.shared.handle(error, context: "QUEUE")
-        }
-    }
 
     // MARK: - Queue History
 
@@ -377,14 +500,12 @@ final class QueueViewModel: ObservableObject {
     func restoreSnapshot(_ snapshot: QueueSnapshot) async {
         do {
             try await sonosManager.restoreQueueSnapshot(group: group, localID: snapshot.localID)
-            // Do NOT loadQueue() here. The replace path is audio-first: the
-            // first track lands now, the rest fill in the background, and each
-            // step posts `.queueChanged`, which the panel observer reloads on.
-            // An immediate loadQueue() reads the partial 1-track queue and
-            // races to last-writer, leaving the panel stuck on one track — the
-            // exact "doesn't reload" symptom. The Queue Manager path works
-            // precisely because it lets the observer drive the reload.
-            showSaveMessage("Restored \(snapshot.summary)")
+            // No loadQueue() here. The replace path is audio-first: the
+            // first track lands now, the rest fill in the background, and
+            // each step posts `.queueChanged` for the panel observer. An
+            // immediate reload reads the partial 1-track queue and races
+            // to last-writer, leaving the panel stuck on one track.
+            showSaveMessage(L10n.restoredSnapshotFormat(snapshot.summary))
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
         }
@@ -400,11 +521,30 @@ final class QueueViewModel: ObservableObject {
         localSavedQueues = sonosManager.localSavedQueues()
     }
 
+    /// Folder-nested form of `localSavedQueues` for the load menu.
+    var savedQueueTree: SavedQueueTree {
+        SavedQueueTree(folders: sonosManager.savedQueueFolders(), queues: localSavedQueues)
+    }
+
+    /// Loads a history snapshot of any room into this group. Replace is
+    /// the undo-aware restore; append adds the rows after the queue.
+    func loadSnapshot(_ snapshot: QueueSnapshot, append: Bool) async {
+        guard append else { await restoreSnapshot(snapshot); return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            try await sonosManager.loadLocalSavedQueue(id: snapshot.localID, group: group, append: true)
+            await loadQueue()
+        } catch {
+            ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
+        }
+    }
+
     func saveToChoragus(name: String) async {
         do {
             let count = try await sonosManager.saveQueueToChoragus(group: group, name: name)
             refreshLocalSavedQueues()
-            showSaveMessage("Saved \(count) tracks to Choragus as \"\(name)\"")
+            showSaveMessage(L10n.savedTracksToChoragusFormat(count, name))
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
         }
@@ -445,9 +585,9 @@ final class QueueViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            let removed = try await sonosManager.dedupeQueue(group: group)
+            let removed = try await queue.dedupeQueue(group: group)
             await loadQueue()
-            showSaveMessage(removed == 0 ? "No duplicates found" : "Removed \(removed) duplicates")
+            showSaveMessage(removed == 0 ? L10n.noDuplicatesFound : L10n.removedDuplicatesFormat(removed))
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
         }

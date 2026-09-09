@@ -30,7 +30,7 @@ final class ArtCoordinator: ObservableObject {
 
     func start(sonosManager: SonosManager) {
         self.sonosManager = sonosManager
-        metadataCancellable = sonosManager.$groupTrackMetadata
+        metadataCancellable = sonosManager.groupTrackMetadataPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] map in
                 self?.dispatch(metadataByGroup: map)

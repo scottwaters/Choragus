@@ -19,7 +19,7 @@ import SonosKit
 ///
 /// The selective-hit-test trick: during hitTest, AppKit sets
 /// `NSApp.currentEvent` to the event being routed. Returning `self` for
-/// events we want to capture and `nil` for everything else makes the
+/// events to capture and `nil` for everything else makes the
 /// overlay transparent to normal mouse interaction while still receiving
 /// scroll and middle-click.
 struct ScrollWheelCapture: NSViewRepresentable {
@@ -75,7 +75,13 @@ struct ScrollWheelCapture: NSViewRepresentable {
         }
 
         override func scrollWheel(with event: NSEvent) {
-            onScroll(event.scrollingDeltaY)
+            // macOS pre-inverts the delta under "Natural" scrolling, so a
+            // raw delta reads backwards on a traditional setup (#87).
+            // Normalise to the natural convention the accumulator
+            // expects, so wheel/finger direction follows the system
+            // setting either way.
+            let delta = event.isDirectionInvertedFromDevice ? event.scrollingDeltaY : -event.scrollingDeltaY
+            onScroll(delta)
         }
 
         override func otherMouseDown(with event: NSEvent) {

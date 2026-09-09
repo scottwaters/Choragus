@@ -57,10 +57,10 @@ public enum BugReportBundle {
 
         public var errorDescription: String? {
             switch self {
-            case .envelopeAssembly: return "Could not assemble the bug-report envelope."
-            case .bodyEncoding:     return "Could not encode the bug-report body."
-            case .envelopeMalformed: return "Bug-report envelope is malformed."
-            case .bodyMalformed:    return "Bug-report body is malformed."
+            case .envelopeAssembly: return L10n.errBugReportEnvelopeAssembly
+            case .bodyEncoding:     return L10n.errBugReportBodyEncoding
+            case .envelopeMalformed: return L10n.errBugReportEnvelopeMalformed
+            case .bodyMalformed:    return L10n.errBugReportBodyMalformed
             }
         }
     }
@@ -157,10 +157,15 @@ public enum BugReportBundle {
     public struct BodyV2: Codable {
         public let entries: [EntryPayload]
         public let devices: [DevicePayload]
+        /// MCP server state and request log; absent in bundles from
+        /// builds before agent access existed, so readers treat it as
+        /// optional.
+        public let mcp: MCPDiagnosticsPayload?
 
-        public init(entries: [EntryPayload], devices: [DevicePayload]) {
+        public init(entries: [EntryPayload], devices: [DevicePayload], mcp: MCPDiagnosticsPayload? = nil) {
             self.entries = entries
             self.devices = devices
+            self.mcp = mcp
         }
     }
 
@@ -332,6 +337,30 @@ public enum BugReportBundle {
         }
     }
 
+    /// The MCP section under the same contract: peer addresses, lockout
+    /// addresses and the recorded request / response bodies pass through
+    /// `DiagnosticsRedactor.scrubForPublicOutput`. Tool results carry
+    /// speaker ids, LAN addresses and household ids (`list_devices`,
+    /// `list_rooms`), so the bodies need the full pass, not just the
+    /// address fields.
+    public static func scrubForPublicOutput(_ mcp: MCPDiagnosticsPayload) -> MCPDiagnosticsPayload {
+        let scrub = DiagnosticsRedactor.scrubForPublicOutput
+        return MCPDiagnosticsPayload(
+            enabled: mcp.enabled, status: mcp.status, port: mcp.port,
+            allowLAN: mcp.allowLAN, preventSleep: mcp.preventSleep, maxVolume: mcp.maxVolume,
+            tokens: mcp.tokens,
+            lockedOutAddresses: mcp.lockedOutAddresses.map(scrub),
+            failedAuthSinceLaunch: mcp.failedAuthSinceLaunch,
+            builds: mcp.builds,
+            activity: mcp.activity.map { row in
+                MCPDiagnosticsPayload.Activity(
+                    at: row.at, client: row.client, remote: scrub(row.remote),
+                    action: row.action, summary: scrub(row.summary), outcome: scrub(row.outcome),
+                    milliseconds: row.milliseconds,
+                    request: row.request.map(scrub), response: row.response.map(scrub))
+            })
+    }
+
     /// Builds the envelope: serialises `entries` + `devices` as a v2
     /// body JSON object, runs the JSON through
     /// `BugReportEncryptor.wrap(...)`, base64-encodes the result, and
@@ -342,13 +371,14 @@ public enum BugReportBundle {
     /// topology snapshot (or genuinely want to omit it) still produce
     /// a valid v2 envelope.
     public static func assemble(entries: [EntryPayload],
-                                devices: [DevicePayload] = []) throws -> Data {
+                                devices: [DevicePayload] = [],
+                                mcp: MCPDiagnosticsPayload? = nil) throws -> Data {
         // 1. Encode the v2 body object as compact JSON.
         let bodyEncoder = JSONEncoder()
         bodyEncoder.outputFormatting = [.sortedKeys]
         let bodyJSON: Data
         do {
-            bodyJSON = try bodyEncoder.encode(BodyV2(entries: entries, devices: devices))
+            bodyJSON = try bodyEncoder.encode(BodyV2(entries: entries, devices: devices, mcp: mcp))
         } catch {
             throw Error.bodyEncoding
         }

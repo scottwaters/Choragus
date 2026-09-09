@@ -18,7 +18,15 @@ public struct AVTransportEventData {
     public var currentPlayMode: PlayMode?
     public var currentTrackDuration: String?
     public var numberOfTracks: Int?
+    /// 1-based position of the playing row within the queue, as the speaker
+    /// reports it. Authoritative input to `QueuePositionResolver` rule 1;
+    /// the title fallback holds rather than resolve when titles repeat.
+    public var currentTrack: Int?
     public var currentSection: Int?
+    /// Which transport commands the speaker accepts right now. Sonos
+    /// publishes this on every AVTransport LastChange, so skip
+    /// availability tracks the source without an extra round-trip.
+    public var currentTransportActions: TransportActions?
 }
 
 public struct RenderingControlEventData {
@@ -33,7 +41,7 @@ public struct RenderingControlEventData {
 ///
 /// Unlike `AVTransport` / `RenderingControl`, ContentDirectory does not
 /// wrap its state in a `<LastChange>` element — its evented variables
-/// sit directly under `<e:property>`. The two we care about:
+/// sit directly under `<e:property>`. The two consumed here:
 /// - `SystemUpdateID`: monotonic counter; any value change means *some*
 ///   container in the directory mutated.
 /// - `ContainerUpdateIDs`: comma-separated `containerID,updateID` pairs
@@ -91,8 +99,14 @@ public enum LastChangeParser {
         if let numStr = values["NumberOfTracks"] {
             event.numberOfTracks = Int(numStr)
         }
+        if let trackStr = values["CurrentTrack"] {
+            event.currentTrack = Int(trackStr)
+        }
         if let secStr = values["CurrentSection"] {
             event.currentSection = Int(secStr)
+        }
+        if let actionsStr = values["CurrentTransportActions"] {
+            event.currentTransportActions = TransportActions.parse(actionsStr)
         }
 
         return event

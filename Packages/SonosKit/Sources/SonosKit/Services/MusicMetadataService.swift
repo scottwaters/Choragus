@@ -86,15 +86,15 @@ public final class MusicMetadataService: ArtistInfoProvider {
     private let cache: MetadataCacheRepository
     private let session: URLSession
     /// User-Agent header — required by MusicBrainz, polite for the
-    /// rest. Identifies us so source operators can spot a misbehaving
-    /// client and reach the maintainer.
+    /// rest. Identifies the client so source operators can reach the
+    /// maintainer.
     private let userAgent = "Choragus/1.0 (https://github.com/scottwaters/Choragus)"
 
     // MARK: - Locale helpers
 
     /// Maps the user's app language to the Wikipedia subdomain prefix.
     /// Wikipedia hosts a separate site per language at `<lang>.wikipedia.org`;
-    /// we hit the localised one first, then fall back to English on 404
+    /// the localised one is queried first, then English on 404
     /// since not every article has a translation. Simplified Chinese
     /// uses the shared `zh.wikipedia.org` (variants are negotiated via
     /// the `Accept-Language` header rather than separate subdomains).
@@ -143,12 +143,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
     }
 
     /// Cache schema version for `ArtistInfo` / `AlbumInfo` payloads.
-    /// Bump this when a fix changes how empty/placeholder values are
-    /// produced so existing entries from the previous version are
-    /// silently ignored (they remain in the DB until natural TTL
-    /// expiry but never match the new key shape). Avoids stranding
-    /// users on stale "no image" cache hits for famous artists when
-    /// the underlying lookup logic improves.
+    /// Bump when lookup logic changes how empty/placeholder values are
+    /// produced; older entries then never match the key and age out on TTL.
     private static let metadataSchemaVersion = "v2"
 
     public func artistInfo(name: String) async -> ArtistInfo? {
@@ -165,20 +161,15 @@ public final class MusicMetadataService: ArtistInfoProvider {
         // Cache key includes the user's app language so a German bio and
         // a French bio for the same artist don't fight for the same
         // entry. Switching language re-resolves rather than serving the
-        // previously-cached translation. Schema version prefix lets us
-        // invalidate the entire cache when fix logic changes (see
-        // `metadataSchemaVersion`).
+        // cached translation. The schema version prefix invalidates the
+        // entire cache when lookup logic changes (see `metadataSchemaVersion`).
         let key = MetadataCacheRepository.Kind.artist.key(Self.metadataSchemaVersion, lastFMLanguageCode(), trimmed)
         if let cached = cache.get(key),
            let data = cached.data(using: .utf8),
            let info = try? JSONDecoder().decode(ArtistInfo.self, from: data) {
             // Treat cached placeholder/garbage entries as a miss and
-            // re-resolve. Catches results that were stored under a
-            // legitimate-looking name before the source-side filter
-            // was added — also catches the "all-empty" entries written
-            // when the Wikipedia bare-name candidate was temporarily
-            // disabled, so users don't wait out the 30-day TTL for
-            // famous artists (Madonna, U2, Radiohead, …) to recover.
+            // re-resolve, so an all-empty entry does not sit out the
+            // 30-day TTL.
             if !Self.looksLikePlaceholderArtist(info)
                 && !Self.looksLikeEmptyArtist(info) {
                 return info
@@ -197,7 +188,7 @@ public final class MusicMetadataService: ArtistInfoProvider {
         guard let unwrapped = merged else { return nil }
 
         // Image fallback: Last.fm withdrew real artist images post-2019
-        // (we filter the placeholder), and Wikipedia thumbnails are only
+        // (the placeholder is filtered), and Wikipedia thumbnails are only
         // present when the article has a lead image. For artists missing
         // both, fall back to iTunes Search's artist endpoint — typically
         // returns a 100×100 photo, small but better than blank.
@@ -278,7 +269,7 @@ public final class MusicMetadataService: ArtistInfoProvider {
         return merged
     }
 
-    /// Returns true for inputs that we know aren't a real artist name and
+    /// Returns true for inputs that are not a real artist name and
     /// will produce garbage from the data sources:
     /// - empty string
     /// - "Various Artists" / "VA" / "Unknown Artist" — compilation markers
@@ -297,8 +288,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
         ]
         if badNames.contains(lower) { return true }
         // Album-suffix sniffing: real artist names occasionally contain
-        // parens (e.g. "Bear's Den (USA)") so we look for music-industry
-        // album tokens specifically.
+        // parens (e.g. "Bear's Den (USA)") so only music-industry
+        // album tokens count.
         let albumTokens = [
             "(deluxe)", "(remastered)", "(remaster)", "(expanded)",
             "(soundtrack)", "(original soundtrack)", "(ost)",
@@ -314,9 +305,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
     /// True for cached entries that resolved to "nothing useful" — no
     /// bio, no image, no tags, no listeners. A cache hit on one of
     /// these gives the user the same blank About card that prompted
-    /// the original lookup, so we treat it as a miss and re-resolve.
-    /// Catches both the disabled-candidate hangover and any source
-    /// that is back online after a previous outage.
+    /// the original lookup, so it is treated as a miss and re-resolved.
+    /// Also recovers from a source that is back online after an outage.
     nonisolated private static func looksLikeEmptyArtist(_ info: ArtistInfo) -> Bool {
         let hasBio = !(info.bio?.isEmpty ?? true)
         let hasImage = !(info.imageURL?.isEmpty ?? true)
@@ -339,8 +329,7 @@ public final class MusicMetadataService: ArtistInfoProvider {
     /// when a query doesn't find a real match — `[unknown]`,
     /// `[anonymous]`, `[various artists]`, etc. They carry tags like
     /// "special purpose artist", "fixme", "bogus artist", "non-music",
-    /// "meta artist". We use those tags as a sentinel and refuse to
-    /// surface the result to the user.
+    /// "meta artist". Those tags are the sentinel; the result is not surfaced.
     /// `nonisolated` so the `nonisolated` MusicBrainz fetcher can call it.
     nonisolated private static func looksLikePlaceholderArtist(_ info: ArtistInfo) -> Bool {
         let placeholderNames: Set<String> = [
@@ -360,11 +349,40 @@ public final class MusicMetadataService: ArtistInfoProvider {
         return lowerTags.intersection(placeholderTags).count >= 2
     }
 
+    /// Cache-only release-year lookup for lightweight badges (Now
+    /// Playing header). Never fires a network request — a year shows
+    /// only when a prior albumInfo fetch populated the cache.
+    public func cachedAlbumReleaseYear(artist: String, album: String) -> Int? {
+        guard !artist.isEmpty, !album.isEmpty else { return nil }
+        let key = MetadataCacheRepository.Kind.album.key(Self.metadataSchemaVersion, lastFMLanguageCode(), artist, album)
+        // Memoised: this is called from view bodies on every re-eval
+        // (position tick), and the backing store is SQLite. One store
+        // read per album, then dictionary hits.
+        if let memo = albumYearMemo[key] { return memo }
+        defer { if albumYearMemo.count > 512 { albumYearMemo.removeAll() } }
+        let year = albumYearLookup(key: key)
+        albumYearMemo[key] = year
+        return year
+    }
+
+    private var albumYearMemo: [String: Int?] = [:]
+
+    private func albumYearLookup(key: String) -> Int? {
+        guard let cached = cache.get(key),
+              let data = cached.data(using: .utf8),
+              let info = try? JSONDecoder().decode(AlbumInfo.self, from: data),
+              let dateString = info.releaseDate else { return nil }
+        // Release dates arrive in mixed formats ("1973", "12 Mar 1973",
+        // "1973-03-12") — the four-digit year is the stable part.
+        guard let range = dateString.range(of: #"\b(19|20)\d{2}\b"#, options: .regularExpression) else { return nil }
+        return Int(dateString[range])
+    }
+
     public func albumInfo(artist: String, album: String) async -> AlbumInfo? {
         // Language-prefixed key — same rationale as `artistInfo`: the
         // cache stores per-locale results so flipping the app language
         // serves a fresh translation instead of the cached one. Schema
-        // version prefix invalidates pre-fix cached entries on first
+        // version prefix invalidates stale cached entries on first
         // access; see `metadataSchemaVersion`.
         let key = MetadataCacheRepository.Kind.album.key(Self.metadataSchemaVersion, lastFMLanguageCode(), artist, album)
         if let cached = cache.get(key),
@@ -414,6 +432,9 @@ public final class MusicMetadataService: ArtistInfoProvider {
         if let encoded = try? JSONEncoder().encode(finalMerged),
            let str = String(data: encoded, encoding: .utf8) {
             cache.set(key, payload: str, ttlSeconds: 30 * 24 * 60 * 60)
+            // A memoised "no year" for this album is stale now that a
+            // fresh fetch landed — drop it so the badge picks it up.
+            albumYearMemo[key] = nil
         }
         return finalMerged
     }
@@ -579,9 +600,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
     /// Order-preserving dedup by `imageIdentityKey` that keeps the
     /// HIGHEST-resolution variant of each photo (first-seen position,
     /// best URL). Non-photo candidates (see
-    /// `isGalleryPhotoCandidate`) are dropped first — cached
-    /// galleries assembled before that filter existed clean up at
-    /// display time. `limit` caps distinct photos, not candidates.
+    /// `isGalleryPhotoCandidate`) are dropped first, so cached galleries
+    /// clean up at display time. `limit` caps distinct photos, not candidates.
     nonisolated public static func dedupePreferHighRes(_ urls: [String], limit: Int = .max) -> [String] {
         var orderedKeys: [String] = []
         var bestByKey: [String: String] = [:]
@@ -753,8 +773,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
 
     /// True when the OpenSearch-resolved title is plausibly the article
     /// the candidate query was asking about. OpenSearch is fuzzy and will
-    /// happily return "Animal husbandry" for "Animal House (band)" — we
-    /// reject those by requiring the candidate's core (everything before
+    /// return "Animal husbandry" for "Animal House (band)"; those are
+    /// rejected by requiring the candidate's core (everything before
     /// any disambiguator) to appear as a substring of the resolved title.
     /// Resolution is case-insensitive and ignores diacritics.
     nonisolated private static func resolvedTitleMatchesQuery(candidate: String,
@@ -857,8 +877,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
     /// Wikipedia" it lands in the same language.
     ///
     /// Two entry points: `query` runs OpenSearch first to find a title
-    /// (used for artist names where Wikipedia uses disambiguators we
-    /// can't predict), `directTitle` skips OpenSearch and goes straight
+    /// (used for artist names where Wikipedia uses unpredictable
+    /// disambiguators), `directTitle` skips OpenSearch and goes straight
     /// to the summary endpoint (used for album titles where the
     /// candidate strings are already canonical).
     ///
@@ -872,7 +892,7 @@ public final class MusicMetadataService: ArtistInfoProvider {
             return summary
         }
         // Fallback chain: not every article has a translation, so on a
-        // miss we retry on en.wikipedia.org. Skipped when the user is
+        // miss it retries on en.wikipedia.org. Skipped when the user is
         // already on English.
         guard primary != "en" else { return nil }
         if let title = await wikipediaResolveTitle(query: query, lang: "en") {
@@ -973,8 +993,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
 
     /// MusicBrainz artist lookup. Returns tags + the canonical name.
     /// No bio (MB doesn't ship those — see Wikipedia for prose).
-    /// Throttle: MB rate-limits to 1 req/sec/IP; per-call sleep keeps
-    /// us under the bar without needing a global token bucket.
+    /// Throttle: MB rate-limits to 1 req/sec/IP; a per-call sleep stays
+    /// under the bar without a global token bucket.
     private nonisolated func musicBrainzArtist(name: String) async -> ArtistInfo? {
         let q = URLEncode.queryValue("artist:\(name)")
         guard let url = URL(string: "https://musicbrainz.org/ws/2/artist/?query=\(q)&fmt=json&limit=1")
@@ -1014,8 +1034,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
 
     /// MusicBrainz release-group lookup. Returns release date + tags
     /// + tracklist (when available via release-group → release →
-    /// recordings expansion). For brevity we keep the lookup to the
-    /// release-group level — full tracklist would need another hop.
+    /// recordings expansion). The lookup stays at the release-group
+    /// level; a full tracklist would need another hop.
     private nonisolated func musicBrainzAlbum(artist: String, album: String) async -> AlbumInfo? {
         let queryStr = #"artist:"\#(artist)" AND release:"\#(album)""#
         let q = URLEncode.queryValue(queryStr)
@@ -1085,7 +1105,7 @@ public final class MusicMetadataService: ArtistInfoProvider {
         ]
         // Last.fm returns a localised bio when `lang` is set on the
         // info methods. The English version is always available as a
-        // baseline, so we silently fall through to it when the user's
+        // baseline, so the lookup falls through to it when the user's
         // locale has no translation.
         if method == "artist.getinfo" || method == "album.getinfo" {
             items.append(URLQueryItem(name: "lang", value: lastFMLanguageCode()))
@@ -1183,14 +1203,10 @@ public final class MusicMetadataService: ArtistInfoProvider {
         return nil
     }
 
-    /// Last.fm withdrew real artist images from its API around 2019
-    /// and now serves a single well-known placeholder graphic (a
-    /// generic vinyl-and-star shape) for every artist whose image
-    /// hasn't been re-uploaded by the community. The placeholder URL
-    /// always contains the same hash; suppressing it here lets the
-    /// merge step fall through to the Wikipedia thumbnail (or render
-    /// no image at all) instead of every Last.fm-only result showing
-    /// the same stock graphic.
+    /// Last.fm serves a single placeholder graphic (generic vinyl-and-star)
+    /// for every artist without a community-uploaded image. Its URL always
+    /// carries the same hash; suppressing it lets the merge step fall
+    /// through to the Wikipedia thumbnail or render no image.
     nonisolated private static func isLastFMPlaceholderImage(_ url: String) -> Bool {
         // The 32-char hash is stable across all sizes and CDNs —
         // matching by substring beats hard-coding the host because

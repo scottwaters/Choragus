@@ -1,8 +1,6 @@
 /// NowPlayingContextPanelViewModel.swift — Owns the About + History
-/// tab state for the Now Playing context panel. Lyrics state moved to
-/// `LyricsCoordinator` so the inline panel and the karaoke popout
-/// window share one source of truth (resolved lyrics, parse cache,
-/// load status, user offset).
+/// tab state for the Now Playing context panel. Lyrics state lives in
+/// `LyricsCoordinator`, shared with the karaoke popout window.
 import Foundation
 import SonosKit
 
@@ -50,7 +48,7 @@ final class NowPlayingContextPanelViewModel {
         artistInfo = nil
         albumInfo = nil
         aboutState = .idle
-        aboutIdentity = ""
+        aboutGuard.reset()
     }
 
     /// Loads whichever tab is currently active, then pre-warms the
@@ -97,12 +95,11 @@ final class NowPlayingContextPanelViewModel {
 
     // MARK: - Private loaders
 
-    /// Track identity the current `aboutState` / fetched info belongs to.
-    /// Captured at fetch start and compared before applying results so a
-    /// slow fetch for a previous track cannot land on the current one —
-    /// and so a `.loaded` state for an OLD track doesn't block a refetch
-    /// after the track changed.
-    private var aboutIdentity = ""
+    /// Track identity the current `aboutState` belongs to. Only a fetch
+    /// for the track now showing may publish, the same track is not
+    /// refetched, and a `.loaded` state for an old track must not block
+    /// the new one.
+    private var aboutGuard = IdentityGuard<String>()
 
     private func aboutIdentity(for metadata: TrackMetadata) -> String {
         "\(metadata.trackURI ?? "")|\(metadata.artist)|\(metadata.album)|\(metadata.title)"
@@ -110,28 +107,24 @@ final class NowPlayingContextPanelViewModel {
 
     private func loadAbout(_ metadata: TrackMetadata) async {
         let identity = aboutIdentity(for: metadata)
-        if case .loaded = aboutState, aboutIdentity == identity { return }
-        if case .loading = aboutState, aboutIdentity == identity { return }
-        aboutIdentity = identity
+        guard aboutGuard.shouldFetch(identity) else { return }
+        aboutGuard.beginFetch(identity)
         // Suno tracks: the "artist" is the Suno creator, which Last.fm /
         // Wikipedia don't know. Populate the About card from Suno's own creator
         // profile (avatar, bio) plus the track's style tags instead.
         if let uri = metadata.trackURI, let uuid = SunoCatalog.uuid(fromURI: uri) {
             aboutState = .loading
             let profile = await SunoResolver.artistProfile(forUUID: uuid)
-            guard aboutIdentity == identity else { return }
+            guard aboutGuard.finishFetch(identity) else { return }
             artistInfo = profile
             albumInfo = nil
             aboutState = .loaded
             return
         }
-        // On radio, the `artist` field frequently carries the station or
-        // soundtrack name rather than the actual performing artist (e.g.
-        // station "Movie Ticket Radio" reports artist="Animal House").
-        // Sending that to Wikipedia / MusicBrainz / Last.fm reliably
-        // produces unrelated articles. Render an empty About card
-        // instead — matches user preference: "if Wikipedia doesn't have
-        // a solid result, don't show anything".
+        // On radio the `artist` field frequently carries the station or
+        // soundtrack name rather than the performing artist; sending it
+        // to Wikipedia / MusicBrainz / Last.fm produces unrelated
+        // articles. Render an empty About card instead.
         if metadata.isRadioStream || !metadata.stationName.isEmpty {
             let artistField = metadata.artist.trimmingCharacters(in: .whitespacesAndNewlines)
             let stationField = metadata.stationName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -152,7 +145,7 @@ final class NowPlayingContextPanelViewModel {
         let fetchedArtist = await artistTask
         let fetchedAlbum = await albumTask
         // Apply only if this fetch is still for the current track.
-        guard aboutIdentity == identity else { return }
+        guard aboutGuard.finishFetch(identity) else { return }
         artistInfo = fetchedArtist
         albumInfo = fetchedAlbum
         aboutState = .loaded

@@ -11,13 +11,9 @@ final class BrowseViewModel {
     let sonosManager: any BrowsingServices
     let objectID: String
     let title: String
-    /// Target group for play / queue actions on items in this view.
-    /// Must stay in sync with the user's current sidebar selection —
-    /// `BrowseListView` updates this via `.onChange(of: parentGroup)`
-    /// when the sidebar selection moves. Captured at init time as a
-    /// seed; pushed-and-still-displayed lists were previously sending
-    /// playback to the group selected when the list was first
-    /// navigated to, not the group currently highlighted.
+    /// Target group for play / queue actions. Seeded at init;
+    /// `BrowseListView` updates it via `.onChange(of: parentGroup)` so a
+    /// pushed list follows the current sidebar selection.
     var group: SonosGroup?
 
     // MARK: - State
@@ -30,11 +26,9 @@ final class BrowseViewModel {
     /// `totalItems` aligned with what's shown while `loadedCount` stays the
     /// raw speaker-side paging offset.
     private var hiddenCount = 0
-    /// True while a `loadMore` round-trip is in flight. Prevents the
-    /// infinite-scroll trigger on the bottom sentinel from firing
-    /// repeatedly while the previous page is still arriving — without
-    /// this guard, a quick scroll past the threshold sends N concurrent
-    /// requests and produces duplicate rows when they all return.
+    /// True while a `loadMore` round-trip is in flight. Stops the
+    /// infinite-scroll sentinel sending N concurrent requests (and
+    /// duplicate rows) on a quick scroll past the threshold.
     var isLoadingMore = false
     /// Set once a page returns zero items — the only authoritative
     /// terminator. SMAPI's reported `total` is unreliable for Spotify
@@ -54,31 +48,24 @@ final class BrowseViewModel {
     var showDeleteConfirm = false
     var deleteItem: BrowseItem?
 
-    /// Mid-expansion prompt state. Set when the recursive walk has
-    /// collected `largeAddThreshold` leaf tracks and is paused waiting
-    /// for the user to OK or Cancel. Live `expansionCount` continues
-    /// to update both before the prompt and (if user OKs) after, so
-    /// the queue panel shows progress throughout.
+    /// Prompt shown once the recursive walk has collected
+    /// `largeAddThreshold` leaf tracks. `expansionCount` keeps updating
+    /// while the prompt is up so the queue panel shows progress.
     var expansionPromptVisible: Bool = false
     var expansionCount: Int = 0
-    /// True while the recursive walk is still running. The sheet
-    /// disables "Add All" until this flips to false so the user
-    /// can't confirm before the count has settled.
+    /// True while the recursive walk is running; the sheet disables
+    /// "Add All" until the count has settled.
     var expansionInProgress: Bool = false
-    /// Set once the recursion crosses the threshold and the sheet
-    /// has been requested — guards against the sheet flickering
-    /// open/closed if the count fluctuates around the threshold.
+    /// Latched once the sheet has been requested so it doesn't flicker
+    /// if the count fluctuates around the threshold.
     private var expansionPromptShown: Bool = false
     private var expansionContinuation: CheckedContinuation<Bool, Never>?
     private var expansionCancelled: Bool = false
     private var expansionUserConfirmed: Bool = false
 
-    /// Trigger threshold. Crossing this during recursion pauses the
-    /// walk and prompts the user. Sized so a typical full-album add
-    /// (12-25 tracks) and even moderate artist adds (a few hundred)
-    /// go straight through, while right-clicking a top-level container
-    /// pops the warning before the user has spent time waiting on a
-    /// 20k-track expansion they did not want.
+    /// Prompt threshold. Album and moderate artist adds go straight
+    /// through; a top-level container pops the warning before a
+    /// 20k-track expansion runs.
     private static let largeAddThreshold = 1_000
 
     private let pageSize = 100
@@ -145,15 +132,13 @@ final class BrowseViewModel {
 
     // MARK: - Data Loading
 
-    /// Load generation. Bumped at the start of every `loadItems`;
-    /// captured by `loadItems`/`loadMore` and re-checked after each
-    /// await so a stale page from a superseded fetch can never reset or
-    /// append over a newer load's results.
-    private var loadGeneration = 0
+    /// Load generation, bumped by every `loadItems` and re-checked after
+    /// each await so a stale page from a superseded fetch never resets or
+    /// appends over a newer load's results.
+    private var loadGuard = GenerationGuard()
 
     func loadItems() async {
-        loadGeneration += 1
-        let generation = loadGeneration
+        let generation = loadGuard.begin()
         isLoading = true
         errorMessage = nil
         reachedEnd = false
@@ -163,7 +148,7 @@ final class BrowseViewModel {
             } else if isServiceSearch {
                 let query = String(objectID.dropFirst("SERVICESEARCH:".count))
                 let result = await ServiceSearchProvider.shared.searchAppleMusic(query: query, entity: serviceSearchEntity, sn: serviceSearchSN)
-                guard generation == loadGeneration else { return }
+                guard loadGuard.isCurrent(generation) else { return }
                 items = result
                 totalItems = items.count
                 loadedCount = items.count
@@ -173,19 +158,17 @@ final class BrowseViewModel {
                 async let albumResults = sonosManager.search(query: query, in: BrowseID.album, householdID: group?.householdID, start: 0, count: PageSize.searchAlbum)
                 async let trackResults = sonosManager.search(query: query, in: BrowseID.tracks, householdID: group?.householdID, start: 0, count: PageSize.searchTrack)
                 let (artists, albums, tracks) = try await (artistResults, albumResults, trackResults)
-                guard generation == loadGeneration else { return }
+                guard loadGuard.isCurrent(generation) else { return }
                 items = artists.items + albums.items + tracks.items
                 totalItems = items.count
                 loadedCount = items.count
             } else {
                 let (result, total) = try await sonosManager.browse(objectID: objectID, householdID: group?.householdID, start: 0, count: pageSize)
-                guard generation == loadGeneration else { return }
-                // Hide legacy queue-history snapshots when browsing the
-                // saved-queues container — they're an undo buffer, not
-                // user content. `loadedCount` stays the RAW count: it is
-                // the speaker-side paging offset, and filtered rows still
-                // advance it (using the visible count re-fetches overlaps
-                // and leaks hidden rows on later pages).
+                guard loadGuard.isCurrent(generation) else { return }
+                // Hide queue-history snapshots (an undo buffer, not user
+                // content). `loadedCount` stays the raw count: it is the
+                // speaker-side paging offset, so filtered rows still
+                // advance it.
                 let visible = result.filter { !QueueHistoryStore.isHistoryTitle($0.title) }
                 hiddenCount = result.count - visible.count
                 items = visible
@@ -193,10 +176,10 @@ final class BrowseViewModel {
                 loadedCount = result.count
             }
         } catch {
-            guard generation == loadGeneration else { return }
+            guard loadGuard.isCurrent(generation) else { return }
             errorMessage = error.localizedDescription
         }
-        if generation == loadGeneration { isLoading = false }
+        if loadGuard.isCurrent(generation) { isLoading = false }
     }
 
     private func loadSMAPIItems(generation: Int) async throws {
@@ -211,29 +194,21 @@ final class BrowseViewModel {
         } else {
             result = try await client.getMetadataAnonymous(serviceURI: uri, deviceID: smapiDeviceID, id: browseID, index: 0, count: pageSize)
         }
-        guard generation == loadGeneration else { return }
+        guard loadGuard.isCurrent(generation) else { return }
         let sid = smapiServiceID ?? 0
         let sn = smapiSerialNumber
-        items = result.items.map { ServiceSearchProvider.shared.smapiItemToBrowseItem($0, serviceID: sid, sn: sn) }
+        let generation = group?.systemVersion ?? .unknown
+        items = result.items.map { ServiceSearchProvider.shared.smapiItemToBrowseItem($0, serviceID: sid, sn: sn, generation: generation) }
         totalItems = result.total
         loadedCount = items.count
     }
 
-    /// Fetches the next page and appends to `items`. Idempotent on
-    /// concurrent calls (guarded by `isLoadingMore`) so the
-    /// infinite-scroll bottom sentinel can fire freely.
+    /// Fetches the next page and appends to `items`. Guarded by
+    /// `isLoadingMore` so the infinite-scroll sentinel can fire freely.
     ///
-    /// Dispatches by source type:
-    /// - **SMAPI** (Spotify, Plex cloud, Audible, …) → calls the SMAPI
-    ///   client with `index = loadedCount`. The previous version
-    ///   incorrectly routed SMAPI pagination through the speaker's
-    ///   `browse(...)` SOAP, which doesn't know SMAPI item IDs and
-    ///   silently returned empty results — meaning Load More was a
-    ///   no-op for every SMAPI service.
-    /// - **Local-library / radio search** (`isSearch`,
-    ///   `isServiceSearch`) — full result set was returned in the
-    ///   initial load, no pagination concept; bails early.
-    /// - **Default UPnP browse** → speaker `browse(start: loadedCount)`.
+    /// SMAPI sources page through the SMAPI client (the speaker's
+    /// `browse(...)` SOAP doesn't know SMAPI item IDs); searches return
+    /// the full set on initial load; UPnP browse pages via the speaker.
     func loadMore() async {
         if isLoadingMore { return }
         if reachedEnd { return }
@@ -243,7 +218,7 @@ final class BrowseViewModel {
         // Capture the generation at page start — a `loadItems` reset that
         // lands while this page is in flight makes the page stale; it must
         // not append onto the freshly-reset list.
-        let generation = loadGeneration
+        let generation = loadGuard.latest
 
         do {
             if isSMAPI {
@@ -260,11 +235,12 @@ final class BrowseViewModel {
                                                                     index: loadedCount,
                                                                     count: pageSize)
                 }
-                guard generation == loadGeneration else { return }
+                guard loadGuard.isCurrent(generation) else { return }
                 let sid = smapiServiceID ?? 0
                 let sn = smapiSerialNumber
                 let mapped = result.items.map {
-                    ServiceSearchProvider.shared.smapiItemToBrowseItem($0, serviceID: sid, sn: sn)
+                    ServiceSearchProvider.shared.smapiItemToBrowseItem($0, serviceID: sid, sn: sn,
+                                                                       generation: group?.systemVersion ?? .unknown)
                 }
                 if mapped.isEmpty {
                     reachedEnd = true
@@ -275,7 +251,7 @@ final class BrowseViewModel {
                 }
             } else {
                 let (result, total) = try await sonosManager.browse(objectID: objectID, householdID: group?.householdID, start: loadedCount, count: pageSize)
-                guard generation == loadGeneration else { return }
+                guard loadGuard.isCurrent(generation) else { return }
                 if result.isEmpty {
                     reachedEnd = true
                 } else {
@@ -351,12 +327,8 @@ final class BrowseViewModel {
         return state == .playing || state == .transitioning
     }
 
-    /// View calls this when the user taps "Add All". If the recursion
-    /// is still running, this just sets the confirmation flag and
-    /// dismisses the alert; the queue add will start when the walk
-    /// finishes naturally. If the walk has already completed and is
-    /// awaiting a decision via `awaitExpansionDecision`, the
-    /// continuation resumes here.
+    /// "Add All" tapped. Sets the confirmation flag; if the walk is already
+    /// awaiting a decision, resumes its continuation.
     func confirmExpansion() {
         expansionUserConfirmed = true
         expansionPromptVisible = false
@@ -364,10 +336,8 @@ final class BrowseViewModel {
         expansionContinuation = nil
     }
 
-    /// View calls this when the user taps "Cancel". Sets the flag
-    /// `collectLeaves` checks every iteration, so the recursion bails
-    /// on its next loop pass. Any continuation already awaiting a
-    /// decision is resolved with `false`.
+    /// "Cancel" tapped. Sets the flag `collectLeaves` checks every
+    /// iteration; any awaiting continuation resolves `false`.
     func cancelExpansion() {
         sonosDiagLog(.info, tag: "QUEUE",
                      "Large-add cancelled by user at \(expansionCount) tracks")
@@ -377,12 +347,9 @@ final class BrowseViewModel {
         expansionContinuation = nil
     }
 
-    /// Suspends the calling task until the user dismisses the alert.
-    /// Only invoked AFTER the recursion has finished — the alert is
-    /// non-blocking during recursion, but if the user hasn't decided
-    /// by the time the walk ends we wait here for them.
+    /// Suspends until the user dismisses the alert. Only invoked after the
+    /// recursion has finished with no decision made yet.
     private func awaitExpansionDecision() async -> Bool {
-        // Already decided? Don't bother with a continuation.
         if expansionUserConfirmed { return true }
         if expansionCancelled { return false }
         return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
@@ -401,9 +368,8 @@ final class BrowseViewModel {
                          context: ["title": item.title, "objectID": item.objectID])
             return
         }
-        // Capture entry-point context — every right-click should land
-        // a row regardless of which branch fires below. Silent no-ops
-        // were the source of issue #8's "no logs visible" follow-up.
+        // Every right-click lands a diagnostics row regardless of which
+        // branch fires below.
         sonosDiagLog(.info, tag: "QUEUE",
                      "addToQueue: \(item.title) playNext=\(playNext)",
                      context: [
@@ -414,12 +380,8 @@ final class BrowseViewModel {
                         "itemClass": "\(item.itemClass)"
                      ])
 
-        // Engage the queue spinner immediately at right-click. Without
-        // this, the inner `addBrowseItemsToQueue` is the first to set
-        // `isAddingToQueue` — but its expansion-then-add sequence
-        // means the user sees nothing happening for the seconds it
-        // takes to walk the container. SonosManager owns the published
-        // flag; QueueView observes it.
+        // Engage the queue spinner now, not when `addBrowseItemsToQueue`
+        // sets it — container expansion can take seconds first.
         if let manager = sonosManager as? SonosManager {
             manager.beginAddingToQueue()
         }
@@ -430,21 +392,11 @@ final class BrowseViewModel {
         }
 
         do {
-            // Client-side expansion is now the default for any
-            // container that lacks a SMAPI cpcontainer URI. Issue #8
-            // root cause: passing the container URI to Sonos via
-            // `addURIToQueue` works for append but mis-displays in the
-            // local queue UI (only the container row is reflected
-            // in the post-add reload — the speaker stored individual
-            // tracks but the queue browse round-trip races the commit
-            // and our view shows the stale state). Expanding to leaf
-            // tracks here mirrors what the toolbar "Add All to Queue"
-            // button does, which the user has confirmed works.
-            //
-            // SMAPI cpcontainer URIs (Spotify/Apple Music/Plex
-            // album/playlist containers) keep the single-item
-            // server-expansion path — those services do expand
-            // cleanly and the queue view shows them correctly.
+            // Containers without a SMAPI cpcontainer URI are expanded
+            // client-side: passing the container URI to `addURIToQueue`
+            // appends correctly but the post-add queue browse races the
+            // speaker's commit and shows stale state (issue #8). SMAPI
+            // cpcontainer URIs expand cleanly server-side.
             let resourceURI = item.resourceURI ?? ""
             let isCpContainer = resourceURI.hasPrefix(URIPrefix.rinconContainer)
             let needsClientExpansion = item.isContainer && !isCpContainer
@@ -457,18 +409,15 @@ final class BrowseViewModel {
                 expansionPromptVisible = false
                 expansionInProgress = true
                 if let manager = sonosManager as? SonosManager {
-                    manager.addingToQueueProgress = 0
+                    manager.queue.addingToQueueProgress = 0
                 }
 
-                // Run the walk. If it crosses the 1 000-leaf
-                // threshold, the sheet appears in parallel — the walk
-                // does NOT pause for it, so the count keeps climbing
-                // while the user reads it. Cancel sets the flag the
-                // recursion checks every iteration.
+                // The walk does not pause for the threshold sheet; the
+                // count keeps climbing while the user reads it.
                 let expanded = await expandLocalLibraryContainer(item)
                 expansionInProgress = false
                 if let manager = sonosManager as? SonosManager {
-                    manager.addingToQueueProgress = 0
+                    manager.queue.addingToQueueProgress = 0
                 }
 
                 if expansionCancelled {
@@ -482,12 +431,8 @@ final class BrowseViewModel {
                              "Expanded local-library container: \(expanded.count) leaf tracks",
                              context: ["objectID": item.objectID])
 
-                // If the alert went up, wait for the user to decide.
-                // (If they confirmed before the walk finished, this
-                // returns immediately; if they cancelled, the
-                // `expansionCancelled` branch above already handled
-                // it.) If the alert never went up (count stayed below
-                // threshold), no decision needed.
+                // Wait for a decision only if the alert went up and the
+                // user hasn't already confirmed.
                 if expansionPromptShown && !expansionUserConfirmed {
                     let proceed = await awaitExpansionDecision()
                     if !proceed { return }
@@ -606,27 +551,15 @@ final class BrowseViewModel {
         return (out, capped)
     }
 
-    /// Walks a local-library container (album, artist, genre, top-level
-    /// `A:TRACKS`, etc.) down to its leaf tracks. Recurses until each
-    /// branch reaches non-container items so deeply-nested structures
-    /// (CDs → artist → album → track, three levels under the user's
-    /// click) are fully drained.
+    /// Walks a local-library container (album, artist, genre, `A:TRACKS`,
+    /// etc.) down to its leaf tracks, recursing through nested structures
+    /// (CDs → artist → album → track).
     ///
-    /// Verified against the user's library: top-level "CDs" returns 317
-    /// artist folders; each artist holds album sub-folders (e.g. Queen
-    /// → 22 album containers); each album holds the individual track
-    /// items. A one-level recursion missed all album-organised
-    /// artists and capped the queue at ~433 tracks. True multi-level
-    /// recursion captures everything up to the 40 000-track queue cap.
-    ///
-    /// Ordering: container children are sorted alphabetically at every
-    /// level; leaf tracks are sorted alphabetically too EXCEPT inside an
-    /// album or playlist, where the browse-returned order IS the track /
-    /// playlist order and must be preserved (issue #59 — alphabetising
-    /// album tracks scrambled the album sequence on right-click
-    /// Add-to-Queue / Play-Next). Flat lists like `A:TRACKS` keep the
-    /// alphabetical order users expect, since Sonos's empty-criteria
-    /// browse returns catalogue-insertion order for those.
+    /// Ordering: containers and leaves are sorted alphabetically at every
+    /// level, except inside an album or playlist where the browse-returned
+    /// order is the track order and must be preserved (issue #59). Sonos's
+    /// empty-criteria browse returns catalogue-insertion order for flat
+    /// lists like `A:TRACKS`.
     private func expandLocalLibraryContainer(_ item: BrowseItem) async -> [BrowseItem] {
         let maxLeaves = Self.sonosQueueLimit
         var leaves: [BrowseItem] = []
@@ -635,7 +568,7 @@ final class BrowseViewModel {
                             depth: 0,
                             maxLeaves: maxLeaves,
                             rootObjectID: item.objectID,
-                            preserveLeafOrder: Self.preservesLeafOrder(item))
+                            preserveLeafOrder: BrowseExpansionOrder.preservesLeafOrder(item))
         if leaves.count >= maxLeaves {
             sonosDiagLog(.warning, tag: "QUEUE",
                          "Container expansion truncated at Sonos queue maximum (\(maxLeaves))",
@@ -647,69 +580,49 @@ final class BrowseViewModel {
         return leaves
     }
 
-    /// True when the container's browse-returned child order is meaningful
-    /// and must survive expansion: album track order and playlist order.
-    private static func preservesLeafOrder(_ item: BrowseItem) -> Bool {
-        item.itemClass == .musicAlbum || item.itemClass == .playlist
-    }
-
-    /// Depth-first recursion. Capped at 6 levels — far past anything
-    /// Sonos's local-library hierarchies use (CDs/Artist/Album/Track =
-    /// 3) but a safety against pathological / cyclic structures.
+    /// Depth-first recursion. Depth cap is a safety against pathological /
+    /// cyclic structures (Sonos local-library hierarchies are 3 deep).
     private func collectLeaves(into leaves: inout [BrowseItem],
                                from objectID: String,
                                depth: Int,
                                maxLeaves: Int,
                                rootObjectID: String,
                                preserveLeafOrder: Bool) async {
-        if expansionCancelled { return }
-        if leaves.count >= maxLeaves { return }
-        if depth > 6 {
+        if BrowseExpansionOrder.shouldStop(collected: leaves.count,
+                                           maxLeaves: maxLeaves,
+                                           cancelled: expansionCancelled) { return }
+        if !BrowseExpansionOrder.canDescend(to: depth) {
             sonosDiagLog(.warning, tag: "QUEUE",
                          "collectLeaves depth limit hit",
                          context: ["objectID": objectID])
             return
         }
         let children = await pagedBrowse(objectID: objectID, ceiling: maxLeaves - leaves.count)
-        // Containers (artist→albums, folders) always sort alphabetically so
-        // walk order is predictable. Leaves sort alphabetically too, UNLESS
-        // this container is an album/playlist whose returned order is the
-        // track order (issue #59). Containers walk before loose leaves at
-        // the same level.
-        let byTitle: (BrowseItem, BrowseItem) -> Bool = {
-            $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-        }
-        let containerChildren = children.filter { $0.isContainer }.sorted(by: byTitle)
-        var leafChildren = children.filter { !$0.isContainer }
-        if !preserveLeafOrder { leafChildren.sort(by: byTitle) }
-        let sorted = containerChildren + leafChildren
+        // Ordering rules (containers first, alphabetical, album / playlist
+        // order preserved — #59) live in BrowseExpansionOrder.
+        let sorted = BrowseExpansionOrder.walkOrder(children: children,
+                                                    preserveLeafOrder: preserveLeafOrder)
         for child in sorted {
             if expansionCancelled { return }
             if leaves.count >= maxLeaves { break }
             if child.isContainer {
-                if isPlaylistFileContainer(child) { continue }
+                if BrowseExpansionOrder.isPlaylistFileContainer(child) { continue }
                 await collectLeaves(into: &leaves,
                                     from: child.objectID,
                                     depth: depth + 1,
                                     maxLeaves: maxLeaves,
                                     rootObjectID: rootObjectID,
-                                    preserveLeafOrder: Self.preservesLeafOrder(child))
+                                    preserveLeafOrder: BrowseExpansionOrder.preservesLeafOrder(child))
             } else if child.resourceURI?.isEmpty == false {
                 leaves.append(child)
                 // Publish the live count for the queue spinner and
                 // alert label.
                 expansionCount = leaves.count
                 if let manager = sonosManager as? SonosManager {
-                    manager.addingToQueueProgress = leaves.count
+                    manager.queue.addingToQueueProgress = leaves.count
                 }
-                // Cross the threshold once: surface the alert so the
-                // user can cancel or pre-confirm. The recursion does
-                // NOT suspend — it keeps walking the library in the
-                // background, and the alert message updates live as
-                // `expansionCount` grows. Cancel sets the flag the
-                // recursion checks every iteration; Add All flips
-                // `expansionUserConfirmed` so the queue add will
-                // start as soon as the walk completes.
+                // Surface the alert once at the threshold; the recursion
+                // keeps walking and the alert count updates live.
                 if !expansionPromptShown && leaves.count >= Self.largeAddThreshold {
                     expansionPromptShown = true
                     expansionPromptVisible = true
@@ -718,22 +631,14 @@ final class BrowseViewModel {
         }
     }
 
-    private func isPlaylistFileContainer(_ item: BrowseItem) -> Bool {
-        let lowered = item.title.lowercased()
-        return lowered.hasSuffix(".m3u") || lowered.hasSuffix(".m3u8")
-            || lowered.hasSuffix(".pls") || lowered.hasSuffix(".cue")
-    }
-
     /// Pages through `Browse(BrowseDirectChildren)` until an empty
     /// page is returned or the per-call ceiling is reached.
     ///
-    /// Speaker-reported `total` is NOT trusted as a terminator —
-    /// composite local-library containers (`A:CD`, some genre-derived
-    /// virtual folders) return a `total` that reflects only the first
-    /// page rather than the true child count, so honouring it caps
-    /// expansion at a single page (the 433-track ceiling that
-    /// blocked queue-everything-from-CDs reports). Empty page is the
-    /// authoritative terminator; the ceiling is the safety bound.
+    /// Speaker-reported `total` is not trusted as a terminator: composite
+    /// local-library containers (`A:CD`, some genre-derived virtual
+    /// folders) report a `total` that reflects only the first page. An
+    /// empty page is the authoritative terminator; the ceiling is the
+    /// safety bound.
     private func pagedBrowse(objectID: String, ceiling: Int) async -> [BrowseItem] {
         guard ceiling > 0 else { return [] }
         let pageSize = 500

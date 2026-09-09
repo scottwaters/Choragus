@@ -10,7 +10,7 @@ import SwiftUI
 import SonosKit
 
 struct SunoExploreWindow: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @StateObject private var web = SunoWebController()
     @State private var status: String?
     @State private var isWorking = false
@@ -49,6 +49,8 @@ struct SunoExploreWindow: View {
             web.onQueue = { url in act(url) { _ = try await sonosManager.addBrowseItemToQueue($0, in: $1) } }
             web.onPlayAll = { urls in actAll(urls) }
             web.onPlaylist = { url in playPlaylist(url) }
+            web.onQueuePlaylist = { url in playPlaylist(url, append: true) }
+            web.onQueueAll = { urls in actAll(urls, append: true) }
         }
     }
 
@@ -135,7 +137,7 @@ struct SunoExploreWindow: View {
     }
 
     /// Fetch a playlist / album page's song list, then replace the queue.
-    private func playPlaylist(_ url: URL) {
+    private func playPlaylist(_ url: URL, append: Bool = false) {
         guard !isWorking else { return }
         isWorking = true
         status = L10n.loadingPlaylistEllipsis
@@ -146,14 +148,14 @@ struct SunoExploreWindow: View {
                 if urls.isEmpty {
                     status = L10n.couldNotReadPlaylist
                 } else {
-                    actAll(urls)
+                    actAll(urls, append: append)
                 }
             }
         }
     }
 
     /// Resolve a whole playlist / genre page's songs and replace the queue.
-    private func actAll(_ urls: [URL]) {
+    private func actAll(_ urls: [URL], append: Bool = false) {
         guard !isWorking, !urls.isEmpty else { return }
         guard let group = selectedGroup else {
             status = L10n.noSpeakerSelected
@@ -180,9 +182,14 @@ struct SunoExploreWindow: View {
             }
             sonosDebugLog("[SUNO] play all resolved \(items.count)/\(urls.count)")
             do {
-                try await sonosManager.playItemsReplacingQueue(items, in: group)
+                if append {
+                    _ = try await sonosManager.addBrowseItemsToQueue(items, in: group, playNext: false)
+                } else {
+                    try await sonosManager.playItemsReplacingQueue(items, in: group)
+                }
                 await MainActor.run {
-                    status = L10n.playingSongsFormat(items.count)
+                    status = append ? L10n.addedSongsFormat(items.count)
+                                    : L10n.playingSongsFormat(items.count)
                     isWorking = false
                 }
             } catch {

@@ -6,6 +6,7 @@
 /// The modification date is used as "last accessed" for LRU ordering.
 import Foundation
 import AppKit
+import ImageIO
 
 public final class ImageCache: ImageCacheProtocol {
     public static let shared = ImageCache()
@@ -28,22 +29,30 @@ public final class ImageCache: ImageCacheProtocol {
     /// time. The index can grow unbounded but the file is small
     /// (~100 bytes per URL) and rebuilt lazily.
     private static let urlIndexFileName = "urls.txt"
-    /// Single serial queue for EVERY disk + index operation (read,
-    /// store, sample, clear, eviction, stat computation). image files,
-    /// the URL index, and the pending-append buffer were previously
-    /// touched from unrelated threads (art fetches, Settings UI,
-    /// eviction on a global queue) with only index writes serialized.
-    /// `pendingURLAppends` is accessed exclusively on this queue.
-    /// CONCURRENT queue: reads (`image`, sampling, stats) run in
-    /// parallel via plain `.sync`; every mutation (store, remove,
-    /// eviction, clear, index flush) takes a `.barrier`. The previous
-    /// serial queue meant a long read (Club Vis's 1200-URL sample
-    /// enumeration + pool resolution reads) parked every other
-    /// caller — observed as ~1.3 s main stalls whenever a main-side
-    /// art resolver missed memory cache during a pool build.
+    /// Single concurrent queue for EVERY disk + index operation.
+    /// Reads (`image`, sampling, stats) run in parallel via plain
+    /// `.sync`; every mutation (store, remove, eviction, clear, index
+    /// flush) takes a `.barrier`. `pendingURLAppends` is accessed
+    /// exclusively on this queue. A serial queue would let one long read
+    /// (a 1200-URL sample enumeration) park every other caller.
     private let diskQueue = DispatchQueue(label: "com.choragus.imagecache.disk",
                                           qos: .utility, attributes: .concurrent)
     private var pendingURLAppends: [String] = []
+
+    /// Bumped when a defect made STORED images wrong, so a fixed build
+    /// discards what the broken one wrote instead of serving it forever.
+    /// The stored file gives no clue that it is damaged, so the whole
+    /// disk tier goes; art re-fetches lazily as it is shown.
+    ///
+    /// 2 — non-square art was cropped with a rectangle measured in
+    /// `NSImage` points against the pixel-space `CGImage`. For art
+    /// tagged above 72 DPI that stored a magnified corner of the cover
+    /// (a 639x640 cover at 300 DPI kept its top-left 154x154 pixels).
+    /// 3 — art fetched over the network was centre-cropped to a square
+    /// before storage. Harmless for album art, which is already square;
+    /// an artist photo is a tall portrait, so the square kept its middle
+    /// and cut the head off. Images are now stored as fetched.
+    private static let purgeGeneration = 3
 
     private static let maxSizeMBKey = "imageCacheMaxSizeMB"
     private static let maxAgeDaysKey = "imageCacheMaxAgeDays"
@@ -80,10 +89,27 @@ public final class ImageCache: ImageCacheProtocol {
         memoryCache.countLimit = CacheDefaults.imageMemoryCountLimit
         memoryCache.totalCostLimit = CacheDefaults.imageMemoryBytesLimit
 
+        // A generation bump discards everything a broken build stored.
+        // The flag is written before the wipe runs: a crash mid-wipe
+        // leaves a partly-emptied cache, which is self-healing, while
+        // re-running the wipe on every launch would not be.
+        let ranGeneration = UserDefaults.standard.integer(forKey: UDKey.imageCachePurgeGeneration)
+        let needsPurge = ranGeneration < Self.purgeGeneration
+        if needsPurge {
+            UserDefaults.standard.set(Self.purgeGeneration, forKey: UDKey.imageCachePurgeGeneration)
+        }
+
         // Run eviction on startup in background (on the disk queue so it
         // can't race concurrent reads/stores)
         diskQueue.async(flags: .barrier) { [weak self] in
-            self?.evictExpiredAndOversized()
+            guard let self else { return }
+            if needsPurge {
+                self.wipeDiskContents()
+                sonosDiagLog(.info, tag: "CACHE",
+                             "Art cache purged — stored images predate a decoding fix",
+                             context: ["generation": String(Self.purgeGeneration)])
+            }
+            self.evictExpiredAndOversized()
         }
     }
 
@@ -99,33 +125,79 @@ public final class ImageCache: ImageCacheProtocol {
 
     public func image(for url: URL) -> NSImage? {
         let key = cacheKey(for: url)
-
         if let img = memoryCache.object(forKey: key as NSString) {
             return img
         }
+        return diskQueue.sync { readFromDisk(key: key) }
+    }
 
-        return diskQueue.sync {
-            let filePath = diskCacheURL.appendingPathComponent(key)
-            guard let data = try? Data(contentsOf: filePath),
-                  let img = NSImage(data: data) else {
-                return nil
-            }
+    public func memoryImage(for url: URL, maxPixelSize: Int? = nil) -> NSImage? {
+        memoryCache.object(forKey: Self.memoryKey(cacheKey(for: url), maxPixelSize: maxPixelSize))
+    }
 
-            // Check if this file has expired
-            if let attrs = try? fileManager.attributesOfItem(atPath: filePath.path),
-               let modDate = attrs[.modificationDate] as? Date,
-               Date().timeIntervalSince(modDate) > maxAgeSeconds {
-                // Expired — remove from disk, don't return
-                try? fileManager.removeItem(at: filePath)
-                return nil
-            }
-
-            let cost = data.count
-            memoryCache.setObject(img, forKey: key as NSString, cost: cost)
-            // Touch file to update access time for LRU
-            try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: filePath.path)
+    /// The disk read runs on the disk queue and the caller suspends, so
+    /// no view pays a file read on the main thread.
+    ///
+    /// `maxPixelSize` asks for a decoded thumbnail. A full-size
+    /// `NSImage(data:)` keeps the JPEG and decodes it again whenever it
+    /// is drawn at a new size (a 300-cell cover grid re-decodes 300 JPEGs
+    /// per relayout). The thumbnail is a bitmap already decoded at
+    /// ≤ `maxPixelSize`, cached under its own key, and draws as a plain scale.
+    public func diskImage(for url: URL, maxPixelSize: Int? = nil) async -> NSImage? {
+        let key = cacheKey(for: url)
+        if let img = memoryCache.object(forKey: Self.memoryKey(key, maxPixelSize: maxPixelSize)) {
             return img
         }
+        return await withCheckedContinuation { continuation in
+            diskQueue.async { [weak self] in
+                continuation.resume(returning: self?.readFromDisk(key: key, maxPixelSize: maxPixelSize))
+            }
+        }
+    }
+
+    private static func memoryKey(_ key: String, maxPixelSize: Int?) -> NSString {
+        (maxPixelSize.map { "\(key)@\($0)" } ?? key) as NSString
+    }
+
+    /// Disk tier read. Must run on `diskQueue`. Expired files are
+    /// removed and read as a miss; a hit fills the memory tier and
+    /// touches the file for LRU.
+    private func readFromDisk(key: String, maxPixelSize: Int? = nil) -> NSImage? {
+        let filePath = diskCacheURL.appendingPathComponent(key)
+        guard let data = try? Data(contentsOf: filePath) else { return nil }
+        if let attrs = try? fileManager.attributesOfItem(atPath: filePath.path),
+           let modDate = attrs[.modificationDate] as? Date,
+           Date().timeIntervalSince(modDate) > maxAgeSeconds {
+            try? fileManager.removeItem(at: filePath)
+            return nil
+        }
+        let img: NSImage?
+        let cost: Int
+        if let maxPixelSize {
+            img = Self.decodedThumbnail(from: data, maxPixelSize: maxPixelSize)
+            cost = maxPixelSize * maxPixelSize * 4
+        } else {
+            img = NSImage(data: data)
+            cost = data.count
+        }
+        guard let img else { return nil }
+        memoryCache.setObject(img, forKey: Self.memoryKey(key, maxPixelSize: maxPixelSize), cost: cost)
+        try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: filePath.path)
+        return img
+    }
+
+    /// ImageIO thumbnail: decoded once, at most `maxPixelSize` on the
+    /// longer side, backed by a bitmap rather than the encoded bytes.
+    private static func decodedThumbnail(from data: Data, maxPixelSize: Int) -> NSImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
 
     /// Evicts one URL from memory and disk. For entries whose source
@@ -181,7 +253,7 @@ public final class ImageCache: ImageCacheProtocol {
     private func appendToURLIndex(_ urlString: String) {
         pendingURLAppends.append(urlString)
         if pendingURLAppends.count >= 25 { flushURLIndexLocked() }
-        // Schedule a flush in 2 s in case we don't hit the threshold.
+        // Schedule a flush in 2 s in case the threshold is not reached.
         diskQueue.asyncAfter(deadline: .now() + 2.0, flags: .barrier) { [weak self] in
             self?.flushURLIndexLocked()
         }
@@ -249,15 +321,18 @@ public final class ImageCache: ImageCacheProtocol {
     }
 
     public func clearDisk() {
-        diskQueue.sync(flags: .barrier) {
-            // Discard buffered index appends atomically with the wipe —
-            // flushing them afterwards would resurrect index entries for
-            // files that no longer exist.
-            pendingURLAppends.removeAll()
-            try? fileManager.removeItem(at: diskCacheURL)
-            try? fileManager.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
-            invalidateDiskStats()
-        }
+        diskQueue.sync(flags: .barrier) { wipeDiskContents() }
+    }
+
+    /// Empties the disk tier. Callers hold the `diskQueue` barrier.
+    /// Buffered index appends are discarded as part of the same wipe —
+    /// flushing them afterwards would resurrect index entries for files
+    /// that no longer exist.
+    private func wipeDiskContents() {
+        pendingURLAppends.removeAll()
+        try? fileManager.removeItem(at: diskCacheURL)
+        try? fileManager.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
+        invalidateDiskStats()
     }
 
     public func clearMemory() {

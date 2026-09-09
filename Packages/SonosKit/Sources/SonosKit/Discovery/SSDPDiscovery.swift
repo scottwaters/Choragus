@@ -5,15 +5,10 @@
 /// (not NWConnection) for multicast support.
 ///
 /// Concurrency: ALL socket state (fd, read source, isSearching) is confined
-/// to `queue`; the public API only enqueues. The previous implementation
-/// closed the fd from the caller's thread while a blocking `recvfrom` loop
-/// used it — after `close`, the kernel can recycle the descriptor number for
-/// an unrelated file, and the still-running `recvfrom` then reads someone
-/// else's descriptor (2026-08-06 concurrency audit, worst finding). The
-/// blocking loop is replaced with a `DispatchSourceRead`: reads are
-/// event-driven on `queue`, and the fd is closed exclusively in the source's
-/// cancel handler, which libdispatch guarantees runs after the last event
-/// handler — no thread ever touches a closed fd.
+/// to `queue`; the public API only enqueues. Reads are event-driven via a
+/// `DispatchSourceRead`, and the fd is closed exclusively in the source's
+/// cancel handler (guaranteed to run after the last event handler), so no
+/// thread can read a recycled descriptor number after `close`.
 import Foundation
 
 public final class SSDPDiscovery: SpeakerDiscovery, @unchecked Sendable {
@@ -181,6 +176,22 @@ public final class SSDPDiscovery: SpeakerDiscovery, @unchecked Sendable {
         guard let location = headers["LOCATION"],
               let url = URL(string: location),
               let host = url.host else {
+            return
+        }
+
+        // SSDP replies are unauthenticated UDP: the LOCATION header is
+        // attacker-writable, and everything downstream (the description
+        // fetch, the minted device's IP, the event listener's peer
+        // allow-list) trusts the host it names. Accept http only, and
+        // only when the advertised host is the datagram's source
+        // address.
+        guard url.scheme?.lowercased() == "http" else { return }
+        var senderAddr = addr.sin_addr
+        var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+        guard inet_ntop(AF_INET, &senderAddr, &buffer, socklen_t(INET_ADDRSTRLEN)) != nil else { return }
+        let senderIP = String(cString: buffer)
+        guard host == senderIP else {
+            sonosDebugLog("[DISCOVERY] SSDP LOCATION host \(host) != sender \(senderIP) — dropped")
             return
         }
 

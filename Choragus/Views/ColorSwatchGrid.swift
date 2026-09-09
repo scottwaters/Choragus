@@ -138,7 +138,7 @@ struct ColorSwatchGrid: View {
             swatchButton(
                 isSelected: isCustomSelected,
                 content: AnyView(Circle().fill(Color(red: lastCustomColor.red, green: lastCustomColor.green, blue: lastCustomColor.blue))),
-                help: "Custom color"
+                help: L10n.customColor
             ) {
                 storedColor = lastCustomColor
             }

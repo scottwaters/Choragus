@@ -6,7 +6,8 @@ import SwiftUI
 import SonosKit
 
 struct HomeTheaterEQView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(\.eqService) private var eqService
+    @Environment(TopologyStore.self) private var topology
 
     @State private var selectedZoneID: String?
     @State private var selectedTab = 0
@@ -32,7 +33,7 @@ struct HomeTheaterEQView: View {
     @State private var isLoading = true
 
     private var zones: [HomeTheaterZone] {
-        sonosManager.homeTheaterZones
+        topology.homeTheaterZones
     }
 
     private var selectedZone: HomeTheaterZone? {
@@ -42,7 +43,7 @@ struct HomeTheaterEQView: View {
 
     private var coordinator: SonosDevice? {
         guard let zone = selectedZone else { return nil }
-        return sonosManager.devices[zone.coordinatorID]
+        return topology.devices[zone.coordinatorID]
     }
 
     var body: some View {
@@ -132,17 +133,17 @@ struct HomeTheaterEQView: View {
                 .foregroundStyle(.secondary)
 
             sliderRow(L10n.bass, value: $bass, range: -10...10) {
-                Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "Bass", value: Int(bass)) }
+                Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "Bass", value: Int(bass)) }
             }
 
             sliderRow(L10n.treble, value: $treble, range: -10...10) {
-                Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "Treble", value: Int(treble)) }
+                Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "Treble", value: Int(treble)) }
             }
 
             Toggle(L10n.loudness, isOn: $loudness)
                 .onChange(of: loudness) {
                     guard let d = coordinator else { return }
-                    Task { try? await sonosManager.setLoudness(device: d, enabled: loudness) }
+                    Task { try? await eqService?.setLoudness(device: d, enabled: loudness) }
                 }
 
             Divider()
@@ -150,13 +151,13 @@ struct HomeTheaterEQView: View {
             Toggle(L10n.nightMode, isOn: $nightMode)
                 .onChange(of: nightMode) {
                     guard let d = coordinator else { return }
-                    Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "NightMode", value: nightMode ? 1 : 0) }
+                    Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "NightMode", value: nightMode ? 1 : 0) }
                 }
 
             Toggle(L10n.dialogEnhancement, isOn: $dialogLevel)
                 .onChange(of: dialogLevel) {
                     guard let d = coordinator else { return }
-                    Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "DialogLevel", value: dialogLevel ? 1 : 0) }
+                    Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "DialogLevel", value: dialogLevel ? 1 : 0) }
                 }
 
             Spacer()
@@ -176,18 +177,18 @@ struct HomeTheaterEQView: View {
             Toggle(L10n.subOn, isOn: $subEnabled)
                 .onChange(of: subEnabled) {
                     guard let d = coordinator else { return }
-                    Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "SubEnable", value: subEnabled ? 1 : 0) }
+                    Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "SubEnable", value: subEnabled ? 1 : 0) }
                 }
 
             sliderRow(L10n.subLevel, value: $subGain, range: -15...15) {
-                Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "SubGain", value: Int(subGain)) }
+                Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "SubGain", value: Int(subGain)) }
             }
             .disabled(!subEnabled)
 
             Toggle(L10n.placementAdjustment, isOn: $subPolarity)
                 .onChange(of: subPolarity) {
                     guard let d = coordinator else { return }
-                    Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "SubPolarity", value: subPolarity ? 1 : 0) }
+                    Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "SubPolarity", value: subPolarity ? 1 : 0) }
                 }
                 .disabled(!subEnabled)
 
@@ -208,16 +209,16 @@ struct HomeTheaterEQView: View {
             Toggle(L10n.surroundsOn, isOn: $surroundEnabled)
                 .onChange(of: surroundEnabled) {
                     guard let d = coordinator else { return }
-                    Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "SurroundEnable", value: surroundEnabled ? 1 : 0) }
+                    Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "SurroundEnable", value: surroundEnabled ? 1 : 0) }
                 }
 
             Group {
                 sliderRow(L10n.tvLevel, value: $surroundLevel, range: -15...15) {
-                    Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "SurroundLevel", value: Int(surroundLevel)) }
+                    Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "SurroundLevel", value: Int(surroundLevel)) }
                 }
 
                 sliderRow(L10n.musicLevel, value: $musicSurroundLevel, range: -15...15) {
-                    Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "MusicSurroundLevel", value: Int(musicSurroundLevel)) }
+                    Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "MusicSurroundLevel", value: Int(musicSurroundLevel)) }
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -234,7 +235,7 @@ struct HomeTheaterEQView: View {
                     .frame(maxWidth: 200)
                     .onChange(of: surroundMode) {
                         guard let d = coordinator else { return }
-                        Task { guard let d = self.coordinator else { return }; try? await sonosManager.setEQ(device: d, eqType: "SurroundMode", value: surroundMode) }
+                        Task { guard let d = self.coordinator else { return }; try? await eqService?.setEQ(device: d, eqType: "SurroundMode", value: surroundMode) }
                     }
                 }
             }
@@ -278,18 +279,19 @@ struct HomeTheaterEQView: View {
         guard let d = coordinator else { return }
         isLoading = true
         do {
-            bass = Double(try await sonosManager.getBass(device: d))
-            treble = Double(try await sonosManager.getTreble(device: d))
-            loudness = try await sonosManager.getLoudness(device: d)
-            nightMode = (try? await sonosManager.getEQ(device: d, eqType: "NightMode")) == 1
-            dialogLevel = (try? await sonosManager.getEQ(device: d, eqType: "DialogLevel")) == 1
-            subEnabled = (try? await sonosManager.getEQ(device: d, eqType: "SubEnable")) != 0
-            subGain = Double((try? await sonosManager.getEQ(device: d, eqType: "SubGain")) ?? 0)
-            subPolarity = (try? await sonosManager.getEQ(device: d, eqType: "SubPolarity")) == 1
-            surroundEnabled = (try? await sonosManager.getEQ(device: d, eqType: "SurroundEnable")) != 0
-            surroundLevel = Double((try? await sonosManager.getEQ(device: d, eqType: "SurroundLevel")) ?? 0)
-            musicSurroundLevel = Double((try? await sonosManager.getEQ(device: d, eqType: "MusicSurroundLevel")) ?? 0)
-            surroundMode = (try? await sonosManager.getEQ(device: d, eqType: "SurroundMode")) ?? 1
+            guard let eqService else { return }
+            bass = Double(try await eqService.getBass(device: d))
+            treble = Double(try await eqService.getTreble(device: d))
+            loudness = try await eqService.getLoudness(device: d)
+            nightMode = (try? await eqService.getEQ(device: d, eqType: "NightMode")) == 1
+            dialogLevel = (try? await eqService.getEQ(device: d, eqType: "DialogLevel")) == 1
+            subEnabled = (try? await eqService.getEQ(device: d, eqType: "SubEnable")) != 0
+            subGain = Double((try? await eqService.getEQ(device: d, eqType: "SubGain")) ?? 0)
+            subPolarity = (try? await eqService.getEQ(device: d, eqType: "SubPolarity")) == 1
+            surroundEnabled = (try? await eqService.getEQ(device: d, eqType: "SurroundEnable")) != 0
+            surroundLevel = Double((try? await eqService.getEQ(device: d, eqType: "SurroundLevel")) ?? 0)
+            musicSurroundLevel = Double((try? await eqService.getEQ(device: d, eqType: "MusicSurroundLevel")) ?? 0)
+            surroundMode = (try? await eqService.getEQ(device: d, eqType: "SurroundMode")) ?? 1
         } catch {
             sonosDebugLog("[EQ] Home theater EQ load failed: \(error)")
         }
@@ -299,27 +301,27 @@ struct HomeTheaterEQView: View {
     private func resetEQ() async {
         guard let d = coordinator else { return }
         bass = 0; treble = 0; loudness = true; nightMode = false; dialogLevel = false
-        try? await sonosManager.setBass(device: d, bass: 0)
-        try? await sonosManager.setTreble(device: d, treble: 0)
-        try? await sonosManager.setLoudness(device: d, enabled: true)
-        try? await sonosManager.setEQ(device: d, eqType: "NightMode", value: 0)
-        try? await sonosManager.setEQ(device: d, eqType: "DialogLevel", value: 0)
+        try? await eqService?.setBass(device: d, bass: 0)
+        try? await eqService?.setTreble(device: d, treble: 0)
+        try? await eqService?.setLoudness(device: d, enabled: true)
+        try? await eqService?.setEQ(device: d, eqType: "NightMode", value: 0)
+        try? await eqService?.setEQ(device: d, eqType: "DialogLevel", value: 0)
     }
 
     private func resetSub() async {
         guard let d = coordinator else { return }
         subEnabled = true; subGain = 0; subPolarity = false
-        try? await sonosManager.setEQ(device: d, eqType: "SubEnable", value: 1)
-        try? await sonosManager.setEQ(device: d, eqType: "SubGain", value: 0)
-        try? await sonosManager.setEQ(device: d, eqType: "SubPolarity", value: 0)
+        try? await eqService?.setEQ(device: d, eqType: "SubEnable", value: 1)
+        try? await eqService?.setEQ(device: d, eqType: "SubGain", value: 0)
+        try? await eqService?.setEQ(device: d, eqType: "SubPolarity", value: 0)
     }
 
     private func resetSurrounds() async {
         guard let d = coordinator else { return }
         surroundEnabled = true; surroundLevel = 0; musicSurroundLevel = 0; surroundMode = 1
-        try? await sonosManager.setEQ(device: d, eqType: "SurroundEnable", value: 1)
-        try? await sonosManager.setEQ(device: d, eqType: "SurroundLevel", value: 0)
-        try? await sonosManager.setEQ(device: d, eqType: "MusicSurroundLevel", value: 0)
-        try? await sonosManager.setEQ(device: d, eqType: "SurroundMode", value: 1)
+        try? await eqService?.setEQ(device: d, eqType: "SurroundEnable", value: 1)
+        try? await eqService?.setEQ(device: d, eqType: "SurroundLevel", value: 0)
+        try? await eqService?.setEQ(device: d, eqType: "MusicSurroundLevel", value: 0)
+        try? await eqService?.setEQ(device: d, eqType: "SurroundMode", value: 1)
     }
 }

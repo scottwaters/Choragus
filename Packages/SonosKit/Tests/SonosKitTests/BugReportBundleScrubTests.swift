@@ -28,6 +28,28 @@ final class BugReportBundleScrubTests: XCTestCase {
         )
     }
 
+    /// The MCP section reaches the bundle through the same barrier: the
+    /// peer address, lockouts and the recorded tool bodies carry LAN
+    /// addresses, speaker ids and household ids from `list_devices`.
+    func testScrubRedactsMCPSection() {
+        let raw = MCPDiagnosticsPayload(
+            enabled: true, status: "running", port: 52080, allowLAN: true, preventSleep: false, maxVolume: 80,
+            tokens: [], lockedOutAddresses: ["192.168.1.77"], failedAuthSinceLaunch: 5, builds: [],
+            activity: [MCPDiagnosticsPayload.Activity(
+                at: "2026-09-11T10:00:00Z", client: "Claude", remote: "192.168.1.20", action: "list_devices",
+                summary: "room=Kitchen", outcome: "ok", milliseconds: 12,
+                request: "{\"room\":\"Kitchen\"}",
+                response: "{\"id\":\"RINCON_AB12CD34EF5601400\",\"ip\":\"192.168.1.12\",\"household\":\"Sonos_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234\"}")])
+        let out = BugReportBundle.scrubForPublicOutput(raw)
+        let body = try! String(decoding: JSONEncoder().encode(out), as: UTF8.self)
+        XCTAssertFalse(body.contains("192.168.1."), "LAN addresses must not survive in the MCP section: \(body)")
+        XCTAssertFalse(body.contains("RINCON_AB12CD34EF5601400"), "Speaker ids must be masked in tool bodies")
+        XCTAssertFalse(body.contains("Sonos_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234"), "Household ids must be masked in tool bodies")
+        XCTAssertEqual(out.activity.first?.action, "list_devices")
+        XCTAssertEqual(out.activity.first?.request, "{\"room\":\"Kitchen\"}")
+        XCTAssertEqual(out.port, 52080)
+    }
+
     /// The exact signature of issue #19's bundle leak: a context blob
     /// carrying `sn=274` and a LAN URL. After the helper, neither must
     /// survive — but `sid=` is preserved because it's diagnostic gold.

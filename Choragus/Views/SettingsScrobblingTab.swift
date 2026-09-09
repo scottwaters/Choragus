@@ -14,7 +14,7 @@ import SonosKit
 struct SettingsScrobblingTab: View {
     @EnvironmentObject var scrobbleManager: ScrobbleManager
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(TopologyStore.self) private var topology
     @ObservedObject var lastfm: LastFMScrobbler
 
     // Local state for credential entry / test / connect flow.
@@ -28,10 +28,6 @@ struct SettingsScrobblingTab: View {
     // Selection state — mirrored into UserDefaults via ScrobbleManager.
     @State private var selectedRooms: Set<String> = []
     @State private var selectedMusicServices: Set<String> = []
-
-    // Last.fm section expanded by default only until connected; afterwards
-    // the per-user setup is done and it collapses out of the way.
-    @State private var lastFMExpanded: Bool = true
 
     // Sonos Playlists / Favorites are NOT sources — they are saved
     // collections of tracks that already come from one of these actual
@@ -69,23 +65,17 @@ struct SettingsScrobblingTab: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            lastFMSection
+            SettingsSectionCard("Last.fm") { lastFMSection }
 
-            Divider()
-
-            sourcesSection
+            SettingsSectionCard(L10n.sources) { sourcesSection }
                 .disabled(!lastfm.isConnected)
                 .opacity(lastfm.isConnected ? 1 : 0.4)
 
-            Divider()
-
-            musicServicesSection
+            SettingsSectionCard(L10n.musicServicesToScrobble) { musicServicesSection }
                 .disabled(!lastfm.isConnected)
                 .opacity(lastfm.isConnected ? 1 : 0.4)
 
-            Divider()
-
-            actionsSection
+            SettingsSectionCard(L10n.scrobbling) { actionsSection }
                 .disabled(!lastfm.isConnected)
                 .opacity(lastfm.isConnected ? 1 : 0.4)
         }
@@ -101,12 +91,18 @@ struct SettingsScrobblingTab: View {
 
     private var lastFMSection: some View {
         let enabled = scrobbleManager.isServiceEnabled(lastfm)
-        return DisclosureGroup(isExpanded: $lastFMExpanded) {
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle(L10n.enableLastFM, isOn: Binding(
-                    get: { enabled },
-                    set: { scrobbleManager.setServiceEnabled(lastfm, $0) }
-                ))
+        return VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Toggle(L10n.enableLastFM, isOn: Binding(
+                        get: { enabled },
+                        set: { scrobbleManager.setServiceEnabled(lastfm, $0) }
+                    ))
+                    if lastfm.isConnected, let name = lastfm.connectedUsername {
+                        Label(name, systemImage: "person.crop.circle")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 if enabled {
                     VStack(alignment: .leading, spacing: 10) {
@@ -182,19 +178,7 @@ struct SettingsScrobblingTab: View {
                     .padding(8)
                     .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
                     }
-                    .padding(.leading, 24)
                 }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "waveform")
-                Text("Last.fm").fontWeight(.semibold)
-                if lastfm.isConnected, let name = lastfm.connectedUsername {
-                    Text("· \(name)")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
         }
     }
 
@@ -248,7 +232,6 @@ struct SettingsScrobblingTab: View {
 
     private var sourcesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.sources).font(.headline)
             Text(L10n.sourcesDescription)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -284,7 +267,7 @@ struct SettingsScrobblingTab: View {
                 }
             }
         }
-        for group in sonosManager.groups {
+        for group in topology.groups {
             for member in group.members {
                 let trimmed = member.roomName.trimmingCharacters(in: .whitespaces)
                 if !trimmed.isEmpty && seen.insert(trimmed).inserted {
@@ -299,7 +282,6 @@ struct SettingsScrobblingTab: View {
 
     private var musicServicesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.musicServicesToScrobble).font(.headline)
             Text(L10n.musicServicesDescription)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -448,7 +430,7 @@ struct SettingsScrobblingTab: View {
 
     /// Answers "why didn't my tracks go?" by listing the most recent
     /// ignored/failed entries alongside the recorded reason. `ignored`
-    /// conflates two cases in the stats row — our eligibility filter
+    /// conflates two cases in the stats row — the app's eligibility filter
     /// (< 30 s, missing artist, > 14 d, room/service filter) and Last.fm's
     /// server-side rejection (duplicate, blocklisted artist, timestamp
     /// drift). The reason string tells the user which bucket each one fell

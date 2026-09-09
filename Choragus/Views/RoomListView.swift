@@ -6,7 +6,7 @@ import SwiftUI
 import SonosKit
 
 struct RoomListView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @Binding var selectedGroupID: String?
     @State private var showGroupEditorFor: SonosGroup?
     /// Group id currently hovered as a drop target (#82). Drives the row
@@ -17,12 +17,10 @@ struct RoomListView: View {
 
     private let iconColumnWidth: CGFloat = 34
 
-    /// Direct O(1) lookup per row. The previous `playingCoordinatorIDs:
-    /// Set<String>` recomputed the whole set on every access (filter +
-    /// map + Set construction over `groupTransportStates`), and was
-    /// accessed once per visible room inside the ForEach — N rooms = N
-    /// full Set rebuilds per body re-eval, contributing to the
-    /// main-thread saturation that starved the karaoke window.
+    /// Direct O(1) lookup per row. A precomputed `Set` of playing
+    /// coordinator IDs would be rebuilt (filter + map over
+    /// `groupTransportStates`) once per visible room inside the ForEach —
+    /// N full Set rebuilds per body re-eval on the main thread.
     private func isPlaying(group: SonosGroup) -> Bool {
         sonosManager.groupTransportStates[group.coordinatorID]?.isActive ?? false
     }
@@ -71,10 +69,9 @@ struct RoomListView: View {
     var body: some View {
         ScrollViewReader { proxy in
             VStack(spacing: 0) {
-                // Refresh control — moved from the global toolbar so
-                // the rescan action lives next to the speaker list it
-                // operates on. Useful after router changes / DHCP
-                // shuffles when cached topology has stale IPs.
+                // Refresh control — the rescan action sits next to the
+                // speaker list it operates on. Useful after router changes
+                // / DHCP shuffles when cached topology has stale IPs.
                 HStack {
                     Spacer()
                     Button {
@@ -173,7 +170,7 @@ struct RoomListView: View {
             }
             .sheet(item: $showGroupEditorFor) { group in
                 GroupEditorView(initialGroup: group)
-                    .environmentObject(sonosManager)
+                    .choragusServices(sonosManager)
             }
         }
     }
@@ -201,33 +198,38 @@ struct RoomListView: View {
             }
     }
 
-    /// Groups the dragged room into `target`. Cross-household drops are
-    /// refused: two Sonos systems cannot form a group, and the speaker
-    /// would answer the join with a SOAP fault.
+    /// Groups the dragged room into `target`. The rules — same group, vanished
+    /// source, missing coordinator, cross-household — live in
+    /// `GroupDropDecision` so they can be tested without two Sonos systems.
     private func handleRoomDrop(providers: [NSItemProvider], onto target: SonosGroup) -> Bool {
         loadGroupID(from: providers) { sourceID in
-            guard sourceID != target.id,
-                  let source = sonosManager.groups.first(where: { $0.id == sourceID }),
-                  let coordinator = target.coordinator
-            else { return }
-            guard source.householdID == target.householdID else {
-                sonosDiagLog(.info, tag: "GROUPING",
-                             "Cross-household drop refused",
-                             context: ["source": source.name, "target": target.name])
-                return
-            }
-            Task {
-                for member in source.members {
-                    do {
-                        try await sonosManager.joinGroup(device: member, toCoordinator: coordinator)
-                    } catch {
-                        sonosDiagLog(.error, tag: "GROUPING",
-                                     "Join failed: \(error.localizedDescription)",
-                                     context: ["room": member.roomName,
-                                               "target": target.name])
+            switch GroupDropDecision.join(sourceID: sourceID, target: target,
+                                          groups: sonosManager.groups) {
+            case let .refuse(reason):
+                sonosDiagLog(.info, tag: "GROUPING", "Room drop refused",
+                             context: ["reason": String(describing: reason),
+                                       "target": target.name])
+            case let .join(memberIDs, coordinatorID, selecting):
+                let members = sonosManager.groups
+                    .flatMap(\.members)
+                    .filter { memberIDs.contains($0.id) }
+                guard let coordinator = sonosManager.groups
+                    .flatMap(\.members).first(where: { $0.id == coordinatorID })
+                else { return }
+                Task {
+                    for member in members {
+                        do {
+                            try await sonosManager.joinGroup(device: member,
+                                                             toCoordinator: coordinator)
+                        } catch {
+                            sonosDiagLog(.error, tag: "GROUPING",
+                                         "Join failed: \(error.localizedDescription)",
+                                         context: ["room": member.roomName,
+                                                   "target": target.name])
+                        }
                     }
+                    selectedGroupID = selecting
                 }
-                selectedGroupID = target.id
             }
         }
         return true
@@ -236,16 +238,23 @@ struct RoomListView: View {
     /// Splits the dragged room's group into standalone rooms.
     private func handleUngroupDrop(providers: [NSItemProvider]) -> Bool {
         loadGroupID(from: providers) { sourceID in
-            guard let source = sonosManager.groups.first(where: { $0.id == sourceID }),
-                  source.members.count > 1 else { return }
-            Task {
-                for member in source.members where member.id != source.coordinatorID {
-                    do {
-                        try await sonosManager.ungroupDevice(member)
-                    } catch {
-                        sonosDiagLog(.error, tag: "GROUPING",
-                                     "Ungroup failed: \(error.localizedDescription)",
-                                     context: ["room": member.roomName])
+            switch GroupDropDecision.split(sourceID: sourceID, groups: sonosManager.groups) {
+            case let .refuse(reason):
+                sonosDiagLog(.info, tag: "GROUPING", "Ungroup drop refused",
+                             context: ["reason": String(describing: reason)])
+            case let .ungroup(memberIDs):
+                let members = sonosManager.groups
+                    .flatMap(\.members)
+                    .filter { memberIDs.contains($0.id) }
+                Task {
+                    for member in members {
+                        do {
+                            try await sonosManager.ungroupDevice(member)
+                        } catch {
+                            sonosDiagLog(.error, tag: "GROUPING",
+                                         "Ungroup failed: \(error.localizedDescription)",
+                                         context: ["room": member.roomName])
+                        }
                     }
                 }
             }

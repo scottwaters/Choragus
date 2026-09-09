@@ -50,7 +50,10 @@ public final class SOAPClient: SOAPClientProtocol {
             throw SOAPError.invalidURL
         }
 
-        let soapAction = "urn:schemas-upnp-org:service:\(service):1#\(action)"
+        // The header value must be a QUOTED string. UPnP requires it, and
+        // libupnp — what most DLNA servers are built on — returns 400 Bad
+        // Request without the quotes. Sonos speakers accept either form.
+        let soapAction = "\"urn:schemas-upnp-org:service:\(service):1#\(action)\""
         let body = buildEnvelope(service: service, action: action, arguments: arguments)
 
         var request = URLRequest(url: url)
@@ -71,6 +74,14 @@ public final class SOAPClient: SOAPClientProtocol {
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await session.data(for: request)
+            // 2 MB bounds a hostile LAN responder; the largest
+            // legitimate payloads (200-item queue browse pages) stay
+            // under a quarter of this.
+            guard data.count <= 2 * 1024 * 1024 else {
+                throw SOAPError.parseError("response exceeded size cap")
+            }
+        } catch let error as SOAPError {
+            throw error
         } catch {
             // Surface macOS Local Network privacy denials. Every SOAP
             // call goes through here, so this is the single cheapest
@@ -110,16 +121,18 @@ public final class SOAPClient: SOAPClientProtocol {
                             "url": url.absoluteString,
                             "http_status": "\(httpResponse.statusCode)"
                          ])
-            throw SOAPError.httpError(httpResponse.statusCode, responseBody)
+            // The body is a hostile-capable server's bytes: keep an
+            // excerpt for diagnosis, never the whole thing (it rides
+            // into every caller that logs localizedDescription).
+            throw SOAPError.httpError(httpResponse.statusCode, String(responseBody.prefix(300)))
         }
 
         // Parse off the caller's actor. In practice every UI-side
         // caller (`SonosManager`, `NowPlayingViewModel`, etc.) is
         // `@MainActor`, and `XMLResponseParser.parseActionResponse`
         // runs `NSXMLParser` synchronously over a response body that
-        // can be several KB. Without an explicit `Task.detached`, Swift
-        // Concurrency was observed in Instruments to keep the
-        // synchronous parse on the caller's actor (main thread),
+        // can be several KB. Without an explicit `Task.detached` the
+        // synchronous parse stays on the caller's actor (main thread),
         // adding 4–10 ms stalls per SOAP call.
         let parsed = await Task.detached(priority: .userInitiated) {
             XMLResponseParser.parseActionResponse(responseBody, action: action)

@@ -17,21 +17,21 @@ public enum AppError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .networkUnavailable:
-            return "The network is unavailable. Check your Wi-Fi connection. Usually transient — only report if it happens often."
+            return L10n.errAppNetworkUnavailable
         case .speakerNotFound(let name):
-            return "Speaker \"\(name)\" was not found on the network."
+            return L10n.errAppSpeakerNotFound(name)
         case .soapFault(let code, _):
             return Self.sanitizedSOAPMessage(code: code)
         case .serviceAuthRequired(let service):
-            return "\(service) requires sign-in. Open the Sonos app to re-authenticate."
+            return L10n.errAppServiceAuthRequired(service)
         case .playbackFailed(let detail):
-            return "Playback failed: \(detail)"
+            return L10n.errAppPlaybackFailed(detail)
         case .cacheFailed(let detail):
-            return "Cache error: \(detail)"
+            return L10n.errAppCacheFailed(detail)
         case .timeout:
-            return "The request timed out. The speaker may be unresponsive. Usually transient — only report if it happens often."
+            return L10n.errAppTimeout
         case .unknown:
-            return "An unexpected error occurred."
+            return L10n.errAppUnknown
         }
     }
 
@@ -41,16 +41,16 @@ public enum AppError: Error, LocalizedError {
     /// Unknown codes get a generic message — raw fault detail is never shown.
     private static func sanitizedSOAPMessage(code: String) -> String {
         switch code {
-        case "401": return "Speaker reported an invalid action."
-        case "402", "714": return "The requested item was not found."
-        case "701": return "Cannot transition — the speaker may be in a different state."
-        case "711": return "The operation is not supported in the current state."
-        case "712": return "The queue is full."
-        case "718": return "Invalid seek target."
-        case "800": return "Service authentication required."
-        case "parse": return "Received an unexpected response from the speaker."
-        case "SMAPI": return "The music service returned an error."
-        default: return "Speaker returned an error (code \(code))."
+        case "401": return L10n.errSoapInvalidAction
+        case "402", "714": return L10n.errSoapItemNotFound
+        case "701": return L10n.errSoapCannotTransition
+        case "711": return L10n.errSoapNotSupportedInState
+        case "712": return L10n.errSoapQueueFull
+        case "718": return L10n.errSoapInvalidSeek
+        case "800": return L10n.errSoapAuthRequired
+        case "parse": return L10n.errSoapUnexpectedResponse
+        case "SMAPI": return L10n.errSoapServiceError
+        default: return L10n.errSoapGenericCode(code)
         }
     }
 
@@ -86,7 +86,7 @@ public enum AppError: Error, LocalizedError {
         case .soapFault(let detail):
             return .soapFault(code: "SMAPI", message: detail)
         case .notAuthenticated:
-            return .serviceAuthRequired("Music service")
+            return .serviceAuthRequired(L10n.errMusicServiceGeneric)
         case .authFailed(let reason):
             return .serviceAuthRequired(reason)
         }

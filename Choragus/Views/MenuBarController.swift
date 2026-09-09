@@ -56,8 +56,8 @@ final class MenuBarController {
             // Open C: 270° arc with the gap on the right. Rendered
             // by stroking a circle along that arc range. Plain
             // NSBezierPath uses degrees and counter-clockwise by
-            // default — we sweep from 45° → 315° going CCW for a
-            // clean right-side opening.
+            // default — the sweep runs 45° → 315° CCW for a clean
+            // right-side opening.
             let radius: CGFloat = 6.5
             let lineWidth: CGFloat = 2.0
             let arc = NSBezierPath()
@@ -103,7 +103,7 @@ final class MenuBarController {
             pop.behavior = .transient
             pop.contentViewController = NSHostingController(
                 rootView: MenuBarPlayerView()
-                    .environmentObject(sonosManager)
+                    .choragusServices(sonosManager)
             )
             pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover = pop
@@ -114,7 +114,7 @@ final class MenuBarController {
 // MARK: - Mini Player View
 
 struct MenuBarPlayerView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @State private var selectedGroupID: String?
     @State private var isHoveringArt = false
     @State private var starRevision = 0
@@ -383,10 +383,8 @@ struct MenuBarPlayerView: View {
                 // Show main window
                 Button {
                     // Bring the captured main window forward, re-showing it
-                    // if it was closed. The previous title-substring search
-                    // matched auxiliary windows ("Choragus Help / Diagnostics",
-                    // Settings) and did nothing when the main window was
-                    // closed (issue #60).
+                    // if it was closed. A title-substring lookup would match
+                    // auxiliary windows and miss a closed main window (issue #60).
                     MainWindowHolder.shared.show()
                 } label: {
                     HStack(spacing: 4) {

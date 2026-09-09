@@ -1,4 +1,4 @@
-/// ComprehensiveTests.swift — Full coverage tests for refactored code.
+/// ComprehensiveTests.swift — Full coverage tests.
 ///
 /// Covers: TrackMetadata (parseStreamContent, isTechnicalName, smartCase),
 /// AppError sanitization, centralized constants, ImageCache/SonosCache,
@@ -411,8 +411,8 @@ final class ConstantsTests: XCTestCase {
     func testCacheDefaults() {
         XCTAssertEqual(CacheDefaults.imageDiskMaxSizeMB, 500)
         XCTAssertEqual(CacheDefaults.imageDiskMaxAgeDays, 30)
-        XCTAssertEqual(CacheDefaults.imageMemoryCountLimit, 200)
-        XCTAssertEqual(CacheDefaults.imageMemoryBytesLimit, 50 * 1024 * 1024)
+        XCTAssertEqual(CacheDefaults.imageMemoryCountLimit, 800)
+        XCTAssertEqual(CacheDefaults.imageMemoryBytesLimit, 96 * 1024 * 1024)
         XCTAssertEqual(CacheDefaults.imageEvictionFrequency, 50)
         XCTAssertEqual(CacheDefaults.playHistoryMaxEntries, 50_000)
     }
@@ -627,6 +627,38 @@ final class LastChangeParserExtendedTests: XCTestCase {
         XCTAssertEqual(event.currentTrackURI, "x-sonos-http:track.mp4?sid=204")
         XCTAssertEqual(event.currentTrackDuration, "0:04:30")
         XCTAssertEqual(event.numberOfTracks, 15)
+        // An event that does not report a position must not invent one:
+        // nil is what lets the consumer keep the last known row.
+        XCTAssertNil(event.currentTrack)
+    }
+
+    /// `CurrentTrack` sits beside `NumberOfTracks` in every AVTransport
+    /// LastChange body. Left unread, every event-driven update reports queue
+    /// position 0 and the resolver's authoritative rule never fires. Payload
+    /// is a real capture from a coordinator playing a 116-track queue.
+    func testParseAVTransportEventCarriesCurrentTrack() {
+        let xml = """
+        <e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0">
+          <e:property>
+            <LastChange>&lt;Event&gt;
+              &lt;InstanceID val=&quot;0&quot;&gt;
+                &lt;TransportState val=&quot;PLAYING&quot;/&gt;
+                &lt;NumberOfTracks val=&quot;116&quot;/&gt;
+                &lt;CurrentTrack val=&quot;70&quot;/&gt;
+                &lt;CurrentSection val=&quot;0&quot;/&gt;
+                &lt;CurrentTrackURI val=&quot;x-sonos-http:track%2f45257.flac?sid=174&quot;/&gt;
+              &lt;/InstanceID&gt;
+            &lt;/Event&gt;</LastChange>
+          </e:property>
+        </e:propertyset>
+        """
+
+        let event = LastChangeParser.parseAVTransportEvent(xml)
+        XCTAssertEqual(event.currentTrack, 70)
+        XCTAssertEqual(event.numberOfTracks, 116)
+        // CurrentSection is a separate variable and must not be confused
+        // with the queue position: both are small integers.
+        XCTAssertEqual(event.currentSection, 0)
     }
 
     func testParseRenderingControlWithBassAndTreble() {
@@ -786,7 +818,7 @@ final class ServiceColorTests: XCTestCase {
         let _ = ServiceColor.color(for: ServiceName.spotify)
         let _ = ServiceColor.color(for: "TV")
         let _ = ServiceColor.color(for: "Unknown Service")
-        // If we get here without crash, the color lookup works
+        // Reaching here without a crash proves the color lookup works
     }
 }
 
@@ -838,6 +870,33 @@ final class EnrichFromMediaInfoExtendedTests: XCTestCase {
         var meta = TrackMetadata(title: "Original")
         meta.enrichFromMediaInfo([:], device: device)
         XCTAssertEqual(meta.title, "Original")
+    }
+
+    private let stationDIDL = """
+    <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="100c2068catalog%3astation%3akey%3aA2W1BPRE6V4O9I" parentID="-1" restricted="true"><dc:title>90er-Alternative</dc:title><upnp:albumArtURI>https://images-na.ssl-images-amazon.com/images/I/station.jpg</upnp:albumArtURI><upnp:class>object.item.audioItem.audioBroadcast</upnp:class></item></DIDL-Lite>
+    """
+
+    func testStationArtDoesNotReplaceTrackArt() {
+        // Amazon stations: the track DIDL carries the song's own cover;
+        // CurrentURIMetaData is the station container with its logo.
+        var meta = TrackMetadata(title: "Self Esteem", artist: "The Offspring")
+        meta.albumArtURI = "https://m.media-amazon.com/images/I/track.jpg"
+        meta.enrichFromMediaInfo([
+            "CurrentURI": "x-sonosapi-radio:catalog%3astation%3akey%3aA2W1BPRE6V4O9I?sid=201&flags=8300&sn=5",
+            "CurrentURIMetaData": stationDIDL
+        ], device: device)
+        XCTAssertEqual(meta.albumArtURI, "https://m.media-amazon.com/images/I/track.jpg")
+        XCTAssertEqual(meta.stationName, "90er-Alternative")
+        XCTAssertEqual(meta.title, "Self Esteem")
+    }
+
+    func testStationArtFillsMissingTrackArt() {
+        var meta = TrackMetadata()
+        meta.enrichFromMediaInfo([
+            "CurrentURI": "x-sonosapi-radio:catalog%3astation%3akey%3aA2W1BPRE6V4O9I?sid=201&flags=8300&sn=5",
+            "CurrentURIMetaData": stationDIDL
+        ], device: device)
+        XCTAssertEqual(meta.albumArtURI, "https://images-na.ssl-images-amazon.com/images/I/station.jpg")
     }
 }
 

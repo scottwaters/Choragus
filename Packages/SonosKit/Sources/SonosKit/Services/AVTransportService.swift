@@ -92,6 +92,21 @@ public final class AVTransportService {
         return TransportState(rawValue: stateStr) ?? .stopped
     }
 
+    /// Asks the speaker which transport commands it currently accepts.
+    /// Only meaningful on a group coordinator — members report an empty
+    /// list. Returns nil when the speaker reports nothing, so callers can
+    /// distinguish "not allowed" from "unknown".
+    public func getCurrentTransportActions(device: SonosDevice) async throws -> TransportActions? {
+        let result = try await soap.send(
+            to: device.baseURL,
+            path: Self.path,
+            service: Self.service,
+            action: "GetCurrentTransportActions",
+            arguments: [("InstanceID", "0")]
+        )
+        return TransportActions.parse(result["Actions"] ?? "")
+    }
+
     /// Fetches current track, position, duration, and DIDL metadata in a single call
     public func getPositionInfo(device: SonosDevice) async throws -> TrackMetadata {
         let result = try await soap.send(

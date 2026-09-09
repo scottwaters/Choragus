@@ -96,6 +96,38 @@ Sonos speakers expose a `GetHouseholdID` SOAP action that the app uses to partit
 
 With Bonjour, the household ID is already in the TXT record. `MDNSDiscovery` populates `device.householdID` from the TXT before the topology pipeline runs, and `handleDiscoveredDevice` skips the SOAP fetch when the field is already set. This is a measurable win on S1 hardware, which throttles aggressively under request pressure during topology discovery.
 
+## Seed addresses — when multicast is blocked outright
+
+The hop limit above only helps where the network *routes* multicast. Where it
+is blocked — IGMP snooping with no querier, an access point that drops
+multicast to save airtime, a firewall rule — no discovery protocol works, and
+raising the TTL changes nothing.
+
+**Settings → System → Add speakers by address** takes a list of IP addresses,
+one per line, probed directly with `GET /xml/device_description.xml`. That is
+ordinary unicast HTTP and crosses boundaries multicast cannot.
+
+One address is normally enough for a whole household: `GetZoneGroupState` on
+the seeded speaker returns every other member with its own IP, and the normal
+topology path takes over from there. The setting is a seed list, not a table to
+maintain per speaker.
+
+Accepted forms: `192.168.1.51`, `192.168.1.51:1400`, a hostname, or a full
+description URL pasted from a browser. Probes time out after 3 seconds so an
+address that has moved does not hold up discovery.
+
+Two consequences worth knowing:
+
+- **The address must stay put.** A DHCP lease that rotates breaks the entry.
+  Reserve the address on the router rather than hoping.
+- **Events still need a return path.** Seeded speakers are added to the event
+  listener's accepted-peer set automatically, but the speaker must also be able
+  to reach this Mac's callback port. Where it cannot, the app falls back to
+  polling: control works, and state updates are slower.
+
+This does not bypass UPnP. Every transport command is still a SOAP call to the
+speaker; what a seed address replaces is the multicast search that finds it.
+
 ## VLAN guidance for users
 
 If speakers don't show up in **Auto** mode, the most common causes (in order of likelihood):

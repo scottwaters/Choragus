@@ -28,7 +28,6 @@ Packages/SonosKit/.build/
 topology_cache.json
 
 # Local-only TODO (cross-release notes, not for GitHub)
-docs/TODO.md
 
 # Claude Code project settings — local-only IDE configuration that can
 # embed personal-machine paths in its allowlist. Must never be committed.
@@ -45,11 +44,8 @@ docs/TODO.md
 *.cer
 *.key
 *.keystore
-.release.env
 
-# ForFunView.swift and GalaxyVisWindow.swift are local-only while the
-# visualisations get reworked. Neither is in project.pbxproj's source
-# list, so the build succeeds whether or not they exist on disk. Restore
-# by adding the file ref + build entry back into project.pbxproj when ready.
-Choragus/Views/ForFunView.swift
-Choragus/Views/GalaxyVisWindow.swift
+
+# Live probes against real hardware name a host on a private network and
+# make network calls from the unit-test target; they stay out of the repo.
+Packages/SonosKit/Tests/SonosKitTests/Live*Probe.swift

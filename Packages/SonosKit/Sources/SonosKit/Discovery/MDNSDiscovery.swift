@@ -92,20 +92,11 @@ public final class MDNSDiscovery: SpeakerDiscovery, @unchecked Sendable {
     private func handleResult(_ result: NWBrowser.Result) {
         guard case .service(let name, let type, let domain, _) = result.endpoint else { return }
 
-        // Fast path: TXT record carries `location` directly. This is the common
-        // case on S2 firmware ≥ 1.51 and avoids opening a TCP connection just
-        // to learn the URL.
-        if case .bonjour(let txt) = result.metadata {
-            if let location = txtValue(txt, "location"), !location.isEmpty,
-               let url = URL(string: location), let host = url.host {
-                guard !seenLocations.contains(location) else { return }
-                seenLocations.insert(location)
-                let port = url.port ?? 1400
-                let hh = txtValue(txt, "hhid")
-                onDeviceFound?(location, host, port, hh)
-                return
-            }
-        }
+        // Any process that can register a Bonjour service writes arbitrary
+        // TXT records, and the host a TXT `location` names would become a
+        // minted device IP and an event-listener allowed peer. Every
+        // discovery therefore resolves the host from the actual endpoint,
+        // at one TCP connection per service per discovery pass.
 
         // Spec-compliant fallback: resolve the service via NWConnection to
         // obtain host/port, then synthesise the standard device-description
@@ -114,17 +105,24 @@ public final class MDNSDiscovery: SpeakerDiscovery, @unchecked Sendable {
         resolveService(name: name, type: type, domain: domain)
     }
 
-    private func resolveService(name: String, type: String, domain: String) {
+    /// IPv4 first: the rest of the pipeline keys speakers by IPv4 address.
+    /// A service reachable only over IPv6 is retried without the
+    /// restriction and its literal is bracketed for the URL.
+    private func resolveService(name: String, type: String, domain: String, ipv4Only: Bool = true) {
         let endpoint = NWEndpoint.service(name: name, type: type, domain: domain, interface: nil)
         guard resolveConnections[endpoint] == nil else { return }
 
-        let connection = NWConnection(to: endpoint, using: .tcp)
+        let parameters = NWParameters.tcp
+        if ipv4Only, let ip = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
+            ip.version = .v4
+        }
+        let connection = NWConnection(to: endpoint, using: parameters)
         connection.stateUpdateHandler = { [weak self, weak connection] state in
             guard let self, let connection else { return }
             switch state {
             case .ready:
                 if let (host, port) = self.extractHostPort(from: connection) {
-                    let location = "http://\(host):\(port)/xml/device_description.xml"
+                    let location = "http://\(Self.urlHost(host)):\(port)/xml/device_description.xml"
                     if !self.seenLocations.contains(location) {
                         self.seenLocations.insert(location)
                         self.onDeviceFound?(location, host, port, nil)
@@ -132,7 +130,12 @@ public final class MDNSDiscovery: SpeakerDiscovery, @unchecked Sendable {
                 }
                 connection.cancel()
                 self.resolveConnections.removeValue(forKey: endpoint)
-            case .failed, .cancelled:
+            case .failed:
+                self.resolveConnections.removeValue(forKey: endpoint)
+                if ipv4Only {
+                    self.resolveService(name: name, type: type, domain: domain, ipv4Only: false)
+                }
+            case .cancelled:
                 self.resolveConnections.removeValue(forKey: endpoint)
             default:
                 break
@@ -148,11 +151,22 @@ public final class MDNSDiscovery: SpeakerDiscovery, @unchecked Sendable {
         let hostString: String
         switch host {
         case .ipv4(let v4): hostString = "\(v4)"
-        case .ipv6(let v6): hostString = "\(v6)"
+        case .ipv6(let v6):
+            if let v4 = v6.asIPv4 {
+                hostString = "\(v4)"
+            } else {
+                // Drop the `%scope` suffix: it is not URL syntax.
+                hostString = "\(v6)".split(separator: "%", maxSplits: 1).first.map(String.init) ?? "\(v6)"
+            }
         case .name(let n, _): hostString = n
         @unknown default: return nil
         }
         return (hostString, Int(port.rawValue))
+    }
+
+    /// Host as it appears in a URL authority: an IPv6 literal is bracketed.
+    static func urlHost(_ host: String) -> String {
+        host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
     }
 
     /// TXT keys on Sonos are lowercase, but tolerate case variation.

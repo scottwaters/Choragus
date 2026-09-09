@@ -8,6 +8,9 @@ final class WindowManager {
 
     var playHistoryManager: PlayHistoryManager?
     var sonosManager: SonosManager?
+    /// Injected alongside `sonosManager` at launch; the Playlist
+    /// Builder window needs SMAPI credentials for its service picker.
+    weak var smapiManager: SMAPIAuthManager?
     var lyricsService: LyricsServiceHolder?
     var lyricsCoordinator: LyricsCoordinator?
     var metadataServicesHolder: MusicMetadataServiceHolder?
@@ -19,6 +22,7 @@ final class WindowManager {
 
     private var playHistoryWindow: NSWindow?
     private var homeTheaterWindow: NSWindow?
+    private var alarmsWindow: NSWindow?
     private var helpWindow: NSWindow?
     private var karaokeLyricsWindow: NSWindow?
     private var diagnosticsWindow: NSWindow?
@@ -46,12 +50,12 @@ final class WindowManager {
         guard let manager = playHistoryManager, let sonos = sonosManager else { return }
         let view = PlayHistoryView()
             .environmentObject(manager)
-            .environmentObject(sonos)
+            .environment(sonos)
             .preferredColorScheme(colorScheme)
         // Default to 1440 × 810 (16:9, 75 % of 1080p) — same as the
         // karaoke window so the stats and karaoke popouts share a
         // consistent default footprint.
-        let window = createWindow(title: "Listening Stats", content: view, width: 1440, height: 810)
+        let window = createWindow(title: L10n.listeningStats, content: view, width: 1440, height: 810)
         window.toolbar?.displayMode = .iconAndLabel
         // Persist frame across launches. AppKit auto-saves the window's
         // origin + size whenever the user drags or resizes, and applies
@@ -69,7 +73,7 @@ final class WindowManager {
         playHistoryWindow = window
     }
 
-    func openDiagnostics() {
+    func openDiagnostics(tab: DiagnosticsView.Tab = .log) {
         if let existing = diagnosticsWindow, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
             return
@@ -82,21 +86,24 @@ final class WindowManager {
         // that tab becomes the active branch — events fired during a
         // Log-tab session would be lost.
         let liveLog = LiveEventLog(sonosManager: manager)
-        let view = DiagnosticsView()
-            .environmentObject(manager)
+        let view = DiagnosticsView(initialTab: tab)
+            .choragusServices(manager)
             .environmentObject(liveLog)
             .preferredColorScheme(colorScheme)
-        let window = createWindow(title: "Choragus Diagnostics", content: view, width: 900, height: 560)
+        let window = createWindow(title: L10n.choragusDiagnostics, content: view, width: 900, height: 560)
         diagnosticsWindow = window
     }
 
-    func openHelp() {
+    func openHelp(topic: HelpTopic? = nil) {
         if let existing = helpWindow, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
+            if let topic {
+                NotificationCenter.default.post(name: .helpSelectTopic, object: topic.rawValue)
+            }
             return
         }
-        let view = HelpView().preferredColorScheme(colorScheme)
-        let window = createWindow(title: "Choragus Help", content: view, width: 820, height: 560)
+        let view = HelpView(initialTopic: topic ?? .gettingStarted).preferredColorScheme(colorScheme)
+        let window = createWindow(title: L10n.choragusHelp, content: view, width: 820, height: 560)
         helpWindow = window
     }
 
@@ -135,7 +142,7 @@ final class WindowManager {
         guard let manager = sonosManager else { return }
 
         let view = QueueLibraryWindow(manager: manager, group: group)
-            .environmentObject(manager)
+            .choragusServices(manager)
         let window = createWindow(title: L10n.queueLibraryWindowTitle, content: view,
                                   width: 1040, height: 720)
         window.identifier = Self.queueLibraryWindowIdentifier
@@ -148,6 +155,37 @@ final class WindowManager {
             forName: NSWindow.willCloseNotification, object: window, queue: .main
         ) { [weak self, weak window] _ in
             if self?.queueLibraryWindow === window { self?.queueLibraryWindow = nil }
+            window?.contentViewController = nil
+            if let token { NotificationCenter.default.removeObserver(token) }
+        }
+    }
+
+    private static let playlistBuilderWindowIdentifier = NSUserInterfaceItemIdentifier("ChoragusPlaylistBuilder")
+    private var playlistBuilderWindow: NSWindow?
+
+    /// Playlist Builder — non-modal so generation and resolution keep
+    /// running while the rest of the app stays usable.
+    func openPlaylistBuilder() {
+        if let existing = playlistBuilderWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+        guard let manager = sonosManager, let smapi = smapiManager else { return }
+        let view = PlaylistBuilderView()
+            .choragusServices(manager)
+            .environmentObject(smapi)
+        let window = createWindow(title: L10n.playlistBuilderTitle, content: view,
+                                  width: 640, height: 560)
+        window.identifier = Self.playlistBuilderWindowIdentifier
+        window.contentMinSize = NSSize(width: 640, height: 560)
+        window.setFrameAutosaveName("ChoragusPlaylistBuilderWindow")
+        playlistBuilderWindow = window
+
+        var token: NSObjectProtocol?
+        token = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { [weak self, weak window] _ in
+            if self?.playlistBuilderWindow === window { self?.playlistBuilderWindow = nil }
             window?.contentViewController = nil
             if let token { NotificationCenter.default.removeObserver(token) }
         }
@@ -179,9 +217,7 @@ final class WindowManager {
         // exited fullscreen via ⌘W, which doesn't fire willClose)
         // leaves a window that AppKit still considers `isVisible`
         // but is on a Space the user isn't on — `makeKeyAndOrderFront`
-        // alone doesn't pull them back. Diagnosed via `[CLUBVIS-OPEN]
-        // reuse existing visible=true` repeating across rapid retries
-        // with no `willClose fired` event ever logging.
+        // alone doesn't pull them back.
         if let existing = clubVisWindow,
            existing.isVisible,
            existing.isOnActiveSpace,
@@ -191,8 +227,8 @@ final class WindowManager {
             return
         }
 
-        // Reuse not viable — tear down anything we know about plus
-        // every orphan window with our identifier. Releasing the
+        // Reuse not viable — tear down the tracked window plus every
+        // orphan window carrying the identifier. Releasing the
         // autosave name first lets the new window claim it; without
         // this AppKit refuses re-registration while the stale window
         // still holds the slot (isReleasedWhenClosed == false keeps
@@ -221,7 +257,7 @@ final class WindowManager {
         }
 
         let view = ClubVisWindow(groupID: group.coordinatorID)
-            .environmentObject(manager)
+            .choragusServices(manager)
             .environmentObject(manager.anchorTracker)
             .environmentObject(history)
             .environmentObject(metadata)
@@ -317,8 +353,7 @@ final class WindowManager {
             window?.contentViewController = nil
         }
         // Auto-open the debug companion in DEBUG builds only —
-        // release builds never see it. Re-enabled for the lighting-v2
-        // tuning cycle on this branch.
+        // release builds never see it.
         #if CHORAGUS_DEV
         openClubVisDebugCompanion()
         #endif
@@ -373,8 +408,8 @@ final class WindowManager {
     }
     #endif
 
-    /// Stable identifier stamped onto every karaoke window so we can
-    /// find orphans in `NSApp.windows` even after our ivar reference
+    /// Stable identifier stamped onto every karaoke window so orphans
+    /// can be found in `NSApp.windows` even after the ivar reference
     /// has been lost.
     private static let karaokeWindowIdentifier = NSUserInterfaceItemIdentifier("ChoragusKaraokeLyrics")
 
@@ -387,7 +422,7 @@ final class WindowManager {
     /// - Sweeps `NSApp.windows` for any karaoke window with a stale
     ///   identifier and closes it. Handles the case where the previous
     ///   window's hosting state went bad (rendered but unresponsive)
-    ///   and our `karaokeLyricsWindow` ivar lost track of it.
+    ///   and the `karaokeLyricsWindow` ivar lost track of it.
     /// - Subscribes to `willCloseNotification` on the new window so the
     ///   ivar nils itself when the user closes — required for accurate
     ///   `isVisible` checks on subsequent reopens.
@@ -409,8 +444,8 @@ final class WindowManager {
     }
 
     func openKaraokeLyrics(group: SonosGroup) {
-        // First, prune any orphaned karaoke windows we've lost track
-        // of. Without this, a locked-up window from a previous open
+        // First, prune any orphaned karaoke windows the ivar has lost
+        // track of. Without this, a locked-up window from a previous open
         // stays on screen with no way to close it, while a fresh open
         // creates a sibling beside it.
         for win in NSApp.windows
@@ -419,7 +454,7 @@ final class WindowManager {
             win.close()
         }
 
-        // If our ivar points to a still-good window, re-focus it.
+        // If the ivar points to a still-good window, re-focus it.
         // Otherwise discard the stale reference.
         if let existing = karaokeLyricsWindow {
             if existing.isVisible {
@@ -433,7 +468,7 @@ final class WindowManager {
         guard let manager = sonosManager,
               let coordinator = lyricsCoordinator else { return }
         let view = LyricsKaraokeWindow(groupID: group.coordinatorID)
-            .environmentObject(manager)
+            .choragusServices(manager)
             .environmentObject(manager.anchorTracker)
             .environmentObject(coordinator)
             .environmentObject(manager.artCache)
@@ -462,7 +497,7 @@ final class WindowManager {
         window.contentMinSize = NSSize(width: 960, height: 540)
         // Force the frame to the intended default — `NSHostingController`
         // (used by `createWindow`) overrides `contentRect` with the
-        // SwiftUI view's intrinsic size unless we set the frame after
+        // SwiftUI view's intrinsic size unless the frame is set after
         // it's been wired up.
         let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
         let originX = screenFrame.midX - 720
@@ -483,6 +518,29 @@ final class WindowManager {
         }
     }
 
+    func openAlarms() {
+        if let existing = alarmsWindow, existing.isVisible {
+            positionOverActiveAppWindow(existing)
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+        guard let manager = sonosManager else { return }
+        let view = AlarmsView()
+            .choragusServices(manager)
+            .preferredColorScheme(colorScheme)
+        let window = createWindow(title: L10n.alarms, content: view, width: 640, height: 480,
+                                  anchorToActiveWindow: true)
+        // The hosting controller's fitting size can shrink the frame on
+        // first open; pin the default and remember the user's resize.
+        window.setFrameAutosaveName("ChoragusAlarmsWindow")
+        if NSRectFromString(UserDefaults.standard.string(forKey: "NSWindow Frame ChoragusAlarmsWindow") ?? "") == .zero {
+            window.setContentSize(NSSize(width: 640, height: 480))
+            positionOverActiveAppWindow(window)
+        }
+        window.minSize = NSSize(width: 560, height: 360)
+        alarmsWindow = window
+    }
+
     func openHomeTheaterEQ() {
         if let existing = homeTheaterWindow, existing.isVisible {
             // Recentre an already-open instance too — the user may
@@ -493,9 +551,9 @@ final class WindowManager {
         }
         guard let manager = sonosManager else { return }
         let view = HomeTheaterEQView()
-            .environmentObject(manager)
+            .choragusServices(manager)
             .preferredColorScheme(colorScheme)
-        homeTheaterWindow = createWindow(title: "Home Theater EQ",
+        homeTheaterWindow = createWindow(title: L10n.homeTheaterEQTitle,
                                           content: view,
                                           width: 480,
                                           height: 420,
@@ -562,7 +620,7 @@ final class WindowManager {
 
         guard let manager = sonosManager else { return }
 
-        let view = SunoExploreWindow().environmentObject(manager)
+        let view = SunoExploreWindow().choragusServices(manager)
         let suffix = group.map { $0.name.isEmpty ? "" : " (\($0.name))" } ?? ""
         let window = createWindow(title: "Suno – Explore\(suffix)", content: view, width: 1100, height: 800)
         window.identifier = Self.sunoExploreWindowIdentifier

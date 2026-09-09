@@ -8,7 +8,7 @@ import Combine
 import SonosKit
 
 struct BrowseView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     let group: SonosGroup?
 
@@ -50,7 +50,7 @@ struct BrowseView: View {
 
                 if breadcrumbs.count > 1 {
                     Button {
-                        breadcrumbs.removeLast()
+                        if breadcrumbs.count > 1 { breadcrumbs.removeLast() }
                     } label: {
                         Image(systemName: "chevron.backward")
                             .font(.system(size: 14, weight: .semibold))
@@ -158,11 +158,11 @@ struct BrowseView: View {
                         onNavigate: { dest in breadcrumbs.append(dest) }
                     )
                     .id(current.objectID)
-                    .environmentObject(sonosManager)
+                    .choragusServices(sonosManager)
                 } else if current.objectID.hasPrefix("SMAPISEARCHPROMPT:") {
                     let sidStr = current.objectID.replacingOccurrences(of: "SMAPISEARCHPROMPT:", with: "")
                     let sid = Int(sidStr) ?? 0
-                    let name = ServiceID.knownNames[sid] ?? "Music Service"
+                    let name = ServiceID.knownNames[sid] ?? L10n.musicService
                     SMAPIServiceSearchView(group: group, serviceID: sid, serviceName: name)
                 } else {
                     BrowseListView(
@@ -180,7 +180,7 @@ struct BrowseView: View {
                         }
                     )
                     .id(current.objectID)
-                    .environmentObject(sonosManager)
+                    .choragusServices(sonosManager)
                 }
             }
         }
@@ -190,31 +190,9 @@ struct BrowseView: View {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return }
         breadcrumbs.append(BrowseDestination(
-            title: "Search: \(query)",
+            title: L10n.searchResultsTitleFormat(query),
             objectID: "SEARCH:\(query)"
         ))
-    }
-}
-
-enum SearchSortOrder: String, CaseIterable {
-    case relevance = "Relevance"
-    case newest = "Newest"
-    case oldest = "Oldest"
-    case title = "Title"
-    case artist = "Artist"
-
-    /// Localised label for the segmented picker. RawValue stays stable
-    /// as the persistence key (the View wraps this in `@State`, not
-    /// `@AppStorage`, so persistence isn't currently used — but the
-    /// stable rawValue is the right shape for when it is).
-    var displayName: String {
-        switch self {
-        case .relevance: return L10n.sortRelevance
-        case .newest:    return L10n.sortNewest
-        case .oldest:    return L10n.sortOldest
-        case .title:     return L10n.sortTitle
-        case .artist:    return L10n.sortArtist
-        }
     }
 }
 
@@ -244,10 +222,21 @@ private struct CollapsibleSectionHeader: View {
         Button {
             isExpanded.toggle()
         } label: {
-            HStack {
-                Text(title)
-                Spacer()
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(title)
+                        .font(.headline)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                if isExpanded {
+                    Divider()
+                }
             }
+            .padding(.bottom, isExpanded ? 2 : 0)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -288,8 +277,58 @@ private enum ServiceSearchOrder {
     }
 }
 
+
+
+/// Live-reorders the browse section cards while a drag is in flight;
+/// the drop finalizes and the caller persists the order.
+private struct BrowseSectionDropDelegate: DropDelegate {
+    let item: BrowseSectionsView.BrowseCategory
+    @Binding var order: [BrowseSectionsView.BrowseCategory]
+    @Binding var dragging: BrowseSectionsView.BrowseCategory?
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging, dragging != item,
+              let from = order.firstIndex(of: dragging),
+              let to = order.firstIndex(of: item) else { return }
+        withAnimation {
+            order.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragging = nil
+        return true
+    }
+}
+
+/// Full-width sidebar row with a hover highlight in the theme accent, so
+/// card rows keep a row-sized click target and read as interactive.
+private struct BrowseRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { Row(configuration: configuration) }
+
+    private struct Row: View {
+        @Environment(SonosManager.self) private var sonosManager
+        let configuration: Configuration
+        @State private var hovering = false
+        var body: some View {
+            configuration.label
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 6)
+                .contentShape(Rectangle())
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(configuration.isPressed ? sonosManager.themeAccent.opacity(0.28)
+                              : hovering ? sonosManager.themeAccent.opacity(0.16) : Color.clear))
+                .onHover { hovering = $0 }
+        }
+    }
+}
+
 struct BrowseSectionsView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     @EnvironmentObject var plexAuth: PlexAuthManager
@@ -297,12 +336,13 @@ struct BrowseSectionsView: View {
     let onNavigate: (BrowseDestination) -> Void
 
     @State private var isLoading = true
+    @AppStorage(UDKey.playlistAIEnabled) private var playlistAIEnabled = false
     /// Bumped on reorder. The persisted service order lives in plain
     /// UserDefaults (outside SwiftUI's observation), so the body must depend on
     /// this to re-render — otherwise Move Up/Down saves but the list doesn't move.
     @State private var orderRevision = 0
-    @AppStorage("browse_serviceSearch_expanded") private var serviceSearchExpanded = true
-    @AppStorage("browse_musicServices_expanded") private var musicServicesExpanded = true
+    @AppStorage("browse_serviceSearch_expanded") private var serviceSearchExpanded = false
+    @AppStorage("browse_musicServices_expanded") private var musicServicesExpanded = false
     @AppStorage(UDKey.tuneInSearchEnabled) private var tuneInEnabled = false
     @AppStorage(UDKey.calmRadioEnabled) private var calmRadioEnabled = false
     @AppStorage(UDKey.somaFMEnabled) private var somaFMEnabled = false
@@ -310,23 +350,22 @@ struct BrowseSectionsView: View {
     @AppStorage(UDKey.appleMusicSearchEnabled) private var appleMusicEnabled = false
     @AppStorage(UDKey.appleMusicKitConnected) private var appleMusicKitConnected = false
     @AppStorage(UDKey.sonosRadioEnabled) private var sonosRadioEnabled = false
-    @AppStorage("browse_favorites_expanded") private var favoritesExpanded = true
-    @AppStorage("browse_library_expanded") private var libraryExpanded = true
+    @AppStorage("browse_favorites_expanded") private var favoritesExpanded = false
+    @AppStorage("browse_choragusSources_expanded") private var choragusSourcesExpanded = false
+    @AppStorage("browse_library_expanded") private var libraryExpanded = false
 
     /// Authenticated SMAPI services that support search (excludes services with dedicated views)
     private var smapiSearchableServices: [SMAPIServiceDescriptor] {
         guard smapiManager.isEnabled else { return [] }
         return smapiManager.authenticatedServiceList.filter { svc in
             svc.id != ServiceID.appleMusic && svc.id != ServiceID.tuneIn &&
-            svc.id != ServiceID.tuneInNew && svc.id != ServiceID.calmRadio
+            svc.id != ServiceID.calmRadio
         }
     }
 
-    // Note: `smapiSearchableServices` now covers *both* Browse and Search —
-    // the view opened by the sidebar entry has a `Browse | Search` tab
-    // picker at the top (Browse default), so we don't need a separate
-    // "Music Services" list for hierarchical-browse services like Plex.
-    // One sidebar entry per service, one view with both flows inside.
+    // `smapiSearchableServices` covers both Browse and Search: the view the
+    // sidebar entry opens has a `Browse | Search` tab picker (Browse default),
+    // so hierarchical-browse services like Plex need no separate list.
 
     /// All service search entries in user-defined order — only includes enabled services
     private var orderedServiceEntries: [ServiceSearchEntry] {
@@ -359,9 +398,6 @@ struct BrowseSectionsView: View {
                 : "Apple Music"
             entries.append(ServiceSearchEntry(key: "applemusic", title: title, objectID: "APPLEMUSICPROMPT:", icon: "magnifyingglass"))
         }
-        if tuneInEnabled {
-            entries.append(ServiceSearchEntry(key: "tunein", title: "TuneIn", objectID: "TUNEINPROMPT:", icon: "radio"))
-        }
         if calmRadioEnabled {
             entries.append(ServiceSearchEntry(key: "calmradio", title: "Calm Radio", objectID: "CALMRADIOPROMPT:", icon: "leaf"))
         }
@@ -370,12 +406,6 @@ struct BrowseSectionsView: View {
         }
         if sonosRadioEnabled {
             entries.append(ServiceSearchEntry(key: "sonosradio", title: "Sonos Radio", objectID: "SONOSRADIOPROMPT:", icon: "antenna.radiowaves.left.and.right"))
-        }
-        // suno.ai — paste a public suno.com link to play an AI-generated song.
-        // Not a Sonos service (no SMAPI sid / account): the link resolves to a
-        // direct CDN MP3 played queue-based. Gated by the Music Services toggle.
-        if sunoEnabled {
-            entries.append(ServiceSearchEntry(key: "suno", title: "suno.ai", objectID: "SUNOPROMPT:", icon: "waveform"))
         }
         // Plex's two flavors are wholly independent — Local (direct PMS
         // via PlexAuthManager PIN flow) and Cloud (SMAPI relay). Show
@@ -388,8 +418,8 @@ struct BrowseSectionsView: View {
         let hasSMAPIPlex = smapiServices.contains { $0.id == ServiceID.plex }
 
         for service in smapiServices {
-            // Plex SMAPI is added separately below as "Plex – Cloud" so
-            // we don't double-list it as plain "Plex" + a flavored one.
+            // Plex SMAPI is added separately below as "Plex – Remote";
+            // skipping it here avoids a second plain "Plex" row.
             if service.id == ServiceID.plex { continue }
             entries.append(ServiceSearchEntry(
                 key: "smapi:\(service.id)",
@@ -409,19 +439,17 @@ struct BrowseSectionsView: View {
         if hasSMAPIPlex {
             entries.append(ServiceSearchEntry(
                 key: "plex.cloud",
-                title: "Plex – Cloud",
+                title: "Plex – Remote",
                 objectID: "SMAPISEARCHPROMPT:\(ServiceID.plex)",
                 icon: "magnifyingglass"
             ))
         }
-        // Line-In: shown whenever the household has any speaker with
-        // analog or TV input capability. We iterate `devices` (all
-        // discovered SSDP devices) rather than `groups.members` —
-        // model names live on the `_MR` MediaRenderer entries which
-        // aren't represented in group membership, so a group-only
-        // scan misses them and the entry never appeared.
+        // Line-In: shown whenever any speaker has analog or TV input.
+        // Iterates `devices` (all SSDP devices) rather than `groups.members`:
+        // model names live on the `_MR` MediaRenderer entries, which group
+        // membership does not carry.
         let anyInputCapable = sonosManager.devices.values.contains {
-            LineInBrowseView.isInputCapable(modelName: $0.modelName)
+            PhysicalInput.isInputCapable(modelName: $0.modelName)
         }
         if anyInputCapable {
             entries.append(ServiceSearchEntry(
@@ -443,124 +471,240 @@ struct BrowseSectionsView: View {
         orderRevision += 1
     }
 
-    var body: some View {
-        // Compute once per body — `orderedServiceEntries` walks SMAPI
-        // tokens, devices, and runs a sort. The previous body called it
-        // twice (`!isEmpty` + `ForEach`) so every re-render did the work
-        // twice. Inside `orderedServiceEntries`, `smapiSearchableServices`
-        // was *itself* called twice — same fix applied below.
-        let _ = orderRevision   // establish a body dependency on the saved order
-        let serviceEntries = orderedServiceEntries
-        return List {
-            // Recently Played
-            if !playHistoryManager.entries.isEmpty {
-                Section {
-                    Button {
-                        onNavigate(BrowseDestination(title: "Recently Played", objectID: "RECENT:"))
-                    } label: {
-                        Label(L10n.recentlyPlayed, systemImage: "clock.arrow.circlepath")
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
 
-            // Service Search — ordered, reorderable — only shown if services are enabled
-            if !serviceEntries.isEmpty {
-                Section {
-                    CollapsibleSectionHeader(title: "Service Search", isExpanded: $serviceSearchExpanded)
-                    if serviceSearchExpanded {
-                        ForEach(Array(serviceEntries.enumerated()), id: \.element.id) { index, entry in
-                            Button {
-                                if entry.key == "suno" {
-                                    // Suno opens the embedded browser popup, not an in-panel view.
-                                    WindowManager.shared.openSunoExploreForActiveGroup()
-                                } else {
-                                    onNavigate(BrowseDestination(title: entry.title, objectID: entry.objectID))
-                                }
-                            } label: {
-                                Label(entry.title, systemImage: entry.icon)
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                if index > 0 {
-                                    Button(L10n.moveUp) { moveServiceEntry(from: index, by: -1) }
-                                }
-                                if index < serviceEntries.count - 1 {
-                                    Button(L10n.moveDown) { moveServiceEntry(from: index, by: 1) }
-                                }
-                            }
+
+    /// A draggable, persistable browse category. Raw values are the
+    /// storage format for the saved order.
+    enum BrowseCategory: String, CaseIterable, Identifiable {
+        case recent, services, sources, favorites, library
+        var id: String { rawValue }
+    }
+
+    @AppStorage("browse_sectionOrder") private var sectionOrderRaw = ""
+    @State private var sectionOrder: [BrowseCategory] = []
+    @State private var draggingCategory: BrowseCategory?
+
+    /// Saved order plus any categories added since it was saved.
+    private var restoredSectionOrder: [BrowseCategory] {
+        let saved = sectionOrderRaw.split(separator: ",").compactMap { BrowseCategory(rawValue: String($0)) }
+        return saved + BrowseCategory.allCases.filter { !saved.contains($0) }
+    }
+
+    @ViewBuilder
+    private func sectionBody(for category: BrowseCategory, serviceEntries: [ServiceSearchEntry]) -> some View {
+        switch category {
+        case .recent:    recentCard
+        case .services:  servicesCard(serviceEntries)
+        case .sources:   sourcesCard
+        case .favorites: favoritesCard
+        case .library:   libraryCard
+        }
+    }
+
+    @ViewBuilder
+    private var recentCard: some View {
+        if !playHistoryManager.entries.isEmpty {
+            sectionCard {
+                Button {
+                    onNavigate(BrowseDestination(title: L10n.recentlyPlayed, objectID: "RECENT:"))
+                } label: {
+                    Label(L10n.recentlyPlayed, systemImage: "clock.arrow.circlepath")
+                }
+                .buttonStyle(BrowseRowButtonStyle())
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func servicesCard(_ serviceEntries: [ServiceSearchEntry]) -> some View {
+        if !serviceEntries.isEmpty {
+            sectionCard {
+                CollapsibleSectionHeader(title: L10n.sonosMusicServices, isExpanded: $serviceSearchExpanded)
+                if serviceSearchExpanded {
+                    ForEach(Array(serviceEntries.enumerated()), id: \.element.id) { index, entry in
+                        Button {
+                            onNavigate(BrowseDestination(title: entry.title, objectID: entry.objectID))
+                        } label: {
+                            Label(entry.title, systemImage: entry.icon)
                         }
-                    }
-                }
-            }
-
-            // Connected Music Services — only services not already shown in Service Search
-            // SMAPI services (Plex, Spotify, etc.) appear once under
-            // "Service Search" above. The detail view has a Browse/Search
-            // tab picker — no need for a second sidebar entry per service.
-
-            if isLoading && sonosManager.browseSections.isEmpty {
-                Section {
-                    ProgressView(L10n.discoveringContent)
-                }
-            }
-
-            if !sonosManager.browseSections.isEmpty {
-                let nonLibrary = sonosManager.browseSections.filter {
-                    !$0.objectID.hasPrefix("A:") && !$0.objectID.hasPrefix("S:")
-                }
-                let library = sonosManager.browseSections.filter {
-                    $0.objectID.hasPrefix("A:") || $0.objectID.hasPrefix("S:")
-                }.sorted { a, _ in a.objectID.hasPrefix("S:") }
-
-                if !nonLibrary.isEmpty {
-                    Section {
-                        CollapsibleSectionHeader(title: L10n.favorites, isExpanded: $favoritesExpanded)
-                        if favoritesExpanded {
-                            ForEach(nonLibrary) { section in
-                                Button {
-                                    onNavigate(BrowseDestination(title: section.title, objectID: section.objectID))
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Label(section.title, systemImage: section.icon)
-                                        if let note = section.availabilityNote {
-                                            Text(note).font(.caption2).foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.plain)
+                        .buttonStyle(BrowseRowButtonStyle())
+                        .contextMenu {
+                            if index > 0 {
+                                Button(L10n.moveUp) { moveServiceEntry(from: index, by: -1) }
                             }
-                        }
-                    }
-                }
-
-                if !library.isEmpty {
-                    Section {
-                        CollapsibleSectionHeader(title: L10n.localLibrary, isExpanded: $libraryExpanded)
-                        if libraryExpanded {
-                            ForEach(library) { section in
-                                Button {
-                                    onNavigate(BrowseDestination(title: section.title, objectID: section.objectID))
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Label(section.title, systemImage: section.icon)
-                                        if let note = section.availabilityNote {
-                                            Text(note).font(.caption2).foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.plain)
+                            if index < serviceEntries.count - 1 {
+                                Button(L10n.moveDown) { moveServiceEntry(from: index, by: 1) }
                             }
                         }
                     }
                 }
             }
         }
-        .listStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var sourcesCard: some View {
+        let mediaServerSections = sonosManager.browseSections.filter { $0.objectID.hasPrefix("MS:") }
+        sectionCard {
+            CollapsibleSectionHeader(title: L10n.choragusSources, isExpanded: $choragusSourcesExpanded)
+            if choragusSourcesExpanded {
+                Button {
+                    _ = WindowManager.shared.openQueueLibraryForActiveGroup()
+                } label: {
+                    Label(L10n.playlistManager, systemImage: "music.note.list")
+                }
+                .buttonStyle(BrowseRowButtonStyle())
+                // The AI builder is opt-in: Settings → AI enables the
+                // feature; disabled = the row disappears entirely.
+                if playlistAIEnabled {
+                    Button {
+                        WindowManager.shared.openPlaylistBuilder()
+                    } label: {
+                        Label(L10n.playlistBuilderTitle, systemImage: "text.badge.plus")
+                    }
+                    .buttonStyle(BrowseRowButtonStyle())
+                }
+                ForEach(mediaServerSections) { section in
+                    Button {
+                        onNavigate(BrowseDestination(title: section.title, objectID: section.objectID))
+                    } label: {
+                        HStack(spacing: 6) {
+                            Label(section.title, systemImage: section.icon)
+                            if let note = section.availabilityNote {
+                                Text(note).font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .buttonStyle(BrowseRowButtonStyle())
+                }
+                if tuneInEnabled {
+                    Button {
+                        onNavigate(BrowseDestination(title: "TuneIn", objectID: "TUNEINPROMPT:"))
+                    } label: {
+                        Label("TuneIn", systemImage: "radio")
+                    }
+                    .buttonStyle(BrowseRowButtonStyle())
+                }
+                if sunoEnabled {
+                    Button {
+                        // Suno opens the embedded browser popup, not an in-panel view.
+                        WindowManager.shared.openSunoExploreForActiveGroup()
+                    } label: {
+                        Label("suno.ai", systemImage: "waveform")
+                    }
+                    .buttonStyle(BrowseRowButtonStyle())
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var favoritesCard: some View {
+        let nonLibrary = sonosManager.browseSections.filter {
+            !$0.objectID.hasPrefix("A:") && !$0.objectID.hasPrefix("S:")
+                && !$0.objectID.hasPrefix("MS:")   // shown under Choragus Sources
+        }
+        if !nonLibrary.isEmpty {
+            sectionCard {
+                CollapsibleSectionHeader(title: L10n.favorites, isExpanded: $favoritesExpanded)
+                if favoritesExpanded {
+                    ForEach(nonLibrary) { section in
+                        Button {
+                            onNavigate(BrowseDestination(title: section.title, objectID: section.objectID))
+                        } label: {
+                            HStack(spacing: 6) {
+                                Label(section.title, systemImage: section.icon)
+                                if let note = section.availabilityNote {
+                                    Text(note).font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .buttonStyle(BrowseRowButtonStyle())
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var libraryCard: some View {
+        let library = sonosManager.browseSections.filter {
+            $0.objectID.hasPrefix("A:") || $0.objectID.hasPrefix("S:")
+        }.sorted { a, _ in a.objectID.hasPrefix("S:") }
+        if !library.isEmpty {
+            sectionCard {
+                CollapsibleSectionHeader(title: L10n.localLibrary, isExpanded: $libraryExpanded)
+                if libraryExpanded {
+                    ForEach(library) { section in
+                        Button {
+                            onNavigate(BrowseDestination(title: section.title, objectID: section.objectID))
+                        } label: {
+                            HStack(spacing: 6) {
+                                Label(section.title, systemImage: section.icon)
+                                if let note = section.availabilityNote {
+                                    Text(note).font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .buttonStyle(BrowseRowButtonStyle())
+                    }
+                }
+            }
+        }
+    }
+
+    /// One shaded, rounded card per browse category — the section
+    /// container for the sidebar's collapsible groups.
+    @ViewBuilder
+    private func sectionCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    var body: some View {
+        // Compute once per body — `orderedServiceEntries` walks SMAPI
+        // tokens and devices and runs a sort.
+        let _ = orderRevision   // establish a body dependency on the saved order
+        let serviceEntries = orderedServiceEntries
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                // Sections render in the user's saved order; drag a card
+                // to reorder. Categories with nothing to show are skipped
+                // but keep their place in the order.
+                ForEach(sectionOrder) { category in
+                    sectionBody(for: category, serviceEntries: serviceEntries)
+                        .onDrag {
+                            draggingCategory = category
+                            return NSItemProvider(object: category.rawValue as NSString)
+                        }
+                        .onDrop(of: [.text], delegate: BrowseSectionDropDelegate(
+                            item: category, order: $sectionOrder, dragging: $draggingCategory))
+                }
+
+                if isLoading && sonosManager.browseSections.isEmpty {
+                    sectionCard {
+                        ProgressView(L10n.discoveringContent)
+                    }
+                }
+            }
+            .padding(10)
+        }
+        .onChange(of: sectionOrder) { _, order in
+            sectionOrderRaw = order.map(\.rawValue).joined(separator: ",")
+        }
         .onAppear {
+            if sectionOrder.isEmpty { sectionOrder = restoredSectionOrder }
             Task {
                 await sonosManager.loadBrowseSections()
                 isLoading = false
+                // Media servers are optional and often absent, so the search
+                // runs after the speaker's own sections are on screen rather
+                // than delaying them by its collection window.
+                Task { await sonosManager.discoverMediaServers() }
                 if smapiManager.isEnabled {
                     if smapiManager.availableServices.isEmpty,
                        let speaker = sonosManager.groups.first?.coordinator {
@@ -578,7 +722,7 @@ struct BrowseSectionsView: View {
 
 /// Displays items for a single level of the browse tree, with pagination and context menus
 struct BrowseListView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var playlistScanner: PlaylistServiceScanner
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     @State private var vm: BrowseViewModel
@@ -626,7 +770,9 @@ struct BrowseListView: View {
     private var playlists: [BrowseItem] { vm.playlists }
     private var showsFilters: Bool { vm.showsFilters }
     private var availableFilters: [String] { vm.availableFilters }
+    @State private var sortOrder: BrowseSortOption = .relevance
     private var filteredItems: [BrowseItem] { vm.filteredItems }
+    private var sortedItems: [BrowseItem] { sortOrder.apply(vm.filteredItems) }
     private func serviceLabel(for item: BrowseItem) -> String? { vm.serviceLabel(for: item) }
 
     /// True when the (filtered) result list contains anything that can
@@ -640,31 +786,13 @@ struct BrowseListView: View {
         }
     }
 
-    /// Top-of-list bulk actions — Play All / Add All to Queue /
-    /// Play Next. Same shape and copy as the other browse views so
-    /// the behaviour is consistent across local library, favourites,
-    /// SMAPI service search, and Plex Direct.
+    /// Top-of-list bulk actions — Play All / Add All to Queue / Play Next,
+    /// with the same layout and copy as the other browse views.
     private var bulkActionBar: some View {
-        HStack(spacing: 6) {
-            Button { Task { await playAllNow() } } label: {
-                Label(L10n.playAll, systemImage: "play.fill")
-            }
-            .controlSize(.small)
-            Button { Task { await addAllToQueue(playNext: false) } } label: {
-                Label(L10n.addAllToQueue, systemImage: "text.append")
-            }
-            .controlSize(.small)
-            Button { Task { await addAllToQueue(playNext: true) } } label: {
-                Label(L10n.playNext, systemImage: "text.insert")
-            }
-            .controlSize(.small)
-            Spacer()
-            Text("\(vm.filteredItems.count) item\(vm.filteredItems.count == 1 ? "" : "s")")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        BrowseBulkActionBar(count: vm.filteredItems.count,
+                            playAll: { Task { await playAllNow() } },
+                            addAll: { Task { await addAllToQueue(playNext: false) } },
+                            playNext: { Task { await addAllToQueue(playNext: true) } })
     }
 
     /// Collects a flat playable list from the current filtered items.
@@ -672,8 +800,8 @@ struct BrowseListView: View {
     /// albums/playlists from SMAPI search results) pass straight
     /// through — `addBrowseItemsToQueue` lets the speaker expand them
     /// server-side. Bare containers (local library albums browsed via
-    /// UPnP) need a child fetch first; for now we send those as-is and
-    /// let `playBrowseItem`'s container path handle the queue switch.
+    /// UPnP) need a child fetch first; those go as-is and
+    /// `playBrowseItem`'s container path handles the queue switch.
     private func collectPlayable() -> [BrowseItem] {
         vm.filteredItems.filter { item in
             (item.resourceURI != nil && !item.isContainer) ||
@@ -686,9 +814,8 @@ struct BrowseListView: View {
         guard !items.isEmpty else { return }
         // Route through the VM so containers (local-library albums, etc.)
         // are client-side-expanded to leaf tracks the same way the
-        // right-click "Play Now" path does. Bypassing this was the cause
-        // of the toolbar buttons enqueueing the bare container row
-        // instead of the album's tracks.
+        // right-click "Play Now" path does; bypassing it enqueues the
+        // bare container row instead of the album's tracks.
         await vm.bulkPlayAll(items)
     }
 
@@ -766,21 +893,22 @@ struct BrowseListView: View {
                         Divider()
                     }
 
-                    // Bulk-action bar — Play All / Add All / Play Next.
-                    // Same shape and copy as PlexDirectBrowseView and
-                    // SMAPIServiceSearchView so behaviour reads the same
-                    // across every browse surface (local library, Sonos
-                    // Favorites, service results — wherever lots of
-                    // tracks land in one view).
+                    // Bulk-action bar — Play All / Add All / Play Next, same
+                    // layout and copy as PlexDirectBrowseView and
+                    // SMAPIServiceSearchView.
                     if hasPlayableTracks {
                         bulkActionBar
+                        Divider()
+                    }
+                    if !vm.filteredItems.isEmpty {
+                        BrowseSortPicker(items: vm.filteredItems, selection: $sortOrder)
                         Divider()
                     }
 
                     ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(Array(vm.filteredItems.enumerated()), id: \.element.id) { index, item in
+                            ForEach(Array(sortedItems.enumerated()), id: \.element.id) { index, item in
                                 Button {
                                     handleTap(item)
                                 } label: {
@@ -929,10 +1057,9 @@ struct BrowseListView: View {
         // list is still on the navigation stack, SwiftUI recreates this
         // struct with the new `parentGroup` value but does NOT re-run
         // `State(wrappedValue:)`, so `vm.group` would otherwise stay
-        // frozen to the group selected when the list was first pushed.
-        // Right-click → Play Now then sent SetAVTransportURI to the
-        // wrong coordinator. Syncing here makes every play / queue
-        // action on this list target the currently-selected group.
+        // frozen to the group selected when the list was first pushed
+        // and Play Now would send SetAVTransportURI to the wrong
+        // coordinator.
         .onChange(of: parentGroup) { _, newGroup in
             vm.group = newGroup
         }
@@ -1046,13 +1173,11 @@ struct BrowseListView: View {
 
     private func smapiDestination(title: String, objectID: String) -> BrowseDestination {
         if vm.isSMAPI, let sid = smapiServiceID, let uri = smapiServiceURI {
-            // Child objectIDs coming from `smapiItemToBrowseItem` already
-            // carry a `smapi:<sid>:` stamp. If we blindly concatenate our
-            // canonical `SMAPI:<sid>:` we end up double-prefixing, which
-            // `BrowseViewModel.smapiItemID` then fails to unwrap — Plex
-            // receives a container id like `smapi:212:library:section:17`
-            // and rejects it with `Client.ItemNotFound`. Strip whatever
-            // prefix the child already has before re-wrapping.
+            // Child objectIDs from `smapiItemToBrowseItem` already carry a
+            // `smapi:<sid>:` stamp. Prepending the canonical `SMAPI:<sid>:`
+            // double-prefixes, `BrowseViewModel.smapiItemID` fails to unwrap,
+            // and Plex rejects ids like `smapi:212:library:section:17` with
+            // `Client.ItemNotFound`. Strip the existing prefix first.
             let stripped = SMAPIPrefix.strip(objectID, serviceID: sid)
             let smapiObjID = "\(SMAPIPrefix.upper)\(sid):\(stripped)"
             var dest = BrowseDestination(title: title, objectID: smapiObjID)
@@ -1077,7 +1202,7 @@ struct BrowseListView: View {
 }
 
 struct BrowseItemRow: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var playlistScanner: PlaylistServiceScanner
     let item: BrowseItem
     @State private var resolvedArtURL: URL?
@@ -1152,7 +1277,7 @@ struct BrowseItemRow: View {
 
             Spacer()
 
-            if item.isContainer {
+            if item.isContainer && !item.isStation {
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -1176,12 +1301,12 @@ struct BrowseItemRow: View {
     }
 
     private func checkArtCache() {
-        let loader = BrowseItemArtLoader(sonosManager: sonosManager)
+        let loader = BrowseItemArtLoader(sonosManager: sonosManager, localArt: sonosManager.enricher)
         resolvedArtURL = loader.checkCache(item: item)
     }
 
     private func loadMissingArt() async {
-        let loader = BrowseItemArtLoader(sonosManager: sonosManager)
+        let loader = BrowseItemArtLoader(sonosManager: sonosManager, localArt: sonosManager.enricher)
         resolvedArtURL = await loader.loadArt(for: item)
     }
 
@@ -1220,6 +1345,7 @@ struct BrowseItemRow: View {
 // MARK: - Filter Chip
 
 private struct FilterChip: View {
+    @Environment(SonosManager.self) private var sonosManager
     let label: String
     let isSelected: Bool
     let action: () -> Void
@@ -1231,7 +1357,7 @@ private struct FilterChip: View {
                 .fontWeight(isSelected ? .semibold : .regular)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(isSelected ? Color.accentColor : Color.secondary.opacity(0.15), in: Capsule())
+                .background(isSelected ? sonosManager.themeAccent : Color.secondary.opacity(0.15), in: Capsule())
                 .foregroundStyle(isSelected ? .white : .primary)
         }
         .buttonStyle(.plain)
@@ -1294,7 +1420,7 @@ private enum AMLevel: Hashable {
 }
 
 struct AppleMusicSearchView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     let group: SonosGroup?
     let onNavigate: (BrowseDestination) -> Void
@@ -1307,7 +1433,7 @@ struct AppleMusicSearchView: View {
     @State private var sn = 0
     @State private var navStack: [AMLevel] = []
     @State private var itemsCache: [Int: [BrowseItem]] = [:]
-    @State private var sortOrder: SearchSortOrder = .relevance
+    @State private var sortOrder: BrowseSortOption = .relevance
     @State private var throttleSnapshot: ITunesRateLimiter.Snapshot?
     @State private var bulkActionInFlight = false
 
@@ -1320,42 +1446,19 @@ struct AppleMusicSearchView: View {
 
     private var currentLevel: AMLevel { navStack.last ?? .search }
 
-    private var sortedItems: [BrowseItem] {
-        switch sortOrder {
-        case .relevance:
-            return items
-        case .newest:
-            return items.sorted { ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) }
-        case .oldest:
-            return items.sorted { ($0.releaseDate ?? .distantFuture) < ($1.releaseDate ?? .distantFuture) }
-        case .title:
-            return items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        case .artist:
-            return items.sorted { $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending }
-        }
-    }
+    private var sortedItems: [BrowseItem] { sortOrder.apply(items) }
 
     var body: some View {
         VStack(spacing: 0) {
             // Header with back button for drill-down levels
             if !navStack.isEmpty {
-                Button {
-                    navStack.removeLast()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.backward")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(levelTitle)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
+                BrowseBackBar(title: levelTitle) {
+                    // The render-time emptiness check above does not cover
+                    // the action: a double-tap delivers the second press to a
+                    // button from the previous frame after the first pop
+                    // already emptied the stack — removeLast() then traps.
+                    if !navStack.isEmpty { navStack.removeLast() }
                 }
-                .buttonStyle(.plain)
 
                 Divider()
             }
@@ -1407,29 +1510,11 @@ struct AppleMusicSearchView: View {
                 Divider()
             }
 
-            // Sort picker — shown at the search level once results
-            // exist AND on every drill-down level (artist's albums,
-            // album's tracks). Mirrors the user's request to sort
-            // an artist's albums by release date or alphabetically
-            // without losing the picker on drill-down.
+            // Sort picker — shown at the search level once results exist
+            // and on every drill-down level (artist's albums, album's
+            // tracks), so the sort order survives drill-down.
             if !items.isEmpty {
-                HStack(spacing: 4) {
-                    Text(L10n.sortLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Picker("", selection: $sortOrder) {
-                        ForEach(SearchSortOrder.allCases, id: \.self) { order in
-                            Text(order.displayName).tag(order)
-                        }
-                    }
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .frame(maxWidth: 140)
-                    .languageReactive()
-                    Spacer()
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+                BrowseSortPicker(items: items, selection: $sortOrder)
                 Divider()
             }
 
@@ -1520,11 +1605,10 @@ struct AppleMusicSearchView: View {
         }
     }
 
-    /// Tracks that the bulk action bar can play directly. Tracks we keep
-    /// as-is. Albums get expanded to their tracks via iTunes /lookup
-    /// when the user actually presses Play All / Add All — we don't
-    /// pre-fetch on view appear because most users don't bulk-act and
-    /// each lookup costs a rate-limiter slot.
+    /// Tracks that the bulk action bar can play directly. Tracks pass
+    /// as-is; albums expand to their tracks via iTunes /lookup only when
+    /// Play All / Add All is pressed, since each lookup costs a
+    /// rate-limiter slot.
     private var hasPlayableContent: Bool {
         items.contains {
             ($0.itemClass == .musicTrack || $0.itemClass == .musicAlbum)
@@ -1548,36 +1632,10 @@ struct AppleMusicSearchView: View {
     /// double-firing — large enqueues take a few seconds and rapid second
     /// clicks would otherwise re-add every track.
     private var appleMusicBulkActionBar: some View {
-        HStack(spacing: 6) {
-            Button { Task { await appleMusicPlayAllNow() } } label: {
-                Label(L10n.playAll, systemImage: "play.fill").font(.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(bulkActionInFlight)
-            Button { Task { await appleMusicAddAll(playNext: false) } } label: {
-                Label(L10n.addAllToQueue, systemImage: "text.append").font(.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(bulkActionInFlight)
-            Button { Task { await appleMusicAddAll(playNext: true) } } label: {
-                Label(L10n.playNext, systemImage: "text.insert").font(.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(bulkActionInFlight)
-            Spacer()
-            if bulkActionInFlight {
-                ProgressView().controlSize(.small)
-                    .padding(.trailing, 4)
-            }
-            Text(bulkContentLabel)
-                .font(.footnote)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        BrowseBulkActionBar(count: items.count, inFlight: bulkActionInFlight,
+                            playAll: { Task { await appleMusicPlayAllNow() } },
+                            addAll: { Task { await appleMusicAddAll(playNext: false) } },
+                            playNext: { Task { await appleMusicAddAll(playNext: true) } })
     }
 
     /// Expands the current `items` into a flat list of playable tracks.
@@ -1677,7 +1735,7 @@ struct AppleMusicSearchView: View {
                     Task { await playAlbumTracks(item, in: group, replace: true) }
                 }
                 Divider()
-                Button(L10n.showTracks) {
+                Button(L10n.browse) {
                     handleTap(item)
                 }
             } else if isPlayable {
@@ -1784,11 +1842,12 @@ private struct TuneInLevel: Equatable {
 }
 
 struct TuneInSearchView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     let group: SonosGroup?
 
     @State private var tab: TuneInTab = .browse
     @State private var searchText = ""
+    @State private var sortOrder: BrowseSortOption = .relevance
     @State private var items: [BrowseItem] = []
     @State private var isLoading = false
     @State private var hasSearched = false
@@ -1799,23 +1858,9 @@ struct TuneInSearchView: View {
         VStack(spacing: 0) {
             // Back button for drill-down
             if !navStack.isEmpty {
-                Button {
-                    navStack.removeLast()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.backward")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(navStack.last?.title ?? "")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
+                BrowseBackBar(title: navStack.last?.title ?? "") {
+                    if !navStack.isEmpty { navStack.removeLast() }
                 }
-                .buttonStyle(.plain)
 
                 Divider()
             }
@@ -1825,7 +1870,7 @@ struct TuneInSearchView: View {
                 VStack(spacing: 8) {
                     Picker("", selection: $tab) {
                         ForEach(TuneInTab.allCases, id: \.self) { t in
-                            Text(t.rawValue).tag(t)
+                            Text(t == .browse ? L10n.browse : L10n.search).tag(t)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -1864,7 +1909,7 @@ struct TuneInSearchView: View {
 
             // Content
             if isLoading {
-                ProgressView(tab == .search ? "Searching..." : "Loading...")
+                ProgressView(tab == .search ? L10n.searching : L10n.loading)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if items.isEmpty && (hasSearched || !navStack.isEmpty) {
                 VStack(spacing: 8) {
@@ -1886,7 +1931,9 @@ struct TuneInSearchView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(items) { item in
+                BrowseSortPicker(items: items, selection: $sortOrder)
+                Divider()
+                List(sortOrder.apply(items)) { item in
                     BrowseItemRow(item: item)
                         .contentShape(Rectangle())
                         .onTapGesture { handleTap(item) }
@@ -1983,93 +2030,174 @@ struct TuneInSearchView: View {
 // MARK: - Calm Radio Browse
 
 struct CalmRadioBrowseView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     let group: SonosGroup?
 
+    private enum Tab: CaseIterable { case browse, search
+        var label: String { self == .browse ? L10n.browse : L10n.search }
+    }
+
     @State private var categories: [ServiceSearchProvider.CalmRadioCategory] = []
     @State private var isLoading = true
-    @State private var selectedCategory: ServiceSearchProvider.CalmRadioCategory?
+    @State private var tab: Tab = .browse
+    @State private var openGenre: ServiceSearchProvider.CalmRadioCategory?
+    @State private var searchText = ""
+    @State private var searchResults: [BrowseItem] = []
+    @State private var hasSearched = false
+    @State private var sortOrder: BrowseSortOption = .relevance
+
+    /// Genres as rows: one level above the channels, same chrome as any
+    /// other service's root menu. Built once per fetch: `BrowseItem`
+    /// mints a fresh identity per instance, so rebuilding per body
+    /// evaluation would re-identify every row.
+    @State private var genreRows: [BrowseItem] = []
+
+    private var allChannels: [BrowseItem] { categories.flatMap(\.channels) }
+
+    private var visibleItems: [BrowseItem] {
+        if let openGenre { return openGenre.channels }
+        return tab == .search ? searchResults : genreRows
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            if let openGenre {
+                BrowseBackBar(title: openGenre.name) { self.openGenre = nil }
+                Divider()
+            } else {
+                VStack(spacing: 8) {
+                    Picker("", selection: $tab) {
+                        ForEach(Tab.allCases, id: \.self) { t in
+                            Text(t.label).tag(t)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
+
+                    if tab == .search {
+                        HStack(spacing: 8) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(.secondary)
+                                    .font(.caption)
+                                TextField(L10n.searchServicePlaceholder("Calm Radio"), text: $searchText)
+                                    .textFieldStyle(.plain)
+                                    .font(.callout)
+                                    .onSubmit { performSearch() }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Color(nsColor: .quaternaryLabelColor).opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+
+                            Button {
+                                performSearch()
+                            } label: {
+                                Text(L10n.search)
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(searchText.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                Divider()
+            }
+
             if isLoading {
                 ProgressView(L10n.loadingCalmRadio)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if categories.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "leaf")
-                        .font(.title)
-                        .foregroundStyle(.secondary)
-                    Text(L10n.noChannelsAvailable)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                emptyState("leaf", L10n.noChannelsAvailable)
+            } else if tab == .search, openGenre == nil, !hasSearched {
+                emptyState("magnifyingglass", L10n.searchForRadioStations)
+            } else if visibleItems.isEmpty {
+                emptyState("magnifyingglass", L10n.noResultsFound)
             } else {
-                // Category picker — wrapping flow layout
-                ScrollView {
-                    FlowLayout(spacing: 6) {
-                        ForEach(categories) { cat in
-                            Button {
-                                selectedCategory = cat
-                            } label: {
-                                Text(cat.name)
-                                    .font(.caption)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 4)
-                                    .background(selectedCategory?.id == cat.id
-                                        ? Color.accentColor.opacity(0.2)
-                                        : Color(nsColor: .quaternaryLabelColor).opacity(0.3),
-                                        in: RoundedRectangle(cornerRadius: 6))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                }
-                .frame(maxHeight: 120)
-
+                BrowseSortPicker(items: visibleItems, selection: $sortOrder)
                 Divider()
-
-                // Channel list
-                if let cat = selectedCategory {
-                    List(cat.channels.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }) { item in
-                        BrowseItemRow(item: item)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if let group = group {
-                                    Task { try? await sonosManager.playBrowseItem(item, in: group) }
-                                }
-                            }
-                            .contextMenu {
-                                if let group = group, item.resourceURI != nil {
-                                    Button(L10n.playNow) {
-                                        Task { try? await sonosManager.playBrowseItem(item, in: group) }
-                                    }
-                                    Button(L10n.playNext) {
-                                        Task { try? await sonosManager.addBrowseItemToQueue(item, in: group, playNext: true) }
-                                    }
-                                    Button(L10n.addToQueue) {
-                                        Task { try? await sonosManager.addBrowseItemToQueue(item, in: group) }
-                                    }
-                                }
-                                #if DEBUG
-                                AddToTestFixturesMenuItem(item: item)
-                                #endif
-                            }
-                    }
-                    .listStyle(.plain)
+                List(sortOrder.apply(visibleItems)) { item in
+                    BrowseItemRow(item: item)
+                        .contentShape(Rectangle())
+                        .onTapGesture { handleTap(item) }
+                        .contextMenu { contextMenuItems(for: item) }
                 }
+                .listStyle(.plain)
             }
         }
         .onAppear {
             Task {
                 let sn = smapiManager.serialNumber(for: ServiceID.calmRadio)
                 categories = await ServiceSearchProvider.shared.browseCalmRadio(sn: sn)
-                selectedCategory = categories.first
+                genreRows = categories.map {
+                    BrowseItem(id: "calm:genre:\($0.id)", title: $0.name, itemClass: .container)
+                }
                 isLoading = false
             }
+        }
+    }
+
+    private func emptyState(_ symbol: String, _ text: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: symbol).font(.title).foregroundStyle(.secondary)
+            Text(text).font(.callout).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Search runs over every channel of every genre; the API returns
+    /// the whole catalogue in one call, so it is a local match on title
+    /// and genre name.
+    private func performSearch() {
+        let needle = searchText.trimmingCharacters(in: .whitespaces)
+        guard !needle.isEmpty else { return }
+        hasSearched = true
+        searchResults = categories.flatMap { cat in
+            cat.channels.filter {
+                $0.title.localizedCaseInsensitiveContains(needle)
+                    || cat.name.localizedCaseInsensitiveContains(needle)
+            }
+        }
+    }
+
+    private func handleTap(_ item: BrowseItem) {
+        // A channel row is classed as a station, which counts as a
+        // container; its stream URI is what marks it playable.
+        if let uri = item.resourceURI, !uri.isEmpty {
+            if let group = group {
+                Task { try? await sonosManager.playBrowseItem(item, in: group) }
+            }
+        } else if let genre = categories.first(where: { "calm:genre:\($0.id)" == item.objectID }) {
+            openGenre = genre
+        }
+    }
+
+    @ViewBuilder
+    private func contextMenuItems(for item: BrowseItem) -> some View {
+        if let group = group, let uri = item.resourceURI, !uri.isEmpty {
+            Button(L10n.playNow) {
+                Task { try? await sonosManager.playBrowseItem(item, in: group) }
+            }
+            // A radio stream plays on the transport; it cannot sit in
+            // the queue, so no queue actions — the same rule the local
+            // library list applies to radio rows.
+            if !URIPrefix.isRadio(uri) {
+                Button(L10n.playNext) {
+                    Task { try? await sonosManager.addBrowseItemToQueue(item, in: group, playNext: true) }
+                }
+                Button(L10n.addToQueue) {
+                    Task { try? await sonosManager.addBrowseItemToQueue(item, in: group) }
+                }
+            }
+            #if DEBUG
+            AddToTestFixturesMenuItem(item: item)
+            #endif
+        } else if item.isContainer {
+            Button(L10n.browse) { handleTap(item) }
         }
     }
 }
@@ -2081,7 +2209,7 @@ struct CalmRadioBrowseView: View {
 /// resolves to a direct CDN MP3 that plays via the queue-based HTTP-get path
 /// (`BrowsePlaybackStrategy.directHTTPSQueue`). Public songs only; no sign-in.
 struct SunoSearchView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     let group: SonosGroup?
 
     @State private var linkText = ""
@@ -2113,7 +2241,7 @@ struct SunoSearchView: View {
                     if isResolving {
                         ProgressView().controlSize(.small)
                     } else {
-                        Text("Play")
+                        Text(L10n.play)
                     }
                 }
                 .disabled(linkText.trimmingCharacters(in: .whitespaces).isEmpty || isResolving || group == nil)
@@ -2181,7 +2309,7 @@ struct SunoSearchView: View {
                 try? await sonosManager.playBrowseItem(item, in: group)
             } catch {
                 await MainActor.run {
-                    errorText = "Couldn't read that link. Use a public suno.com song link."
+                    errorText = L10n.sunoLinkUnreadable
                     isResolving = false
                 }
             }
@@ -2212,7 +2340,7 @@ private enum SMAPIServiceTab: String, CaseIterable {
 }
 
 struct SMAPIServiceSearchView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     let group: SonosGroup?
     let serviceID: Int
@@ -2222,6 +2350,9 @@ struct SMAPIServiceSearchView: View {
     @State private var searchText = ""
     @State private var categories: [SMAPISearchCategoryItem] = []
     @State private var selectedCategory: SMAPISearchCategoryItem?
+    /// Categories the service lists but has been observed not to answer
+    /// (`SMAPISearchCategories.recordFanOut`); kept out of the chips only.
+    @State private var hiddenCategoryIDs: Set<String> = []
     @State private var items: [BrowseItem] = []
     @State private var isLoading = false
     @State private var hasSearched = false
@@ -2233,26 +2364,13 @@ struct SMAPIServiceSearchView: View {
     // Browse after a search shows the stale search results.
     @State private var browseRootItems: [BrowseItem] = []
     @State private var searchRootItems: [BrowseItem] = []
-    @State private var sortOrder: SearchSortOrder = .relevance
+    @State private var sortOrder: BrowseSortOption = .relevance
     /// Transient playback-failure banner. Clears itself after 4 s so the
     /// user sees the reason (e.g. Plex SMAPI rejection) without needing
     /// to open the log.
     @State private var playError: String?
 
-    private var sortedItems: [BrowseItem] {
-        switch sortOrder {
-        case .relevance:
-            return items
-        case .newest:
-            return items.sorted { ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) }
-        case .oldest:
-            return items.sorted { ($0.releaseDate ?? .distantFuture) < ($1.releaseDate ?? .distantFuture) }
-        case .title:
-            return items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        case .artist:
-            return items.sorted { $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending }
-        }
-    }
+    private var sortedItems: [BrowseItem] { sortOrder.apply(items) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2268,23 +2386,9 @@ struct SMAPIServiceSearchView: View {
 
             // Back button for drill-down
             if !navStack.isEmpty {
-                Button {
-                    navStack.removeLast()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.backward")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(navStack.last?.title ?? "")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
+                BrowseBackBar(title: navStack.last?.title ?? "") {
+                    if !navStack.isEmpty { navStack.removeLast() }
                 }
-                .buttonStyle(.plain)
 
                 Divider()
             }
@@ -2297,7 +2401,7 @@ struct SMAPIServiceSearchView: View {
                 VStack(spacing: 8) {
                     Picker("", selection: $tab) {
                         ForEach(SMAPIServiceTab.allCases, id: \.self) { t in
-                            Text(t.rawValue).tag(t)
+                            Text(t == .browse ? L10n.browse : L10n.search).tag(t)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -2321,15 +2425,17 @@ struct SMAPIServiceSearchView: View {
                     }
 
                     if tab == .search {
-                        if categories.count > 1 {
-                            Picker("", selection: $selectedCategory) {
-                                ForEach(categories) { cat in
-                                    Text(cat.title).tag(Optional(cat))
+                        // Chips that wrap: a segmented control overflows the
+                        // panel at seven or more categories.
+                        if visibleCategories.count > 1 {
+                            FlowLayout(spacing: 6) {
+                                ForEach(visibleCategories) { cat in
+                                    FilterChip(label: cat.title, isSelected: selectedCategory == cat) {
+                                        selectedCategory = cat
+                                    }
                                 }
                             }
-                            .pickerStyle(.segmented)
-                            .labelsHidden()
-                            .controlSize(.small)
+                            .padding(.horizontal, 12)
                             .onChange(of: selectedCategory) {
                                 if hasSearched { performSearch() }
                             }
@@ -2370,8 +2476,8 @@ struct SMAPIServiceSearchView: View {
             // Content
             if isLoading {
                 let label: String = {
-                    if !navStack.isEmpty { return "Loading..." }
-                    return tab == .search ? "Searching \(serviceName)..." : "Loading \(serviceName)..."
+                    if !navStack.isEmpty { return L10n.loading }
+                    return tab == .search ? L10n.searchingServiceFormat(serviceName) : L10n.loadingServiceFormat(serviceName)
                 }()
                 ProgressView(label)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -2399,23 +2505,7 @@ struct SMAPIServiceSearchView: View {
                     smapiBulkActionBar
                     Divider()
                 }
-                HStack(spacing: 4) {
-                    Text(L10n.sortLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Picker("", selection: $sortOrder) {
-                        ForEach(SearchSortOrder.allCases, id: \.self) { order in
-                            Text(order.displayName).tag(order)
-                        }
-                    }
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .frame(maxWidth: 140)
-                    .languageReactive()
-                    Spacer()
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+                BrowseSortPicker(items: items, selection: $sortOrder)
                 Divider()
 
                 List(sortedItems) { item in
@@ -2441,7 +2531,8 @@ struct SMAPIServiceSearchView: View {
                     }
                     items = await ServiceSearchProvider.shared.pagedBrowseSMAPI(
                         id: level.containerID, serviceID: serviceID,
-                        serviceURI: uri, token: token, sn: sn)
+                        serviceURI: uri, token: token, sn: sn,
+                        generation: group?.systemVersion ?? .unknown)
                     isLoading = false
                 }
             }
@@ -2450,14 +2541,14 @@ struct SMAPIServiceSearchView: View {
             loadBrowseRootIfNeeded()
             guard !categoriesLoaded else { return }
             categoriesLoaded = true
-            // Load cached categories immediately for instant UI
-            let cacheKey = "smapiSearchCategories_\(serviceID)"
-            if let cached = UserDefaults.standard.array(forKey: cacheKey) as? [[String: String]], !cached.isEmpty {
-                categories = [SMAPISearchCategoryItem(id: "all", title: "All")]
-                    + cached.compactMap { d in
-                        guard let id = d["id"], let title = d["title"] else { return nil }
-                        return SMAPISearchCategoryItem(id: id, title: title)
-                    }
+            // Load cached categories immediately for instant UI. The
+            // cache is shared with the agent server, which needs the same
+            // per-service ids to search at all.
+            hiddenCategoryIDs = SMAPISearchCategories.emptySearchIDs(serviceID: serviceID)
+            let cached = SMAPISearchCategories.cached(serviceID: serviceID)
+            if !cached.isEmpty {
+                categories = [SMAPISearchCategoryItem(id: "all", title: L10n.all)]
+                    + cached.map { SMAPISearchCategoryItem(id: $0.id, title: $0.title) }
                 selectedCategory = categories.first
             } else {
                 setDefaultCategories()
@@ -2468,7 +2559,7 @@ struct SMAPIServiceSearchView: View {
                 let client = SMAPIClient.shared
                 if let discovered = try? await client.getSearchCategories(serviceURI: uri, token: token),
                    !discovered.isEmpty {
-                    let newCats = [SMAPISearchCategoryItem(id: "all", title: "All")]
+                    let newCats = [SMAPISearchCategoryItem(id: "all", title: L10n.all)]
                         + discovered.map { SMAPISearchCategoryItem(id: $0.id, title: $0.title) }
                     if newCats.map(\.id) != categories.map(\.id) {
                         categories = newCats
@@ -2477,8 +2568,7 @@ struct SMAPIServiceSearchView: View {
                         }
                     }
                     // Cache for next time
-                    let toCache = discovered.map { ["id": $0.id, "title": $0.title] }
-                    UserDefaults.standard.set(toCache, forKey: cacheKey)
+                    SMAPISearchCategories.store(discovered, serviceID: serviceID)
                 }
             }
         }
@@ -2499,7 +2589,8 @@ struct SMAPIServiceSearchView: View {
             }
             let loaded = await ServiceSearchProvider.shared.browseSMAPI(
                 id: BrowseID.smapiRoot, serviceID: serviceID,
-                serviceURI: uri, token: token, sn: sn)
+                serviceURI: uri, token: token, sn: sn,
+                generation: group?.systemVersion ?? .unknown)
             browseRootItems = loaded
             // Paint only if the Browse root is still on screen — the user may
             // have switched tab or drilled down while the fetch ran.
@@ -2511,12 +2602,18 @@ struct SMAPIServiceSearchView: View {
         }
     }
 
+    /// The chips: every listed category except those observed empty.
+    /// The "All" fan-out still queries the hidden ones so they can return.
+    private var visibleCategories: [SMAPISearchCategoryItem] {
+        categories.filter { !hiddenCategoryIDs.contains($0.id) }
+    }
+
     private func setDefaultCategories() {
         categories = [
-            SMAPISearchCategoryItem(id: "all", title: "All"),
-            SMAPISearchCategoryItem(id: "track", title: "Tracks"),
-            SMAPISearchCategoryItem(id: "artist", title: "Artists"),
-            SMAPISearchCategoryItem(id: "album", title: "Albums"),
+            SMAPISearchCategoryItem(id: "all", title: L10n.all),
+            SMAPISearchCategoryItem(id: "track", title: L10n.tracksTitle),
+            SMAPISearchCategoryItem(id: "artist", title: L10n.artists),
+            SMAPISearchCategoryItem(id: "album", title: L10n.albumsTitle),
         ]
         selectedCategory = categories.first
     }
@@ -2532,23 +2629,32 @@ struct SMAPIServiceSearchView: View {
     }
 
     private func handleTap(_ item: BrowseItem) {
-        if let uri = item.resourceURI, !uri.isEmpty, !item.isContainer {
+        // A station row plays whole; drilling into it shows only the
+        // station's current track, which cannot be played on its own.
+        if let uri = item.resourceURI, !uri.isEmpty, !item.isContainer || item.isStation {
             if let group = group {
                 Task {
                     do {
                         try await sonosManager.playBrowseItem(item, in: group)
                     } catch {
                         sonosDebugLog("[SMAPI_SEARCH] Play failed for \(item.title): \(error). uri=\(uri)")
-                        showPlayError("Couldn't play \(item.title): \(error.localizedDescription)")
+                        showPlayError(L10n.couldNotStartPlaybackFormat(error.localizedDescription))
                     }
                 }
             }
         } else if item.isContainer {
-            itemsCache[navStack.count] = items
-            for k in itemsCache.keys where k > navStack.count { itemsCache.removeValue(forKey: k) }
-            let containerID = SMAPIPrefix.strip(item.objectID, serviceID: serviceID)
-            navStack.append(SMAPISearchLevel(title: item.title, containerID: containerID))
+            drillInto(item)
         }
+    }
+
+    /// Opens a container's level. Unclassed station rows play on tap but
+    /// stay browsable from their menu, so what the service returns inside
+    /// them is inspectable.
+    private func drillInto(_ item: BrowseItem) {
+        itemsCache[navStack.count] = items
+        for k in itemsCache.keys where k > navStack.count { itemsCache.removeValue(forKey: k) }
+        let containerID = SMAPIPrefix.strip(item.objectID, serviceID: serviceID)
+        navStack.append(SMAPISearchLevel(title: item.title, containerID: containerID))
     }
 
     // MARK: - Context menus
@@ -2563,30 +2669,13 @@ struct SMAPIServiceSearchView: View {
         }
     }
 
-    /// Top-of-list bulk actions, mirroring PlexDirectBrowseView and
-    /// the rest of the app — same shape and copy so behavior reads
-    /// the same regardless of which service the user is in.
+    /// Top-of-list bulk actions, same layout and copy as
+    /// PlexDirectBrowseView and the other browse views.
     private var smapiBulkActionBar: some View {
-        HStack(spacing: 6) {
-            Button { Task { await smapiPlayAllNow() } } label: {
-                Label(L10n.playAll, systemImage: "play.fill")
-            }
-            .controlSize(.small)
-            Button { Task { await smapiAddAllToQueue(playNext: false) } } label: {
-                Label(L10n.addAllToQueue, systemImage: "text.append")
-            }
-            .controlSize(.small)
-            Button { Task { await smapiAddAllToQueue(playNext: true) } } label: {
-                Label(L10n.playNext, systemImage: "text.insert")
-            }
-            .controlSize(.small)
-            Spacer()
-            Text("\(items.count) item\(items.count == 1 ? "" : "s")")
-                .font(.footnote)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        BrowseBulkActionBar(count: items.count,
+                            playAll: { Task { await smapiPlayAllNow() } },
+                            addAll: { Task { await smapiAddAllToQueue(playNext: false) } },
+                            playNext: { Task { await smapiAddAllToQueue(playNext: true) } })
     }
 
     /// Bulk action helpers — operate on the entire current items list.
@@ -2603,7 +2692,8 @@ struct SMAPIServiceSearchView: View {
                     let id = SMAPIPrefix.strip(item.objectID, serviceID: serviceID)
                     let kids = await ServiceSearchProvider.shared.pagedBrowseSMAPI(
                         id: id, serviceID: serviceID,
-                        serviceURI: uri, token: token, sn: sn)
+                        serviceURI: uri, token: token, sn: sn,
+                        generation: group?.systemVersion ?? .unknown)
                     out.append(contentsOf: kids.filter { $0.resourceURI != nil && !$0.isContainer })
                 }
             } else if item.resourceURI != nil {
@@ -2616,22 +2706,22 @@ struct SMAPIServiceSearchView: View {
     private func smapiPlayAllNow() async {
         guard let group = group else { return }
         let tracks = await smapiCollectTracks()
-        guard !tracks.isEmpty else { showPlayError("Nothing to play."); return }
+        guard !tracks.isEmpty else { showPlayError(L10n.nothingToPlayInThisList); return }
         do {
             try await sonosManager.playItemsReplacingQueue(tracks, in: group)
         } catch {
-            showPlayError("Couldn't play all: \(error.localizedDescription)")
+            showPlayError(L10n.couldNotPlayAllFormat(error.localizedDescription))
         }
     }
 
     private func smapiAddAllToQueue(playNext: Bool) async {
         guard let group = group else { return }
         let tracks = await smapiCollectTracks()
-        guard !tracks.isEmpty else { showPlayError("Nothing to add."); return }
+        guard !tracks.isEmpty else { showPlayError(L10n.nothingToAdd); return }
         do {
             _ = try await sonosManager.addBrowseItemsToQueue(tracks, in: group, playNext: playNext)
         } catch {
-            showPlayError("Couldn't add: \(error.localizedDescription)")
+            showPlayError(L10n.couldNotAddAllFormat(error.localizedDescription))
         }
     }
 
@@ -2640,8 +2730,22 @@ struct SMAPIServiceSearchView: View {
         if let group = group {
             let isAlbum = item.itemClass == .musicAlbum || (item.isContainer && item.objectID.contains("album"))
             let isPlayable = item.resourceURI != nil
+            // A station (Amazon album / playlist / artist station, or a
+            // classed station on any radio scheme): plays whole on the
+            // transport, cannot be queued row by row.
+            let playsAsStation = item.isStation
+                || (item.resourceURI?.hasPrefix(URIPrefix.sonosApiRadio) ?? false)
 
-            if isAlbum {
+            if playsAsStation {
+                Button(L10n.playNow) {
+                    Task { await playContainer(item, in: group) }
+                }
+                // A classed station has no level beneath it.
+                if item.isContainer && !item.isStation {
+                    Divider()
+                    Button(L10n.browse) { drillInto(item) }
+                }
+            } else if isAlbum {
                 Button(L10n.playNow) {
                     Task { await playContainer(item, in: group) }
                 }
@@ -2656,18 +2760,21 @@ struct SMAPIServiceSearchView: View {
                     Task { await playContainer(item, in: group) }
                 }
                 Divider()
-                Button(L10n.showTracks) {
+                Button(L10n.browse) {
                     handleTap(item)
                 }
             } else if item.isContainer {
-                Button(L10n.browse) { handleTap(item) }
-                Divider()
-                Button(L10n.playAll) {
+                Button(L10n.playNow) {
                     Task { await playContainer(item, in: group) }
                 }
-                Button(L10n.addAllToQueue) {
+                Button(L10n.playNext) {
+                    Task { await enqueueContainer(item, in: group, playNext: true) }
+                }
+                Button(L10n.addToQueue) {
                     Task { await enqueueContainer(item, in: group, playNext: false) }
                 }
+                Divider()
+                Button(L10n.browse) { handleTap(item) }
             } else if isPlayable {
                 Button(L10n.playNow) {
                     Task { try? await sonosManager.playBrowseItem(item, in: group) }
@@ -2716,17 +2823,17 @@ struct SMAPIServiceSearchView: View {
         guard let (token, uri, sn) = serviceCredentials() else { return }
         let tracks = await ServiceSearchProvider.shared.pagedBrowseSMAPI(
             id: containerID, serviceID: serviceID, serviceURI: uri, token: token, sn: sn,
-            maxItems: 10_000)
+            maxItems: 10_000, generation: group.systemVersion)
         let playable = tracks.filter { $0.resourceURI != nil && !$0.isContainer }
         guard !playable.isEmpty else {
-            showPlayError("No playable tracks in \(container.title)")
+            showPlayError(L10n.noPlayableTracksInFormat(container.title))
             return
         }
         do {
             try await sonosManager.addBrowseItemsToQueue(playable, in: group, playNext: playNext)
         } catch {
             sonosDebugLog("[SMAPI_SEARCH] enqueueContainer (track-by-track) failed: \(error). first URI=\(playable.first?.resourceURI ?? "nil")")
-            showPlayError("Couldn't enqueue \(container.title): \(error.localizedDescription)")
+            showPlayError(L10n.couldNotAddAllFormat(error.localizedDescription))
         }
     }
 
@@ -2747,17 +2854,17 @@ struct SMAPIServiceSearchView: View {
         guard let (token, uri, sn) = serviceCredentials() else { return }
         let tracks = await ServiceSearchProvider.shared.pagedBrowseSMAPI(
             id: containerID, serviceID: serviceID, serviceURI: uri, token: token, sn: sn,
-            maxItems: 10_000)
+            maxItems: 10_000, generation: group.systemVersion)
         let playable = tracks.filter { $0.resourceURI != nil && !$0.isContainer }
         guard !playable.isEmpty else {
-            showPlayError("No playable tracks in \(container.title)")
+            showPlayError(L10n.noPlayableTracksInFormat(container.title))
             return
         }
         do {
             try await sonosManager.playItemsReplacingQueue(playable, in: group)
         } catch {
             sonosDebugLog("[SMAPI_SEARCH] playContainer (track-by-track) failed: \(error). first URI=\(playable.first?.resourceURI ?? "nil")")
-            showPlayError("Couldn't play \(container.title): \(error.localizedDescription)")
+            showPlayError(L10n.couldNotStartPlaybackFormat(error.localizedDescription))
             return
         }
     }
@@ -2784,24 +2891,33 @@ struct SMAPIServiceSearchView: View {
                     ? [("track", 20), ("album", 10), ("artist", 5)]
                     : realCategories.map { ($0.id, $0.id == "track" ? 20 : ($0.id == "album" ? 10 : 5)) }
 
-                results = await withTaskGroup(of: [BrowseItem].self) { group in
+                var counts: [String: Int] = [:]
+                results = await withTaskGroup(of: (String, [BrowseItem]).self) { group in
                     for (catID, limit) in categoriesToSearch {
                         group.addTask {
-                            await ServiceSearchProvider.shared.searchSMAPI(
+                            (catID, await ServiceSearchProvider.shared.searchSMAPI(
                                 term: query, searchID: catID, serviceID: self.serviceID,
-                                serviceURI: uri, token: token, sn: sn, count: limit)
+                                serviceURI: uri, token: token, sn: sn, count: limit,
+                                generation: self.group?.systemVersion ?? .unknown))
                         }
                     }
                     var all: [BrowseItem] = []
-                    for await batch in group {
+                    for await (catID, batch) in group {
+                        counts[catID] = batch.count
                         all.append(contentsOf: batch)
                     }
                     return all
                 }
+                // Every category answered the same term: record which
+                // ones the service lists but leaves empty, and drop
+                // them from the chips.
+                SMAPISearchCategories.recordFanOut(serviceID: serviceID, counts: counts)
+                hiddenCategoryIDs = SMAPISearchCategories.emptySearchIDs(serviceID: serviceID)
             } else {
                 results = await ServiceSearchProvider.shared.searchSMAPI(
                     term: query, searchID: searchID, serviceID: serviceID,
-                    serviceURI: uri, token: token, sn: sn)
+                    serviceURI: uri, token: token, sn: sn,
+                    generation: group?.systemVersion ?? .unknown)
             }
             searchRootItems = results
             // Paint only if the Search tab is still on screen — the user may
@@ -2898,16 +3014,16 @@ private struct LargeAddPromptSheet: View {
 }
 
 /// Isolated submenu so a hover/scroll-driven re-render of the parent
-/// `BrowseListView` doesn't rebuild the open playlist submenu — that
-/// rebuild was the source of the visible flicker when hovering over
-/// "Add to Playlist". Only this view's body re-runs when `playlists`
-/// or `item` changes, and neither changes during hover.
+/// `BrowseListView` doesn't rebuild the open playlist submenu (visible
+/// as flicker on hover). Only this body re-runs when `playlists` or
+/// `item` changes, and neither changes during hover.
 /// Vertical A-Z fast-scroll index (issue #58). Tapping or dragging over a
 /// letter calls `onSelect`. Kept compact so it overlays the list edge like
 /// the native Sonos app's index.
 /// A-Z fast-scroll (issue #58): a compact button that opens a grid of index
 /// letters in a popover; picking one jumps to that section and dismisses.
 private struct AZIndexBar: View {
+    @Environment(SonosManager.self) private var sonosManager
     let onSelect: (String) -> Void
     @State private var showGrid = false
     private let letters: [String] = ["#"] + (65...90).map { String(UnicodeScalar($0)!) }
@@ -2934,8 +3050,8 @@ private struct AZIndexBar: View {
                         Text(letter)
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
                             .frame(width: 38, height: 38)
-                            .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
-                            .foregroundStyle(Color.accentColor)
+                            .background(sonosManager.themeAccent.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
+                            .foregroundStyle(sonosManager.themeAccent)
                     }
                     .buttonStyle(.plain)
                 }

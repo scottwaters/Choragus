@@ -16,6 +16,13 @@ final class DiagnosticsRedactorTests: XCTestCase {
 
     // MARK: - scrubForPublicOutput
 
+    /// A household id binds every speaker to one Sonos account; it is
+    /// masked to its last four characters like a device id.
+    func testScrubsHouseholdID() {
+        let out = DiagnosticsRedactor.scrubForPublicOutput("household=Sonos_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234 room=Kitchen")
+        XCTAssertEqual(out, "household=Sonos_**************************1234 room=Kitchen")
+    }
+
     /// The exact failure mode from issue #19's bundle: `sn=274` made it
     /// to GitHub in cleartext because the bundle path bypassed the
     /// redactor.

@@ -35,13 +35,10 @@ public enum TVAudioFormat: String, Equatable, Sendable {
     case dtsSurround51
 
     /// Maps Sonos's `HTAudioIn` integer to a TVAudioFormat. The wire
-    /// format is undocumented; cases are populated as captures from
-    /// real HDMI inputs accumulate — the first three were captured
-    /// locally, the remainder supplied by issue #80 (whose table
-    /// matches the locally-captured values, cross-validating the
-    /// source). Unknown integers fall through to `.unknown` — never
-    /// guessed; `AudioFormatObserver` records the raw integer so new
-    /// values surface in diagnostics bundles.
+    /// format is undocumented; cases are populated from captures of
+    /// real HDMI inputs. Unknown integers fall through to `.unknown` —
+    /// never guessed; `AudioFormatObserver` records the raw integer so
+    /// new values surface in diagnostics bundles.
     public static func from(htAudioIn: Int) -> TVAudioFormat {
         switch htAudioIn {
         case 0:         return .noSignal
@@ -261,14 +258,7 @@ public struct TrackMetadata: Equatable {
     public var positionString: String { formatTime(position) }
 
     private func formatTime(_ interval: TimeInterval) -> String {
-        let total = Int(interval)
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let seconds = total % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%d:%02d", minutes, seconds)
+        PlaybackTimeFormat.string(interval)
     }
 
     /// Extracts the Sonos service ID (sid=NNN) from the track URI, if present.
@@ -326,8 +316,8 @@ public struct TrackMetadata: Equatable {
         // Atmos / Apple Spatial Audio stream). Only overwrite when the
         // current field is `.unknown` OR the new info is richer — the
         // first event for a new track often arrives during STOPPED /
-        // TRANSITIONING with an all-zero streamInfo, and we don't want
-        // to clobber a previously-decoded `.atmos` flag with that.
+        // TRANSITIONING with an all-zero streamInfo, which must not
+        // clobber an already-decoded `.atmos` flag.
         let streamInfo = XMLResponseParser.extractStreamInfo(didl)
         let parsedFormat = Self.audioFormat(fromStreamInfo: streamInfo)
         if audioFormat == .unknown || parsedFormat != .unknown {
@@ -344,7 +334,7 @@ public struct TrackMetadata: Equatable {
         let currentURI = mediaInfo["CurrentURI"] ?? ""
 
         // Detect if playing from queue vs direct stream/favorite
-        // Must run BEFORE the guard — even if no DIDL, we need isQueueSource set
+        // Must run BEFORE the guard — isQueueSource is set even with no DIDL
         isQueueSource = currentURI.hasPrefix(URIPrefix.rinconQueue)
         didReportTransportSource = true
 
@@ -357,7 +347,17 @@ public struct TrackMetadata: Equatable {
 
         // Save current title/artist — enrichFromDIDL only fills empty fields
         let hadTitle = !title.isEmpty
+        // `CurrentURIMetaData` describes the *container* (station,
+        // playlist), and enrichFromDIDL overwrites art unconditionally.
+        // Amazon stations report each song with its own cover in the
+        // track DIDL; letting the station logo replace it here flips the
+        // cover back to the logo on every poll. Existing track-level art
+        // is kept; the container art only fills a gap.
+        let priorArt = albumArtURI
         enrichFromDIDL(rawDIDL, device: device)
+        if let priorArt, !priorArt.isEmpty {
+            albumArtURI = priorArt
+        }
 
         // For radio streams, DIDL title is the station name
         if let parsed = Self.quickParseDIDLTitle(rawDIDL),
@@ -365,7 +365,7 @@ public struct TrackMetadata: Equatable {
             stationName = parsed
             // If title was set from DIDL but it's just the station name, keep it
             if !hadTitle && title == parsed {
-                // title is the station name — that's fine for now, track info may come later
+                // title is the station name; track info may come later
             }
         }
     }

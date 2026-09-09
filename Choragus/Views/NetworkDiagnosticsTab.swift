@@ -178,7 +178,7 @@ struct SpeakerDisplayRow: Identifiable {
 }
 
 struct NetworkDiagnosticsTab: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @ObservedObject var model: NetworkDiagnosticsModel
     @State private var copied = false
     @State private var filter = ""

@@ -8,26 +8,11 @@ import Combine
 import Observation
 import SonosKit
 
-/// Anchored position model — single source of truth for "where the
-/// playhead is right now" used by every position-displaying view
-/// (seek slider, time text, synced lyrics). The view layer wraps
-/// `projected(at:)` in a `TimelineView` to advance smoothly between
-/// authoritative events.
-///
-/// Why this exists: the previous design wrote `smoothPosition` from
-/// two competing sources (a 1 Hz timer that nudged forward in 0.5 s
-/// deadband-filtered steps, plus event-driven snap-overwrites from
-/// `groupPositions`). Each write reached the view as a discrete
-/// jump — backward when the speaker's authoritative time lagged the
-/// wall-clock projection, forward when it led, never smooth between.
-/// A single anchor + per-frame wall-clock projection eliminates the
-/// jumps by construction: between authoritative events the view
-/// extrapolates monotonically, and authoritative events only rebase
-/// the anchor when drift exceeds the noise floor.
-// `PositionAnchor` now lives in SonosKit (`Models/PositionAnchor.swift`) so
-// the karaoke popout window and the inline panel read from a single
-// shared anchor maintained by `SonosManager`. The drift-tolerant rebase
-// logic moved alongside it; this VM is now a pure consumer.
+/// Playhead position comes from the `PositionAnchor` in SonosKit,
+/// maintained by `SonosManager` and shared by the inline panel and the
+/// karaoke popout. Views wrap `projected(at:)` in a `TimelineView` so the
+/// playhead advances smoothly between authoritative events; this view
+/// model is a pure consumer.
 
 @MainActor
 @Observable
@@ -73,29 +58,20 @@ final class NowPlayingViewModel {
     // MARK: - Volume / Mute (derived from SonosManager)
     //
     // No local mirror dictionaries. Volumes and mutes read directly from
-    // `sonosManager.deviceVolumes` / `deviceMutes` so UI re-renders the
-    // moment the manager publishes — no `.onReceive` middleman, no
-    // intermediate-state race when multiple `@Published` writes happen
-    // inside one event handler (the bug that left FP5 visually unmuted
-    // for 10+ s after Office's coord event already propagated to its
-    // member volume).
+    // `sonosManager.deviceVolumes` / `deviceMutes` so the UI re-renders
+    // the moment the manager publishes, with no intermediate-state race
+    // between multiple writes inside one event handler.
 
-    /// Master slider scratchpad — only used while the user is actively
-    /// dragging. Outside of drag, `volume` derives from current member
-    /// volumes so external Sonos-app changes surface immediately.
+    /// Master slider scratchpad, used only while the user is dragging.
+    /// Outside a drag, `volume` derives from current member volumes.
     var dragVolume: Double = 0
     var isDraggingVolume = false
 
-    /// Drag snapshot of per-member volumes + master baseline, captured
-    /// on the first `applyMasterVolume` call after the previous drag
-    /// committed. The snapshot is the IMMUTABLE reference for the entire
-    /// drag — every mid-drag tick computes targets against it, never
-    /// against the running per-member values. Without this, members that
-    /// hit 0/100 lose their offset to master permanently (the running
-    /// values get clamped, then on the way back the clamped value is
-    /// treated as the "real" value, leaving alignment compressed forever).
-    /// Cleared by `commitVolume`, `resetForGroupChange`, and at the end
-    /// of `fetchCurrentState`.
+    /// Immutable drag-start reference: per-member volumes + master
+    /// baseline. Every mid-drag tick computes targets against it, never
+    /// the running values — otherwise members clamped at 0/100 lose their
+    /// offset to master permanently. Cleared by `commitVolume`,
+    /// `resetForGroupChange`, and at the end of `fetchCurrentState`.
     private var dragSnapshot: (master: Double, volumes: [String: Double])?
 
     /// Holding the master at 0 for `zeroHoldToSyncDelay` discards the
@@ -107,18 +83,14 @@ final class NowPlayingViewModel {
 
     // MARK: - Position
 
-    /// Shared playhead anchor maintained by `SonosManager`. Every
-    /// position-displaying view (panel seek bar, time text, synced
-    /// lyrics, karaoke popout) reads from this single source so they
-    /// stay in lockstep.
+    /// Shared playhead anchor maintained by `SonosManager`; every
+    /// position-displaying view reads from it so they stay in lockstep.
     var positionAnchor: PositionAnchor {
         sonosManager.groupPositionAnchors[group.coordinatorID] ?? .zero
     }
 
-    /// Drag scratchpad — populated only while the user is actively
-    /// dragging the seek slider. The slider's binding writes here; the
-    /// time text and lyrics still project from `positionAnchor`. On
-    /// drag-end this value seeds the seek + new anchor.
+    /// Seek-slider drag scratchpad. Time text and lyrics still project
+    /// from `positionAnchor`; on drag-end this seeds the seek + new anchor.
     var dragPosition: TimeInterval = 0
     var isDraggingSeek = false
 
@@ -130,19 +102,16 @@ final class NowPlayingViewModel {
     // MARK: - Derived state (read directly from SonosManager)
 
     /// Master volume — average of the group's per-member volumes when
-    /// idle; the user's drag value while a slider is in flight. Reading
-    /// this property registers a SwiftUI dependency on
-    /// `sonosManager.deviceVolumes`, so external speaker-side changes
-    /// reach the slider on the very next render tick.
+    /// idle; the drag value while a slider is in flight. Reading it
+    /// registers a SwiftUI dependency on `sonosManager.deviceVolumes`.
     var volume: Double {
         if isDraggingVolume { return dragVolume }
         return currentAverageVolume
     }
 
-    /// True iff every group member is muted. No stored copy — derived
-    /// from `sonosManager.deviceMutes` on every read so optimistic
-    /// coord-driven mute propagation surfaces in the master toggle the
-    /// instant the manager dictionary is written.
+    /// True iff every group member is muted. Derived from
+    /// `sonosManager.deviceMutes` on every read so optimistic mute
+    /// propagation surfaces in the master toggle immediately.
     var isMuted: Bool {
         let members = group.members
         guard !members.isEmpty else { return false }
@@ -235,20 +204,16 @@ final class NowPlayingViewModel {
         }
     }
 
-    /// Convenience seek-by-offset for the ±15s / ±30s skip buttons in
-    /// the Now Playing transport row. Reads the projected playhead via
-    /// `currentPosition`, clamps to the track range, and dispatches to
-    /// the absolute-position seek path. Disabled at the call site for
-    /// non-queue radio/stream sources where seeking is meaningless.
+    /// Seek-by-offset for the ±15s / ±30s skip buttons. Clamps to the
+    /// track range; disabled at the call site for radio/stream sources.
     func seekRelative(by deltaSeconds: TimeInterval) {
         let now = currentPosition
         let target = max(0, now + deltaSeconds)
         let duration = trackMetadata.duration
         let clamped: TimeInterval
         if duration > 0 {
-            // Stop a hair before the end so we don't trigger an immediate
-            // queue advance when the user holds +30 near the track end —
-            // they wanted to skip in-track, not to the next song.
+            // Stop a second before the end so holding +30 near the track
+            // end doesn't trigger a queue advance.
             clamped = min(target, max(0, duration - 1))
         } else {
             clamped = target
@@ -261,10 +226,9 @@ final class NowPlayingViewModel {
         let minutes = (Int(seconds) % 3600) / 60
         let secs = Int(seconds) % 60
         let timeStr = String(format: "%d:%02d:%02d", hours, minutes, secs)
-        // Apply the seek to the shared anchor immediately so every UI
-        // (panel + karaoke window) reflects the new position before the
-        // speaker's confirmation event arrives (Sonos's grace window
-        // suppresses incoming position events for ~3 s anyway).
+        // Apply the seek to the shared anchor immediately so panel and
+        // karaoke window reflect it before the speaker's confirmation
+        // event arrives.
         sonosManager.setPositionAnchor(
             coordinatorID: group.coordinatorID,
             PositionAnchor(time: max(0, seconds),
@@ -281,16 +245,9 @@ final class NowPlayingViewModel {
         }
     }
 
-    // Anchor maintenance moved to `SonosManager` — both the inline
-    // panel and the karaoke popout now consume the same shared anchor
-    // via `sonosManager.groupPositionAnchors[coordinatorID]`. The drift-
-    // tolerant rebase, transport-state freeze, and seek-explicit set
-    // all happen there.
-
-    /// Project the current playhead. Used by code paths that need a
-    /// snapshot value (history logging, copy-track-info, etc.). Views
-    /// should use `TimelineView` and call `positionAnchor.projected(at:)`
-    /// directly so the read happens on each animation frame.
+    /// Snapshot of the projected playhead for one-shot consumers. Views
+    /// should call `positionAnchor.projected(at:)` inside a `TimelineView`
+    /// so the read happens on each animation frame.
     var currentPosition: TimeInterval {
         positionAnchor.projected(at: Date())
     }
@@ -300,9 +257,8 @@ final class NowPlayingViewModel {
     func toggleMute() {
         let newMuted = !isMuted
         sonosDebugLog("[UI-TAP] toggleMute group=\(group.name) target=\(newMuted)")
-        // Optimistic write straight into the manager. View bindings read
-        // back from `sonosManager.deviceMutes` on the next render — no
-        // local mirror to drift, no `.onReceive` race window.
+        // Optimistic write straight into the manager; view bindings read
+        // back from `sonosManager.deviceMutes` on the next render.
         for member in group.members {
             sonosManager.updateDeviceMute(member.id, muted: newMuted)
         }
@@ -329,24 +285,17 @@ final class NowPlayingViewModel {
 
     private var scrollVolumeCommitTask: Task<Void, Never>?
 
-    /// Throttled mid-drag commit. Fires a per-member SOAP fan-out at
-    /// most once every 250 ms while the master slider is actively
-    /// being dragged so other listeners (Sonos app on phone, second
-    /// controller) hear progressive volume change instead of jumping
-    /// at drag-end. Cancelled at drag-end so `commitVolume` is the
-    /// authoritative final write.
+    /// Throttled mid-drag commit: a per-member SOAP fan-out at most once
+    /// per 250 ms so other controllers see progressive volume change.
+    /// Cancelled at drag-end so `commitVolume` is the final write.
     private var throttledMasterCommitTask: Task<Void, Never>?
     /// Per-device throttled commits for the per-speaker sliders.
     private var throttledMemberCommitTasks: [String: Task<Void, Never>] = [:]
     private static let throttleInterval: UInt64 = 250_000_000  // 250 ms
 
-    /// Applies a scroll-wheel volume step to the coordinator's master volume
-    /// and debounces the SOAP commit. Called from the mouse-wheel capture in
-    /// NowPlayingView — intentionally not exposed to any other path so the
-    /// debounce window (300 ms of quiet) can't interact with the drag-slider
-    /// commit-on-release flow. Pure step application: uses the same
-    /// `setVolume()` routing as the slider (grace periods, proportional
-    /// group volume, per-speaker fan-out) to stay feature-consistent.
+    /// Applies a scroll-wheel step to the master volume and debounces the
+    /// SOAP commit. Only called from the mouse-wheel capture so the
+    /// debounce window can't interact with the slider's commit-on-release.
     func applyScrollVolumeStep(_ step: Int) {
         let current = currentAverageVolume
         let next = max(0, min(100, current + Double(step)))
@@ -360,54 +309,27 @@ final class NowPlayingViewModel {
         }
     }
 
-    /// Master slider drag-tick: distribute `newMaster` across members
-    /// (proportional or linear) and write the per-member values straight
-    /// into `sonosManager.deviceVolumes`. The slider's get-side reads
-    /// `dragVolume` while a drag is in flight, so visual position
-    /// matches the pointer regardless of clamping at 0/100.
-    ///
-    /// Computes targets against an immutable drag-start snapshot, NOT the
-    /// running per-member values. This preserves member offsets when the
-    /// master pushes them past 0/100 — clamping doesn't poison the next
-    /// tick's math, so dragging back recovers the original spread.
-    /// SOAP commit is deferred to drag-end (`commitVolume`).
+    /// Master slider drag-tick: distributes `newMaster` across members
+    /// (proportional or linear) into `sonosManager.deviceVolumes`. Targets
+    /// are computed against the immutable drag-start snapshot so members
+    /// clamped at 0/100 recover their offset when dragged back.
     func applyMasterVolume(_ newMaster: Double) {
         dragVolume = newMaster
         let snap = dragSnapshot ?? captureDragSnapshot()
+        let mode: GroupVolumeDistribution.Mode =
+            UserDefaults.standard.bool(forKey: UDKey.proportionalGroupVolume) ? .proportional : .linear
 
-        // Master at the extremes is absolute: 0 silences everything, 100
-        // drives everything to max. The snapshot is preserved unchanged,
-        // so as soon as the master leaves the extreme the original spread
-        // recovers via the normal distribution math below.
-        let absoluteTarget: Int?
-        if newMaster <= 0 { absoluteTarget = 0 }
-        else if newMaster >= 100 { absoluteTarget = 100 }
-        else { absoluteTarget = nil }
-
-        let proportional = UserDefaults.standard.bool(forKey: UDKey.proportionalGroupVolume)
+        // Ratios, the zero-master case and clamp recovery live in
+        // GroupVolumeDistribution.
+        let targets = GroupVolumeDistribution.targets(
+            master: newMaster,
+            memberIDs: group.members.map(\.id),
+            snapshot: .init(master: snap.master, volumes: snap.volumes),
+            mode: mode)
 
         for member in group.members {
-            let clamped: Int
-            if let abs = absoluteTarget {
-                clamped = abs
-            } else {
-                let original = snap.volumes[member.id] ?? snap.master
-                let newVol: Double
-                if proportional, snap.master > 0 {
-                    // Each member keeps its ratio to the snapshot master.
-                    // e.g. members at 30,40 (master=35) → master to 70 → 60,80.
-                    newVol = original * (newMaster / snap.master)
-                } else if proportional {
-                    // Snapshot master was 0 — ratio undefined; drive all to newMaster.
-                    newVol = newMaster
-                } else {
-                    // Linear: shift each member by the master delta. Offsets
-                    // relative to the snapshot are preserved across the drag.
-                    newVol = original + (newMaster - snap.master)
-                }
-                clamped = Int(max(0, min(100, newVol)))
-            }
-            sonosManager.updateDeviceVolume(member.id, volume: clamped)
+            guard let volume = targets[member.id] else { continue }
+            sonosManager.updateDeviceVolume(member.id, volume: volume)
         }
         updateZeroHold(master: newMaster)
         scheduleThrottledMasterCommit()
@@ -425,16 +347,14 @@ final class NowPlayingViewModel {
         zeroHoldTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: Self.zeroHoldToSyncDelay)
             guard let self, !Task.isCancelled, self.dragVolume <= 0 else { return }
-            var flattened: [String: Double] = [:]
-            for member in self.group.members { flattened[member.id] = 0 }
-            self.dragSnapshot = (master: 0, volumes: flattened)
+            let levelled = GroupVolumeDistribution.levelledSnapshot(
+                memberIDs: self.group.members.map(\.id))
+            self.dragSnapshot = (master: levelled.master, volumes: levelled.volumes)
         }
     }
 
-    /// Captures the immutable drag-start state — current master baseline
-    /// and each member's current volume. Subsequent ticks within the
-    /// same drag use this as the reference; the snapshot itself is never
-    /// rewritten until `commitVolume` clears it.
+    /// Captures the drag-start reference (master baseline + per-member
+    /// volumes). Never rewritten until `commitVolume` clears it.
     @discardableResult
     private func captureDragSnapshot() -> (master: Double, volumes: [String: Double]) {
         var volumes: [String: Double] = [:]
@@ -446,13 +366,9 @@ final class NowPlayingViewModel {
         return snap
     }
 
-    /// 250 ms-quiet throttled commit during master drag. Coalesces
-    /// rapid drag ticks: each tick cancels the prior pending task and
-    /// schedules a fresh one. SOAP only fires after the user pauses
-    /// for 250 ms, so a continuous drag produces 0 mid-drag SOAPs;
-    /// a slower drag produces ~4/sec, capped by the round-trip time
-    /// the speaker can drain anyway. `commitVolume` cancels the
-    /// pending task at drag-end and fires the final write itself.
+    /// Coalesces drag ticks: each tick cancels the pending task and
+    /// schedules a fresh one, so SOAP fires only after 250 ms of quiet.
+    /// `commitVolume` cancels it at drag-end and writes the final value.
     private func scheduleThrottledMasterCommit() {
         throttledMasterCommitTask?.cancel()
         throttledMasterCommitTask = Task { @MainActor [weak self] in
@@ -470,20 +386,15 @@ final class NowPlayingViewModel {
     }
 
     func commitVolume() {
-        // Cancel any pending throttled mid-drag commit; the final
-        // SOAP below is authoritative.
+        // The final SOAP below is authoritative; drop the pending
+        // throttled commit.
         throttledMasterCommitTask?.cancel()
         throttledMasterCommitTask = nil
-        // The drag is over — a pending zero-hold must not fire against a
-        // later drag's snapshot.
+        // A pending zero-hold must not fire against a later drag's snapshot.
         zeroHoldTask?.cancel()
         zeroHoldTask = nil
-        // Per-device SOAPs in parallel — for a group of N speakers a
-        // serial loop took N × ~150 ms (the cumulative SOAP round-trip
-        // time), which read as sluggish on 3+ speaker groups. TaskGroup
-        // fires them concurrently so the whole commit completes in one
-        // round-trip instead of N. Reads volumes straight from the
-        // manager (the optimistic distribution wrote them there).
+        // Per-device SOAPs fan out concurrently so an N-speaker commit
+        // completes in one round-trip rather than N.
         let members = group.members
         let snapshot = members.map { ($0, sonosManager.deviceVolumes[$0.id] ?? 0) }
         dragSnapshot = nil
@@ -509,9 +420,7 @@ final class NowPlayingViewModel {
     // MARK: - Per-Speaker Volume/Mute (called from VolumeControlView)
 
     func setSpeakerVolume(device: SonosDevice, volume: Int) async {
-        // Drag-end final commit. Cancel any pending throttled
-        // mid-drag SOAP for this device — this call is
-        // authoritative.
+        // Drag-end final commit; the pending throttled SOAP is dropped.
         throttledMemberCommitTasks[device.id]?.cancel()
         throttledMemberCommitTasks[device.id] = nil
         sonosDebugLog("[UI-TAP] setSpeakerVolume room=\(device.roomName) target=\(volume)")
@@ -528,20 +437,14 @@ final class NowPlayingViewModel {
         sonosDebugLog("[UI-SOAP-END] setSpeakerVolume room=\(device.roomName) elapsed=\(elapsedMs)ms")
     }
 
-    /// Schedules a 250 ms-quiet SOAP commit for a single member,
-    /// invoked from the per-speaker slider's binding setter on each
-    /// drag tick. Same coalescing pattern as
-    /// `scheduleThrottledMasterCommit` but per-device — different
-    /// members can have independent in-flight throttles when the
-    /// user nudges them in turn. Cancelled by `setSpeakerVolume`
-    /// (drag-end) so the final SOAP is the authoritative write.
     /// Per-device commit generation. A completing throttled task may only
-    /// nil its dictionary slot when it is still the latest scheduled task
-    /// for that device — an unconditional nil would wipe a NEWER task's
-    /// slot (the old task can pass its cancellation check, then get
-    /// cancelled mid-SOAP after the newer task has taken the slot).
+    /// nil its dictionary slot while it is still the latest task for that
+    /// device; an unconditional nil would wipe a newer task's slot.
     private var memberCommitGenerations: [String: Int] = [:]
 
+    /// Per-device equivalent of `scheduleThrottledMasterCommit`, invoked
+    /// from the per-speaker slider on each drag tick. Cancelled by
+    /// `setSpeakerVolume` at drag-end.
     func scheduleThrottledSpeakerCommit(device: SonosDevice, volume: Int) {
         throttledMemberCommitTasks[device.id]?.cancel()
         let generation = (memberCommitGenerations[device.id] ?? 0) + 1
@@ -601,11 +504,9 @@ final class NowPlayingViewModel {
 
     // MARK: - Action Runner
 
-    /// Token for the action that currently owns `actionInFlight`. Only
-    /// the call that SET the flag may clear it — after a
-    /// `resetForGroupChange` (which nils the flag directly), a still-
-    /// running old action's completion must not clear a newer action's
-    /// in-flight state.
+    /// Token for the action that owns `actionInFlight`. Only the call
+    /// that set the flag may clear it, so a still-running old action's
+    /// completion can't clear a newer action's in-flight state.
     private var actionGeneration = 0
 
     func performAction(_ id: String, _ action: @escaping () async throws -> Void) {
@@ -625,10 +526,8 @@ final class NowPlayingViewModel {
 
     // MARK: - Group lifecycle
 
-    /// Reset transient UI state when switching to a different group.
-    /// No volume/mute mirror to clear — those derive directly from
-    /// `sonosManager.deviceVolumes` / `deviceMutes` keyed by the new
-    /// group's members.
+    /// Resets transient UI state when switching group. Volume / mute
+    /// derive from the manager and need no reset.
     func resetForGroupChange() {
         isDraggingVolume = false
         isDraggingSeek = false
@@ -655,24 +554,15 @@ final class NowPlayingViewModel {
         }
     }
 
-    /// Snapshot stringification — for code paths that need a one-shot
-    /// value (e.g. accessibility labels). The visible time text is
-    /// driven by `TimelineView` in the view layer and formats from
-    /// `positionAnchor.projected(at: ctx.date)` directly so the digit
-    /// updates each frame instead of once per render.
+    /// One-shot formatted position (e.g. accessibility labels). The
+    /// visible time text formats from `positionAnchor.projected(at:)`
+    /// inside a `TimelineView` so it updates each frame.
     var smoothPositionString: String {
         formatTime(currentPosition)
     }
 
     func formatTime(_ interval: TimeInterval) -> String {
-        let total = Int(max(0, interval))
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let seconds = total % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%d:%02d", minutes, seconds)
+        PlaybackTimeFormat.string(interval)
     }
 
     // MARK: - Track-change side effects (position anchor only)
@@ -740,10 +630,8 @@ final class NowPlayingViewModel {
             await manager.scanGroup(group)
         }
 
-        // Force-set local state from the just-fetched @Published values.
-        // No grace period or threshold checks — this is an explicit
-        // user action, so the anchor snaps directly to the freshly
-        // fetched position.
+        // Explicit user action: the anchor snaps to the fetched position
+        // with no grace period or threshold checks.
         let meta = sonosManager.groupTrackMetadata[group.coordinatorID] ?? TrackMetadata()
         sonosManager.setPositionAnchor(
             coordinatorID: group.coordinatorID,
@@ -751,19 +639,15 @@ final class NowPlayingViewModel {
                            wallClock: Date(),
                            isPlaying: transportState.isPlaying)
         )
-        // Manual drive — speaker switches whose metadata is already
-        // cached don't republish, so `.onReceive` wouldn't fire.
+        // Speaker switches whose metadata is already cached don't
+        // republish, so drive the handler directly.
         handleMetadataChanged(meta)
         crossfadeOn = (try? await sonosManager.getCrossfadeMode(group: group)) ?? false
 
-        // No local mirror to populate — `volume`, `isMuted`,
-        // `speakerVolumes`, and `speakerMutes` derive directly from
-        // `sonosManager.deviceVolumes` / `deviceMutes`, which `scanGroup`
-        // above just refreshed. Clear any stale drag snapshot so the
-        // next user drag captures fresh state — but only when no drag is
-        // active NOW: the awaits above are long enough for a drag to have
-        // started, and wiping its immutable reference snapshot mid-drag
-        // breaks the offset-preserving distribution math.
+        // Clear the stale drag snapshot so the next drag captures fresh
+        // state — but not mid-drag: the awaits above are long enough for
+        // a drag to have started, and wiping its reference snapshot breaks
+        // the offset-preserving distribution.
         if !isDraggingVolume { dragSnapshot = nil }
     }
 

@@ -40,6 +40,63 @@ public final class EventListener: @unchecked Sendable {
     /// Callback: (subscriptionID, sequenceNumber, xmlBody)
     public var onEvent: ((String, UInt32, String) -> Void)?
 
+    /// Addresses permitted to deliver events, set by the owner from the
+    /// discovered device list.
+    ///
+    /// UPnP eventing has no authentication: anything that can reach this
+    /// port can post `LastChange` XML straight into topology and transport
+    /// parsing. A LAN host can already command the speakers directly, so
+    /// this is input validation, not access control — it stops a peer
+    /// feeding the app a false household view or untrusted XML.
+    ///
+    /// Empty means accept any peer: the state between `start()` and the
+    /// first device list, during which an event can only come from a
+    /// speaker holding a subscription from a previous session.
+    ///
+    /// Mutated only on `queue`, like the rest of this type's state.
+    private var allowedPeers: Set<String> = []
+
+    /// Peers refused since launch, for the diagnostic counter. Counting rather
+    /// than logging every refusal keeps a hostile or misconfigured peer from
+    /// flooding the log it is being refused by.
+    private var refusedPeerCount = 0
+    private var refusedPeerSample: String?
+
+    /// Points the listener at the current speaker set. Safe to call on every
+    /// topology change; the listener keeps serving while it is applied.
+    public func setAllowedPeers(_ addresses: Set<String>) {
+        queue.async { [weak self] in
+            self?.allowedPeers = addresses
+        }
+    }
+
+    /// (refused, oneRefusedAddress) since launch, for diagnostics.
+    public func refusedPeerStats(_ completion: @escaping (Int, String?) -> Void) {
+        queue.async { [weak self] in
+            completion(self?.refusedPeerCount ?? 0, self?.refusedPeerSample)
+        }
+    }
+
+    /// The peer address of a connection, without the port.
+    static func peerAddress(of connection: NWConnection) -> String? {
+        switch connection.endpoint {
+        case let .hostPort(host, _):
+            switch host {
+            case let .ipv4(address): return "\(address)"
+            case let .ipv6(address):
+                // An IPv4-mapped IPv6 peer must compare against the IPv4
+                // address the speaker was discovered on, not its mapped form.
+                let text = "\(address)"
+                if let mapped = text.split(separator: ":").last, mapped.contains(".") {
+                    return String(mapped)
+                }
+                return text
+            @unknown default: return nil
+            }
+        default: return nil
+        }
+    }
+
     /// The port the listener is bound to (available after start)
     public private(set) var port: UInt16 = 0
 
@@ -73,15 +130,30 @@ public final class EventListener: @unchecked Sendable {
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
 
-        let nwListener: NWListener
+        // The fixed port can fail at BIND time, not just at construction:
+        // a network-path rebuild starts the new listener while the old one's
+        // cancel has not yet released the socket. A fatal bind would leave
+        // the session in poll-only mode; an ephemeral-port retry keeps
+        // eventing alive, and the SUBSCRIBE callback URL carries whatever
+        // port was bound.
         if let fixed = NWEndpoint.Port(rawValue: Self.preferredPort),
            let bound = try? NWListener(using: params, on: fixed) {
-            nwListener = bound
+            do {
+                try activate(bound)
+                return
+            } catch StartError.bindFailed {
+                sonosDebugLog("[EVENTS] Port \(Self.preferredPort) is in use — retrying on an ephemeral port (firewall rules scoped to \(Self.preferredPort) will not see this session's events)")
+            }
         } else {
             sonosDebugLog("[EVENTS] Port \(Self.preferredPort) unavailable — falling back to an ephemeral port (firewall rules scoped to \(Self.preferredPort) will not see this session's events)")
-            nwListener = try NWListener(using: params)
         }
+        try activate(try NWListener(using: params))
+    }
 
+    /// Starts `nwListener`, waits for it to become ready, and records the
+    /// bound port. Throws — leaving the listener cancelled — on bind
+    /// failure, timeout, or a missing port.
+    private func activate(_ nwListener: NWListener) throws {
         let readySemaphore = DispatchSemaphore(value: 0)
         // Written on `queue` by the state handler, read on the caller
         // thread after the semaphore wait — hence the lock.
@@ -141,10 +213,45 @@ public final class EventListener: @unchecked Sendable {
         listener = nil
     }
 
+    /// Stops and WAITS for the socket to release. `cancel()` frees the
+    /// port asynchronously, so a stop-then-rebind that does not wait races
+    /// its own socket: the new bind loses, falls to an ephemeral port that
+    /// firewall rules do not cover, and the old listener leaks holding the
+    /// fixed port with event delivery dead behind a working-looking
+    /// subscription set.
+    public func stopAndWait() async {
+        guard let nwListener = listener else { return }
+        listener = nil
+        port = 0
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let resumed = NSLock()
+            var done = false
+            let finish = {
+                resumed.lock()
+                defer { resumed.unlock() }
+                guard !done else { return }
+                done = true
+                continuation.resume()
+            }
+            nwListener.stateUpdateHandler = { state in
+                switch state {
+                case .cancelled, .failed:
+                    finish()
+                default:
+                    break
+                }
+            }
+            nwListener.cancel()
+            // cancel() on an already-dead listener may never call the
+            // handler again; a short deadline keeps the await bounded.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { finish() }
+        }
+    }
+
     /// The URL that Sonos speakers should send NOTIFY requests to
     public var callbackURL: URL? {
         guard port > 0, !localAddress.isEmpty, localAddress != "127.0.0.1" else {
-            // If we only have localhost, try resolving again
+            // Only localhost resolved: try again
             if localAddress == "127.0.0.1" || localAddress.isEmpty {
                 if let ip = Self.getLocalIPAddress() {
                     return URL(string: "http://\(ip):\(port)/notify")
@@ -164,6 +271,19 @@ public final class EventListener: @unchecked Sendable {
     }
 
     private func handleConnection(_ connection: NWConnection) {
+        // Source check first: an unknown peer never occupies a connection
+        // slot, so refusing them cannot be used to exhaust the cap below.
+        // No response is sent — the connection is dropped without revealing
+        // that anything is listening.
+        if !allowedPeers.isEmpty {
+            let peer = Self.peerAddress(of: connection)
+            if peer == nil || !allowedPeers.contains(peer!) {
+                refusedPeerCount += 1
+                if refusedPeerSample == nil { refusedPeerSample = peer ?? "unknown" }
+                connection.cancel()
+                return
+            }
+        }
         // Concurrent-connection cap: refuse anything beyond the cap
         // outright (no response — the socket never enters service).
         guard activeConnectionCount < Self.maxConcurrentConnections else {
@@ -210,7 +330,7 @@ public final class EventListener: @unchecked Sendable {
         }))
     }
 
-    /// Accumulates data from the connection until we have a complete,
+    /// Accumulates data from the connection until a complete,
     /// validated NOTIFY request. Rejects: oversized headers/bodies
     /// (413), missing/invalid Content-Length (400), non-NOTIFY methods
     /// (405). This socket is reachable by any LAN peer, so framing is

@@ -49,8 +49,8 @@ public enum SunoResolver {
 
         // The clip API is authoritative: it returns the real `audio_url` (some
         // tracks — e.g. video uploads — aren't at cdn1/<uuid>.mp3), the title,
-        // the creator, and art, and 404s for non-playable ids, so we never
-        // queue a silent track.
+        // the creator, and art, and 404s for non-playable ids, so a silent
+        // track is never queued.
         guard let clip = await fetchClip(uuid: uuid), let audio = clip.audioURL, !audio.isEmpty else {
             sonosDebugLog("[SUNO] resolve: no playable clip for \(uuid)")
             throw ResolveError.notPublic
@@ -110,29 +110,85 @@ public enum SunoResolver {
         return request
     }
 
-    /// Fetch a Suno playlist / genre page and return its song URLs in order
-    /// (de-duplicated by clip UUID). The page server-renders every `/song/<uuid>`
-    /// link, so this works without the page being open in the web view.
+    /// Fetch a Suno playlist's songs in order, de-duplicated by clip UUID.
+    ///
+    /// The playlist API is authoritative: one request returns every clip
+    /// with its title, artist, art and audio URL. Suno's playlist pages
+    /// return 200 with the clip ids buried in a streamed React payload and
+    /// no `/song/` href, so the HTML is only a fallback — first `og:audio`
+    /// CDN links, then `/song/` hrefs.
     public static func playlistSongURLs(_ playlistURL: String) async -> [String] {
         guard let url = URL(string: playlistURL) else { return [] }
-        var request = URLRequest(url: url)
-        request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            forHTTPHeaderField: "User-Agent"
-        )
-        guard let (data, _) = try? await session.data(for: request) else { return [] }
-        let html = String(data: data, encoding: .utf8) ?? ""
-        guard let re = try? NSRegularExpression(pattern: "/song/(\(uuidPattern))") else { return [] }
-        let ns = html as NSString
+        let identifier = url.pathComponents.last(where: { $0.range(of: uuidPattern, options: .regularExpression) != nil })
+
+        if let identifier, let viaAPI = await playlistClipsFromAPI(identifier), !viaAPI.isEmpty {
+            sonosDebugLog("[SUNO] playlist \(identifier) → \(viaAPI.count) songs (api)")
+            return viaAPI.map { "https://suno.com/song/\($0)" }
+        }
+
+        guard let html = await fetchHTML(url) else { return [] }
         var seen = Set<String>()
         var out: [String] = []
-        re.enumerateMatches(in: html, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
-            guard let m = m else { return }
-            let uuid = ns.substring(with: m.range(at: 1)).lowercased()
-            if seen.insert(uuid).inserted { out.append("https://suno.com/song/\(uuid)") }
+        func collect(_ pattern: String) {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { return }
+            let ns = html as NSString
+            re.enumerateMatches(in: html, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+                guard let m else { return }
+                let uuid = ns.substring(with: m.range(at: 1)).lowercased()
+                if seen.insert(uuid).inserted { out.append("https://suno.com/song/\(uuid)") }
+            }
         }
-        sonosDebugLog("[SUNO] playlist \(url.lastPathComponent) → \(out.count) songs")
+        collect("/song/(\(uuidPattern))")
+        // og:audio carries one CDN URL per track.
+        collect("cdn[0-9]*\\.suno\\.ai/(\(uuidPattern))")
+        sonosDebugLog("[SUNO] playlist \(url.lastPathComponent) → \(out.count) songs (html)")
         return out
+    }
+
+    /// Clip ids for a playlist, in order, straight from the API. Pages until
+    /// a page comes back empty; a long playlist is served in pages of 20.
+    private static func playlistClipsFromAPI(_ identifier: String) async -> [String]? {
+        var ids: [String] = []
+        var seen = Set<String>()
+        for page in 0..<25 {
+            guard let url = URL(string:
+                "https://studio-api.prod.suno.com/api/playlist/\(identifier)/?page=\(page)") else { break }
+            var request = URLRequest(url: url)
+            request.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
+            guard let (data, response) = try? await session.data(for: request),
+                  (response as? HTTPURLResponse)?.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return ids.isEmpty ? nil : ids }
+
+            let clips = (json["playlist_clips"] as? [[String: Any]]) ?? []
+            if clips.isEmpty { break }
+            let countBefore = ids.count
+            for entry in clips {
+                guard let clip = entry["clip"] as? [String: Any],
+                      let id = clip["id"] as? String,
+                      // A clip with no audio URL is still generating or was
+                      // removed; queueing it would play silence.
+                      let audio = clip["audio_url"] as? String, !audio.isEmpty
+                else { continue }
+                if seen.insert(id.lowercased()).inserted { ids.append(id.lowercased()) }
+            }
+            // `page` beyond the first currently returns the same clips rather
+            // than an empty page, so a page that adds nothing new is the end.
+            // Trusting an empty page alone would fire 24 redundant requests
+            // for every playlist.
+            if ids.count == countBefore { break }
+        }
+        return ids.isEmpty ? nil : ids
+    }
+
+    private static let browserUserAgent =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+
+    private static func fetchHTML(_ url: URL) async -> String? {
+        var request = URLRequest(url: url)
+        request.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
+        guard let (data, _) = try? await session.data(for: request) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     /// Fetch a clip's lyrics from Suno's public clip endpoint (no auth for

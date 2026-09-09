@@ -36,14 +36,37 @@ public enum URIPrefix {
     /// is a track, not radio; classing it as radio mislabeled the
     /// source ("Radio" instead of the service), hid Up Next, set
     /// stationName on direct-played favorites, and excluded real
-    /// album art from the Club Vis wall.
+    /// album art from the Club Vis wall. Amazon Music tracks use the
+    /// same scheme with a `catalog/tracks/<asin>/` path (see
+    /// `ItemIDStyle.amazonCatalogPath`) and are tracks too.
     public static func isRadio(_ uri: String) -> Bool {
         if uri.hasPrefix(sonosApiHLSStatic) {
-            let decoded = uri.removingPercentEncoding ?? uri
-            return !decoded.contains("song:")
+            return !isHLSStaticTrack(uri)
         }
         return uri.hasPrefix(sonosApiStream) || uri.hasPrefix(sonosApiRadio) ||
             uri.hasPrefix(rinconMP3Radio) || uri.hasPrefix(sonosApiHLS)
+    }
+
+    /// True if an `x-sonosapi-hls-static` URI addresses an on-demand
+    /// track rather than a station: Apple/YouTube `song:<id>` or Amazon
+    /// `catalog/tracks/<asin>/` (browse/queue) and `catalog:track:asin:<asin>`
+    /// (the per-song TrackURI Sonos reports while an Amazon station plays).
+    public static func isHLSStaticTrack(_ uri: String) -> Bool {
+        guard uri.hasPrefix(sonosApiHLSStatic) else { return false }
+        let decoded = uri.removingPercentEncoding ?? uri
+        return decoded.contains("song:") || isAmazonTrackPath(decoded)
+    }
+
+    /// True if this is an Amazon Music on-demand track URI
+    /// (`x-sonosapi-hls-static:catalog%2ftracks%2f<asin>%2f?sid=201…` or
+    /// `x-sonosapi-hls-static:catalog%3atrack%3aasin%3a<asin>?sid=201…`).
+    public static func isAmazonTrack(_ uri: String) -> Bool {
+        guard uri.hasPrefix(sonosApiHLSStatic) else { return false }
+        return isAmazonTrackPath(uri.removingPercentEncoding ?? uri)
+    }
+
+    private static func isAmazonTrackPath(_ decoded: String) -> Bool {
+        decoded.contains("catalog/tracks/") || decoded.contains("catalog:track:asin:")
     }
 
     /// Extracts the numeric Apple Music catalog song ID from a Sonos URI.
@@ -113,7 +136,7 @@ public enum ServiceID {
         tuneIn: "TuneIn",
         youTubeMusic: "YouTube Music",
         sonosRadio: "Sonos Radio",
-        tuneInNew: "TuneIn",
+        tuneInNew: "TuneIn (new)",
         siriusXM: "SiriusXM",
     ]
 }
@@ -162,10 +185,20 @@ public enum ServiceName {
         // TIDAL plays via a resolved `audio.tidal.com` CDN URL with no sid=,
         // so the host substring is the only signal at this layer.
         if decoded.contains("tidal") { return tidal }
+        // Radio Paradise and SomaFM resolve to direct HTTPS streams with no
+        // sid, so the host is the only thing identifying them here too.
+        if decoded.contains("radioparadise") { return radioParadise }
+        if decoded.contains("somafm") { return "SomaFM Radio" }
         if URIPrefix.isRadio(uri) { return radio }
         if decoded.contains("spotify") { return spotify }
         if decoded.contains("apple") { return appleMusic }
         if decoded.contains("amazon") || decoded.contains("amzn") { return amazonMusic }
+        // A plain-HTTP URI on a known media-server host is that server's
+        // track; its name is the service identity, not generic "Streaming".
+        if decoded.hasPrefix("http"), let host = URL(string: uri)?.host,
+           let server = MediaServerService.serverName(servingHost: host) {
+            return server
+        }
         return streaming
     }
 
@@ -223,6 +256,9 @@ public enum SonosProtocol {
 // MARK: - Timing Constants
 
 public enum Timing {
+    /// Days a deleted Choragus playlist stays in Deleted Items before
+    /// it is removed for good.
+    public static let deletedSavedQueueRetentionDays = 30
     public static let defaultGracePeriod: TimeInterval = 5
     public static let playbackGracePeriod: TimeInterval = 10
     public static let soapRequestTimeout: TimeInterval = 10
@@ -246,12 +282,9 @@ public enum Timing {
     public static let statusMessageDismiss: TimeInterval = 3
     public static let subscriptionRenewalCheck: TimeInterval = 60
     /// `HybridEventFirstTransport` reconciliation safety-net cadence.
-    /// Reverted to 15 s after a 60 s setting coincided with an episode
-    /// where AVTransport / ContentDirectory event delivery silently
-    /// stalled for ~14 minutes — events stopped flowing and the longer
-    /// reconciliation interval no longer masked the gap quickly enough
-    /// to be invisible. Until the underlying event-flow issue is
-    /// understood the safety net stays tight.
+    /// Kept tight: AVTransport / ContentDirectory event delivery can
+    /// stall silently for minutes, and a longer interval leaves that
+    /// gap visible.
     public static let reconciliationPolling: TimeInterval = 15
     public static let legacyPolling: TimeInterval = 5
     /// Cadence of the active-group position rebase poll driven by
@@ -274,7 +307,7 @@ public enum Timing {
     /// Poll cadence while waiting for the user to approve Last.fm auth
     /// in their browser.
     public static let lastFMAuthPollInterval: UInt64 = 2_000_000_000
-    /// How long we'll keep polling after opening the browser before
+    /// How long polling continues after opening the browser before
     /// giving up on `auth.getSession`.
     public static let lastFMAuthTimeout: TimeInterval = 90
     /// Debounce between scroll-wheel deltas and the SOAP volume commit —
@@ -285,6 +318,23 @@ public enum Timing {
 // MARK: - UserDefaults Keys
 
 public enum UDKey {
+    /// Tab tag Settings should open on next appearance (consumed once).
+    public static let settingsPendingTab = "settings.pendingTab"
+    /// Playlist Builder AI provider selection + per-provider settings.
+    public static let playlistAIEnabled = "playlistAI.enabled"
+    /// True after a successful Settings-tab connection test; cleared on
+    /// any provider/model/endpoint/key change.
+    public static let playlistAIVerified = "playlistAI.verified"
+    public static let playlistAIProvider = "playlistAI.provider"
+    public static let playlistAIClaudeModel = "playlistAI.claudeModel"
+    public static let playlistAIOpenAIModel = "playlistAI.openaiModel"
+    public static let playlistAICustomBaseURL = "playlistAI.customBaseURL"
+    public static let playlistAICustomModel = "playlistAI.customModel"
+    /// JSON `[AIServiceProfile]` and the selected profile's id. The
+    /// per-provider keys above are legacy: read once by
+    /// `AIServiceProfileStore.migrateLegacyIfNeeded`.
+    public static let playlistAIProfiles = "playlistAI.profiles"
+    public static let playlistAISelectedProfile = "playlistAI.selectedProfile"
     public static let startupMode = "startupMode"
     public static let communicationMode = "communicationMode"
     public static let discoveryMode = "discoveryMode"
@@ -292,6 +342,21 @@ public enum UDKey {
     /// Default 3401; users on segmented networks scope a firewall rule to it
     /// (speakers → controller). 0/unset = default. Applied at next launch.
     public static let eventListenerPort = "eventListener.port"
+    /// MCP server (agent access): on/off, LAN exposure, port, sleep inhibit.
+    public static let mcpEnabled = "mcp.enabled"
+    public static let mcpAllowLAN = "mcp.allowLAN"
+    public static let mcpPort = "mcp.port"
+    public static let mcpPreventSleep = "mcp.preventSleep"
+    public static let mcpTokens = "mcp.tokens"
+    /// Highest volume an agent may set through MCP (0-100); unset reads as 80.
+    public static let mcpMaxVolume = "mcp.maxVolume"
+    /// Quiet hours: a lower agent volume cap between two hours of the day.
+    public static let mcpQuietEnabled = "mcp.quietEnabled"
+    public static let mcpQuietStart = "mcp.quietStart"
+    public static let mcpQuietEnd = "mcp.quietEnd"
+    public static let mcpQuietMaxVolume = "mcp.quietMaxVolume"
+    /// Show the MCP status pill in the main toolbar; absent reads as on.
+    public static let mcpShowInToolbar = "mcp.showInToolbar"
     /// Hop limit for outbound SSDP M-SEARCH datagrams. The socket default is
     /// 1, which a router drops at the first hop, so speakers on another VLAN
     /// or subnet never see the search. Raising it lets the search cross a
@@ -299,6 +364,11 @@ public enum UDKey {
     /// where IGMP snooping or the AP blocks the traffic outright.
     /// 0/unset = `Timing.ssdpDefaultMulticastTTL`. Applied on next scan.
     public static let ssdpMulticastTTL = "ssdp.multicastTTL"
+    /// Addresses probed directly for speakers, newline-separated, in addition
+    /// to whatever multicast finds. For networks that block multicast
+    /// outright, where no hop limit helps. One address is normally enough:
+    /// the topology query on that speaker returns the rest of the household.
+    public static let seedSpeakerAddresses = "discovery.seedAddresses"
     public static let appearanceMode = "appearanceMode"
     /// Independent appearance preference for the karaoke popout
     /// window. Defaults to `.dark` because the karaoke window is an
@@ -334,6 +404,9 @@ public enum UDKey {
     public static let middleClickMuteEnabled = "middleClickMuteEnabled"
     public static let imageCacheMaxSizeMB = "imageCacheMaxSizeMB"
     public static let imageCacheMaxAgeDays = "imageCacheMaxAgeDays"
+    /// Highest art-cache purge generation this install has already run.
+    /// See `ImageCache.purgeGeneration`.
+    public static let imageCachePurgeGeneration = "imageCachePurgeGeneration"
     public static let classicShuffleEnabled = "classicShuffleEnabled"
     public static let chartTheme = "chartTheme"
     public static let customPrimaryColor = "customPrimary"
@@ -345,6 +418,11 @@ public enum UDKey {
     public static let calmRadioEnabled = "calmRadioEnabled"
     public static let somaFMEnabled = "somaFMEnabled"
     public static let sunoEnabled = "sunoEnabled"
+    /// Master toggle for UPnP/DLNA media-server discovery and browsing.
+    public static let mediaServersEnabled = "mediaServers.enabled"
+    /// When true, only servers the user added by address are shown; SSDP
+    /// discovery results for other servers are ignored.
+    public static let mediaServersManualOnly = "mediaServers.manualOnly"
     public static let appleMusicSearchEnabled = "appleMusicSearchEnabled"
     /// Mirrors the live MusicKit authorisation state to a fast-readable
     /// @AppStorage flag — BrowseView consults it to auto-show / auto-
@@ -396,12 +474,9 @@ public enum UDKey {
     public static let realtimeStats = "realtimeStats"
     public static let rollupInterval = "rollupInterval"
     /// User-overridable cap on play-history row count. Sentinel `0`
-    /// means unlimited (no pruning). Default for unset accounts is
-    /// effectively unlimited via `UserDefaults.integer`'s zero
-    /// fallback — users who were silently capped at the old 50k
-    /// `CacheDefaults.playHistoryMaxEntries` ceiling now keep
-    /// everything they have unless they explicitly opt back into a
-    /// smaller cap from Settings → Music → Play History.
+    /// means unlimited (no pruning); an unset key reads as `0` via
+    /// `UserDefaults.integer`, so the default is unlimited unless a
+    /// smaller cap is chosen in Settings → Music → Play History.
     public static let playHistoryMaxEntries = "playHistoryMaxEntries"
 
     // MARK: - Visualisations (Club Vis)
@@ -563,8 +638,11 @@ public enum PageSize {
 public enum CacheDefaults {
     public static let imageDiskMaxSizeMB = 500
     public static let imageDiskMaxAgeDays = 30
-    public static let imageMemoryCountLimit = 200
-    public static let imageMemoryBytesLimit = 50 * 1024 * 1024
+    /// Sized for the Queue Library grid: 74 tiles × 4 decoded 240 px
+    /// thumbnails (~230 KB each) must fit or the grid evicts its own
+    /// cells while scrolling and re-decodes on every pass.
+    public static let imageMemoryCountLimit = 800
+    public static let imageMemoryBytesLimit = 96 * 1024 * 1024
     public static let imageEvictionFrequency = 50
     public static let playHistoryMaxEntries = 50_000
 }
@@ -623,7 +701,7 @@ public enum QueueChangeKey {
     /// An array of `QueueItem` the view can append directly without
     /// re-fetching the whole queue from the coordinator. If absent,
     /// subscribers should do a full reload instead. Present on single- or
-    /// multi-track adds where we know the resulting track numbers; absent
+    /// multi-track adds with known resulting track numbers; absent
     /// on container adds (server-side expansion) or when the SOAP response
     /// didn't include a usable track number.
     public static let optimisticItems = "optimisticItems"
@@ -633,10 +711,6 @@ public enum QueueChangeKey {
 
 public enum AppPaths {
     /// Returns the Choragus directory in Application Support, creating it if needed.
-    /// (Pre-rename builds used a `SonosController` directory at the same parent.
-    /// In the sandboxed build the new bundle ID gets a fresh container, so cross-
-    /// directory access doesn't apply — the old directory is in the old bundle's
-    /// container and isn't visible to the renamed app.)
     public static var appSupportDirectory: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
@@ -674,10 +748,10 @@ public enum URLEncode {
 public enum DIDLNormalize {
     /// `resourceMetadata` reaches consumers either raw or whole-document
     /// escaped depending on producer. Detect the escaped form by the
-    /// document signature (`&lt;DIDL-Lite`), never by any `&lt;` — a raw
+    /// document signature (`&lt;DIDL-Lite`), never by any `&lt;`: a raw
     /// DIDL whose title contains a literal `<` (escaped to `&lt;` in its
-    /// text node) matched the loose sniff and was unescaped wholesale,
-    /// leaving bare `&` in text nodes that the speaker rejects.
+    /// text node) would otherwise be unescaped wholesale, leaving bare
+    /// `&` in text nodes that the speaker rejects.
     public static func metadata(_ meta: String) -> String {
         meta.contains("&lt;DIDL-Lite") ? XMLResponseParser.xmlUnescape(meta) : meta
     }

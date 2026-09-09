@@ -29,13 +29,16 @@ struct ContentView: View {
         return value
     }
 
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var presetManager: PresetManager
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     @EnvironmentObject var plexAuth: PlexAuthManager
     @EnvironmentObject var artCoordinator: ArtCoordinator
     @ObservedObject private var localNetworkMonitor = LocalNetworkPermissionMonitor.shared
+    @ObservedObject private var mcpServer = ChoragusMCPServer.shared
+    @ObservedObject private var mcpActivity = MCPActivityLog.shared
+    @AppStorage(UDKey.mcpShowInToolbar) private var showMCPInToolbar = true
     /// Forces the entire window subtree to re-render when the user
     /// changes the app language in Settings. `L10n.tr(...)` reads
     /// `UserDefaults` every call, but SwiftUI has no way to know that
@@ -48,20 +51,17 @@ struct ContentView: View {
     @State private var selectedGroupID: String?
     @AppStorage(UDKey.showQueue) private var showQueue = false
     @AppStorage(UDKey.showBrowse) private var showBrowse = false
-    // Alarms: Sonos S2 app uses cloud API for alarms, not local UPnP AlarmClock.
-    // UPnP returns 0 alarms. Feature removed until cloud API access is available.
+    // Alarms: the Sonos S2 app uses the cloud API, not local UPnP AlarmClock,
+    // which returns 0 alarms.
     @State private var showPresetManager = false
     /// Drives the diagnostics-button red badge. True only when an error-level
     /// diagnostic exists (seeded from the store at launch, flipped live via
     /// `.diagnosticsErrorStateChanged`). Warnings / info / empty leave it false.
     @State private var hasDiagnosticError = false
 
-    /// Opens the proper macOS Preferences window — the standalone
-    /// non-modal Settings scene wired up at App level. Replaces the
-    /// previous `.sheet`-based Settings presentation, which was modal
-    /// over the main window and blocked any other alert/sheet from
-    /// surfacing while it was open (notably Sparkle's "Install and
-    /// Relaunch" prompt during in-app auto-update).
+    /// Opens the standalone non-modal Settings scene wired up at App
+    /// level. A modal sheet would block every other alert / sheet while
+    /// open (notably Sparkle's "Install and Relaunch" prompt).
     @Environment(\.openSettings) private var openSettings
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .automatic
     @State private var showFirstRunWelcome = false
@@ -75,11 +75,10 @@ struct ContentView: View {
     private let nowPlayingMinWidth: CGFloat = 640
     private let browseMinWidth: CGFloat = 260
     private let browseMaxWidth: CGFloat = 600
-    /// 302 — the queue width measured from the user's reference window
-    /// (1409 × 597) where the four toolbar icons, the title, the track
-    /// count, and the vertical scroll-bar gutter all render without
-    /// clipping. Sums to a `requiredMinWidth` of exactly 1409 pt
-    /// (200 + 260 + 6 + 640 + 1 + 302) when all panels are visible.
+    /// 302 — the queue width at which the four toolbar icons, the title,
+    /// the track count and the scroll-bar gutter render without clipping.
+    /// `requiredMinWidth` sums to 1409 pt (200 + 260 + 6 + 640 + 1 + 302)
+    /// when all panels are visible.
     private let queueMinWidth: CGFloat = 302
     private let queueMaxWidth: CGFloat = 600
     private let sidebarWidth: CGFloat = 200
@@ -159,10 +158,9 @@ struct ContentView: View {
     /// Minimum window width needed for current panel configuration.
     /// Whether the speaker sidebar column is currently consuming
     /// horizontal space. NavigationSplitView's `.detailOnly`
-    /// visibility hides the sidebar entirely; in that mode we
-    /// shouldn't reserve sidebar width in the OS resize floor or the
-    /// user gets a window minimum 200 pt larger than the actual
-    /// content needs.
+    /// visibility hides the sidebar entirely; reserving sidebar width in
+    /// the OS resize floor in that mode makes the window minimum 200 pt
+    /// larger than the content needs.
     private var sidebarShown: Bool {
         sidebarVisibility != .detailOnly
     }
@@ -319,17 +317,11 @@ struct ContentView: View {
                 }
             )) {
                 RoomListView(selectedGroupID: $selectedGroupID)
-                    // Pinned to the exact width the panel-width
-                    // calculator (`requiredMinWidth`, `panelWidths`)
-                    // assumes. The previous range (min 140, ideal 180,
-                    // max 220) let the user drag the sidebar to a width
-                    // greater than `sidebarWidth`, leaving
-                    // `requiredMinWidth` short by up to 20 pt — the OS
-                    // resize floor was wrong, the queue panel got
-                    // squeezed below its declared minimum, and the
-                    // queue toolbar's trailing icons clipped off the
-                    // right edge. Pinning to a single value keeps the
-                    // calculator and the rendered layout in lockstep.
+                    // Pinned to the exact width the panel-width calculator
+                    // (`requiredMinWidth`, `panelWidths`) assumes. A drag
+                    // range wider than `sidebarWidth` leaves `requiredMinWidth`
+                    // short, squeezes the queue panel below its minimum and
+                    // clips its trailing toolbar icons.
                     .navigationSplitViewColumnWidth(sidebarWidth)
             } detail: {
                 if let group = selectedGroup {
@@ -338,7 +330,7 @@ struct ContentView: View {
                         HStack(spacing: 0) {
                             if showBrowse {
                                 BrowseView(group: group)
-                                    .environmentObject(sonosManager)
+                                    .choragusServices(sonosManager)
                                     .frame(width: sizes.browse)
 
                                 // Draggable resize handle
@@ -539,16 +531,16 @@ struct ContentView: View {
                     .help(L10n.muteOrUnmuteAll)
                     .sheet(isPresented: $showPresetManager) {
                         PresetManagerView()
-                            .environmentObject(sonosManager)
+                            .choragusServices(sonosManager)
                             .environmentObject(presetManager)
                     }
 
                     Button {
                         WindowManager.shared.openQueueLibraryForActiveGroup()
                     } label: {
-                        Image(systemName: "rectangle.stack")
+                        Image(systemName: "music.note.list")
                     }
-                    .help(L10n.queueLibrary)
+                    .help(L10n.playlistManager)
 
                     Button {
                         WindowManager.shared.togglePlayHistory()
@@ -556,6 +548,13 @@ struct ContentView: View {
                         Image(systemName: "chart.bar.xaxis")
                     }
                     .help(L10n.listeningStats)
+
+                    Button {
+                        WindowManager.shared.openAlarms()
+                    } label: {
+                        Image(systemName: "alarm")
+                    }
+                    .help(L10n.manageAlarms)
 
                     Menu {
                         Button(L10n.karaoke) {
@@ -569,11 +568,6 @@ struct ContentView: View {
                     }
                     .menuIndicator(.hidden)
                     .help(L10n.visualisationMenu)
-
-                    // Rescan button moved to the room/speaker list
-                    // (RoomListView header) so it lives next to the
-                    // speakers it operates on. Removed from the
-                    // global toolbar to declutter.
 
                     if !hideDiagnosticsIcon {
                         Button {
@@ -590,6 +584,15 @@ struct ContentView: View {
                     }
 
                     supportMenu
+
+                    Button {
+                        WindowManager.shared.openHelp()
+                    } label: {
+                        Image(systemName: "questionmark.circle")
+                    }
+                    .help(L10n.choragusHelp)
+
+                    mcpIndicator
 
                     Button {
                         openSettings()
@@ -670,9 +673,8 @@ struct ContentView: View {
     }
 
     /// Speaker / group menu (pause-all, resume-all, mute, presets).
-    /// Extracted so the toolbar `ToolbarItemGroup` body fits inside
-    /// the Swift compiler's type-inference budget once the karaoke
-    /// button and the diagnostics button are also present.
+    /// Extracted so the toolbar `ToolbarItemGroup` body stays inside
+    /// the Swift compiler's type-inference budget.
     @ViewBuilder
     private var speakerControlMenu: some View {
         Menu {
@@ -708,15 +710,14 @@ struct ContentView: View {
         .help(L10n.muteOrUnmuteAll)
         .sheet(isPresented: $showPresetManager) {
             PresetManagerView()
-                .environmentObject(sonosManager)
+                .choragusServices(sonosManager)
                 .environmentObject(presetManager)
         }
     }
 
-    /// Same extraction reason as `karaokeToolbarButton` — the inline
-    /// conditional + ZStack composite of the bug icon was tipping the
-    /// toolbar `ToolbarItemGroup` over the type-inference complexity
-    /// budget once the karaoke button was added beside it.
+    /// Same extraction reason as `karaokeToolbarButton`: the inline
+    /// conditional + ZStack composite tips the toolbar `ToolbarItemGroup`
+    /// over the type-inference complexity budget.
     @ViewBuilder
     private var diagnosticsToolbarButton: some View {
         if !hideDiagnosticsIcon {
@@ -734,6 +735,51 @@ struct ContentView: View {
     /// Toolbar affordance for the support panel. Absent entirely when
     /// packaging injected nothing — a fork's build shows no support
     /// button at all, rather than one leading to an empty sheet.
+    /// Shown only while Agent access is switched on: a dot in the
+    /// server's state, and the count of requests assistants have made
+    /// this session. Opens the Diagnostics window on its own tab.
+    @ViewBuilder
+    private var mcpIndicator: some View {
+        if mcpServer.isEnabled && showMCPInToolbar {
+            Button {
+                WindowManager.shared.openDiagnostics(tab: .mcp)
+            } label: {
+                HStack(spacing: 5) {
+                    Text("MCP")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    Circle()
+                        .fill(mcpIndicatorColor)
+                        .frame(width: 7, height: 7)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(.quaternary.opacity(0.6)))
+            }
+            .buttonStyle(.plain)
+            .help(mcpIndicatorHelp)
+        }
+    }
+
+    private var mcpIndicatorColor: Color {
+        switch mcpServer.status {
+        case .running: return .green
+        case .stopped: return .secondary
+        case .failed: return .orange
+        }
+    }
+
+    private var mcpIndicatorHelp: String {
+        let calls = mcpActivity.callsByClient.values.reduce(0, +)
+        switch mcpServer.status {
+        case .running(let port):
+            return "\(L10n.mcpSection) — \(L10n.mcpStatusRunning) · \(port) · \(L10n.mcpTokenCallsFormat(calls))"
+        case .stopped:
+            return "\(L10n.mcpSection) — \(L10n.mcpStatusStopped)"
+        case .failed(let reason):
+            return "\(L10n.mcpSection) — \(L10n.mcpStatusFailedFormat(reason))"
+        }
+    }
+
     @ViewBuilder
     private var supportMenu: some View {
         if Self.supportURL != nil || Self.bitcoinAddress != nil {
@@ -869,7 +915,7 @@ private struct WindowFrameAutosaver: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         // `view.window` is nil at make-time. Defer to the next runloop
-        // tick so the host has attached the view before we look it up.
+        // tick so the host has attached the view before the lookup.
         DispatchQueue.main.async {
             view.window?.setFrameAutosaveName(name)
         }

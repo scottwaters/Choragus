@@ -2,21 +2,19 @@
 
 **Native macOS controller for Sonos speakers.** Built entirely in Swift and SwiftUI. Ships as a universal binary with native support for both Apple Silicon and Intel Macs.
 
-> Choragus was previously named *SonosController*. Same project, same code; renamed in respect of the Sonos trademark.
-
 > **Looking for internals?** See [technical_readme.md](technical_readme.md) for architecture, protocols, and build instructions.
 
-![Choragus in light and dark mode](screenshots/v4.14/theme_light_dark.png)
+<img src="screenshots/v5/theme_light_dark.png" alt="Choragus in light and dark mode" width="1044">
 
 ---
 
-## Why This Exists
+## The Why
 
-Sonos shipped a macOS desktop controller for years, but it was an Intel-only (x86_64) binary that relied on Apple's Rosetta 2 translation layer. Apple is discontinuing Rosetta, which means the official Sonos desktop app will stop working on modern Macs — and Sonos appears to have no plans to release a native replacement.
+Sonos shipped a macOS desktop controller for years, but it was an Intel-only (x86_64) binary that relied on Apple's Rosetta 2 translation layer. Apple is discontinuing Rosetta 2 support, which means the official Sonos desktop app will stop working on modern Macs — and Sonos provided no indications of a replacement at the time, plus there were many personal tweaks I wanted.
 
-This project was built from scratch by a Sonos fan who wanted to keep controlling their speakers from their Mac. It is not affiliated with, endorsed by, or derived from Sonos, Inc. in any way. No proprietary Sonos code, assets, or intellectual property were used. The app communicates with speakers using the open UPnP protocols that any device on your local network can see and use. All control happens locally — nothing is sent to the cloud.
+This project was built from scratch by a Sonos fan who wanted to keep controlling their speakers from their Mac and add the functionality I wanted but was missing. It is not affiliated with, endorsed by, or derived from Sonos, Inc. in any way. No proprietary Sonos code, assets, or intellectual property were used. The app communicates with speakers using the open UPnP protocols that any device on your local network can see and use. All control happens locally — nothing is sent to the cloud.
 
-Tested against a live Sonos system with 16 speakers across 10 zones, a large local music library (45,000+ tracks), and multiple streaming services (Apple Music, Spotify, TuneIn, Calm Radio, Sonos Radio).
+Tested against a live Sonos system with 22 speakers across 15 zones and both S1 and S2 generations, a large local music library (45,000+ tracks), and multiple streaming services (Apple Music, Spotify, TuneIn, Calm Radio, Sonos Radio, etc).
 
 ---
 
@@ -41,235 +39,182 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 
 ---
 
-## What's New in v4.14
+## What's new in v5.0
 
-Home-theatre controls, sidebar grouping, and a queue that keeps up.
+Many additions - an AI playlist builder and a local MCP server so your AI assistant can drive choragus and the speakers — plus DLNA media servers, alarms, self repairing queues, restructure of main app core code, more music service support, and a long, long list of smaller things.
 
-- **Night Mode and Dialog Enhancement in Now Playing.** No trip to the EQ window for the two settings you change nightly — and the Surrounds tab now appears on every system that actually has surrounds.
-- **Group from the sidebar.** Double-click a room to edit its group, or drag one room onto another to group them.
-- **The queue keeps up.** The playing track stays in view as tracks change, with the highlight and level bars arriving within about a second instead of lagging or dropping out.
-- **Silent queues explain themselves.** When a saved queue's track links have expired, the speaker skips through them without a sound and without an error; Choragus now tells you what happened and what to do about it.
-- **Media keys can be turned off.** Some Bluetooth and USB headsets send a play command when a call ends, which could start music unexpectedly. Settings → Keyboard Controls hands the keys back to other apps.
-- **Volume that moves together.** Hold the group slider at zero for a second and every speaker rises in sync.
-- **Rename favourites**, and see which folders each Sonos system indexes as local music.
-- **Rooms that went missing come back.** A group whose coordinator no longer matched its own members left the system visible but uncontrollable until a relaunch; it now repairs itself.
-- **Speakers on another VLAN.** The speaker search now crosses routers instead of stopping at the first one, with a hop limit you can raise in Settings → System.
-- **Help covers the whole app**, in all 13 languages.
+AI is entirely optional and arrives in four levels, from copying a prompt into whatever chat AI you already use, through to asking for music from your phone. **[docs/AI.md](docs/AI.md) is the guide**: what each level does, what it needs, how to set it up, and what leaves your Mac.
+
+```mermaid
+flowchart LR
+    L0["Level 0<br/>No AI - No Worries 😁"] --> L1["Level 1 (Chat)<br/>Copy and paste between Chat and choragus"]
+    L1 --> L2["Level 2 (Chat)<br/>Connected Automatic Playlist Building"]
+    L2 --> L3["Level 3 (MCP)<br/>Assistant on this Mac"]
+    L3 --> L4["Level 4 (MCP)<br/>Same from your phone"]
+
+    classDef none stroke:#8a8a8e,stroke-width:2px
+    classDef local stroke:#22a06b,stroke-width:2px
+    classDef cloud stroke:#8b7bf7,stroke-width:2px
+    class L0 none
+    class L1,L2 local
+    class L3,L4 cloud
+```
+
+### Build playlists with AI
+
+Describe the playlist you want — "90s trip-hop for a rainy evening, nothing over 5 minutes", "twenty songs my kids will sing along to", "the best of 1971", "songs by artists the Beatles cited as their biggest influences in earliest to latest release date"  — and the songs stream into a table as the model writes them. Then **Match to** a source: your **local library first** if you like, Apple Music, Spotify or any signed-in service, or a media server such as Plex. Each song becomes a real, playable track; the ones that could not be found are listed so you can try them elsewhere. Save the result as a Choragus playlist (into any folder), add it to the queue, play it next, or play it now.
+
+- Works with **Claude, OpenAI, or any OpenAI-compatible endpoint** — DeepSeek, Ollama, LM Studio and the like — set up under Settings → AI with a name, a key kept in the keychain, and a Test button; the model list comes from the provider itself.
+- No AI service at all? **Copy prompt** gives you a ready-made request for any chat AI, and **Paste list** reads the reply back. The same button takes any list you type yourself, one song per line.
+- The reply is treated as untrusted text end to end, keys are only ever sent to their own provider, and the matching paces itself so Apple Music does not throttle you.
+
+<img src="screenshots/v5/build_playlist.png" alt="Build Playlist — brief, matched songs, and the save options" width="1000">
+
+Setup for both ways of doing it — with a key, or with nothing but the clipboard — is in [docs/AI.md](docs/AI.md#level-1--copy-and-paste-playlists).
+
+<img src="screenshots/v5/ai/settings_ai_playlist_generation.png" alt="Settings — AI tab, playlist generation" width="560">
+
+### Talk to it: AI Agent access (MCP)
+
+An AI assistant on your Mac can drive Choragus through the Model Context Protocol. The server runs inside Choragus on `127.0.0.1`; nothing is routed through a cloud on Choragus's side, and the assistant reaches your **local library and media servers** as well as the **cloud services** signed in to Sonos. Ask it to play something in a room, group the house, build a playlist from a description, tidy the queue, set an alarm, or tell you what you listened to most this month — it does the work through 116 tools over the same code the app uses — everything the app itself can do short of changing its settings.
+
+**Things you can say**
+
+- "What's playing in the kitchen?"
+- "Turn the office down to 20 and skip this track."
+- "Play Kind of Blue in the living room — from my library if you have it, otherwise Apple Music."
+- "Put the whole house on the kitchen, then put it back the way it was."
+- "Make me a 90s indie playlist from my own music and start it on the deck." The queue fills as songs match; songs it could not find are listed so you can say "try those on Spotify".
+- "Save what's in the queue as a playlist called Sunday."
+- "What have I listened to most this month?"
+- "Wake me at 6:30 on weekdays in the bedroom with the chime at volume 15."
+
+It asks before clearing a queue, deleting a playlist, preset or alarm, splitting every group or re-indexing the library, unless you switch **Skip confirmations** on for that token.
+
+**What it can reach**
+
+- Rooms, playback, volume (room, group-proportional, per speaker), mute, shuffle, repeat, crossfade, sleep timer, per-speaker EQ.
+- Your Sonos library (search by track, artist, album, genre, composer, and browse the tree), DLNA media servers, TuneIn radio, Sonos favorites, Apple Music and any signed-in service.
+- The queue: read, add, play next, move, remove, de-duplicate, jump, save as a playlist; edits can be pinned to the queue's revision so nothing changed underneath them.
+- Choragus playlists and folders: list, read, play, create, add, remove, rename, duplicate, move, delete.
+- The playlist builder as a background job: match a song list on your library first, fall back to a service for the misses, append each match to a room's queue as it lands, save the result; cancel or undo.
+- Play history: recently played, most played over any window, starred tracks, smart queues, listening stats.
+- Grouping with snapshot and restore (party mode you can undo), presets (list, read, apply, save, delete), line-in and TV inputs, Sonos alarms.
+- The rest of the app: full EQ including sub and surrounds, Sonos-side playlists, folders and Deleted Items, queue undo history, M3U/CSV export, lyrics, artist and album information, Suno links, Last.fm scrobbling, speaker network status, the diagnostics log, and opening Back of the Club or Karaoke on a room.
+
+**Setup**
+
+1. Settings → AI → AI Agent access: switch **Enable MCP server** on. Add a token for each assistant: type a name such as "Claude Desktop", pick its access level (read only, control, or manage), click Add token. The token is copied to the clipboard; paste it into the client now, because Settings shows only its first characters afterwards.
+2. Claude Desktop: open its MCP settings (Settings → Developer → Edit Config) and add the block from [MCP.md](docs/MCP.md) with the endpoint `http://127.0.0.1:52080/mcp` and your token, then restart Claude Desktop. Claude Code: one command, `claude mcp add --transport http choragus http://127.0.0.1:52080/mcp --header "Authorization: Bearer <token>"`. Cursor, VS Code and the OpenAI tools take the same endpoint; [MCP.md](docs/MCP.md) has each configuration.
+3. Keep Choragus running: **Open Choragus at login** and **Prevent the Mac from sleeping** are in the same section. The main window can stay closed when Menu Bar Controls are on.
+4. Try it: ask the assistant "what rooms do I have?" — it should list your Sonos rooms.
+
+<img src="screenshots/v5/ai/settings_agent_access.png" alt="Settings → AI → AI Agent access — tokens, access levels and the volume limit" width="560">
+
+**Safety**
+
+- Loopback only unless you allow other devices; tokens live in the keychain and are compared in constant time; web pages and unknown host names are refused; five wrong tokens lock an address out for five minutes; each token is rate-limited.
+- A volume limit for agents (default 80) and optional quiet hours with a lower limit apply to every volume change, alarm and preset; each token can be set to skip confirmations if you trust that assistant to act alone.
+- Anything that removes what cannot be put back — clearing a queue, deletes, splitting all groups, re-indexing — is marked destructive and asks the assistant to confirm.
+- Settings → AI Agent access shows every request by token; Diagnostics → AI Agent access and the bug-report bundle carry the same log.
+
+<img src="screenshots/v5/ai/diagnostics_agent_access.png" alt="The MCP badge in the toolbar, and Diagnostics → AI Agent access" width="1000">
+
+**From your phone**
+
+The phone never talks to your Mac, and nothing is published to the internet. Instead you drive a session that is *running on the Mac*, and that session makes the loopback call to Choragus. With Claude that is Remote Control — `claude --remote-control "Choragus"` on the Mac, then **Code** in the Claude app on your phone. With ChatGPT it is a Codex task backed by your Mac. Either way the full 116 tools answer exactly as they do at your desk, with no tunnel, no certificate and no public hostname. [docs/AI.md](docs/AI.md#level-4--the-same-from-your-phone) walks through it.
+
+<img src="screenshots/v5/ai/phone_remote_session.png" alt="ChatGPT on the phone driving Codex on the Mac — the request goes out, the playlist comes back saved in Choragus" width="850">
+
+[docs/AI.md](docs/AI.md#level-3--an-assistant-drives-choragus-mcp) is the step-by-step guide; [MCP.md](docs/MCP.md) lists every tool, the client configurations, and the protocol details.
+
+### Also new
+
+- **Play from your media server.** Plex, Synology, MinimServer and other DLNA/UPnP servers appear in Browse; the server supplies the library and the artwork, the speaker plays the track. Settings → Media Servers lists what was found, lets you add one by address, and names any speaker that cannot reach it.
+
+<img src="screenshots/v5/settings_music.png" alt="Settings → Music — library shares and media servers, with a display name of your own" width="560">
+
+- **Alarms, in the app.** The alarm icon in the toolbar lists every Sonos alarm with a week strip and a switch; add or edit one with time, room, music from your Sonos favorites, days, volume and duration.
+
+<img src="screenshots/v5/alarms.png" alt="The Alarms window" width="749">
+
+- **A queue that looks after itself.** Expired links and unreachable servers are found before they play and repaired where possible; select several tracks to move, copy or remove them together; the header shows the running time and the footer the time left.
+
+<img src="screenshots/v5/queue_panel.png" alt="The Queue panel — multi-select, health badges, and the footer" width="624">
+
+- **Track lengths for local music.** Sonos reports no length for library tracks; Choragus now remembers the length from the last time each one played, so the queue total, Queue Library and assistants see it.
+- **Playlist Manager grows up.** Playlists open by folder in every menu, deleted playlists wait in Deleted Items for 30 days, the window opens instantly, tracks can be played from it directly, and Build Playlist offers a fresh sample prompt each time.
+
+<img src="screenshots/v5/playlist_manager.png" alt="Playlist Manager — saved queues by source, folders, artwork grid, and the track detail pane" width="1000">
+
+- **Plex plays count.** Tracks played from your Plex server show as an active stream and count toward play history and play counts.
+- **Amazon Music works.** Sign in under Settings → Music and browse, search and play (patch contributed in #88). Amazon Music Prime plays albums, playlists and stations; single tracks need Amazon Music Unlimited.
+
+<img src="screenshots/v5/nowplaying_lyrics.png" alt="An Amazon Music track playing lossless, with synced lyrics" width="640">
+
+- **Browse is tidier.** Sidebar sections are cards you can collapse and drag into your own order; every list has a sort menu.
+- **Shortcuts can select an input.** A new Select Input action plays a speaker's line-in or TV input in any room; [docs/SHORTCUTS.md](docs/SHORTCUTS.md) covers every action and how to run one on a schedule.
+- **Diagnostics for agents.** Diagnostics → AI Agent access lists every request an assistant made, with its full arguments and result a click away, and the bug-report bundle carries the same.
+- **Help rewritten and grouped** into Listening, Music, AI, Shortcuts and System, selectable and copyable, in all 13 languages.
+
+<img src="screenshots/v5/help_ai.png" alt="Help — the AI section" width="980">
+
+ **Fixes across the board:** durations over an hour, media keys on a locked Mac, scroll-wheel direction, Suno playlists, service names in Settings, and event subscriptions that used to go quiet after a while.
 
 Full change list in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## Everything else Choragus does
+
+The long-form reference, area by area, is in **[docs/FEATURES.md](docs/FEATURES.md)**. In short:
+
+- **Three panels** — Browse, Now Playing and Queue — with full transport, shuffle, repeat, crossfade, sleep timer, group and per-speaker volume, EQ and home-theatre controls, stream-format badges, lyrics that scroll with the track, artist biographies and play history per track.
+
+<img src="screenshots/v5/nowplaying_home_theatre.png" alt="Now Playing on a home-theatre room — the TV input, its stream format, Night Mode and Dialog Enhancement" width="640">
+
+<img src="screenshots/v4.14/nowplaying_about.png" alt="The About tab — artist biography and tags from Last.fm" width="487">
+
+- **Your music, wherever it is** — the Sonos library on your NAS, Sonos favorites and playlists, media servers, Apple Music, Spotify, TIDAL, Amazon Music, Audible, Plex, TuneIn, Calm Radio, SomaFM, Sonos Radio and Suno, with search across the lot and a status dot per service in Settings.
+
+<img src="screenshots/v5/browse_spotify.png" alt="Browsing Spotify — New Releases, with the sort menu every list has" width="325">
+
+- **Playlist Manager** — saved queues on this Mac in folders, Sonos playlists, automatic history snapshots and smart queues, with M3U/CSV export.
+- **Listening Stats** — dashboard and history with filters, starring, export, and Last.fm scrobbling from your own history with per-room and per-service filters.
+- **Rooms** — drag to group, presets that recall grouping, volumes and EQ, a menu-bar mini player, and Apple Shortcuts with Siri phrases.
+
+<img src="screenshots/v5/toolbar_menu.png" alt="The speaker menu — pause all, resume all, mute all, and the group presets" width="163">
+
+<img src="screenshots/v5/presets.png" alt="Group Presets — saved grouping, volumes and EQ, applied in one click" width="680">
+
+- **Two Sonos systems at once** — S1 and S2 households side by side, each with its own library shares.
+- **Visualisations** — Back of the Club, a wall of album art lit by the current cover, and a karaoke window readable from across the room.
+
+### Karaoke and Back of the Club
+
+**Karaoke** (`⌘K`) is a pop-out window built to be read from across the room: the current line large and bright, the lines around it fading away, the album art and track in the corner. Timed lyrics scroll with the track and can be nudged a few seconds either way; plain lyrics show as text.
+
+<img src="screenshots/v4.5/karaoke_popout.png" alt="The karaoke window" width="713">
+
+**Back of the Club** (`⌘J`) fills a screen with a wall of album art from your own history, tinted by the cover playing now, with what is coming next and the artist's story down one side. Leave it on a TV or a spare display and it looks after itself.
+
+<img src="screenshots/v5/back_of_the_club.png" alt="Back of the Club — the wall, what is playing, what is next, and the artist" width="1000">
+
+### Diagnostics
+
+The Diagnostics window (toolbar activity icon) has a tab for each thing that can go wrong. **Network** reads every speaker's link: band and channel, latency, interference and firmware, with a Check Wi-Fi flag on the weak one. **Log** and **Live Events** show what the app and the speakers are saying to each other, **Speakers** each player's model, role, address, firmware and event subscription, and **AI Agent access** every request an assistant made. Copy All puts the lot on the clipboard for a bug report.
+
+<img src="screenshots/v5/diagnostics_network.png" alt="Diagnostics → Network — every speaker's band, channel, latency, interference and firmware, with a Check Wi-Fi flag on the weak one" width="1000">
+
 ## Earlier releases
 
-Notes for v4.13 and earlier are in [CHANGELOG.md](CHANGELOG.md), which carries the full dated history.
+Notes for v4.14 and earlier are in [CHANGELOG.md](CHANGELOG.md), which carries the full dated history; the [feature reference](docs/FEATURES.md) describes what those releases added as it stands today.
 
-> **Upgrading from SonosController?** v4.0 renamed the project and changed the bundle identifier, so existing SonosController installs don't auto-upgrade — download Choragus fresh and re-authenticate your music services on first launch. Play history, presets, stats, and preferences carry over automatically. Full note in [CHANGELOG.md](CHANGELOG.md#v40--2026-04-27--choragus).
+> **Upgrading from SonosController?** v4.0 renamed the project and changed the bundle identifier, so existing SonosController installs don't auto-upgrade — download Choragus once from the releases page; from then on updates arrive in the app.
 
 ---
 
-## Features
-
-### The Toolbar
-
-![The Choragus toolbar](screenshots/v4.14/toolbar.png)
-
-Left to right, above the panels:
-
-| Icon | What it does |
-|---|---|
-| Grid | Show or hide the Browse panel |
-| List | Show or hide the Queue panel |
-| Speaker | Pause all, resume all, mute all, and the preset menu |
-| Stack | Queue Library (`⌘L`) |
-| Bar chart | Listening Stats (`⇧⌘S`) |
-| Sparkles over a screen | Visualisations — Back of the Club and the karaoke popout |
-| Activity trace | Diagnostics |
-| Heart | Ways to support the project — official builds only |
-| Gear | Settings (`⌘,`) |
-
-![The speaker menu — pause all, resume all, mute all, and group presets](screenshots/v4/toolbar_menu.png)
-
-### Now Playing, Browse, and Queue
-
-![The three panels — Browse, Now Playing, and Queue](screenshots/v4/mainview.png)
-
-The main view shows three panels: **Browse** (left), **Now Playing** (centre), and **Queue** (right). All three are togglable from the toolbar. The Now Playing panel is guaranteed a minimum width of 640 px — the side panels shrink proportionally when the window is resized.
-
-**Now Playing** shows album art with automatic artwork resolution from multiple sources (speaker metadata, iTunes Search, manual override). Right-click the artwork to search for alternative art, ignore incorrect art, or refresh. The service tag names the source: Spotify, Radio, Music Library, and so on.
-
-**Star any track** — click the star icon next to Copy Track Info to star the currently playing track. Works for any source: queue tracks, radio streams, Spotify, Apple Music — any track where metadata is available. Starred tracks are saved locally and can be filtered in the listening history. Star and unstar from Now Playing or the menu-bar mini player.
-
-**Copy Track Details** copies the current track's metadata to the clipboard in a clean format:
-
-```
-Artist: Lofi Girl
-Album: Lofi Girl x Assassin's Creed Shadows - stealthy beats to relax to
-Track: A Moment of Sweetness - Prithvi Remix
-```
-
-Useful for sharing, logging, or searching another platform.
-
-**Playback controls** — play, pause, stop, skip, seek with a draggable slider and smooth position interpolation. Shuffle, repeat (off / all / one), crossfade, sleep timer. Pause-all / Resume-all from the toolbar menu.
-
-**Stream details** sit above the service name: a **Dolby Atmos** badge when the speaker reports a spatial stream and the coordinator supports it, the **TV input format** for HDMI sources (Dolby Digital 5.1, Atmos TrueHD 7.1, DTS and so on), and otherwise the container with bit depth and sample rate — `FLAC · Lossless · 24-bit/96 kHz`. Nothing is shown when the speaker reports no detail, which is common on services that don't publish it. The Back of the Club wall shows the same line above the source name.
-
-For a home-theatre zone, **Night Mode** and **Dialog Enhancement** appear directly below the group buttons. The full set of home-theatre settings stays in the EQ window.
-
-![Now Playing quick controls with the home-theatre row](screenshots/v4.14/nowplaying_quick_controls.png)
-
-**Lyrics, About, and History** sit in tabs below the transport controls. Lyrics are fetched per track and scroll in time with playback when timed lyrics exist, or display as plain text when they don't. About pulls the artist biography, listener count, and tags from Last.fm. History lists previous plays of the current track.
-
-![Lyrics scrolling in time with the track](screenshots/v4/nowplaying_lyrics_synced.png)
-
-![Lyrics in dark mode](screenshots/v4/nowplaying_lyrics_dark.png)
-
-![The About tab — artist biography and tags from Last.fm](screenshots/v4.14/nowplaying_about.png)
-
-**Volume** — master slider covers the whole group (proportional or linear mode). Individual per-speaker sliders with drag protection. Mute toggle per speaker and master. Bass, treble, loudness, and Home Theater EQ (sub/surround levels, night mode, dialog enhancement) via the EQ panel.
-
-**Scroll-wheel + middle-click** *(v3.6)* — hover over the Now Playing view and scroll the mouse wheel to adjust the master volume of the selected speaker. Middle-click anywhere on the view toggles mute. Discrete steps, debounced so rapid flicks don't spam the speaker with SOAP calls.
-
-### Browse & Library
-
-The Browse panel reaches your music library and connected services:
-
-- **Service Search** — Apple Music, TuneIn, Calm Radio, Sonos Radio, Spotify (individually toggleable in Settings)
-- **Sonos Favorites & Playlists** — everything you've set up in the Sonos app
-- **Local Library** — NAS/network music library with artists, albums, tracks, genres, composers, folder browsing
-- **Recently Played** — quick access to tracks from your listening history
-- **Search** — local library search across artists, albums, and tracks
-- Play now, play next, add to queue, replace queue from the context menu
-- Drag tracks from Browse directly into the Queue
-
-![Browsing Apple Music with the sort control](screenshots/v4.14/browse_apple_music.png)
-
-### Queue
-
-The Queue panel shows the current play queue with album art, track info, and duration. Tap to jump to a track, drag to reorder, right-click to remove. Queue shuffle physically reorders the tracks. Save the current queue as a Sonos playlist, an Apple Music playlist when every track is an Apple Music one, or into Choragus's own Queue Library.
-
-![The Queue panel](screenshots/v4.14/queue_panel.png)
-
-As tracks change the view follows the speaker: the previous track stays at the top so the playing track sits just below it, and the queue scrolls on toward the end when too few tracks remain to slide.
-
-### Queue Library
-
-![Queue Library — saved queues by source, artwork grid, and the track detail pane](screenshots/v4.14/queue_library.png)
-
-A separate window (`⌘L`) holding saved queues, split by source in the sidebar: **Choragus** queues stored on this Mac, **Sonos** playlists read from the system, **History** snapshots taken automatically, and **Smart** queues (Most Played over the last 30 days, Recently Played, Starred).
-
-Queues can be filed into folders and subfolders, and the same queue can sit in more than one folder. Switch between an artwork grid and a list, filter by title, then select a queue to see its tracks, choose which room to play into, reorder by dragging, or drag a track onto another queue to copy it there. Export a queue as M3U or CSV, duplicate it, or clone it into a Choragus queue; the clone can be edited while the original Sonos playlist stays unchanged.
-
-### Music Services
-
-![Settings → Music — services with status dots, toggles, and the Other Services list](screenshots/v4/settings_music.png)
-
-Services are managed in **Settings → Music**. Each can be individually enabled. **First-time setup is described in plain language in [Setupguide.md](Setupguide.md)** — start there if you're not sure how to get a service showing up.
-
-#### Available — No Connection Required
-
-| Service | Browse | Search | Playback | Notes |
-|---------|:------:|:------:|:--------:|-------|
-| **Local Music Library** | ✓ | ✓ | ✓ | NAS / network shares via UPnP |
-| **Sonos Favorites** | ✓ | — | ✓ | Favorites set up in the Sonos app |
-| **Sonos Playlists** | ✓ | — | ✓ | Playlists saved from queues |
-| **TuneIn** | ✓ | ✓ | ✓ | Public RadioTime API, no login needed |
-| **Calm Radio** | ✓ | — | ✓ | Public API, no login needed |
-| **Apple Music** | — | ✓ | ✓ | Search via iTunes API. Playback requires Apple Music connected in the Sonos app and one favorited song — this lets the app discover your account credentials. Once set up, all search results are directly playable |
-| **Sonos Radio** | — | ✓ | ✓ | Search via anonymous SMAPI. Category browsing requires DeviceLink auth (not yet supported) |
-
-#### Available — Connection Required (Tested)
-
-| Service | Browse | Search | Playback | Notes |
-|---------|:------:|:------:|:--------:|-------|
-| **Spotify** | ✓ | ✓ | ✓ | AppLink authentication. Connect in Settings, then add one favorited song via the Sonos app |
-| **Plex** *(v3.7)* | ✓ | ✓ | ✓ | AppLink authentication via [app.plex.tv/auth](https://app.plex.tv/auth). Streams from your own Plex Media Server — no third-party CDN, no short-lived signatures |
-| **Audible** *(v4.0)* | ✓ | ✓ | ✓ | AppLink authentication. Confirmed working for audiobook playback; chapter navigation behaves like a queue |
-
-#### Available — Connection Required (Untested)
-
-40+ additional services are available via SMAPI AppLink/DeviceLink and may work — connect via **Settings → Music → Other Services**. Results are not guaranteed.
-
-| Service | SID | Notes |
-|---------|:---:|-------|
-| **Pandora** *(v4.0)* | 3 | US-only as of 2026; visible in Settings → Music as untested. Uses the public SMAPI sid 3 (distinct from RINCON 519). Connect at your own risk and please [open an issue](https://github.com/scottwaters/Choragus/issues) with the result |
-
-#### Not Available
-
-Confirmed by live probe against the Sonos `ListAvailableServices` + `getAppLink` endpoints (2026-04-24). These services ship encrypted API keys in their Sonos manifest (`cf.ws.sonos.com/p/m/<uuid>`) that only Sonos's app and speaker firmware can decrypt — third-party clients receive `403 / NOT_AUTHORIZED` from the SMAPI endpoint before auth can begin.
-
-| Service | SID | Response | Workaround |
-|---------|:---:|----------|------------|
-| **Apple Music** (as SMAPI service) | 204 | `SonosError 999` | iTunes Search API fallback already used for search |
-| **Amazon Music** | 201 | Same class of Sonos-identity gate | — |
-| **YouTube Music** | 284 | GCP `403 PERMISSION_DENIED` (no API key) | — |
-| **SoundCloud** | 160 | `Client.NOT_AUTHORIZED` (403) | Scrobbling of SoundCloud listens via the Sonos app works |
-| **Sonos Radio browsing** | 303 | Category browsing requires DeviceLink (search works) | — |
-
-**Scrobbling remains possible for all services above** — play history is recorded from whatever the Sonos app plays, regardless of whether this app can directly browse/search that service.
-
-### Listening History
-
-![Listening Stats — Dashboard](screenshots/v4/listening_stats.png)
-
-The **Dashboard** summarises listening: total plays, hours listened, unique artists and rooms. Quick stat pills show your current streak, best streak, average plays per day, unique albums, stations, and starred-track count. Charts show listening activity over time, peak hours, and day-of-week distribution.
-
-![Listening Stats — Timeline](screenshots/v3/history_list.png)
-
-The **History** timeline groups tracks by day with album art, artist, album, service-source badge, room, and duration. Starred tracks show a star icon. Tracks from radio streams show the station name and service badge (Sonos Radio, TuneIn, etc.). Filter by date range, room, source, or search text. Starred-only filter shows just your favourites.
-
-![History — Right-click menu](screenshots/v3/history_rightclick.png)
-
-**Right-click any track** in the history to:
-
-- **Star / Unstar** — mark tracks as favourites
-- **Copy Track Details** — copies formatted metadata (Artist, Album, Track, Station) to clipboard
-- **Copy Title / Copy Artist** — copy individual fields
-- **Filter by artist, room, or source** — instantly filter the history view
-
-**Last.fm scrobbling** *(v3.6)* — listening history doubles as the source for Last.fm scrobbling. Everything is submitted from the local SQLite table, not by tapping the speakers again; filter by room and music service so you can (for example) scrobble only what plays in the office, excluding the kids' bedroom. See the **Scrobbling** tab in Settings — documented in [CHANGELOG.md](CHANGELOG.md).
-
-### Menu Bar Mode
-
-![Menu Bar Mini Player](screenshots/v3/menubar.png)
-
-Control playback without switching apps. The menu-bar mini player shows album art with a blurred background, track title, artist, and room. Transport controls (skip, play/pause, skip), volume slider with mute toggle, and a star button for the currently playing track. The room picker shows green/grey dots for playing status across zones. Click *Open Choragus* to bring up the main window.
-
-### Rooms & Grouping
-
-The sidebar lists every room, grouped by Sonos system when more than one is on the network. Double-click a room to open the grouping editor. Drag one room onto another to group them, or drag a room onto the strip below the list to split its group; rooms on different systems can't be grouped.
-
-Holding the group volume slider at zero for a second levels every speaker in the group, so raising it afterwards moves them together instead of restoring the previous spread.
-
-### Speaker Presets
-
-![Group Presets](screenshots/v4/presets.png)
-
-Save and recall speaker-group configurations with per-speaker volumes. Optionally include EQ settings (bass, treble, loudness, home-theatre sub/surround levels). One-click Apply to instantly reconfigure your speakers. Presets show an `EQ` badge when EQ is bundled and a `5.1` badge when the saved zone is a Home Theater bundle.
-
-![Preset EQ Editor — full Home Theater controls](screenshots/v4/presets_edit_ht.png)
-
-The preset editor shows all EQ controls including Home Theater settings: Night Mode, Dialog Enhancement, Sub level, Surround level, TV/Music balance, and Full/Ambient playback mode.
-
-### Settings
-
-Settings has four tabs: **Display**, **Music**, **Scrobbling**, and **System**. Each tab is broken into clearly labelled sections.
-
-![Settings — Display tab](screenshots/v4/settings_display.png)
-
-- **Display** — Language (13 supported), Theme (System / Light / Dark), Colours (separate pickers for accent dot, playing-zone indicator, and inactive-zone indicator), Menu Bar Controls toggle, Keyboard Controls (media keys on or off), Mouse Controls (scroll-wheel volume, middle-click mute), and the karaoke window's line style and appearance.
-
-![The interface in French](screenshots/v4/localized_french.png)
-- **Music** — Connected services with status dots, search-only services as toggles, the *Other Services* section for everything else, and a Local Music Library section listing the network folders each Sonos system indexes (tagged S1 or S2) with a reindex button. Adding or removing a folder is done in the Sonos app. *(See screenshot under [Music Services](#music-services).)*
-- **Scrobbling** *(v3.6)* — Send your listens to Last.fm using your own API key (register at [last.fm/api/account/create](https://www.last.fm/api/account/create)). Filter by room and by service, run automatically every 5 minutes or on demand. A Filter Preview shows why a track did or didn't scrobble.
-
-![Settings — Scrobbling tab](screenshots/v4/settings_scrobbling.png)
-
-![Settings — System tab with Discovery and Cache controls](screenshots/v4/settings_system.png)
-
-- **System** — Updates (Event-Driven push or Legacy Polling), Startup mode (Quick Start cached / Classic), **Discovery** (Auto / Bonjour / Legacy Multicast — Auto is the default and works for almost everyone), the Event listener port and Discovery hop limit for segmented networks, and the artwork Cache controls (max size, max age, clear).
-
-### Privacy & Local-Only Operation
+## Privacy & Local-Only Operation
 
 - **No accounts, no cloud.** The app talks directly to your speakers on your LAN.
 - **No telemetry.** No analytics, no crash reporting, no usage tracking.
@@ -299,10 +244,12 @@ A few features in the upstream binary depend on credentials and infrastructure t
 
 - **Apple Music** — search works via the iTunes API; playback requires Apple Music connected in the Sonos app plus one favorited song.
 - **Sonos Radio** — search works anonymously; browsing categories requires DeviceLink auth (not yet supported).
-- **Amazon Music / YouTube Music** — blocked (they require native OAuth flows that aren't available to third-party apps).
+- **YouTube Music** — blocked (requires a native OAuth flow that isn't available to third-party apps).
+- **Amazon Music** — on an S1 system albums enqueue track by track; on any system an Amazon Music Prime account plays stations, albums and playlists but not single tracks (Amazon Music Unlimited does). Podcasts are browsable but untested for playback.
 - **Adding to Favorites** — requires the official Sonos app (the UPnP `CreateObject` action is not supported by Sonos firmware).
 - **Adding music library folders** — also requires the Sonos app. Choragus lists the folders each system indexes and can trigger a reindex, but `CreateObject` on the share container returns success and stores nothing (verified on S1 and S2).
-- **Alarms** — Sonos S2 uses a cloud API; the local UPnP `AlarmClock` service returns empty.
+- **Plex – Remote behind CGNAT** — Plex's Sonos service needs the server reachable at a direct public address; a relay-only server is reported by Plex as unavailable. Plex – Local works on the network regardless.
+- **Media servers across VLANs** — the speaker, not the Mac, fetches the audio, so a server on another VLAN needs a firewall rule from the speakers' VLAN to the server's port. Settings → Media Servers names the speakers that cannot reach it.
 
 ## License
 
@@ -313,3 +260,4 @@ PolyForm Noncommercial 1.0.0 — see [LICENSE](LICENSE). Copyright © 2024-2026 
 This project is not affiliated with, endorsed by, or connected to Sonos, Inc. or any of the music service providers referenced in this software. All trademarks are the property of their respective owners: "Sonos" and "Sonos Radio" are trademarks of Sonos, Inc.; "Spotify" is a trademark of Spotify AB; "Apple Music" and "iTunes" are trademarks of Apple Inc.; "Amazon Music" is a trademark of Amazon.com, Inc.; "YouTube Music" is a trademark of Google LLC; "TuneIn" is a trademark of TuneIn, Inc.; "TIDAL" is a trademark of Aspiro AB; "Deezer" is a trademark of Deezer SA; "SoundCloud" is a trademark of SoundCloud Limited; "iHeartRadio" is a trademark of iHeartMedia, Inc.; "Plex" is a trademark of Plex, Inc.; "Calm Radio" is a trademark of Calm Radio Ltd.
 
 This software is an independent, fan-built controller that communicates with Sonos hardware using standard UPnP protocols. No proprietary code, assets, or intellectual property from any of these companies was used. Use at your own risk.
+

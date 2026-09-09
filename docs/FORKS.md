@@ -43,7 +43,7 @@ Choragus stores user-supplied secrets (Last.fm API key, SMAPI tokens, Plex token
 
 Not a feature gate, just a build-quality difference worth knowing about if you're iterating on the source.
 
-## Future credential-gated features
+## New credential-gated features
 
 If new functionality lands that requires its own developer credentials, hosted infrastructure, or signing material, it will be listed here. The pattern stays the same: empty Info.plist field → fallback or no-op; populated → full feature.
 

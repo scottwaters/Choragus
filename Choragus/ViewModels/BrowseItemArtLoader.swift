@@ -1,26 +1,26 @@
 /// BrowseItemArtLoader.swift — Art resolution for browse items.
 ///
 /// Resolves album art from cache, DIDL metadata, /getaa, BrowseMetadata,
-/// container browsing, and iTunes search. Extracted from BrowseItemRow
-/// to keep the view focused on layout.
+/// container browsing, and iTunes search.
 import Foundation
 import SonosKit
 
 @MainActor
 final class BrowseItemArtLoader {
     private let sonosManager: any (BrowsingServiceProtocol & ArtCacheProtocol & TransportStateProviding)
+    /// Narrow dependency on the enricher rather than the façade.
+    private let localArt: any LocalAlbumArtResolving
 
-    /// Process-lifetime negative cache. An `objectID` lands here once
-    /// every art-resolve strategy has failed for it; subsequent
-    /// `loadArt` calls short-circuit instead of re-running the full
-    /// SOAP cascade (BrowseMetadata, container-first-track, iTunes
-    /// search). Lifted to a `static` because each row in the browse
-    /// list constructs a fresh `BrowseItemArtLoader` per `.onAppear`,
-    /// so an instance-level cache would never see a hit.
+    /// Process-lifetime negative cache: `objectID`s for which every
+    /// strategy has failed, so `loadArt` skips the SOAP / iTunes cascade.
+    /// `static` because each browse row builds a fresh loader per
+    /// `.onAppear`.
     private static var negativeArt: Set<String> = []
 
-    init(sonosManager: any (BrowsingServiceProtocol & ArtCacheProtocol & TransportStateProviding)) {
+    init(sonosManager: any (BrowsingServiceProtocol & ArtCacheProtocol & TransportStateProviding),
+         localArt: any LocalAlbumArtResolving) {
         self.sonosManager = sonosManager
+        self.localArt = localArt
     }
 
     /// Checks the discovered art cache for this item
@@ -73,7 +73,7 @@ final class BrowseItemArtLoader {
         if let url = await tryBrowseMetadata(item: item) { return url }
 
         // 3. Try /getaa for non-radio items
-        if let url = tryGetaa(item: item) { return url }
+        if let url = await tryGetaa(item: item) { return url }
 
         // 4. Try first track in container
         if let url = await tryContainerFirstTrack(item: item) { return url }
@@ -119,7 +119,7 @@ final class BrowseItemArtLoader {
         return nil
     }
 
-    private func tryGetaa(item: BrowseItem) -> URL? {
+    private func tryGetaa(item: BrowseItem) async -> URL? {
         guard let uri = item.resourceURI, !uri.isEmpty,
               !uri.hasPrefix(URIPrefix.sonosApiStream),
               !uri.hasPrefix(URIPrefix.sonosApiRadio),
@@ -127,6 +127,17 @@ final class BrowseItemArtLoader {
               !uri.hasPrefix(URIPrefix.rinconPlaylist),
               let device = sonosManager.groups.first?.coordinator else { return nil }
         let artURL = AlbumArtSearchService.getaaURL(speakerIP: device.ip, port: device.port, trackURI: uri)
+        // Direct-HTTP tracks (media servers): the proxy only answers when the
+        // file carries embedded art. An unverified URL shows a permanent
+        // blank and stops the cascade before the iTunes fallback, so probe
+        // first; a miss lets the next strategy run.
+        if uri.hasPrefix("http://") || uri.hasPrefix("https://") {
+            guard let url = URL(string: artURL), await ArtResolver.getaaReturnsImage(url) else {
+                return nil
+            }
+            sonosManager.cacheArtURL(artURL, forURI: uri, title: item.title, itemID: item.objectID)
+            return url
+        }
         sonosManager.cacheArtURL(artURL, forURI: uri, title: item.title, itemID: item.objectID)
         return URL(string: artURL)
     }
@@ -190,7 +201,7 @@ final class BrowseItemArtLoader {
         // instantly (even mid-cooldown), and a miss only hits iTunes when the
         // limiter has budget — so each album resolves once and survives
         // relaunches instead of re-flooding the limiter every browse (#64).
-        if let artURL = await sonosManager.resolveLocalAlbumArt(artist: artist, album: album) {
+        if let artURL = await localArt.resolveLocalAlbumArt(artist: artist, album: album) {
             sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title, itemID: "")
             return URL(string: artURL)
         }
@@ -198,7 +209,7 @@ final class BrowseItemArtLoader {
         // For generic containers, try guessing artist/album from path.
         if !isArtist && !isAlbum {
             if let (guessedArtist, guessedAlbum) = guessArtistAlbum(from: item.objectID, title: item.title) {
-                if let artURL = await sonosManager.resolveLocalAlbumArt(artist: guessedArtist, album: guessedAlbum) {
+                if let artURL = await localArt.resolveLocalAlbumArt(artist: guessedArtist, album: guessedAlbum) {
                     sonosManager.cacheArtURL(artURL, forURI: item.objectID, title: item.title, itemID: "")
                     return URL(string: artURL)
                 }

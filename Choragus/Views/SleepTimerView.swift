@@ -2,7 +2,7 @@ import SwiftUI
 import SonosKit
 
 struct SleepTimerView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @Environment(\.dismiss) private var dismiss
     let group: SonosGroup
 

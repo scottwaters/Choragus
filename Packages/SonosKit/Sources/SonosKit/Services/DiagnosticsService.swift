@@ -141,6 +141,7 @@ public enum DiagnosticsRedactor {
         var out = s
         out = scrubHomePath(out)
         out = scrubDeviceID(out)
+        out = scrubHouseholdID(out)
         out = scrubLANIP(out)
         out = scrubServiceAccount(out)
         out = scrubAuthToken(out)
@@ -174,6 +175,21 @@ public enum DiagnosticsRedactor {
         return result
     }
 
+    /// `Sonos_ABCDEF…1234` → `Sonos_********1234`. A household id binds
+    /// every speaker to one Sonos account, so it is masked like a device id.
+    static func scrubHouseholdID(_ s: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"Sonos_([A-Za-z0-9]+)"#) else { return s }
+        let range = NSRange(s.startIndex..<s.endIndex, in: s)
+        var result = s
+        for match in regex.matches(in: s, range: range).reversed() {
+            guard match.numberOfRanges >= 2,
+                  let idRange = Range(match.range(at: 1), in: result) else { continue }
+            let id = String(result[idRange])
+            result.replaceSubrange(idRange, with: String(repeating: "*", count: max(0, id.count - 4)) + id.suffix(4))
+        }
+        return result
+    }
+
     /// LAN-private IPv4 → `<lan-ip>`. Public IPs preserved so e.g.
     /// `lrclib.net` resolves stay readable.
     static func scrubLANIP(_ s: String) -> String {
@@ -188,6 +204,11 @@ public enum DiagnosticsRedactor {
             guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
             let range = NSRange(out.startIndex..<out.endIndex, in: out)
             out = regex.stringByReplacingMatches(in: out, range: range, withTemplate: "<lan-ip>")
+        }
+        // mDNS names identify machines on the LAN as surely as an address.
+        if let regex = try? NSRegularExpression(pattern: #"\b[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.local\b"#) {
+            let range = NSRange(out.startIndex..<out.endIndex, in: out)
+            out = regex.stringByReplacingMatches(in: out, range: range, withTemplate: "<lan-host>")
         }
         return out
     }

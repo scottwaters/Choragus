@@ -78,9 +78,8 @@ public final class ArtCacheService: ObservableObject, ArtCacheProtocol {
 
     /// Looks up cached art by URI, exact-case-insensitive title, or normalized title.
     /// For radio URIs the URI lookup is skipped — see `cacheArtURL` for
-    /// why. Pre-existing radio-URI entries (written before this guard
-    /// landed) are also bypassed at read time, so stale ones don't keep
-    /// surfacing the previous song's art until they get overwritten.
+    /// why. Stored radio-URI entries are also bypassed at read time, so a
+    /// stale one cannot surface the previous song's art.
     ///
     /// Title-key cache hits are validated against the requesting track's
     /// URI source-family. Title is a coarse key — different sources
@@ -112,8 +111,8 @@ public final class ArtCacheService: ObservableObject, ArtCacheProtocol {
     /// True when the cached art URL is a `/getaa?u=<src>` proxy whose
     /// embedded source URI belongs to a different source family than
     /// the requesting track's URI. Returns false (i.e. trust the cache)
-    /// when either side can't be classified, so we never break a
-    /// working lookup just because we couldn't prove the negative.
+    /// when either side can't be classified, so an unprovable negative
+    /// never breaks a working lookup.
     private static func isStaleCrossSource(cachedArt: String, currentURI: String?) -> Bool {
         guard let currentURI, !currentURI.isEmpty else { return false }
         guard let comps = URLComponents(string: cachedArt) else { return false }
@@ -133,11 +132,15 @@ public final class ArtCacheService: ObservableObject, ArtCacheProtocol {
     /// written for one source is rejected when the cache is queried
     /// for another.
     private enum SourceFamily {
-        case localFile, appleMusic, spotify, http, radio, queue, container, unknown
+        case localFile, appleMusic, amazon, spotify, http, radio, queue, container, unknown
     }
 
     private static func sourceFamily(of uri: String) -> SourceFamily {
         if uri.hasPrefix(URIPrefix.fileCifs) || uri.hasPrefix(URIPrefix.smb) { return .localFile }
+        // Amazon shares the hls-static scheme with Apple Music; its
+        // `/getaa?u=` proxy URLs are bound to the Amazon source, so a
+        // title-keyed entry must not cross over.
+        if URIPrefix.isAmazonTrack(uri) { return .amazon }
         if uri.hasPrefix(URIPrefix.sonosApiHLSStatic) || uri.hasPrefix(URIPrefix.sonosApiHLS) { return .appleMusic }
         if uri.hasPrefix("x-sonos-spotify:") { return .spotify }
         if uri.hasPrefix(URIPrefix.sonosApiStream) || uri.hasPrefix(URIPrefix.sonosApiRadio) || uri.hasPrefix(URIPrefix.rinconMP3Radio) { return .radio }

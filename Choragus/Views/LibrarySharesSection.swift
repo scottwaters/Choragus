@@ -6,9 +6,9 @@ import SwiftUI
 import SonosKit
 
 struct LibrarySharesSection: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(LibraryStore.self) private var library
 
-    @State private var shares: [SonosManager.LibraryShare] = []
+    @State private var shares: [LibraryStore.LibraryShare] = []
     @State private var isLoading = false
 
     var body: some View {
@@ -34,7 +34,7 @@ struct LibrarySharesSection: View {
                             .truncationMode(.middle)
                         // S1 and S2 index the same path separately; without
                         // the tag the two rows are indistinguishable.
-                        if sonosManager.hasMultipleSystems {
+                        if library.hasMultipleSystems {
                             Text(share.systemVersion.displayLabel)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -61,7 +61,7 @@ struct LibrarySharesSection: View {
 
     private func reload() async {
         isLoading = true
-        shares = await sonosManager.libraryShares()
+        shares = await library.libraryShares()
         isLoading = false
     }
 }

@@ -17,7 +17,8 @@ Pick the service you care about. Each one falls into one of two paths:
 | **Spotify** | B — needs Sonos-app step |
 | **Plex** | B — but skip the favourited-song step (B is shorter for Plex) |
 | **Apple Music** *(playback, not just search)* | B — needs Sonos-app step |
-| **Amazon Music, YouTube Music, SoundCloud** | Not supported in any third-party app — see the bottom of this guide for why |
+| **Amazon Music** | B — needs Sonos-app step |
+| **YouTube Music, SoundCloud** | Not supported in any third-party app — see the bottom of this guide for why |
 
 If you only ever listen via TuneIn or radio, you can skip Path B entirely.
 
@@ -122,12 +123,16 @@ Also see the in-app **Setup Guide** button (Settings → Music → top of Connec
 
 Some services cannot be controlled by *any* third-party app, including this one:
 
-- **Amazon Music** — Amazon uses a proprietary OAuth flow that Sonos exposes only to its own apps. Returns an empty auth URL when third-party apps ask. There is no workaround.
 - **YouTube Music** — same pattern. Locked to Sonos's first-party apps.
 - **SoundCloud** — Sonos's account-identity gate returns `Client.NOT_AUTHORIZED` (HTTP 403) to non-Sonos clients. Confirmed by live probe.
 - **Sonos Radio (browsing categories)** — search works (Path A); browsing the curated categories requires DeviceLink authentication, which Sonos has not exposed to third-party apps.
 
 These limitations apply equally to every third-party Sonos controller — not just Choragus. The official Sonos app remains the only way to drive these specific services.
+
+> **Amazon Music used to be on this list.** Earlier versions of this guide
+> said it couldn't be connected. That was wrong — it works through the normal
+> Path B connect flow, verified on Sonos S1 and S2 systems. If you tried it before
+> and gave up, try again.
 
 ---
 

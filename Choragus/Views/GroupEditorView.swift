@@ -2,13 +2,13 @@
 ///
 /// Uses optimistic updates: checkmarks flip immediately on tap, then SOAP calls
 /// run in the background. If the call fails, the optimistic state is reverted.
-/// A 1-second delay before topology refresh gives the speaker time to process
-/// the grouping change before we query the new state.
+/// A 1-second delay before topology refresh gives the speaker time to apply
+/// the grouping change before the new state is queried.
 import SwiftUI
 import SonosKit
 
 struct GroupEditorView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @Environment(\.dismiss) private var dismiss
 
     let initialGroup: SonosGroup

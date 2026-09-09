@@ -6,7 +6,7 @@
 import Foundation
 
 @MainActor
-public final class PlayHistoryManager: ObservableObject {
+public final class PlayHistoryManager: ObservableObject, QueueDurationSource {
     @Published public var entries: [PlayHistoryEntry] = []
 
     /// Bumps every time `updateGenre(forArtist:genre:)` mutates an
@@ -90,6 +90,43 @@ public final class PlayHistoryManager: ObservableObject {
     /// O(1) check used by the now-playing star button. Replaces the
     /// previous `entries.contains(where:)` linear scan which dominated
     /// the main thread on every NowPlayingView body re-eval.
+    // MARK: - Learned durations
+
+    /// Length by URI and by title|artist|album from every play that
+    /// reported one; rebuilt lazily when the entry count changes. The
+    /// latest play wins, so a re-tagged file corrects itself.
+    private var durationIndex: [String: TimeInterval] = [:]
+    private var durationIndexedCount = -1
+
+    public func learnedDuration(uri: String?, title: String, artist: String, album: String) -> TimeInterval? {
+        if durationIndexedCount != entries.count { rebuildDurationIndex() }
+        if let uri, !uri.isEmpty, let known = durationIndex["u:" + Self.uriKey(uri)] { return known }
+        guard !title.isEmpty else { return nil }
+        return durationIndex["t:" + Self.trackKey(title: title, artist: artist, album: album)]
+            ?? durationIndex["ta:" + Self.trackKey(title: title, artist: artist, album: "")]
+    }
+
+    private func rebuildDurationIndex() {
+        var index: [String: TimeInterval] = [:]
+        for entry in entries where entry.duration > 0 {
+            if let uri = entry.sourceURI, !uri.isEmpty { index["u:" + Self.uriKey(uri)] = entry.duration }
+            if !entry.title.isEmpty {
+                index["t:" + Self.trackKey(title: entry.title, artist: entry.artist, album: entry.album)] = entry.duration
+                index["ta:" + Self.trackKey(title: entry.title, artist: entry.artist, album: "")] = entry.duration
+            }
+        }
+        durationIndex = index
+        durationIndexedCount = entries.count
+    }
+
+    private static func uriKey(_ uri: String) -> String {
+        (uri.removingPercentEncoding ?? uri).lowercased()
+    }
+
+    private static func trackKey(title: String, artist: String, album: String) -> String {
+        [title, artist, album].map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.joined(separator: "|")
+    }
+
     public func isStarred(title: String, artist: String) -> Bool {
         guard !title.isEmpty else { return false }
         return starredKeys.contains(Self.starredKey(title: title, artist: artist))

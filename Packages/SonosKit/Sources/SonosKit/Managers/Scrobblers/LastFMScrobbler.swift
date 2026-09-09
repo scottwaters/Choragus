@@ -58,7 +58,7 @@ public final class LastFMScrobbler: ObservableObject, ScrobbleService {
                 return
             }
         }
-        throw LastFMError.service(14, "Authorization timed out. Please try Connect again.")
+        throw LastFMError.service(14, L10n.errLastFMAuthTimedOut)
     }
 
     public func disconnect() {

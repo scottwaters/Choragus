@@ -1,4 +1,4 @@
-# The Choragus — Technical README
+# Choragus — Technical README
 
 Low-level reference for developers. For the end-user feature overview see [README.md](README.md).
 
@@ -8,8 +8,8 @@ Low-level reference for developers. For the end-user feature overview see [READM
 
 - **Choragus** — SwiftUI app target (views, ViewModels, app-level singletons).
 - **SonosKit** — local Swift package (discovery, UPnP/SOAP services, models, caching, SMAPI, play history, transport strategies).
-- **~24,000 lines of Swift** across 80+ source files.
-- **292 unit tests** covering classifier logic, XML parsing, grace-period state machines, topology-merge invariants (value equality, stable member sort, household partitioning, grace window), protocol conformance, and model enrichment.
+- **~105,000 lines of Swift** across 216 source files.
+- **1006 unit tests** covering classifier logic, XML parsing, grace-period state machines, topology-merge invariants (value equality, stable member sort, household partitioning, grace window), protocol conformance, and model enrichment.
 - **Zero external dependencies.** No CocoaPods, no Carthage, no remote SPM packages. The entire project builds against Apple's standard frameworks.
 - Targets macOS 14+. Universal binary (arm64 + x86_64).
 
@@ -21,6 +21,12 @@ For deeper detail, see the documents under `docs/`:
 - [docs/DISCOVERY.md](docs/DISCOVERY.md) — Auto / Bonjour / Legacy Multicast discovery modes.
 - [docs/LOCALIZATION.md](docs/LOCALIZATION.md) — 13-locale architecture, conventions, gotchas.
 - [docs/SERVICES.md](docs/SERVICES.md) — music-service status matrix (working / untested / blocked).
+- [docs/MCP.md](docs/MCP.md) — the Model Context Protocol server: tools, client setup, network rules.
+- [docs/AI.md](docs/AI.md) — the four levels of AI use, from copy-and-paste playlists to an assistant driving Choragus from a phone.
+- [docs/FEATURES.md](docs/FEATURES.md) — feature reference with screenshots.
+- [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) — diagnostic categories, the bug-report bundle and its redaction.
+- [docs/SHORTCUTS.md](docs/SHORTCUTS.md) — every Apple Shortcuts action, Siri phrases and scheduled runs.
+- [docs/FORKS.md](docs/FORKS.md) — building a fork without the maintainer's credentials.
 
 ---
 
@@ -48,7 +54,7 @@ All speaker communication is local — no cloud service is required beyond optio
 
 ### Service Layer (Interface Segregation)
 
-11 focused service protocols instead of a single fat interface:
+10 focused service protocols instead of a single fat interface:
 
 `PlaybackService`, `VolumeService`, `EQService`, `QueueService`, `BrowsingService`, `GroupingService`, `AlarmService`, `MusicServiceDetection`, `TransportStateProviding`, `ArtCache`.
 
@@ -75,7 +81,7 @@ Switchable in Settings → System.
 2. `refreshTopology` aborts if the source device's household is still `nil`. Merging with a `nil` household would let the filter `groups.filter { $0.householdID != household }` retain every known-household group while appending new `nil`-tagged duplicates — producing visible duplicates and section reshuffles on subsequent rescans.
 3. Members constructed in the topology loop inherit the source device's resolved `softwareVersion` / `swGen` only when the existing entry's corresponding field is empty, so a known fact is never downgraded to unknown.
 4. **Members are stably sorted by `id` at construction.** `SonosGroup` conforms to `Equatable` by synthesis, and array equality is order-sensitive — a pure reorder in the next topology response would otherwise trip the change detector.
-5. **Writes into `devices` are equality-guarded.** `@Published` on a dictionary fires on every assignment, regardless of whether the new value differs. Unconditional writes cascade re-renders through every `@EnvironmentObject` observer, which was triggering `onChange(of: groups)`-bound scroll animations even when `groups` itself was unchanged.
+5. **Writes into `devices` are equality-guarded.** `SonosManager` is `@Observable`, and an assignment to an observed dictionary invalidates every view that reads it regardless of whether the value differs. Writers compare before assigning, so event and poll ticks that carry no change leave views alone; unconditional writes were triggering `onChange(of: groups)`-bound scroll animations even when `groups` itself was unchanged.
 6. **Group-removal grace window (`groupRemovalGrace = 30 s`).** Different Sonos speakers in the same household occasionally return subtly different `GetZoneGroupState` views while state propagates. A single source's topology is no longer treated as authoritative for immediate removal — a group missing from the new response is retained if its id was present in *any* topology within the grace window. Only groups absent for longer than 30 s are actually dropped.
 
 **Defensive rules for artwork on radio streams:**
@@ -125,23 +131,17 @@ See [docs/DISCOVERY.md](docs/DISCOVERY.md) for the full design.
 
 ### Localization (L10n)
 
-Dictionary-based localization in `Packages/SonosKit/Sources/SonosKit/Localization/L10n.swift`. Keys are looked up against `UserDefaults[UDKey.appLanguage]` with English as the fallback. Supported languages: English, German, French, Dutch, Spanish, Italian, Swedish, Norwegian (nb), Danish, Japanese, Portuguese, Polish, Chinese Simplified.
+Translations live in an Apple String Catalog, `Packages/SonosKit/Sources/SonosKit/Resources/Localizable.xcstrings`, a package resource compiled by Xcode into one `Localizable.strings` table per locale. `L10n.tr(_:)` looks keys up against `UserDefaults[UDKey.appLanguage]` with English as the fallback, so the language follows the app's own setting rather than the system locale; under `swift build` / `swift test`, where SwiftPM copies the catalog uncompiled, the same lookup decodes the catalog JSON directly. Supported languages: English, German, French, Dutch, Spanish, Italian, Swedish, Norwegian (nb), Danish, Japanese, Portuguese, Polish, Chinese Simplified.
 
 **Invariant:** every new user-visible string surface must:
 
 1. Add a `public static var` accessor (or `public static func` for format strings) to `L10n`.
-2. Add the translation entry to the `translations` dictionary covering all 13 locales.
+2. Add the key to `Localizable.xcstrings` with a value for all 13 locales.
 3. Reference via `L10n.keyName` (not hardcoded literals).
 
 Format-string helpers use `String(format:)` with `%1$@` / `%2$@` positional placeholders so translations can reorder arguments — see `L10n.updateAvailableBody(current:latest:)` for the canonical example.
 
-**Pre-commit gate:** Swift 6 asserts on duplicate dict-literal keys at first access (EXC_BREAKPOINT before the app draws a window). The recommended check is:
-
-```bash
-grep -nE '^[[:space:]]+"[a-zA-Z][a-zA-Z0-9_]*":[[:space:]]*\[' \
-  Packages/SonosKit/Sources/SonosKit/Localization/L10n.swift \
-  | awk -F'"' '{print $2}' | sort | uniq -c | awk '$1 > 1 {print}'
-```
+**Gate:** `L10nCatalogTests` fails on a missing locale, a duplicate key, an accessor without a catalog entry or the reverse, and a placeholder set that differs from English; CI runs the same checks on every push.
 
 **Help body:** as of v3.7 the entire `HelpView` body prose (every heading, paragraph, and bullet across 10 topics) is fully localised across all 13 languages. v4.0 added two new topics (Now Playing details, Music Services) and expanded Preferences from 5 to 11 bullets — all entries ship complete translations.
 
@@ -199,7 +199,7 @@ cd Packages/SonosKit
 swift test
 ```
 
-The Swift Package Manager target for `SonosKit` is self-contained and runs independently of the app target. Tests are organized into five files covering XML parsing, service protocols, model enrichment, session state, and the `SonosSystemVersion` classifier.
+The Swift Package Manager target for `SonosKit` is self-contained and runs independently of the app target. Tests are organized into 78 files covering XML parsing, service protocols, media-server parsing, MCP tools, model enrichment, session state, and the `SonosSystemVersion` classifier.
 
 ### Project Conventions
 

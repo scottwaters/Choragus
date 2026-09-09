@@ -19,7 +19,7 @@ import AppKit
 import SonosKit
 
 struct NowPlayingView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var anchorTracker: AnchorTracker
     @EnvironmentObject var positionTracker: PositionTracker
     /// Forwarded into `NowPlayingContextPanel` so its VM can be
@@ -54,6 +54,14 @@ struct NowPlayingView: View {
     @State private var showEQ = false
     @State private var showCopied = false
     @State private var showExpandedArt = false
+    /// The context panel's carousel (artist photos + cover), so the
+    /// main artwork click pages through the same set. Empty while the
+    /// panel is hidden — the viewer then shows the cover alone.
+    @State private var artCarouselURLs: [URL] = []
+
+    private func updateArtCarousel(_ urls: [URL]) {
+        if artCarouselURLs != urls { artCarouselURLs = urls }
+    }
     @State private var showMasterVolumeInput = false
     @State private var showArtSearch = false
     /// Persisted collapse state for the Lyrics / About / History panel.
@@ -145,10 +153,12 @@ struct NowPlayingView: View {
                     if !contextPanelCollapsed {
                         NowPlayingContextPanel(
                             trackMetadata: trackMetadata,
+                            nowPlayingArtURL: vm.art.radioTrackArtURL ?? vm.art.displayedArtURL,
                             group: group,
                             positionAnchor: vm.positionAnchor,
                             lyricsCoordinator: lyricsCoordinator,
-                            metadataService: metadataService.service
+                            metadataService: metadataService.service,
+                            onCarouselChange: updateArtCarousel
                         )
                         // 260pt = tab picker (~36) + divider (1) +
                         // padding (~16) + 5-row × 34pt lyrics (170) +
@@ -203,22 +213,15 @@ struct NowPlayingView: View {
             vm.group = group
         }
         // Volume / mute / track-metadata views read directly from
-        // `sonosManager` via the VM's computed properties, so the prior
-        // `.onReceive($deviceVolumes)` / `.onReceive($deviceMutes)` /
-        // `.onReceive($groupTrackMetadata)` re-sync hooks are gone.
-        // SwiftUI's @Observable / @EnvironmentObject machinery handles
-        // invalidation automatically, and there's no longer a local
-        // mirror to drift out of sync with the manager's authoritative
-        // dictionaries — which removes the race window where a coord
-        // event's optimistic propagation to a member dropped on the
-        // floor until the next unrelated publish woke `.onReceive`.
+        // `sonosManager` via the VM's computed properties — no local
+        // mirror to re-sync or drift out of step with the manager.
         .sheet(isPresented: $showGroupEditor) {
             GroupEditorView(initialGroup: group)
-                .environmentObject(sonosManager)
+                .choragusServices(sonosManager)
         }
         .sheet(isPresented: $showSleepTimer) {
             SleepTimerView(group: group)
-                .environmentObject(sonosManager)
+                .choragusServices(sonosManager)
         }
         .sheet(isPresented: $showExpandedArt) {
             ExpandedArtView(
@@ -226,15 +229,15 @@ struct NowPlayingView: View {
                 title: trackMetadata.title,
                 artist: trackMetadata.artist,
                 album: trackMetadata.album,
-                stationName: trackMetadata.stationName
+                stationName: trackMetadata.stationName,
+                galleryURLs: artCarouselURLs
             )
         }
     }
 
-    /// The playback section — extracted so we can attach
-    /// `volumeScrollControl` to just this part. The context panel
-    /// below uses its own ScrollViews internally; we don't want our
-    /// scroll-wheel capture stealing events from there.
+    /// The playback section — extracted so `volumeScrollControl` attaches
+    /// to just this part. The context panel below uses its own ScrollViews
+    /// internally; the scroll-wheel capture must not steal events from there.
     private var playbackSection: some View {
         choragusWatermarkBackground {
             playbackSectionContent
@@ -380,7 +383,9 @@ struct NowPlayingView: View {
                             }
 
                             if !trackMetadata.album.isEmpty {
-                                Text(trackMetadata.album)
+                                let year = metadataService.service.cachedAlbumReleaseYear(
+                                    artist: trackMetadata.artist, album: trackMetadata.album)
+                                Text(year.map { "\(trackMetadata.album) (\(String($0)))" } ?? trackMetadata.album)
                                     .font(.body)
                                     .foregroundStyle(.tertiary)
                                     .lineLimit(1)
@@ -419,8 +424,8 @@ struct NowPlayingView: View {
                                 // TV / HDMI format pill — separate from
                                 // the streaming Atmos badge above. Only
                                 // fires for HDMI / line-in track URIs and
-                                // only when we've recognised the integer
-                                // bitfield. Unknown values fall through
+                                // only when the integer bitfield is
+                                // recognised. Unknown values fall through
                                 // silently rather than guess.
                                 if let tvFormatLabel = tvAudioFormatLabel(trackMetadata) {
                                     Label(tvFormatLabel, systemImage: "tv")
@@ -486,16 +491,13 @@ struct NowPlayingView: View {
                             Button {
                                 // Read `htSatChannelMaps` authoritatively
                                 // from the speaker on each click rather
-                                // than trusting whatever the last
-                                // topology refresh happened to leave
-                                // cached. The map drifts across topology
-                                // changes / regrouping / sub-add/remove,
-                                // and a stale read here was sending the
-                                // user into the surround-sound EQ for a
-                                // stereo speaker (or vice-versa). One
-                                // `GetZoneGroupState` SOAP per click is
-                                // cheap (~17 ms after the XML-parse
-                                // off-main fix) and removes the race.
+                                // than the cached topology snapshot. The
+                                // map drifts across topology changes /
+                                // regrouping / sub-add/remove, and a stale
+                                // read opens the wrong EQ window (surround
+                                // EQ for a stereo speaker or vice-versa).
+                                // One `GetZoneGroupState` SOAP per click
+                                // is cheap.
                                 Task {
                                     if let coordinator = group.coordinator {
                                         await sonosManager.refreshTopology(from: coordinator, force: true)
@@ -514,7 +516,7 @@ struct NowPlayingView: View {
                             .controlSize(.small)
                             .popover(isPresented: $showEQ) {
                                 EQView(group: group)
-                                    .environmentObject(sonosManager)
+                                    .choragusServices(sonosManager)
                             }
 
                             if hasTrack {
@@ -541,7 +543,7 @@ struct NowPlayingView: View {
                         // the EQ window (#78). Renders nothing for
                         // non-HT zones.
                         HomeTheaterQuickControls(group: group)
-                            .environmentObject(sonosManager)
+                            .choragusServices(sonosManager)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -552,14 +554,12 @@ struct NowPlayingView: View {
                 // Time/seek area — fixed height to prevent layout shift.
                 //
                 // 10 Hz `TimelineView` projects `vm.positionAnchor` so
-                // the seek-bar value and time text advance smoothly. The
-                // earlier `.animation` schedule (60/120 Hz at display
-                // refresh) was the per-frame culprit behind karaoke
-                // window jitter — `Slider` re-binds at every tick, which
-                // saturates the main thread enough to starve the karaoke
-                // popout's `TimelineView`. 10 Hz is visually smooth for a
-                // slowly-advancing seek bar and frees ~50 frames/sec of
-                // main-thread budget for other windows.
+                // the seek-bar value and time text advance smoothly. Not
+                // the `.animation` schedule (60/120 Hz): `Slider` re-binds
+                // at every tick, which saturates the main thread enough
+                // to starve the karaoke popout's `TimelineView`. 10 Hz is
+                // visually smooth for a slowly-advancing seek bar and
+                // leaves main-thread budget for other windows.
                 //
                 // While the user is dragging the slider, the binding
                 // reads `vm.dragPosition` instead of the projection so
@@ -618,23 +618,19 @@ struct NowPlayingView: View {
                         }
 
                         // `backward.end.fill` is SF Symbols' "skip to
-                        // previous track" glyph (triangle + tape-head
-                        // line). The earlier `backward.fill` reads as
-                        // rewind/scrub, which is the wrong metaphor —
-                        // Sonos treats this control as a hard track-to-
-                        // track jump, not a continuous seek.
+                        // previous track" glyph; `backward.fill` reads as
+                        // rewind/scrub, the wrong metaphor — Sonos treats
+                        // this control as a hard track-to-track jump.
                         transportButton("previous", icon: "backward.end.fill", size: .title2) {
                             performAction("previous") { try await sonosManager.previous(group: group) }
                         }
                         .tooltip(L10n.previous)
-                        // Queue playback supports next/prev regardless of any
-                        // station metadata that might be piggybacked on the
-                        // track (some service tracks carry a stationName value
-                        // from the music provider that doesn't mean "radio").
-                        // Disable only when we're in a non-queue radio/stream
-                        // context where next/prev aren't meaningful.
-                        .disabled(!trackMetadata.isQueueSource &&
-                                  (trackMetadata.isRadioStream || !trackMetadata.stationName.isEmpty))
+                        // The speaker itself reports which transport
+                        // commands the current source accepts, so service
+                        // radio is handled correctly: an Amazon Music station
+                        // grants Next but not Previous, a TuneIn stream
+                        // neither, and queue playback both.
+                        .disabled(!sonosManager.canSkipPrevious(group: group))
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
@@ -657,14 +653,9 @@ struct NowPlayingView: View {
                             performAction("next") { try await sonosManager.next(group: group) }
                         }
                         .tooltip(L10n.next)
-                        // Queue playback supports next/prev regardless of any
-                        // station metadata that might be piggybacked on the
-                        // track (some service tracks carry a stationName value
-                        // from the music provider that doesn't mean "radio").
-                        // Disable only when we're in a non-queue radio/stream
-                        // context where next/prev aren't meaningful.
-                        .disabled(!trackMetadata.isQueueSource &&
-                                  (trackMetadata.isRadioStream || !trackMetadata.stationName.isEmpty))
+                        // See the Previous button: skip availability comes
+                        // from the speaker's own CurrentTransportActions.
+                        .disabled(!sonosManager.canSkipNext(group: group))
 
                         transportButton("repeat", icon: repeatIcon, size: .body,
                                         tint: playMode.repeatMode != .off ? (sonosManager.resolvedAccentColor ?? .accentColor) : .secondary) {
@@ -945,10 +936,9 @@ struct NowPlayingView: View {
                     }
                     .transition(.opacity)
             }
-            // Station-art mini badge on the bottom-right of the album art is
-            // disabled — its resolution heuristic is flaky and it was flickering.
-            // Leaving the shouldShowStationBadge/radioStationArtURL APIs in place
-            // so this can be re-enabled with one-line change when fixed.
+            // Station-art mini badge is disabled — its resolution heuristic
+            // flickers. The shouldShowStationBadge/radioStationArtURL APIs
+            // stay in place so it can be re-enabled here.
             // if vm.art.shouldShowStationBadge(trackMetadata: trackMetadata),
             //    let stationArt = vm.art.radioStationArtURL {
             //     CachedAsyncImage(url: stationArt, cornerRadius: 4)
@@ -961,7 +951,7 @@ struct NowPlayingView: View {
         .onAppear {
             vm.onArtAppear()
         }
-        .onReceive(sonosManager.$groupTrackMetadata) { newMeta in
+        .onReceive(sonosManager.groupTrackMetadataPublisher) { newMeta in
             let meta = newMeta[group.coordinatorID] ?? TrackMetadata()
             vm.handleMetadataChanged(meta)
         }
@@ -1033,7 +1023,7 @@ struct NowPlayingView: View {
     /// Localised label for the HDMI / line-in audio format pill. Returns
     /// nil when the track isn't an HDMI / line-in source or the speaker
     /// hasn't classified the format yet — in either case the pill is
-    /// suppressed so we never show a stale or guessed label.
+    /// suppressed rather than showing a stale or guessed label.
     private func tvAudioFormatLabel(_ metadata: TrackMetadata) -> String? {
         guard let uri = metadata.trackURI else { return nil }
         let isHTSource = uri.contains("x-sonos-htastream:") || uri.contains("x-rincon-stream:")
@@ -1103,9 +1093,30 @@ struct ExpandedArtView: View {
     /// page through the set; empty at single-image call sites.
     var galleryURLs: [URL] = []
     @Environment(\.dismiss) private var dismiss
-    @State private var galleryIndex: Int = 0
+    @State private var galleryIndex: Int
+
+    init(artURL: URL?, title: String, artist: String, album: String,
+         stationName: String, galleryURLs: [URL] = []) {
+        self.artURL = artURL
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.stationName = stationName
+        self.galleryURLs = galleryURLs
+        // Open on the image that was tapped, not the first in the set.
+        _galleryIndex = State(initialValue: artURL.flatMap { galleryURLs.firstIndex(of: $0) } ?? 0)
+    }
 
     private var showsCarousel: Bool { galleryURLs.count > 1 }
+
+    /// The set can change while open (the near-duplicate pass lands, the
+    /// track changes): keep the image on screen if it is still present,
+    /// otherwise fall back to the first.
+    private func realign(from previous: [URL], to current: [URL]) {
+        let shown = previous.indices.contains(galleryIndex) ? previous[galleryIndex] : artURL
+        galleryIndex = shown.flatMap { current.firstIndex(of: $0) } ?? 0
+    }
+
     private var displayedURL: URL? {
         showsCarousel
             ? galleryURLs[min(max(galleryIndex, 0), galleryURLs.count - 1)]
@@ -1135,7 +1146,11 @@ struct ExpandedArtView: View {
         VStack(spacing: 16) {
             ZStack {
                 if let url = displayedURL {
-                    CachedAsyncImage(url: url, cornerRadius: 12, priority: .interactive)
+                    // The viewer shows the whole photo. Artist shots are
+                    // tall portraits, and cropping one to the square frame
+                    // is exactly what the thumbnail already did.
+                    CachedAsyncImage(url: url, cornerRadius: 12, priority: .interactive,
+                                     contentMode: .fit)
                         .frame(width: 400, height: 400)
                         .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
                         .id(url)
@@ -1205,6 +1220,7 @@ struct ExpandedArtView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
         }
+        .onChange(of: galleryURLs) { previous, current in realign(from: previous, to: current) }
         .padding(30)
         .frame(width: 460, height: showsCarousel ? 584 : 560)
         .onAppear {

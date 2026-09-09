@@ -4,13 +4,10 @@ public enum StaleDataError: Error, LocalizedError, Equatable {
     case deviceUnreachable(String) // room name
     case groupChanged(String) // group name
     case topologyStale
-    /// Raised when the speaker rejects the URI/metadata we sent (UPnP
-    /// 714 "no such resource"). NOT a topology event — bundling it
-    /// with `topologyStale` previously led users to think their group
-    /// layout was broken when in reality the speaker simply refused
-    /// the single-track URI we built (issue #42). The real fix is to
-    /// route those plays through the queue path; this case exists so
-    /// the user sees an actionable message in the meantime.
+    /// Raised when the speaker rejects the URI/metadata sent to it (UPnP
+    /// 714 "no such resource"). NOT a topology event: reporting it as
+    /// `topologyStale` misreads a refused single-track URI as a broken
+    /// group layout.
     case serviceRejected
     /// Raised on a direct play when the speaker can't resolve the track's
     /// source — its music service or library share isn't set up on that
@@ -21,7 +18,7 @@ public enum StaleDataError: Error, LocalizedError, Equatable {
     /// Play/Pause sent to a transport with no source loaded (fresh boot,
     /// cleared queue, no stream). The speaker faults UPnP 701 — the same code
     /// stale topology produces — so this case exists to report the actual
-    /// situation instead of a rescan banner or a generic error (issue #72).
+    /// situation instead of a rescan banner or a generic error.
     case nothingLoaded
 
     /// Tracks skipped within seconds of starting, repeatedly. Sonos reports
@@ -42,30 +39,37 @@ public enum StaleDataError: Error, LocalizedError, Equatable {
     /// with UPnP 800 (#77: Spotify's "Unable to access playlist"
     /// error row carried a playlist URI through the leaf path).
     case notPlayable
+    /// The speaker accepted an Amazon Music track into the queue and
+    /// faulted UPnP 701 on Play. Observed on an Amazon Music Prime
+    /// account for every track form: Prime plays albums,
+    /// playlists and stations only; on-demand tracks need Unlimited.
+    case serviceTierRefused
 
     public var errorDescription: String? {
         switch self {
         case .deviceUnreachable(let name):
-            return "\(name) is not responding. Your network layout may have changed — refreshing now."
+            return L10n.errStaleDeviceUnreachable(name)
         case .groupChanged(let name):
-            return "\(name) group has changed. Refreshing speaker list."
+            return L10n.errStaleGroupChanged(name)
         case .topologyStale:
-            return "Speaker layout has changed since last cached. Refreshing now."
+            return L10n.errStaleTopology
         case .serviceRejected:
-            return "Speaker rejected request. Please raise bug report."
+            return L10n.errStaleServiceRejected
         case .notPlayable:
-            return "Service returned an unplayable item. Please raise bug report."
+            return L10n.errStaleNotPlayable
+        case .serviceTierRefused:
+            return L10n.errorAmazonTrackRefused
         case .serviceUnavailable:
-            return "This track's music service or library isn't available on this speaker's system."
+            return L10n.errStaleServiceUnavailable
         case .nothingLoaded:
-            return "Nothing is loaded on this speaker. Choose something to play."
+            return L10n.errStaleNothingLoaded
         case .tracksSkippingEarly:
             return L10n.errorTracksSkippingEarly
         case .libraryNotConfigured(let generation):
             let app = generation == .unknown
-                ? "the Sonos app for this system"
-                : "the Sonos \(generation.displayLabel) app"
-            return "This music isn't set up on the selected system. Add your music folders in \(app), then try again."
+                ? L10n.errStaleLibraryAppThisSystem
+                : L10n.errStaleLibraryAppNamed(generation.displayLabel)
+            return L10n.errStaleLibraryNotConfigured(app)
         }
     }
 }

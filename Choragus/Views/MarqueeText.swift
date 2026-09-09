@@ -12,6 +12,10 @@ struct MarqueeText: View {
     var foregroundStyle: AnyShapeStyle = AnyShapeStyle(.primary)
     var pauseDuration: Double = 3.0
     var scrollSpeed: Double = 30.0 // points per second
+    /// `true`: static until the pointer enters, then one full slide cycle
+    /// runs to completion even if the pointer leaves. `false`: loops
+    /// continuously while overflowing.
+    var scrollOnHover = false
 
     @State private var textWidth: CGFloat = 0
     @State private var containerWidth: CGFloat = 0
@@ -41,6 +45,13 @@ struct MarqueeText: View {
                 .onChange(of: text) {
                     restartAnimation()
                 }
+                .onHover { inside in
+                    if inside, scrollOnHover { startCycle() }
+                }
+                // Rows in a lazy list leave the hierarchy when scrolled
+                // off-screen; a live slide task would otherwise keep
+                // writing state into a dead view.
+                .onDisappear { animationTask?.cancel() }
                 .background {
                     Text(text)
                         .font(font)
@@ -77,36 +88,46 @@ struct MarqueeText: View {
 
     private func startAnimation() {
         animationTask?.cancel()
-        guard needsScroll else {
+        guard needsScroll, !scrollOnHover else {
             offset = 0
             return
         }
         animationTask = Task { @MainActor in
             while !Task.isCancelled {
-                // Pause at start
-                offset = 0
-                try? await Task.sleep(nanoseconds: UInt64(pauseDuration * 1_000_000_000))
-                guard !Task.isCancelled else { return }
-
-                // Slide to show overflow
-                let duration = Double(overflow) / scrollSpeed
-                withAnimation(.linear(duration: duration)) {
-                    offset = -overflow
-                }
-                try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-                guard !Task.isCancelled else { return }
-
-                // Pause at end
-                try? await Task.sleep(nanoseconds: UInt64(pauseDuration * 1_000_000_000))
-                guard !Task.isCancelled else { return }
-
-                // Reset instantly
-                withAnimation(.none) {
-                    offset = 0
-                }
-                try? await Task.sleep(nanoseconds: Timing.marqueeAnimationPause)
+                await runCycle(initialPause: pauseDuration)
             }
         }
+    }
+
+    /// Hover trigger: one cycle, ignored while one is already running.
+    private func startCycle() {
+        guard needsScroll, animationTask == nil || animationTask?.isCancelled == true else { return }
+        animationTask = Task { @MainActor in
+            await runCycle(initialPause: 0.4)
+            animationTask = nil
+        }
+    }
+
+    /// Pause → slide to the end → pause → snap back.
+    private func runCycle(initialPause: Double) async {
+        offset = 0
+        try? await Task.sleep(nanoseconds: UInt64(initialPause * 1_000_000_000))
+        guard !Task.isCancelled else { return }
+
+        let duration = Double(overflow) / scrollSpeed
+        withAnimation(.linear(duration: duration)) {
+            offset = -overflow
+        }
+        try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+        guard !Task.isCancelled else { return }
+
+        try? await Task.sleep(nanoseconds: UInt64(pauseDuration * 1_000_000_000))
+        guard !Task.isCancelled else { return }
+
+        withAnimation(.none) {
+            offset = 0
+        }
+        try? await Task.sleep(nanoseconds: Timing.marqueeAnimationPause)
     }
 
     private func restartAnimation() {

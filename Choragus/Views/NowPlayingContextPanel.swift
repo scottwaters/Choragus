@@ -16,6 +16,13 @@ import SonosKit
 
 struct NowPlayingContextPanel: View {
     let trackMetadata: TrackMetadata
+    /// The artwork the Now Playing view is showing for this track —
+    /// the same resolved URL, so the expanded carousel's cover matches
+    /// the main artwork rather than a companion-lookup guess.
+    let nowPlayingArtURL: URL?
+    /// Reports the expanded viewer's paging set upward so the main
+    /// artwork click opens the same carousel as the About thumbnails.
+    var onCarouselChange: (([URL]) -> Void)? = nil
     let group: SonosGroup
     /// Authoritative playhead anchor sourced from `NowPlayingViewModel`.
     /// The synced-lyrics view wraps `positionAnchor.projected(at:)` in
@@ -51,9 +58,9 @@ struct NowPlayingContextPanel: View {
     /// Cached result of `matchingHistory()` for the current track.
     /// Recomputed only when the track changes or the history store
     /// grows — `matchingHistory()` filters thousands of entries on the
-    /// main thread, so calling it inside the History tab `body` made
-    /// every parent invalidation (transport tick, topology event,
-    /// volume change) re-scan the whole store.
+    /// main thread, so it must not run inside the History tab `body`
+    /// on every parent invalidation (transport tick, topology event,
+    /// volume change).
     @State private var historyEntries: [PlayHistoryEntry] = []
 
     /// Cached result of `matchingArtistHistory()` for the current
@@ -70,18 +77,19 @@ struct NowPlayingContextPanel: View {
     @State private var artistTopTracks: [ArtistTopTrack] = []
 
     /// Initialises the VM eagerly so body's first render — which fires
-    /// before any `.task` modifier — already has the real instance. The
-    /// previous `@State var vm: VM?` + `assertionFailure`-guarded getter
-    /// crashed because SwiftUI evaluated body before the lazy `.task`
-    /// could populate it.
+    /// before any `.task` modifier — already has the real instance.
     init(
         trackMetadata: TrackMetadata,
+        nowPlayingArtURL: URL?,
         group: SonosGroup,
         positionAnchor: PositionAnchor,
         lyricsCoordinator: LyricsCoordinator,
-        metadataService: MusicMetadataService
+        metadataService: MusicMetadataService,
+        onCarouselChange: (([URL]) -> Void)? = nil
     ) {
         self.trackMetadata = trackMetadata
+        self.nowPlayingArtURL = nowPlayingArtURL
+        self.onCarouselChange = onCarouselChange
         self.group = group
         self.positionAnchor = positionAnchor
         _ctxVM = State(wrappedValue: NowPlayingContextPanelViewModel(
@@ -271,7 +279,7 @@ struct NowPlayingContextPanel: View {
     }
 
     // Offset persistence + tab orchestration live on
-    // `NowPlayingContextPanelViewModel` now — see `scheduleOffsetSave`,
+    // `NowPlayingContextPanelViewModel` — see `scheduleOffsetSave`,
     // `loadActiveTab`, `refreshAbout` in that file.
 
     // MARK: - About
@@ -331,12 +339,16 @@ struct NowPlayingContextPanel: View {
                 artist: ctxVM.artistInfo?.name ?? trackMetadata.artist,
                 album: "",
                 stationName: "",
-                galleryURLs: displayGallery
+                galleryURLs: expandedCarouselURLs
             )
         }
         .task(id: "\(trackMetadata.artist)|\(trackMetadata.album)") {
             await loadAppleMusicCompanions()
         }
+        .onChange(of: expandedCarouselURLs, initial: true) { _, urls in
+            onCarouselChange?(urls)
+        }
+        .onDisappear { onCarouselChange?([]) }
         .task(id: artistGallery.map(\.absoluteString).joined(separator: "|")) {
             similarityDedupedGallery = nil
             let urls = artistGallery
@@ -380,9 +392,8 @@ struct NowPlayingContextPanel: View {
                      ])
     }
 
-    /// Identifiable URL wrapper so we can use `.sheet(item:)` with a
-    /// nilable URL state. SwiftUI's `.sheet(item:)` requires Identifiable
-    /// content; URL itself isn't.
+    /// Identifiable URL wrapper for `.sheet(item:)` with a nilable URL
+    /// state; `.sheet(item:)` requires Identifiable content and URL isn't.
     private struct IdentifiableURL: Identifiable {
         let url: URL
         var id: String { url.absoluteString }
@@ -416,6 +427,18 @@ struct NowPlayingContextPanel: View {
     /// `MusicMetadataService.refineGallery`).
     private var displayGallery: [URL] {
         similarityDedupedGallery ?? artistGallery
+    }
+
+    /// The expanded viewer's paging set: the artist photos plus the
+    /// artwork Now Playing is showing for this track, so the cover is
+    /// reachable from the carousel and opening from the cover pages
+    /// into the photos.
+    private var expandedCarouselURLs: [URL] {
+        var urls = displayGallery
+        if let cover = nowPlayingArtURL, !urls.contains(cover) {
+            urls.append(cover)
+        }
+        return urls
     }
 
     private func artistSection(_ info: ArtistInfo) -> some View {
@@ -469,8 +492,8 @@ struct NowPlayingContextPanel: View {
     /// instead of clipping. Each link points at Wikipedia's search-go
     /// endpoint, which auto-redirects to the article when one matches
     /// the name and falls back to the search results page otherwise —
-    /// so we never show a 404 even when the artist's article lives at
-    /// a slightly different title.
+    /// no 404 even when the artist's article lives at a slightly
+    /// different title.
     @ViewBuilder
     private func similarArtistsRow(_ names: [String]) -> some View {
         var combined = Text("")
@@ -525,10 +548,7 @@ struct NowPlayingContextPanel: View {
         }
     }
 
-    /// Card wrapper used by both artist and album sections. Subtle
-    /// material fill with a soft outline reads as "modern macOS" without
-    /// shouting — distinguishes the section as a unit but doesn't compete
-    /// with the bio text or tags.
+    /// Card wrapper used by both artist and album sections.
     @ViewBuilder
     private func aboutCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         content()
@@ -544,11 +564,9 @@ struct NowPlayingContextPanel: View {
             )
     }
 
-    /// Header used for each card: a small accent-coloured icon, the title,
-    /// an optional secondary subtitle line, and an optional trailing
-    /// image (artist photo from Wikipedia / Last.fm). The image renders
-    /// with rounded corners and a tint-coloured outline so it reads as
-    /// part of the card rather than a floating thumbnail.
+    /// Header used for each card: accent-coloured icon, title, optional
+    /// subtitle line, and optional trailing image(s) (artist photo from
+    /// Apple Music / Wikipedia / Last.fm).
     @ViewBuilder
     private func sectionHeader(icon: String, title: String,
                                subtitle: String?,
@@ -580,7 +598,10 @@ struct NowPlayingContextPanel: View {
             if !galleryURLs.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(galleryURLs, id: \.absoluteString) { url in
-                        CachedAsyncImage(url: url, cornerRadius: 8, priority: .interactive)
+                        // Press shots are tall portraits; a centred square
+                        // of one keeps the midriff and cuts the head off.
+                        CachedAsyncImage(url: url, cornerRadius: 8, priority: .interactive,
+                                         fillAlignment: .top)
                             .frame(width: 64, height: 64)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -638,10 +659,7 @@ struct NowPlayingContextPanel: View {
         if !info.artist.isEmpty { lines.append(info.artist) }
         // Prefer the Apple Music release date when present — Wikipedia /
         // MusicBrainz often return year-only or partial dates while Apple
-        // returns the full release date. Falls back to whatever the
-        // other sources supplied. Rendered on its own line under the
-        // artist so the date stands as a labelled fact rather than a
-        // run-on inline detail.
+        // returns the full date. Falls back to the other sources.
         if let appleDate = appleAlbumReleaseDate {
             let f = DateFormatter()
             f.dateStyle = .medium
@@ -795,11 +813,8 @@ struct NowPlayingContextPanel: View {
     }
 
     private func matchingHistory() -> [PlayHistoryEntry] {
-        // Match by title + artist (case-insensitive). Most history
-        // queries are interactive — 5k entries scanned in memory is
-        // fine without an index. If history grows past tens of
-        // thousands we'd add a `(title, artist)` index on the SQLite
-        // side.
+        // Match by title + artist (case-insensitive). Thousands of
+        // entries scanned in memory is fine without a SQLite index.
         let needleTitle = trackMetadata.title.lowercased()
         let needleArtist = trackMetadata.artist.lowercased()
         let filtered: [PlayHistoryEntry] = playHistoryManager.entries.filter { entry in
@@ -914,9 +929,7 @@ struct NowPlayingContextPanel: View {
     }
 
     private func formatDuration(_ seconds: Int) -> String {
-        let m = seconds / 60
-        let s = seconds % 60
-        return String(format: "%d:%02d", m, s)
+        PlaybackTimeFormat.string(seconds: seconds)
     }
 
     private func formatRelativeDate(_ date: Date) -> String {
@@ -928,10 +941,10 @@ struct NowPlayingContextPanel: View {
 
 // MARK: - Service holders (env-injectable wrappers)
 
-/// SwiftUI's `@EnvironmentObject` requires `ObservableObject`, but our
-/// services are intentionally not — they're stateless. These thin
-/// wrappers let the app inject them once and have views observe the
-/// holder reference rather than the bare struct.
+/// SwiftUI's `@EnvironmentObject` requires `ObservableObject`; the
+/// services are intentionally stateless structs. These thin wrappers
+/// let the app inject them once and have views observe the holder
+/// reference rather than the bare struct.
 
 @MainActor
 public final class LyricsServiceHolder: ObservableObject {

@@ -1,6 +1,13 @@
 import Foundation
 
-public final class ZoneGroupTopologyService {
+/// The one topology capability `TopologyStore` needs. Narrow on purpose:
+/// the store depends on the ability to read a household's zone-group state,
+/// not on the whole SOAP service, and a stub satisfies it in tests.
+public protocol ZoneGroupStateFetching: Sendable {
+    func getZoneGroupState(device: SonosDevice) async throws -> [ZoneGroupData]
+}
+
+public final class ZoneGroupTopologyService: ZoneGroupStateFetching {
     private let soap: SOAPClient
     private static let path = "/ZoneGroupTopology/Control"
     private static let service = "ZoneGroupTopology"

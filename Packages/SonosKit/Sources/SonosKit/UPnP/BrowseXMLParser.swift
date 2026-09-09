@@ -2,8 +2,8 @@
 ///
 /// DIDL-Lite is the UPnP content format: items and containers with Dublin Core metadata.
 /// The tricky part is `r:resMD` — Sonos embeds escaped DIDL metadata *inside* DIDL items.
-/// The SAX parser would descend into and mangle this nested XML, so we pre-extract resMD
-/// content via regex before SAX parsing, then stitch it back in during didEndElement.
+/// The SAX parser would descend into and mangle this nested XML, so resMD content is
+/// pre-extracted via regex before SAX parsing, then stitched back in during didEndElement.
 import Foundation
 
 public class BrowseXMLParser: NSObject, XMLParserDelegate {
@@ -24,7 +24,7 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
     private var currentDesc = ""
     private var isContainerEntry = false
 
-    // resMD handling: track depth so we skip nested elements inside resMD
+    // resMD handling: track depth to skip nested elements inside resMD
     private var resMDDepth = 0
     private var inResMD = false
 
@@ -39,11 +39,21 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
         self.devicePort = devicePort
     }
 
-    public static func parse(_ xml: String, deviceIP: String, devicePort: Int) -> [BrowseItem] {
+    /// - Parameter upgradeInsecureArt: rewrite `http://` art URLs to
+    ///   `https://` unless they are on the device itself. Right for Sonos,
+    ///   which proxies external art; wrong for a UPnP media server, which
+    ///   serves art over plain HTTP on the LAN and often from a different port
+    ///   than its control endpoint — the upgrade then points at a port with no
+    ///   TLS and every cover silently fails to load.
+    private var upgradeInsecureArt = true
+
+    public static func parse(_ xml: String, deviceIP: String, devicePort: Int,
+                             upgradeInsecureArt: Bool = true) -> [BrowseItem] {
         // Do NOT call xmlUnescape — the SOAP SAX parser already unescaped
         // the outer layer. The DIDL XML is valid XML with its own &amp; entities.
         guard let data = xml.data(using: .utf8) else { return [] }
         let handler = BrowseXMLParser(deviceIP: deviceIP, devicePort: devicePort)
+        handler.upgradeInsecureArt = upgradeInsecureArt
 
         // Pre-extract resMD content before SAX parsing, because the SAX parser
         // will unescape and descend into the nested DIDL elements
@@ -63,7 +73,7 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
     }
 
     /// Extract r:resMD content for each item before SAX parsing.
-    /// The resMD contains escaped DIDL-Lite XML that we need to preserve as-is.
+    /// The resMD contains escaped DIDL-Lite XML that must be preserved as-is.
     private func extractResMDMap(from xml: String) {
         // Match item id and its resMD content
         // Pattern: item with id="X" ... <r:resMD>CONTENT</r:resMD>
@@ -163,10 +173,17 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
                 if trimmed.hasPrefix("/") {
                     currentArtURI = "http://\(deviceIP):\(devicePort)\(trimmed)"
                 } else if !trimmed.isEmpty {
-                    // Upgrade external HTTP to HTTPS — only keep HTTP for local speaker URLs
-                    if trimmed.hasPrefix("http://"),
+                    // Upgrade external HTTP to HTTPS. Only public hosts: a
+                    // LAN device serves plain HTTP on its own port and has no
+                    // TLS listener there, so upgrading a media server's art
+                    // URL turns a working image into a silent connection
+                    // failure. Covers the speaker itself and every other
+                    // private-range host, not just `deviceIP`.
+                    if upgradeInsecureArt,
+                       trimmed.hasPrefix("http://"),
                        let parsed = URL(string: trimmed),
-                       parsed.host != deviceIP {
+                       parsed.host != deviceIP,
+                       !IPAddress.isPrivate(parsed.host ?? "") {
                         currentArtURI = trimmed.replacingOccurrences(of: "http://", with: "https://", options: [], range: trimmed.startIndex..<trimmed.index(trimmed.startIndex, offsetBy: 7))
                     } else {
                         currentArtURI = trimmed
@@ -193,9 +210,6 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
                 // metadata `AddMultipleURIsToQueue` rejects the
                 // request with UPnP 402, even though the same call
                 // succeeds when given the item's full DIDL envelope.
-                // Verified via direct SOAP testing of Compilations
-                // tracks that were silently failing through
-                // Choragus.
                 let resolvedMeta: String?
                 if !currentResMD.isEmpty {
                     resolvedMeta = currentResMD
@@ -213,7 +227,7 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
                     resolvedMeta = nil
                 }
 
-                let item = BrowseItem(
+                var item = BrowseItem(
                     id: entryID,
                     title: currentTitle,
                     artist: currentArtist,
@@ -224,6 +238,7 @@ public class BrowseXMLParser: NSObject, XMLParserDelegate {
                     resourceMetadata: resolvedMeta,
                     serviceDescriptor: currentDesc.isEmpty ? nil : currentDesc
                 )
+                item.rawUPnPClass = currentClass.isEmpty ? nil : currentClass
                 items.append(item)
                 inEntry = false
 

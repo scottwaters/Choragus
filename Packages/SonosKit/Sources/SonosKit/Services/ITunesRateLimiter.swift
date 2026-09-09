@@ -30,6 +30,13 @@ public actor ITunesRateLimiter {
     private let softLimitPerMinute = 12
     private let windowDuration: TimeInterval = 60
 
+    /// Slots in each window that only the `.nowPlaying` lane may take. The
+    /// artwork pipeline (browse-panel render, queue re-pins after a cache
+    /// purge) can hold the full budget for minutes at a time; the lookup that
+    /// gives the playing track its title and length must never queue behind
+    /// it, or a bare Apple Music row stays "Live" for the whole play.
+    private let reservedSlotsForNowPlaying = 2
+
     /// How long we treat ourselves as locked out after a 403/429. Apple's
     /// actual block typically clears in 10–30 min; 15 is a reasonable middle
     /// ground that errs on the side of letting the IP fully reset.
@@ -58,6 +65,17 @@ public actor ITunesRateLimiter {
 
     // MARK: - Decision API
 
+    /// Which share of the per-minute budget a request draws from.
+    public enum Lane: Sendable, Equatable {
+        /// Artwork, browse, history backfill, search. Capped at
+        /// `softLimitPerMinute - reservedSlotsForNowPlaying`.
+        case background
+        /// The catalogue lookup for the track currently playing. May use the
+        /// full `softLimitPerMinute`, so it always has slots the background
+        /// lane cannot consume.
+        case nowPlaying
+    }
+
     public enum Decision: Equatable {
         case proceed
         case denied(reason: DenyReason, retryAfter: Date)
@@ -72,7 +90,7 @@ public actor ITunesRateLimiter {
 
     /// Atomic acquire — returns `.proceed` and records the request, or `.denied`
     /// with a `retryAfter` time the caller can surface to the user.
-    public func acquire() -> Decision {
+    public func acquire(lane: Lane = .background) -> Decision {
         totalAttempted += 1
         let now = Date()
 
@@ -93,7 +111,7 @@ public actor ITunesRateLimiter {
         // Drop timestamps that fell out of the window
         requestWindow.removeAll { now.timeIntervalSince($0) >= windowDuration }
 
-        if requestWindow.count >= softLimitPerMinute {
+        if requestWindow.count >= windowCap(for: lane) {
             totalDeniedSelfThrottle += 1
             // Earliest in-window timestamp + window = when a slot frees up
             let oldest = requestWindow.first ?? now
@@ -106,6 +124,16 @@ public actor ITunesRateLimiter {
         requestWindow.append(now)
         totalAllowed += 1
         return .proceed
+    }
+
+    /// Every lane's requests share one window (Apple counts per IP, not per
+    /// caller); the lanes differ only in how full the window may be before
+    /// they are refused.
+    private func windowCap(for lane: Lane) -> Int {
+        switch lane {
+        case .background: return softLimitPerMinute - reservedSlotsForNowPlaying
+        case .nowPlaying: return softLimitPerMinute
+        }
     }
 
     /// Caller invokes this after observing a 403 or 429 from iTunes. Locks the
@@ -135,10 +163,10 @@ public actor ITunesRateLimiter {
     /// Used by background sweeps (history backfill, browse panel rendering)
     /// that benefit from automatic pacing across the soft window. Foreground
     /// user-initiated calls should keep using `acquire()` for fail-fast UX.
-    public func acquireOrWait(maxWait: TimeInterval) async -> Decision {
+    public func acquireOrWait(maxWait: TimeInterval, lane: Lane = .background) async -> Decision {
         let deadline = Date().addingTimeInterval(maxWait)
         while true {
-            let decision = acquire()
+            let decision = acquire(lane: lane)
             switch decision {
             case .proceed:
                 return .proceed
@@ -172,6 +200,10 @@ public actor ITunesRateLimiter {
     ///   workloads (browse-panel render, history backfill) pace themselves
     ///   into the rate-limit window automatically. Hard `.cooldown` still
     ///   fails fast — 15-minute waits would just stall callers.
+    ///
+    /// `lane`: `.background` (default) for artwork / browse / backfill;
+    /// `.nowPlaying` for the playing track's catalogue lookup, which keeps
+    /// `reservedSlotsForNowPlaying` of the window to itself.
     /// Foreground-search variant: skips the per-minute self-throttle but
     /// still respects an active 403/429 cooldown and records new ones.
     /// Use this for user-initiated calls (Apple Music search, manual
@@ -212,17 +244,17 @@ public actor ITunesRateLimiter {
         }
     }
 
-    public func perform(url: URL, session: URLSession, maxWait: TimeInterval = 0) async -> (Data, HTTPURLResponse)? {
+    public func perform(url: URL, session: URLSession, maxWait: TimeInterval = 0, lane: Lane = .background) async -> (Data, HTTPURLResponse)? {
         let decision: Decision = maxWait > 0
-            ? await acquireOrWait(maxWait: maxWait)
-            : acquire()
+            ? await acquireOrWait(maxWait: maxWait, lane: lane)
+            : acquire(lane: lane)
 
         switch decision {
         case .denied(let reason, let until):
             let urlSummary = url.absoluteString.prefix(120)
             switch reason {
             case .selfThrottle:
-                sonosDebugLog("[iTunes] self-throttle deny (waited up to \(Int(maxWait))s) until \(until): \(urlSummary)")
+                sonosDebugLog("[iTunes] self-throttle deny (\(lane), waited up to \(Int(maxWait))s) until \(until): \(urlSummary)")
             case .cooldown(let status):
                 sonosDebugLog("[iTunes] cooldown(\(status)) deny until \(until): \(urlSummary)")
             }

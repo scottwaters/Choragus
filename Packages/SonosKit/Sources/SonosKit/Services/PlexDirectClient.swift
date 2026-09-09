@@ -6,11 +6,10 @@
 /// on plex.tv's relay being healthy, and surfaces "PMS asleep" as a
 /// concrete error instead of an empty list.
 ///
-/// Auth is Plex's PIN flow: we ask plex.tv for an alphanumeric code
-/// (length varies — Plex's strong-PIN generator returns 4–8 chars
-/// depending on their current settings), the user types it at
-/// plex.tv/link, we poll until it's claimed, and we keep the resulting
-/// `authToken` in SecretsStore alongside SMAPI tokens. Server discovery
+/// Auth is Plex's PIN flow: plex.tv issues an alphanumeric code
+/// (4–8 chars), the user authorises it at plex.tv/link, the client
+/// polls until it's claimed, and the resulting `authToken` is kept
+/// in SecretsStore alongside SMAPI tokens. Server discovery
 /// uses the same token against `clients.plex.tv/api/v2/resources` to
 /// enumerate the user's owned servers and pick a reachable connection
 /// (LAN preferred).
@@ -34,7 +33,7 @@ public struct PlexServer {
     public let name: String
     public let clientIdentifier: String
     public let accessToken: String
-    /// Connections in the order we tried them (LAN first, then remote).
+    /// Connections in probe order (LAN first, then remote).
     public let connections: [PlexConnection]
     public let owned: Bool
 }
@@ -119,13 +118,13 @@ public enum PlexError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .notAuthenticated:    return "Plex isn't connected — sign in first."
-        case .noServersFound:      return "No Plex servers found on this account."
-        case .networkError(let e): return "Network error: \(e.localizedDescription)"
-        case .httpError(let c, _): return "Plex returned HTTP \(c)."
-        case .parseError(let m):   return "Couldn't parse Plex response: \(m)"
-        case .pinExpired:          return "Plex sign-in code expired — try again."
-        case .authPending:         return "Waiting for plex.tv/link…"
+        case .notAuthenticated:    return L10n.errPlexNotConnected
+        case .noServersFound:      return L10n.errPlexNoServers
+        case .networkError(let e): return L10n.errPlexNetworkError(e.localizedDescription)
+        case .httpError(let c, _): return L10n.errPlexHTTP(c)
+        case .parseError(let m):   return L10n.errPlexParse(m)
+        case .pinExpired:          return L10n.errPlexPinExpired
+        case .authPending:         return L10n.plexWaitingForLink
         }
     }
 }
@@ -227,7 +226,7 @@ public final class PlexDirectClient: Sendable {
             throw PlexError.parseError("non-JSON pin lookup")
         }
         // `authToken` is null until the user claims the code; once
-        // claimed it's the long-lived token we keep.
+        // claimed it's the long-lived token.
         if let token = json["authToken"] as? String, !token.isEmpty {
             return token
         }
@@ -237,8 +236,8 @@ public final class PlexDirectClient: Sendable {
     // MARK: - Server discovery
 
     /// Lists all servers the account owns/has access to. Pick one with
-    /// `pickReachableConnection` — we don't auto-pick because the
-    /// caller may want to surface a multi-server picker.
+    /// `pickReachableConnection`; no auto-pick, so the caller can
+    /// surface a multi-server picker.
     public func listServers(authToken: String) async throws -> [PlexServer] {
         guard let url = URL(string: "https://clients.plex.tv/api/v2/resources?includeHttps=1&includeRelay=1") else {
             throw PlexError.parseError("invalid resources URL")
@@ -253,7 +252,7 @@ public final class PlexDirectClient: Sendable {
         }
         var out: [PlexServer] = []
         for entry in arr {
-            // `provides` is a comma-separated list — we want servers, not players.
+            // `provides` is a comma-separated list — servers only, not players.
             let provides = (entry["provides"] as? String) ?? ""
             guard provides.contains("server") else { continue }
 
@@ -275,6 +274,16 @@ public final class PlexDirectClient: Sendable {
             }
             out.append(PlexServer(name: name, clientIdentifier: cid,
                                   accessToken: token, connections: conns, owned: owned))
+            // What plex.tv advertises for this server — the same list
+            // its Sonos service works from, so a "no available servers"
+            // fault can be read against it. Hosts only; no tokens.
+            let presence = (entry["presence"] as? Bool).map(String.init) ?? "?"
+            let publicMatches = (entry["publicAddressMatches"] as? Bool).map(String.init) ?? "?"
+            let summary = conns.map { c in
+                let host = URL(string: c.uri)?.host ?? c.uri
+                return "\(host)\(c.local ? " local" : "")\(c.relay ? " relay" : "")"
+            }.joined(separator: "; ")
+            sonosDebugLog("[PLEX] server \(name) owned=\(owned) presence=\(presence) publicAddressMatches=\(publicMatches) connections=[\(summary)]")
         }
         sonosDebugLog("[PLEX] listServers found \(out.count) servers")
         return out
@@ -345,6 +354,53 @@ public final class PlexDirectClient: Sendable {
         let path = "/search?query=\(q)&limit=\(limit)"
         let result = try await getMediaList(baseURI: baseURI, path: path, authToken: authToken)
         return result.items
+    }
+
+    /// Reports playback state for one track — what every Plex client
+    /// sends every few seconds. The server derives "now playing" and
+    /// play counts from these; `deviceName` is the room shown in the
+    /// server's activity list.
+    public func timeline(baseURI: String, authToken: String, ratingKey: String,
+                         state: String, timeMs: Int, durationMs: Int, deviceName: String) async throws {
+        var components = URLComponents(string: "\(baseURI)/:/timeline")
+        components?.queryItems = [
+            URLQueryItem(name: "ratingKey", value: ratingKey),
+            URLQueryItem(name: "key", value: "/library/metadata/\(ratingKey)"),
+            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library"),
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "time", value: String(timeMs)),
+            URLQueryItem(name: "duration", value: String(durationMs)),
+            URLQueryItem(name: "hasMDE", value: "0"),
+            URLQueryItem(name: "X-Plex-Device-Name", value: deviceName),
+        ]
+        guard let url = components?.url else {
+            throw PlexError.parseError("invalid url \(baseURI)/:/timeline")
+        }
+        var request = URLRequest(url: url)
+        for (k, v) in plexHeaders() { request.setValue(v, forHTTPHeaderField: k) }
+        request.setValue(authToken, forHTTPHeaderField: "X-Plex-Token")
+        request.setValue(deviceName, forHTTPHeaderField: "X-Plex-Device-Name")
+        request.timeoutInterval = 8
+        _ = try await dataAndCheck(for: request)
+    }
+
+    /// Marks a track played: play count +1, last-played now, a history
+    /// row. Timelines alone show the session but do not count a music
+    /// play; clients scrobble at track end.
+    public func scrobble(baseURI: String, authToken: String, ratingKey: String) async throws {
+        var components = URLComponents(string: "\(baseURI)/:/scrobble")
+        components?.queryItems = [
+            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library"),
+            URLQueryItem(name: "key", value: ratingKey),
+        ]
+        guard let url = components?.url else {
+            throw PlexError.parseError("invalid url \(baseURI)/:/scrobble")
+        }
+        var request = URLRequest(url: url)
+        for (k, v) in plexHeaders() { request.setValue(v, forHTTPHeaderField: k) }
+        request.setValue(authToken, forHTTPHeaderField: "X-Plex-Token")
+        request.timeoutInterval = 8
+        _ = try await dataAndCheck(for: request)
     }
 
     /// Mints a transient token (~6 min lifetime) for use in a playback
@@ -455,8 +511,7 @@ public final class PlexDirectClient: Sendable {
         let partKey = part?["key"] as? String
         let durationMs = (dict["duration"] as? Int) ?? (media?["duration"] as? Int)
         // Playlist-only fields. Plex serialises `smart` as `1` / `0`
-        // (not a JSON boolean) — coerce both forms so we don't depend
-        // on the server version's quirks.
+        // (not a JSON boolean) — coerce both forms.
         let smart: Bool? = {
             if let b = dict["smart"] as? Bool { return b }
             if let i = dict["smart"] as? Int { return i != 0 }
@@ -526,7 +581,7 @@ public final class PlexAuthManager: ObservableObject {
     /// Trailing timestamps of recent path-signature changes, for flap
     /// detection. A dual-interface Mac can oscillate Wi-Fi ⇄ Ethernet every
     /// ~minute; without throttling that floods the diagnostics bundle with a
-    /// path-change line per flip (observed on issue #46).
+    /// path-change line per flip.
     private var pathChangeTimes: [Date] = []
     /// Set once when flapping is detected, so the per-flip log is emitted only
     /// once until the link settles.
@@ -534,9 +589,9 @@ public final class PlexAuthManager: ObservableObject {
 
     private init() {
         // Default the "prefer direct" toggle to true on first launch —
-        // direct is the better experience when it works, and we let the
-        // user fall back to the SMAPI relay via the toggle in
-        // MusicServicesView if their PMS isn't reachable from the LAN.
+        // direct is faster when it works, and the toggle in
+        // MusicServicesView falls back to the SMAPI relay when the PMS
+        // isn't reachable from the LAN.
         UserDefaults.standard.register(defaults: [UDKey.plexPreferDirect: true])
         // Tokens come out of the unified SecretsStore (one Keychain prompt
         // per dev rebuild, not one per service).
@@ -621,9 +676,9 @@ public final class PlexAuthManager: ObservableObject {
     private var pinSession = 0
 
     /// Builds the OAuth-style authorize URL the user should open.
-    /// Strong PINs (which we use for security) aren't typeable codes —
-    /// they're random tokens embedded in this URL. The user clicks the
-    /// link, authorizes inside Plex's web UI, we poll until it lands.
+    /// Strong PINs aren't typeable codes — they're random tokens embedded
+    /// in this URL. The user authorizes inside Plex's web UI; the manager
+    /// polls until it lands.
     /// Reference: https://forums.plex.tv/t/authenticating-with-plex/609370
     public func authorizeURL() -> URL? {
         guard let pin = activePin else { return nil }
@@ -689,7 +744,7 @@ public final class PlexAuthManager: ObservableObject {
                 }
             } catch PlexError.pinExpired {
                 await MainActor.run {
-                    self.pinPollError = "Plex sign-in code expired — try again."
+                    self.pinPollError = L10n.errPlexPinExpired
                     self.isPolling = false
                     self.activePin = nil
                 }
@@ -710,7 +765,7 @@ public final class PlexAuthManager: ObservableObject {
             self.isPolling = false
             self.activePin = nil
             if self.pinPollError == nil {
-                self.pinPollError = "Timed out waiting for plex.tv/link."
+                self.pinPollError = L10n.errPlexLinkTimedOut
                 sonosDiagLog(.error, tag: "PLEX",
                              "PIN polling timed out — user did not complete plex.tv/link")
             }

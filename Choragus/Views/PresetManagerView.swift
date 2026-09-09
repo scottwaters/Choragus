@@ -3,7 +3,7 @@ import SwiftUI
 import SonosKit
 
 struct PresetManagerView: View {
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var presetManager: PresetManager
     @Environment(\.dismiss) private var dismiss
 
@@ -38,7 +38,7 @@ struct PresetManagerView: View {
         .frame(width: 680, height: 580)
         .sheet(item: $editingPreset) { preset in
             PresetEditView(preset: preset)
-                .environmentObject(sonosManager)
+                .choragusServices(sonosManager)
                 .environmentObject(presetManager)
         }
         .alert(L10n.deletePresetTitle, isPresented: Binding(
@@ -170,7 +170,7 @@ struct PresetManagerView: View {
                         .fontWeight(.semibold)
 
                     if preset.includesEQ {
-                        Text("EQ")
+                        Text(L10n.eq)
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
@@ -326,7 +326,7 @@ struct PresetManagerView: View {
 
 private struct PresetEditView: View {
     @State var preset: GroupPreset
-    @EnvironmentObject var sonosManager: SonosManager
+    @Environment(SonosManager.self) private var sonosManager
     @EnvironmentObject var presetManager: PresetManager
     @Environment(\.dismiss) private var dismiss
     @State private var isLoadingEQ = false
@@ -431,11 +431,9 @@ private struct PresetEditView: View {
                     // Section 4: Home Theater. Driven by the preset's
                     // own `homeTheaterEQ` value rather than the live
                     // `isHTZone` lookup — `sonosManager.homeTheaterZones`
-                    // is computed off `@Published` topology and
-                    // briefly returns nil mid-edit on every topology
-                    // event, which used to make the whole section
-                    // disappear and reappear. The data is in
-                    // `preset.homeTheaterEQ` regardless.
+                    // is computed off `@Published` topology and briefly
+                    // returns nil mid-edit on every topology event, which
+                    // would blank the section.
                     if preset.includesEQ && preset.homeTheaterEQ != nil {
                         Divider()
                         homeTheaterSection
@@ -671,10 +669,7 @@ private struct PresetEditView: View {
                     // preset editor — the live device's `hasSub` /
                     // `hasSurrounds` capability isn't a reliable
                     // gate when editing a preset that may be applied
-                    // to a different bonded setup later. The data
-                    // we're editing lives in `preset.homeTheaterEQ`;
-                    // showing the full set of controls is what the
-                    // user expects.
+                    // to a different bonded setup later.
                     Divider()
                     Toggle(L10n.subTab, isOn: binding(for: \.subEnabled))
                         .toggleStyle(.checkbox)
@@ -749,9 +744,9 @@ private struct PresetEditView: View {
         for i in preset.members.indices {
             guard let device = sonosManager.devices[preset.members[i].deviceID] else { continue }
             do {
-                let bass = try await sonosManager.getBass(device: device)
-                let treble = try await sonosManager.getTreble(device: device)
-                let loudness = try await sonosManager.getLoudness(device: device)
+                let bass = try await sonosManager.eq.getBass(device: device)
+                let treble = try await sonosManager.eq.getTreble(device: device)
+                let loudness = try await sonosManager.eq.getLoudness(device: device)
                 preset.members[i].eq = SpeakerEQ(bass: bass, treble: treble, loudness: loudness)
             } catch {
                 sonosDebugLog("[PRESET] Failed to read EQ for \(device.roomName): \(error)")
@@ -759,15 +754,15 @@ private struct PresetEditView: View {
         }
 
         if isHTZone, let device = sonosManager.devices[preset.coordinatorDeviceID] {
-            let nightMode = (try? await sonosManager.getEQ(device: device, eqType: "NightMode")) == 1
-            let dialogLevel = (try? await sonosManager.getEQ(device: device, eqType: "DialogLevel")) == 1
-            let subEnabled = (try? await sonosManager.getEQ(device: device, eqType: "SubEnable")) != 0
-            let subGain = (try? await sonosManager.getEQ(device: device, eqType: "SubGain")) ?? 0
-            let subPolarity = (try? await sonosManager.getEQ(device: device, eqType: "SubPolarity")) == 1
-            let surroundEnabled = (try? await sonosManager.getEQ(device: device, eqType: "SurroundEnable")) != 0
-            let surroundLevel = (try? await sonosManager.getEQ(device: device, eqType: "SurroundLevel")) ?? 0
-            let musicSurroundLevel = (try? await sonosManager.getEQ(device: device, eqType: "MusicSurroundLevel")) ?? 0
-            let surroundMode = (try? await sonosManager.getEQ(device: device, eqType: "SurroundMode")) ?? 1
+            let nightMode = (try? await sonosManager.eq.getEQ(device: device, eqType: "NightMode")) == 1
+            let dialogLevel = (try? await sonosManager.eq.getEQ(device: device, eqType: "DialogLevel")) == 1
+            let subEnabled = (try? await sonosManager.eq.getEQ(device: device, eqType: "SubEnable")) != 0
+            let subGain = (try? await sonosManager.eq.getEQ(device: device, eqType: "SubGain")) ?? 0
+            let subPolarity = (try? await sonosManager.eq.getEQ(device: device, eqType: "SubPolarity")) == 1
+            let surroundEnabled = (try? await sonosManager.eq.getEQ(device: device, eqType: "SurroundEnable")) != 0
+            let surroundLevel = (try? await sonosManager.eq.getEQ(device: device, eqType: "SurroundLevel")) ?? 0
+            let musicSurroundLevel = (try? await sonosManager.eq.getEQ(device: device, eqType: "MusicSurroundLevel")) ?? 0
+            let surroundMode = (try? await sonosManager.eq.getEQ(device: device, eqType: "SurroundMode")) ?? 1
 
             preset.homeTheaterEQ = HomeTheaterEQ(
                 nightMode: nightMode, dialogLevel: dialogLevel,
