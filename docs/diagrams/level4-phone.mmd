@@ -1,5 +1,5 @@
 flowchart TB
-    P["Claude or ChatGPT<br/>on your phone"] -.->|"vendor's cloud"| S["Your session<br/>running on your Mac"]
+    P["Claude or ChatGPT<br/>on your phone"] -.->|"cloud / internet"| S["Your session<br/>running on your Mac"]
     S -->|"http://127.0.0.1:52080/mcp"| C["Choragus<br/>on your Mac"]
     C --> K["Sonos speakers"]
 
