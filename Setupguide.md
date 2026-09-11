@@ -1,6 +1,6 @@
 # Setup Guide — Music Services in Choragus
 
-This guide is for getting your favourite streaming services (Spotify, Apple Music, TuneIn, Plex, etc.) working inside Choragus. It's written for everyday users, not engineers — no command-line steps, no networking jargon. If anything is still unclear after reading this, please open an issue.
+This guide is for getting your favourite streaming services (Spotify, Apple Music, TuneIn, Plex, etc.) working inside Choragus. It's written for everyday users: no command-line steps, no networking jargon. If anything is still unclear after reading this, please open an issue.
 
 ---
 
@@ -28,7 +28,7 @@ If you only ever listen via TuneIn or radio, you can skip Path B entirely.
 
 **TuneIn, Calm Radio, Sonos Radio, Apple Music (search).**
 
-These services don't require a Choragus-side OAuth — but they **do still need to exist in your Sonos household**. The radio services (TuneIn, Calm Radio, Sonos Radio) are pre-installed on most Sonos systems and you usually don't have to do anything; Apple Music has to be added explicitly. If a service hasn't been added in your Sonos household, the toggle in **Settings → Music** will be greyed out with an inline hint.
+These services don't require a Choragus-side OAuth, but they do still need to exist in your Sonos household. The radio services (TuneIn, Calm Radio, Sonos Radio) are pre-installed on most Sonos systems and you usually don't have to do anything; Apple Music has to be added explicitly. If a service hasn't been added in your Sonos household, the toggle in **Settings → Music** will be greyed out with an inline hint.
 
 ### Step 0 (only if needed) — Add the service in the official Sonos app
 
@@ -37,18 +37,18 @@ These services don't require a Choragus-side OAuth — but they **do still need 
 3. Pick the service. For Apple Music sign in with your Apple Account; for the radio services there's nothing to sign in to.
 4. The service is now part of your Sonos household.
 
-You only need to do this once per service per Sonos household. For TuneIn / Calm Radio / Sonos Radio you usually don't need this step at all — they're already there.
+You only need to do this once per service per Sonos household. For TuneIn / Calm Radio / Sonos Radio you usually don't need this step at all; they're already there.
 
 ### Steps inside Choragus
 
-1. **Open Choragus.**
-2. **Press `⌘,`** (Command + comma) to open Settings. (Or `Choragus` menu → `Settings…`.)
+1. Open Choragus.
+2. Press `⌘,` (Command + comma) to open Settings. (Or `Choragus` menu → `Settings…`.)
 3. Scroll to the **Music** section.
 4. Under **Search Services**, tick the checkbox next to the service you want.
 
-The service now appears in the **Browse** panel under **Service Search**. You can search, browse, and play music. No browser sign-in step.
+The service now appears in the **Browse** panel under **Service Search**. You can search, browse, and play music with no browser sign-in step.
 
-> **Note for Apple Music:** the Path A checkbox enables *search* only (via the public iTunes API). To actually *play* an Apple Music track on your speakers, you also need to follow Path B's favourited-song step once. Tapping search results to preview works without it.
+> **Note for Apple Music:** the Path A checkbox enables *search* only (via the public iTunes API). To *play* an Apple Music track on your speakers, you also need to follow Path B's favourited-song step once. Tapping search results to preview works without it.
 
 ---
 
@@ -71,15 +71,15 @@ You only need to do this once per service per Sonos household.
 
 ### Step 2 — *(Spotify and Apple Music only — skip for Plex)* Add one favourited song
 
-This step is the one most users miss. **Sonos's internal account identifier (`sn=`) is only generated when you favourite content from a service.** Without that identifier, third-party apps like Choragus cannot authenticate playback through the service. There is no way for the app to do this on your behalf — it's a Sonos design constraint.
+This step is the one most users miss. Sonos's internal account identifier (`sn=`) is only generated when you favourite content from a service. Without that identifier, third-party apps like Choragus cannot authenticate playback through the service. There is no way for the app to do this on your behalf; it's a Sonos design constraint.
 
 1. Still in the official Sonos app, browse the service you just connected.
 2. Play any track from that service on any of your Sonos speakers.
 3. While the track is playing, tap **the heart icon** (or *Save to Sonos Favorites*).
 
-Just one favourite is enough — you don't need to do this for every track.
+One favourite is enough; you don't need to do this for every track.
 
-> **Why is this necessary?** Sonos generates the account identifier the first time you save content from a service. Once that identifier exists, every third-party Sonos controller can use it to authenticate playback. There's nothing Choragus can do to bypass this — the identifier is generated server-side by Sonos.
+> **Why is this necessary?** Sonos generates the account identifier the first time you save content from a service. Once that identifier exists, every third-party Sonos controller can use it to authenticate playback. There's nothing Choragus can do to bypass this: the identifier is generated server-side by Sonos.
 >
 > **Plex doesn't need this.** Plex streams from your own home server, so Sonos doesn't track a per-account subscription identifier for it.
 
@@ -107,13 +107,13 @@ Once it's green, the service appears in the **Browse** panel and you can search,
 
 Sonos indexes network folders itself; Choragus reads that index rather than keeping its own. **Settings → Music → Local Music Library** lists the folders each system indexes, tagged (S1) or (S2) when both are on the network, and has a button to rebuild the index after you add or change files.
 
-Adding or removing a folder has to be done in the Sonos app — Sonos accepts the instruction over the local protocol and then discards it, so no third-party controller can do it. Once the folder is in Sonos, it shows up in Choragus under Music Library with no further setup.
+Adding or removing a folder has to be done in the Sonos app: Sonos accepts the instruction over the local protocol and then discards it, so no third-party controller can do it. Once the folder is in Sonos, it shows up in Choragus under Music Library with no further setup.
 
 ---
 
 ## What if my service is in neither list?
 
-The **Other Services** section in Settings → Music lists every service Sonos has registered (~100). Most have not been individually tested — many *should* work via AppLink, but we haven't confirmed each one. If you connect one and it works, please open an issue so we can promote it to "tested".
+The **Other Services** section in Settings → Music lists every service Sonos has registered (~100). Most have not been individually tested; many *should* work via AppLink, but we haven't confirmed each one. If you connect one and it works, please open an issue so we can promote it to "tested".
 
 Also see the in-app **Setup Guide** button (Settings → Music → top of Connected Services) for the same instructions in a compact form.
 
@@ -123,14 +123,14 @@ Also see the in-app **Setup Guide** button (Settings → Music → top of Connec
 
 Some services cannot be controlled by *any* third-party app, including this one:
 
-- **YouTube Music** — same pattern. Locked to Sonos's first-party apps.
-- **SoundCloud** — Sonos's account-identity gate returns `Client.NOT_AUTHORIZED` (HTTP 403) to non-Sonos clients. Confirmed by live probe.
+- **YouTube Music** — locked to Sonos's first-party apps.
+- **SoundCloud** — Sonos's account-identity gate returns `Client.NOT_AUTHORIZED` (HTTP 403) to non-Sonos clients, confirmed by live probe.
 - **Sonos Radio (browsing categories)** — search works (Path A); browsing the curated categories requires DeviceLink authentication, which Sonos has not exposed to third-party apps.
 
-These limitations apply equally to every third-party Sonos controller — not just Choragus. The official Sonos app remains the only way to drive these specific services.
+These limitations apply equally to every third-party Sonos controller. The official Sonos app remains the only way to drive these specific services.
 
 > **Amazon Music used to be on this list.** Earlier versions of this guide
-> said it couldn't be connected. That was wrong — it works through the normal
+> said it couldn't be connected. That was wrong; it works through the normal
 > Path B connect flow, verified on Sonos S1 and S2 systems. If you tried it before
 > and gave up, try again.
 
@@ -166,7 +166,7 @@ Open an issue at <https://github.com/scottwaters/Choragus/issues>. Include:
 
 ## Summary
 
-- **Path A (TuneIn, Calm Radio, Sonos Radio, Apple Music search):** open Choragus → `⌘,` → Music → tick the checkbox. Done.
+- **Path A (TuneIn, Calm Radio, Sonos Radio, Apple Music search):** open Choragus → `⌘,` → Music → tick the checkbox.
 - **Path B (Spotify, Plex, Apple Music playback):**
   1. In the official Sonos app, add the service.
   2. *(Spotify / Apple Music only)* In the official Sonos app, play a song from that service and save it as a favourite.

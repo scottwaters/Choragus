@@ -45,7 +45,7 @@ public static var playPause: String { tr("playPause") }
 `tr(_:)` reads the active locale from `UserDefaults[UDKey.appLanguage]` and falls back to English, then to the key. The catalog is a package resource (`resources: [.process("Resources")]`, `defaultLocalization: "en"`), reached through `Bundle.module`:
 
 - **Xcode builds** (the app, `xcodebuild`) compile the catalog into one `Localizable.strings` table per `<locale>.lproj` in `SonosKit_SonosKit.bundle`; `tr` resolves the locale's bundle and calls `localizedString(forKey:value:table:)`.
-- **SwiftPM command-line builds** (`swift build`, `swift test`, CI) copy the catalog as is; `tr` decodes the catalog JSON once on first use instead. Same data, same lookup rules.
+- **SwiftPM command-line builds** (`swift build`, `swift test`, CI) copy the catalog as is; `tr` decodes the catalog JSON once on first use instead, with the same data and lookup rules.
 
 Keys stay in the catalog and lookup stays under the app's own language setting, so a user can run Choragus in Japanese on an English Mac.
 
@@ -54,7 +54,7 @@ Keys stay in the catalog and lookup stays under the app's own language setting, 
 Every new user-visible string must:
 
 1. Add a `public static var` accessor (or `public static func` for format strings) to `L10n`.
-2. Add the key to `Localizable.xcstrings` with a value for **all 13 locales** (Xcode's catalog editor, or edit the JSON).
+2. Add the key to `Localizable.xcstrings` with a value for all 13 locales (Xcode's catalog editor, or edit the JSON).
 3. Reference via `L10n.keyName` from view code, never a hardcoded literal.
 
 `L10nCatalogTests` pins all of it on every `swift test`: every key carries every locale, no key is duplicated, every accessor resolves to a catalog key and every catalog key has an accessor, and every locale consumes the same format placeholders as English. The CI workflow (`.github/workflows/ci.yml`, hygiene job) runs the same checks without a Swift toolchain.
@@ -85,13 +85,13 @@ public static func updateAvailableBody(current: String, latest: String) -> Strin
 ],
 ```
 
-Some locales naturally place the version *before* "latest" — positional placeholders let the translator do this without code changes.
+Some locales place the version *before* "latest". Positional placeholders let the translator do this without code changes.
 
 ## Reactivity to language changes
 
 ### Vanilla SwiftUI views
 
-Most views read locale via the `L10n` accessors during `body`. They re-render automatically when `@AppStorage(UDKey.appLanguage)` is updated — provided they observe it directly or are inside a parent that does.
+Most views read locale via the `L10n` accessors during `body`. They re-render automatically when `@AppStorage(UDKey.appLanguage)` is updated, provided they observe it directly or are inside a parent that does.
 
 ### Segmented `Picker` controls
 
@@ -127,7 +127,7 @@ enum CommunicationMode: String, CaseIterable {
 
 ### AppKit-hosted SwiftUI windows
 
-The About box, Help window, and Listening Stats window are SwiftUI views inside `NSHostingController`. AppKit-hosted SwiftUI doesn't observe `UserDefaults` automatically, so a language flip is invisible to those windows — they render in whatever language was active when the window opened.
+The About box, Help window, and Listening Stats window are SwiftUI views inside `NSHostingController`. AppKit-hosted SwiftUI doesn't observe `UserDefaults` automatically, so a language flip is invisible to those windows. They render in whatever language was active when the window opened.
 
 `LanguageReactiveContainer` (in `WindowManager.swift`) is the wrapper:
 
@@ -151,7 +151,7 @@ let host = NSHostingController(
 
 ## Language-aware metadata
 
-Wikipedia, MusicBrainz, and Last.fm queries follow the user's app language — not the system locale.
+Wikipedia, MusicBrainz, and Last.fm queries follow the user's app language, not the system locale.
 
 ### Wikipedia
 
@@ -200,7 +200,7 @@ formatter.locale = L10n.currentLocale
 formatter.dateStyle = .medium
 ```
 
-Mixing `Locale.current` (system) and `L10n.currentLocale` (app) leaks the system locale into otherwise-localised UI — e.g. the listening-history grouping headers used to show in the system locale even when the app was set to French. `PlayHistoryView2` migrated to `L10n.currentLocale`; the rest of the app should adopt it on next touch.
+Mixing `Locale.current` (system) and `L10n.currentLocale` (app) leaks the system locale into otherwise-localised UI, e.g. the listening-history grouping headers used to show in the system locale even when the app was set to French. `PlayHistoryView2` migrated to `L10n.currentLocale`; the rest of the app should adopt it on next touch.
 
 ## Help body
 
@@ -212,7 +212,7 @@ As of v3.7 every paragraph in the in-app Help window is localised across all 13 
 
 ## Shortcuts and Siri (App Intents)
 
-App Intents metadata is the one place `L10n` cannot reach: intent titles, descriptions, parameter names, parameter summaries, entity type names and Siri phrases must be string literals so the `appintentsmetadataprocessor` can extract them at build time, and the system resolves them against the app bundle's string catalogs in the **system** locale, not the in-app language.
+App Intents metadata is the one place `L10n` cannot reach: intent titles, descriptions, parameter names, parameter summaries, entity type names and Siri phrases must be string literals so the `appintentsmetadataprocessor` can extract them at build time, and the system resolves them against the app bundle's string catalogs in the system locale, not the in-app language.
 
 - `Choragus/Localizable.xcstrings` — intent titles, descriptions, parameter titles and descriptions, `ParameterSummary` strings (`"Play on ${room}"`), `TypeDisplayRepresentation` names and `shortTitle`s. Keys are the English literals as written in `PlaybackIntents.swift`.
 - `Choragus/AppShortcuts.xcstrings` — the spoken phrases (`"Play ${applicationName} in ${room}"`).
@@ -237,6 +237,6 @@ When adding a single new key:
 
 1. Add the `public static var` accessor.
 2. Add the key to the catalog with a value for every locale (`"state": "translated"`).
-3. `swift test --filter L10nCatalogTests` — it names any locale, accessor or placeholder that does not line up.
+3. Run `swift test --filter L10nCatalogTests`; it names any locale, accessor or placeholder that does not line up.
 
 Bulk additions (Help rewrite, Settings reorganisation) typically batch keys in groups of ~10 per dict-edit so the diff stays reviewable.

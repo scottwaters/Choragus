@@ -46,7 +46,7 @@ For deeper detail, see the documents under `docs/`:
 | MusicBrainz | Album release dates and tracklists |
 | Last.fm | Bios (with `lang=`), tags, similar artists, scrobbling |
 
-All speaker communication is local — no cloud service is required beyond optional SMAPI authentication flows with individual music services.
+All speaker communication is local; no cloud service is required beyond optional SMAPI authentication flows with individual music services.
 
 ---
 
@@ -73,20 +73,20 @@ Switchable in Settings → System.
 
 `GetZoneGroupState` is called per-coordinator, and its response describes only that household's groups. Two households on the same LAN (S1 + S2) return disjoint topologies.
 
-`SonosManager.refreshTopology` merges new groups into the existing list **per household** — never wholesale replacement. Pre-household-ID cache entries are backfilled on first live refresh when their coordinator's household becomes known. Each refresh is serialized per-household via `refreshingHouseholds: Set<String>` so S1 and S2 don't block each other.
+`SonosManager.refreshTopology` merges new groups into the existing list per household; the list is never replaced wholesale. Pre-household-ID cache entries are backfilled on first live refresh when their coordinator's household becomes known. Each refresh is serialized per-household via `refreshingHouseholds: Set<String>` so S1 and S2 don't block each other.
 
 **Defensive rules to avoid speaker flicker:**
 
-1. `handleDiscoveredDevice` preserves any previously-resolved `householdID` across `GetHouseholdID` retries. A transient SOAP failure must not wipe a known household — seeding `device.householdID = existing?.householdID` before the fresh fetch makes the write idempotent when the retry fails.
-2. `refreshTopology` aborts if the source device's household is still `nil`. Merging with a `nil` household would let the filter `groups.filter { $0.householdID != household }` retain every known-household group while appending new `nil`-tagged duplicates — producing visible duplicates and section reshuffles on subsequent rescans.
+1. `handleDiscoveredDevice` preserves any previously-resolved `householdID` across `GetHouseholdID` retries. A transient SOAP failure must not wipe a known household. Seeding `device.householdID = existing?.householdID` before the fresh fetch makes the write idempotent when the retry fails.
+2. `refreshTopology` aborts if the source device's household is still `nil`. Merging with a `nil` household would let the filter `groups.filter { $0.householdID != household }` retain every known-household group while appending new `nil`-tagged duplicates, producing visible duplicates and section reshuffles on subsequent rescans.
 3. Members constructed in the topology loop inherit the source device's resolved `softwareVersion` / `swGen` only when the existing entry's corresponding field is empty, so a known fact is never downgraded to unknown.
-4. **Members are stably sorted by `id` at construction.** `SonosGroup` conforms to `Equatable` by synthesis, and array equality is order-sensitive — a pure reorder in the next topology response would otherwise trip the change detector.
+4. **Members are stably sorted by `id` at construction.** `SonosGroup` conforms to `Equatable` by synthesis, and array equality is order-sensitive, so a pure reorder in the next topology response would trip the change detector.
 5. **Writes into `devices` are equality-guarded.** `SonosManager` is `@Observable`, and an assignment to an observed dictionary invalidates every view that reads it regardless of whether the value differs. Writers compare before assigning, so event and poll ticks that carry no change leave views alone; unconditional writes were triggering `onChange(of: groups)`-bound scroll animations even when `groups` itself was unchanged.
-6. **Group-removal grace window (`groupRemovalGrace = 30 s`).** Different Sonos speakers in the same household occasionally return subtly different `GetZoneGroupState` views while state propagates. A single source's topology is no longer treated as authoritative for immediate removal — a group missing from the new response is retained if its id was present in *any* topology within the grace window. Only groups absent for longer than 30 s are actually dropped.
+6. **Group-removal grace window (`groupRemovalGrace = 30 s`).** Different Sonos speakers in the same household occasionally return subtly different `GetZoneGroupState` views while state propagates. A single source's topology is no longer treated as authoritative for immediate removal: a group missing from the new response is retained if its id was present in *any* topology within the grace window. Only groups absent for longer than 30 s are dropped.
 
 **Defensive rules for artwork on radio streams:**
 
-1. `ArtResolver.handleTrackURIChanged` does **not** clear `radioTrackArtURL` when a new radio track starts. The prior track's art stays visible until `searchRadioTrackArt` completes its iTunes lookup and sets the new URL (or clears it explicitly on no-match). This eliminates the `old-track-art → station-art → new-track-art` flicker sequence during radio advances.
+1. `ArtResolver.handleTrackURIChanged` does not clear `radioTrackArtURL` when a new radio track starts. The prior track's art stays visible until `searchRadioTrackArt` completes its iTunes lookup and sets the new URL (or clears it explicitly on no-match). This eliminates the `old-track-art → station-art → new-track-art` flicker sequence during radio advances.
 2. `NowPlayingViewModel.searchRadioTrackArt` short-circuits when `transportState.isActive == false`. While paused, stream-content pings oscillate `title` between empty and populated; without the guard, each oscillation would clear radio art and then re-search, producing a visible flicker even though no real track change occurred.
 
 ### S1 / S2 Classification
@@ -110,7 +110,7 @@ All cache files are created with `0o600` permissions.
 ### Security
 
 - **Keychain** — all credentials (SMAPI tokens, Last.fm API app credentials, Last.fm session keys) live in a single unified `SecretsStore` Keychain item with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`. One ACL means one authorization prompt per rebuild instead of one per credential. Legacy per-service Keychain items migrate automatically on first launch. Metadata (which services are connected) stored separately in Application Support JSON.
-- **Scrobbling credentials** — BYO-only. The app ships no bundled Last.fm API key; users register their own at last.fm/api/account/create and paste it into Settings. Submissions are computed entirely from the local `play_history` table — no new network taps on the speakers.
+- **Scrobbling credentials** — BYO-only. The app ships no bundled Last.fm API key; users register their own at last.fm/api/account/create and paste it into Settings. Submissions are computed entirely from the local `play_history` table, with no new network taps on the speakers.
 - **App sandbox** — network client + server entitlements only. No filesystem, no contacts, no other apps.
 - **ATS hardened** — specific domain exceptions for legacy HTTP radio services (TuneIn, 1.fm, radiotime.com), no blanket `NSAllowsArbitraryLoads`.
 - **Error sanitization** — SOAP faults/HTTP errors surface user-friendly messages; raw details never exposed.
@@ -121,7 +121,7 @@ All cache files are created with `0o600` permissions.
 Two parallel discovery transports behind `SpeakerDiscovery`:
 
 - **`SSDPDiscovery`** — UDP multicast M-SEARCH to `239.255.255.250:1900`. Works on flat networks; commonly blocked across VLANs.
-- **`MDNSDiscovery`** — `NWBrowser` over `_sonos._tcp`. Works wherever mDNS is reflected (most modern routers). The TXT record carries the same `location` URL plus the household ID, so post-discovery is unchanged and `GetHouseholdID` is skipped — measurable on S1.
+- **`MDNSDiscovery`** — `NWBrowser` over `_sonos._tcp`. Works wherever mDNS is reflected (most modern routers). The TXT record carries the same `location` URL plus the household ID, so post-discovery is unchanged and `GetHouseholdID` is skipped, which is measurable on S1.
 
 `DiscoveryMode` enum (Auto / Bonjour / Legacy Multicast) is bound to `Settings → Discovery`. Auto wraps both transports in a parallel-merge that dedupes by location URL. The other two run a single transport so users on hostile networks can isolate which one is working.
 
@@ -139,15 +139,15 @@ Translations live in an Apple String Catalog, `Packages/SonosKit/Sources/SonosKi
 2. Add the key to `Localizable.xcstrings` with a value for all 13 locales.
 3. Reference via `L10n.keyName` (not hardcoded literals).
 
-Format-string helpers use `String(format:)` with `%1$@` / `%2$@` positional placeholders so translations can reorder arguments — see `L10n.updateAvailableBody(current:latest:)` for the canonical example.
+Format-string helpers use `String(format:)` with `%1$@` / `%2$@` positional placeholders so translations can reorder arguments; see `L10n.updateAvailableBody(current:latest:)` for the canonical example.
 
 **Gate:** `L10nCatalogTests` fails on a missing locale, a duplicate key, an accessor without a catalog entry or the reverse, and a placeholder set that differs from English; CI runs the same checks on every push.
 
-**Help body:** as of v3.7 the entire `HelpView` body prose (every heading, paragraph, and bullet across 10 topics) is fully localised across all 13 languages. v4.0 added two new topics (Now Playing details, Music Services) and expanded Preferences from 5 to 11 bullets — all entries ship complete translations.
+**Help body:** as of v3.7 the entire `HelpView` body prose (every heading, paragraph, and bullet across 10 topics) is fully localised across all 13 languages. v4.0 added two new topics (Now Playing details, Music Services) and expanded Preferences from 5 to 11 bullets; all entries ship complete translations.
 
 **Language-aware metadata:** Wikipedia, MusicBrainz, and Last.fm queries follow the user's app language. `MusicMetadataService.wikipediaLanguageCode()` resolves the per-language Wikipedia subdomain; `lastFMLanguageCode()` produces the Last.fm `lang=` parameter. Cache keys in `MetadataCacheRepository` carry a `<lang>|` prefix so an English bio and a German bio coexist instead of overwriting. A one-shot `metadataCache.langPrefixMigrated.v1` UserDefault flag drives the SQLite UPDATE that renames legacy unprefixed rows on first launch under v4.0.
 
-**AppKit-hosted windows:** SwiftUI views inside `NSHostingController` (About box, Help window, Listening Stats) don't observe `UserDefaults[UDKey.appLanguage]` automatically. `LanguageReactiveContainer` wraps them with `@AppStorage(UDKey.appLanguage)` + `.id(appLanguage)` so a language flip rebuilds the view tree. Segmented `Picker` controls also cache their rendered labels — they get `.languageReactive()` applied to invalidate the cache on flip.
+**AppKit-hosted windows:** SwiftUI views inside `NSHostingController` (About box, Help window, Listening Stats) don't observe `UserDefaults[UDKey.appLanguage]` automatically. `LanguageReactiveContainer` wraps them with `@AppStorage(UDKey.appLanguage)` + `.id(appLanguage)` so a language flip rebuilds the view tree. Segmented `Picker` controls also cache their rendered labels, so they get `.languageReactive()` applied to invalidate the cache on flip.
 
 See [docs/LOCALIZATION.md](docs/LOCALIZATION.md) for the full design.
 
@@ -163,7 +163,7 @@ Two-tier system. Sparkle 2 is the primary path; the GitHub-API checker is the fa
 
 `SparkleUpdaterObserver.makeForApp()` checks the substituted values for empty / unsubstituted state; when valid, it constructs `SPUStandardUpdaterController(startingUpdater: true, …)` and exposes the `SPUUpdater` plus its KVO state (`canCheckForUpdates`, `automaticallyChecksForUpdates`, `automaticallyDownloadsUpdates`, `lastUpdateCheckDate`) via `@Published` for the SwiftUI Settings panel and Check-for-Updates menu item. The appcast is signed with an EdDSA private key held only by the release-signer; verification keeps the public key in the shipping bundle and rejects unsigned or wrongly-signed payloads at install time.
 
-**GitHub-API fallback (`UpdateChecker.swift`).** Active only when Sparkle is inert. Queries `api.github.com/repos/scottwaters/Choragus/releases/latest`, compares `tag_name` (normalised — strips leading "v", extracts numeric run) against the running `CFBundleShortVersionString` using a pure numeric semver comparator. Silent background check at most once per 24 h at launch (`UserDefaults[updateChecker.lastCheck]`). Manual check from the app menu always reports a result. Notification-only — opens the GitHub release page in the user's browser; no install path. All outcomes (`available`, `current`, `error`) logged via `sonosDebugLog`.
+**GitHub-API fallback (`UpdateChecker.swift`).** Active only when Sparkle is inert. Queries `api.github.com/repos/scottwaters/Choragus/releases/latest`, compares `tag_name` (normalised: strips leading "v", extracts numeric run) against the running `CFBundleShortVersionString` using a pure numeric semver comparator. Silent background check at most once per 24 h at launch (`UserDefaults[updateChecker.lastCheck]`). Manual check from the app menu always reports a result. Notification-only: opens the GitHub release page in the user's browser; no install path. All outcomes (`available`, `current`, `error`) logged via `sonosDebugLog`.
 
 **Settings → Software Updates** in the System tab is rendered only when Sparkle is active. Three controls: auto-check toggle (off = "no scheduled checks", manual still works), auto-download toggle (disabled until auto-check is on), and a Check Now button with a last-checked timestamp. State flows through `SparkleUpdaterObserver`; both toggles write back to `SPUUpdater` so changes persist in Sparkle's standard `SUEnableAutomaticChecks` / `SUAutomaticallyUpdate` defaults keys.
 
@@ -190,7 +190,7 @@ The resulting app is at `build/Choragus.app`. Use `-configuration Debug` for a d
 
 Don't reuse one `build/` directory for both configurations. `xcodebuild clean` does not remove products the other configuration left there: a Release bundle sitting in the directory makes the Debug link step fail with no useful diagnostic, and a Release build over Debug output can pick up `Choragus.debug.dylib` and `__preview.dylib` and carry them into the bundle. Delete `build/` when switching configuration.
 
-The project file is signing-neutral — no team ID, no provisioning profile, automatic style — so it builds cleanly under any identity (or none) without modification.
+The project file is signing-neutral (no team ID, no provisioning profile, automatic style), so it builds cleanly under any identity (or none) without modification.
 
 ### Running Tests
 
@@ -229,8 +229,8 @@ Under `~/Library/Containers/com.choragus.app/Data/Library/Application Support/Ch
 
 ## Issues
 
-Bug reports and feature requests welcome at [github.com/scottwaters/Choragus/issues](https://github.com/scottwaters/Choragus/issues). Pull requests are not accepted on this project — please open an issue and describe the change you'd like to see.
+Bug reports and feature requests welcome at [github.com/scottwaters/Choragus/issues](https://github.com/scottwaters/Choragus/issues). Pull requests are not accepted on this project. Please open an issue and describe the change you'd like to see.
 
 ## License
 
-PolyForm Noncommercial 1.0.0 — see [LICENSE](LICENSE). Free for personal, hobbyist, educational, charitable, and other noncommercial use; commercial use requires a separate agreement. Applies retroactively to every prior release under any name, including all releases distributed as SonosController.
+PolyForm Noncommercial 1.0.0; see [LICENSE](LICENSE). Free for personal, hobbyist, educational, charitable, and other noncommercial use; commercial use requires a separate agreement. Applies retroactively to every prior release under any name, including all releases distributed as SonosController.

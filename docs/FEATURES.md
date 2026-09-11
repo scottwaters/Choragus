@@ -31,11 +31,11 @@ Left to right, above the panels:
 
 <img src="../screenshots/v5/theme_light_dark.png" alt="The three panels — Browse, Now Playing, and Queue" width="1044">
 
-The main view shows three panels: **Browse** (left), **Now Playing** (centre), and **Queue** (right). All three are togglable from the toolbar. The Now Playing panel is guaranteed a minimum width of 640 px — the side panels shrink proportionally when the window is resized.
+The main view shows three panels: **Browse** (left), **Now Playing** (centre), and **Queue** (right). All three are togglable from the toolbar. The Now Playing panel is guaranteed a minimum width of 640 px; the side panels shrink proportionally when the window is resized.
 
 **Now Playing** shows album art with automatic artwork resolution from multiple sources (speaker metadata, media-server art, iTunes Search, manual override). Click the artwork to open it full size and page through the artist's photos; right-click to search for alternative art, ignore incorrect art, or refresh. The service tag names the source: Spotify, Radio, Music Library, your media server, and so on.
 
-**Star any track** — click the star icon next to Copy Track Info to star the currently playing track. Works for any source: queue tracks, radio streams, Spotify, Apple Music — any track where metadata is available. Starred tracks are saved locally and can be filtered in the listening history. Star and unstar from Now Playing or the menu-bar mini player.
+**Star any track** — click the star icon next to Copy Track Info to star the currently playing track. Works for any source where metadata is available: queue tracks, radio streams, Spotify, Apple Music. Starred tracks are saved locally and can be filtered in the listening history. Star and unstar from Now Playing or the menu-bar mini player.
 
 **Copy Track Details** copies the current track's metadata to the clipboard in a clean format:
 
@@ -49,7 +49,7 @@ Useful for sharing, logging, or searching another platform.
 
 **Playback controls** — play, pause, stop, skip, seek with a draggable slider and smooth position interpolation. Shuffle, repeat (off / all / one), crossfade, sleep timer. Pause-all / Resume-all from the toolbar menu.
 
-**Stream details** sit above the service name: a **Dolby Atmos** badge when the speaker reports a spatial stream and the coordinator supports it, the **TV input format** for HDMI sources (Dolby Digital 5.1, Atmos TrueHD 7.1, DTS and so on), and otherwise the container with bit depth and sample rate — `FLAC · Lossless · 24-bit/96 kHz`. Nothing is shown when the speaker reports no detail, which is common on services that don't publish it. The Back of the Club wall shows the same line above the source name.
+**Stream details** sit above the service name: a **Dolby Atmos** badge when the speaker reports a spatial stream and the coordinator supports it, the **TV input format** for HDMI sources (Dolby Digital 5.1, Atmos TrueHD 7.1, DTS and so on), and otherwise the container with bit depth and sample rate, such as `FLAC · Lossless · 24-bit/96 kHz`. Nothing is shown when the speaker reports no detail, which is common on services that don't publish it. The Back of the Club wall shows the same line above the source name.
 
 For a home-theatre zone, **Night Mode** and **Dialog Enhancement** appear directly below the group buttons. The full set of home-theatre settings stays in the EQ window.
 
@@ -89,7 +89,7 @@ Sidebar sections are cards: collapse the ones you don't use and drag them into y
 
 #### Build Playlist with AI
 
-Describe the playlist you want — "90s trip-hop for a rainy evening, nothing over 5 minutes" — and the songs stream into a table as the model writes them. **Match to** the service you pick (Apple Music, an authenticated streaming service, your local library or a media server) resolves each one to a playable track, then save it as a Choragus playlist, add it to the queue, play it next or play it now. No AI service configured? **Copy prompt** gives you a template for any chat AI and **Paste list** reads the reply back.
+Describe the playlist you want ("90s trip-hop for a rainy evening, nothing over 5 minutes") and the songs stream into a table as the model writes them. **Match to** the service you pick (Apple Music, an authenticated streaming service, your local library or a media server) resolves each one to a playable track, then save it as a Choragus playlist, add it to the queue, play it next or play it now. Without an AI service configured, **Copy prompt** gives you a template for any chat AI and **Paste list** reads the reply back.
 
 AI services live in Settings → AI: add Claude, OpenAI, or any OpenAI-compatible endpoint (DeepSeek, Ollama, LM Studio), give each a name, store its key in the keychain and press Test; the model list comes from the provider itself. Help → AI Playlists walks through it and lists sample prompts.
 
@@ -123,7 +123,7 @@ The same folders appear wherever a playlist is picked: Add to Choragus Queue in 
 
 <img src="../screenshots/v5/settings_music.png" alt="Settings → Music — services with status dots, toggles, the Other Services list, and Media Servers" width="560">
 
-Services are managed in **Settings → Music**. Each can be individually enabled. **First-time setup is described in plain language in [Setupguide.md](../Setupguide.md)** — start there if you're not sure how to get a service showing up.
+Services are managed in **Settings → Music**. Each can be individually enabled. First-time setup is described in plain language in [Setupguide.md](../Setupguide.md). Start there if you're not sure how to get a service showing up.
 
 #### Available — No Connection Required
 
@@ -149,7 +149,7 @@ Services are managed in **Settings → Music**. Each can be individually enabled
 
 #### Available — Connection Required (Untested)
 
-40+ additional services are available via SMAPI AppLink/DeviceLink and may work — connect via **Settings → Music → Other Services**. Results are not guaranteed.
+40+ additional services are available via SMAPI AppLink/DeviceLink and may work. Connect via **Settings → Music → Other Services**. Results are not guaranteed.
 
 | Service | SID | Notes |
 |---------|:---:|-------|
@@ -157,7 +157,7 @@ Services are managed in **Settings → Music**. Each can be individually enabled
 
 #### Not Available
 
-Confirmed by live probe against the Sonos `ListAvailableServices` + `getAppLink` endpoints (2026-04-24). These services ship encrypted API keys in their Sonos manifest (`cf.ws.sonos.com/p/m/<uuid>`) that only Sonos's app and speaker firmware can decrypt — third-party clients receive `403 / NOT_AUTHORIZED` from the SMAPI endpoint before auth can begin.
+Confirmed by live probe against the Sonos `ListAvailableServices` + `getAppLink` endpoints (2026-04-24). These services ship encrypted API keys in their Sonos manifest (`cf.ws.sonos.com/p/m/<uuid>`) that only Sonos's app and speaker firmware can decrypt. Third-party clients receive `403 / NOT_AUTHORIZED` from the SMAPI endpoint before auth can begin.
 
 | Service | SID | Response | Workaround |
 |---------|:---:|----------|------------|
@@ -166,7 +166,7 @@ Confirmed by live probe against the Sonos `ListAvailableServices` + `getAppLink`
 | **SoundCloud** | 160 | `Client.NOT_AUTHORIZED` (403) | Scrobbling of SoundCloud listens via the Sonos app works |
 | **Sonos Radio browsing** | 303 | Category browsing requires DeviceLink (search works) | — |
 
-**Scrobbling remains possible for all services above** — play history is recorded from whatever the Sonos app plays, regardless of whether this app can directly browse/search that service.
+Scrobbling remains possible for all services above: play history is recorded from whatever the Sonos app plays, regardless of whether this app can directly browse/search that service.
 
 ### Listening History
 
@@ -176,7 +176,7 @@ The **Dashboard** summarises listening: total plays, hours listened, unique arti
 
 ![Listening Stats — Timeline](../screenshots/v3/history_list.png)
 
-The **History** timeline groups tracks by day with album art, artist, album, service-source badge, room, and duration. Starred tracks show a star icon. Tracks from radio streams show the station name and service badge (Sonos Radio, TuneIn, etc.). Filter by date range, room, source, or search text. Starred-only filter shows just your favourites.
+The **History** timeline groups tracks by day with album art, artist, album, service-source badge, room, and duration. Starred tracks show a star icon. Tracks from radio streams show the station name and service badge (Sonos Radio, TuneIn, etc.). Filter by date range, room, source, or search text. Starred-only filter shows only your favourites.
 
 ![History — Right-click menu](../screenshots/v3/history_rightclick.png)
 
@@ -187,7 +187,7 @@ The **History** timeline groups tracks by day with album art, artist, album, ser
 - **Copy Title / Copy Artist** — copy individual fields
 - **Filter by artist, room, or source** — instantly filter the history view
 
-**Last.fm scrobbling** — listening history doubles as the source for Last.fm scrobbling. Everything is submitted from the local SQLite table, not by tapping the speakers again; filter by room and music service so you can (for example) scrobble only what plays in the office, excluding the kids' bedroom. See the **Scrobbling** tab in Settings — documented in [CHANGELOG.md](../CHANGELOG.md).
+**Last.fm scrobbling** — listening history doubles as the source for Last.fm scrobbling. Everything is submitted from the local SQLite table, not by tapping the speakers again; filter by room and music service so you can (for example) scrobble only what plays in the office, excluding the kids' bedroom. See the **Scrobbling** tab in Settings, documented in [CHANGELOG.md](../CHANGELOG.md).
 
 ### Menu Bar Mode
 
@@ -239,6 +239,6 @@ Settings has seven tabs: **Display**, **Music**, **Scrobbling**, **AI**, **Visua
 
 **Diagnostics** — the Diagnostics window records what the app and your speakers are doing, and keeps warnings and errors so a bug report carries evidence rather than a description from memory. [DIAGNOSTICS.md](DIAGNOSTICS.md) explains what each category of message means and which ones are worth acting on. Nothing leaves your machine unless you export a bug bundle, and addresses, speaker ids, paths, account names and tokens are removed when you do.
 
-- **System** — Updates (Event-Driven push or Legacy Polling), Startup mode (Quick Start cached / Classic), **Discovery** (Auto / Bonjour / Legacy Multicast — Auto is the default and works for almost everyone), an Advanced network row holding the event listener port, discovery hop limit and add-speakers-by-address for networks that block the automatic search, and the artwork Cache controls (max size, max age, clear).
+- **System** — Updates (Event-Driven push or Legacy Polling), Startup mode (Quick Start cached / Classic), **Discovery** (Auto / Bonjour / Legacy Multicast; Auto is the default and works for almost everyone), an Advanced network row holding the event listener port, discovery hop limit and add-speakers-by-address for networks that block the automatic search, and the artwork Cache controls (max size, max age, clear).
 - **Software Updates** — Update channel and check-now.
 

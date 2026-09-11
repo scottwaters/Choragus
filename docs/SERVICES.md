@@ -57,12 +57,12 @@ Amazon Music sat in the blocked table from v3.51 until v5.0, recorded as
 "same Sonos-identity gate" with the code comment "returns empty auth URL".
 Re-probed on 2026-09-06 against a live S1 household, that does not
 reproduce: the descriptor reports `Policy Auth="AppLink"`, and `getAppLink`
-returns HTTP 200 with a usable `regUrl` — including with the exact request
+returns HTTP 200 with a usable `regUrl`, including with the exact request
 Choragus sends (`householdId` only, speaker device id). Four request
 variants were tried, all succeeded.
 
 The `hardware` / `osVersion` / `sonosAppName` fields that the SMAPI WSDL
-lists as optional really are optional here; they are not what unblocks it.
+lists as optional are optional here; they are not what unblocks it.
 Token refresh works too: Amazon returns fresh credentials inside the
 `Client.TokenRefreshRequired` fault's `<detail>`, which is exactly what
 `soapCallWithRefresh` already reads.
@@ -84,7 +84,7 @@ Two things did need fixing, both in playback rather than auth:
   stations. `ServiceRules.resolvesViaGetMediaURI = false` keeps Amazon items
   on their raw service URI + DIDL, which is what the speaker plays.
 
-The cdudn form turned out not to matter — the speaker accepted both the
+The cdudn form turned out not to matter: the speaker accepted both the
 token-bearing and the `-0-Token` variant.
 
 Whether SiriusXM (37) and YouTube Music (284) are misdiagnosed the same way
@@ -103,11 +103,11 @@ Confirmed by live probe against `ListAvailableServices` + `getAppLink` (most rec
 | **SoundCloud** | 160 | `Client.NOT_AUTHORIZED` (403) | Scrobbling of SoundCloud listens via the Sonos app still works |
 | **Sonos Radio** *(category browsing)* | 303 | DeviceLink-only | Search works |
 
-**Scrobbling remains possible for all services above** — play history is recorded from whatever the Sonos app plays, regardless of whether Choragus can directly browse/search that service. See [Last.fm scrobbling](../README.md#what-s-new-in-v36).
+Scrobbling remains possible for all services above: play history is recorded from whatever the Sonos app plays, regardless of whether Choragus can directly browse/search that service. See [Last.fm scrobbling](../README.md#what-s-new-in-v36).
 
 ## AI playlist providers
 
-Not music services — the chat AI behind **Build Playlist with AI** (Choragus Sources, opt-in via Settings → AI). Each entry is a user-named `AIServiceProfile` with its own model, endpoint and keychain key (`aiProfile.<id>`), so several custom servers can coexist.
+Not music services: the chat AI behind **Build Playlist with AI** (Choragus Sources, opt-in via Settings → AI). Each entry is a user-named `AIServiceProfile` with its own model, endpoint and keychain key (`aiProfile.<id>`), so several custom servers can coexist.
 
 | Provider | Endpoint | Notes |
 |----------|----------|-------|
@@ -115,11 +115,11 @@ Not music services — the chat AI behind **Build Playlist with AI** (Choragus S
 | **OpenAI** | `https://api.openai.com/v1` chat completions | — |
 | **Custom (OpenAI-compatible)** | User-supplied base URL | DeepSeek, Ollama, LM Studio, vLLM. A bare host gains `/v1`; a URL that already carries a path is used as given. A 200 that is not an event stream surfaces the server's message (LM Studio answers an unknown path that way) |
 
-The API key is sent only to that profile's host, and only as a bearer header over `https` or to a private address (Ollama / LM Studio on the LAN); cleartext to a non-local address is refused (`insecureEndpoint`). The reply is treated as untrusted input: typed decode, control-character stripping, field and list caps, stream size caps. A connection test in Settings gates the builder's source menu until it passes. Songs are then matched on a chosen service — Apple Music (iTunes catalog), any authenticated SMAPI service, the Sonos local library, or a DLNA server's `Search` — with artist match mandatory.
+The API key is sent only to that profile's host, and only as a bearer header over `https` or to a private address (Ollama / LM Studio on the LAN); cleartext to a non-local address is refused (`insecureEndpoint`). The reply is treated as untrusted input: typed decode, control-character stripping, field and list caps, stream size caps. A connection test in Settings gates the builder's source menu until it passes. Songs are then matched on a chosen service (Apple Music (iTunes catalog), any authenticated SMAPI service, the Sonos local library, or a DLNA server's `Search`), with artist match mandatory.
 
 ## Service identity folding
 
-A household advertises around 90 third-party descriptors. `MusicServiceCatalog` resolves each to a canonical service by sid, then by name, then by the host's first DNS label. Vendors conventionally host their Sonos integration at `sonos.<vendor>.com`, so the host pass rejects tokens that describe what a service serves rather than who it is — `sonos`, `radio`, `music`, `player`, `stream`, `media`, `audio` — in both the scheme-token pass (`x-sonosapi-radio:` → "radio") and the name-word pass ("Sonos Radio" → "sonos"). Without that guard 37 unrelated services folded into Sonos Radio and inherited its search-only toggle. Descriptors folded by host match are logged under `CATALOG`.
+A household advertises around 90 third-party descriptors. `MusicServiceCatalog` resolves each to a canonical service by sid, then by name, then by the host's first DNS label. Vendors conventionally host their Sonos integration at `sonos.<vendor>.com`, so the host pass rejects tokens that describe what a service serves rather than who it is (`sonos`, `radio`, `music`, `player`, `stream`, `media`, `audio`) in both the scheme-token pass (`x-sonosapi-radio:` → "radio") and the name-word pass ("Sonos Radio" → "sonos"). Without that guard 37 unrelated services folded into Sonos Radio and inherited its search-only toggle. Descriptors folded by host match are logged under `CATALOG`.
 
 Services that resolve through SMAPI to a plain HTTPS stream with no `sid=` (Radio Paradise, SomaFM, TIDAL) are named from the stream host as a last resort; a sid still wins where one exists. Plain-HTTP URIs on a known media-server host carry the server's name.
 
@@ -148,7 +148,7 @@ These are the same numeric IDs used for scrobbling-filter matching, so any new s
 
 1. Probe the household with `ListAvailableServices` to discover its sid.
 2. If `getAppLink` returns HTTP 200 with a usable `regUrl`, it's likely tested-blue eligible. Add to `MusicServicesView.testedAppLinkServices` and to `SonosConstants.ServiceID`.
-3. If `getAppLink` returns a fault (`403 / NOT_AUTHORIZED`, `SonosError 999`), the service is Sonos-identity-gated. Add to the blocked list and document the response — record the actual fault code, not "same as" another service.
+3. If `getAppLink` returns a fault (`403 / NOT_AUTHORIZED`, `SonosError 999`), the service is Sonos-identity-gated. Add to the blocked list and document the response; record the actual fault code, not "same as" another service.
 4. If `getAppLink` returns HTTP 200 but an *empty* `regUrl`, treat it as inconclusive, not as a gate. Re-probe against the `SecureUri` from `ListAvailableServices` (or, for a service the household does not list, the service's own SMAPI host) and check the raw response for namespace-prefixed elements before concluding anything. This is what mis-filed Amazon Music as blocked for five releases, and Pandora for two.
 5. If the service does not need a Sonos Favorite to expose the account serial number (self-hosted services like Plex), add the sid to `servicesNotNeedingSN` in `MusicServicesView`.
 6. Update this document.

@@ -1,6 +1,6 @@
 # Sonos UPnP Protocol Reference
 
-This document describes the UPnP/SOAP protocols used by Choragus to communicate with Sonos speakers. All communication is local network HTTP — no internet access required.
+This document describes the UPnP/SOAP protocols used by Choragus to communicate with Sonos speakers. All communication is local network HTTP (no internet access required).
 
 ## Overview
 
@@ -142,11 +142,11 @@ Browse results are returned as DIDL-Lite XML inside a SOAP `Result` element. The
 
 ### Music library shares are read-only over UPnP
 
-`S:` can be browsed to list the folders a system indexes, and `DestroyObject` removes one, but a share cannot be added. `CreateObject` against the `S:` container answers HTTP 200 with a well-formed `ObjectID` and `Result` container, then persists nothing — the share is absent from `Browse("S:")` immediately afterwards. Verified on both S1 (firmware 57.x) and S2 (96.x), with a path that does not exist and with an existing guest-readable share, and with both DIDL shapes (`<item>` plus plain path, and `<container>` plus an `x-file-cifs://` `res`). Adding a share requires the Sonos app.
+`S:` can be browsed to list the folders a system indexes, and `DestroyObject` removes one, but a share cannot be added. `CreateObject` against the `S:` container answers HTTP 200 with a well-formed `ObjectID` and `Result` container, then persists nothing. The share is absent from `Browse("S:")` immediately afterwards. Verified on both S1 (firmware 57.x) and S2 (96.x), with a path that does not exist and with an existing guest-readable share, and with both DIDL shapes (`<item>` plus plain path, and `<container>` plus an `x-file-cifs://` `res`). Adding a share requires the Sonos app.
 
 ### `HTSatChanMapSet` is advertised per member, not per zone
 
-Every bonded member carries the attribute, but a satellite advertises only the soundbar and itself; the complete set appears on the soundbar's own entry. A live 5.1 zone publishes four different values — the soundbar's full map plus one partial view per satellite. Reading the first non-empty value found therefore records whichever partial view was enumerated first. Merge across all members.
+Every bonded member carries the attribute, but a satellite advertises only the soundbar and itself; the complete set appears on the soundbar's own entry. A live 5.1 zone publishes four different values (the soundbar's full map plus one partial view per satellite). Reading the first non-empty value found therefore records whichever partial view was enumerated first. Merge across all members.
 
 ## Zone Group Topology
 
@@ -169,7 +169,7 @@ Every bonded member carries the attribute, but a satellite advertises only the s
 **Key rules:**
 - Transport commands (play, pause, next) go to the **group coordinator**
 - Volume commands go to **individual speakers**
-- Members with `Invisible="1"` are bonded speakers (subs, surrounds, stereo pair secondary) — hide from the UI
+- Members with `Invisible="1"` are bonded speakers (subs, surrounds, stereo pair secondary); hide them from the UI
 - The `Coordinator` attribute tells you which UUID leads each group
 
 ## Grouping
@@ -208,9 +208,9 @@ Track metadata from `GetPositionInfo` and browse results uses DIDL-Lite XML:
 
 ## UPnP Events (GENA)
 
-In event-first mode the app `SUBSCRIBE`s to AVTransport, RenderingControl and ZoneGroupTopology and receives `NOTIFY` callbacks on a TCP listener (default port 3401; ephemeral fallback if the port is held). The AVTransport `LastChange` body carries `TransportState`, `CurrentTrackMetaData`, `CurrentTrackURI`, `CurrentTrackDuration`, `NumberOfTracks` and `CurrentTrack` — the speaker's own 1-based queue position. `CurrentTrack` is read on the event path so the queue highlight follows the speaker's position rather than a title match; zero means "not reported", not row zero.
+In event-first mode the app `SUBSCRIBE`s to AVTransport, RenderingControl and ZoneGroupTopology and receives `NOTIFY` callbacks on a TCP listener (default port 3401; ephemeral fallback if the port is held). The AVTransport `LastChange` body carries `TransportState`, `CurrentTrackMetaData`, `CurrentTrackURI`, `CurrentTrackDuration`, `NumberOfTracks` and `CurrentTrack` (the speaker's own 1-based queue position). `CurrentTrack` is read on the event path so the queue highlight follows the speaker's position rather than a title match; zero means "not reported", not row zero.
 
-`NOTIFY` connections are accepted only from addresses in the discovered speaker set (refreshed on every topology change; an IPv4-mapped IPv6 peer is compared in its IPv4 form). Other peers are dropped without a response and counted, not logged per event. Sonos speakers accept unauthenticated SOAP from any LAN host, so this is input validation — it keeps a peer from feeding the app a false view of the household — not access control.
+`NOTIFY` connections are accepted only from addresses in the discovered speaker set (refreshed on every topology change; an IPv4-mapped IPv6 peer is compared in its IPv4 form). Other peers are dropped without a response and counted, not logged per event. Sonos speakers accept unauthenticated SOAP from any LAN host, so this is input validation (it keeps a peer from feeding the app a false view of the household), not access control.
 
 ## UPnP/DLNA media servers
 
@@ -220,7 +220,7 @@ Sonos cannot browse UPnP media servers, but a speaker plays an ordinary HTTP URL
 
 **Control URL.** The `controlURL` is taken from inside the `ContentDirectory:1` `<service>` block. The first `controlURL` in the document usually belongs to `ConnectionManager` and faults on every `Browse`.
 
-**Advertised vs answering host.** The base URL is built from the address that answered the search. If the description advertised a different host, that is recorded as `advertisedHostMismatch` rather than normalised away: the `res` URLs the server hands out live on the advertised host, and speakers are given those. A server answering from `192.168.50.200` while advertising `10.10.10.200` browsed perfectly and played nothing.
+**Advertised vs answering host.** The base URL is built from the address that answered the search. If the description advertised a different host, that is recorded as `advertisedHostMismatch` rather than normalised away: the `res` URLs the server hands out live on the advertised host, and speakers are given those. A server answering from `192.168.50.200` while advertising `10.10.10.200` browsed without error and played nothing.
 
 **Browse.** Standard `ContentDirectory` `Browse` (`BrowseDirectChildren`) from `ObjectID` `0`, paged. Items with video or image classes are filtered; roots are pruned by a first-page class verdict.
 
@@ -232,7 +232,7 @@ SearchCriteria: upnp:class derivedfrom "object.item.audioItem" and dc:title cont
 
 Backslashes and double quotes in the term are escaped. Search support is server-dependent; a fault or empty result reads as a miss, not an error.
 
-**Playback.** The item's `res` URL is handed to the speaker with the direct-HTTP DIDL (the same strategy as Suno and TIDAL). The speaker fetches from the server itself, so the speaker — not the Mac — needs a route to it.
+**Playback.** The item's `res` URL is handed to the speaker with the direct-HTTP DIDL (the same strategy as Suno and TIDAL). The speaker fetches from the server itself, so the speaker, not the Mac, needs a route to it.
 
 **Per-speaker reachability probe.** A VLAN the speaker cannot route to, a server bound to the wrong interface and a one-speaker firewall hole all present as transport STOPPED, status OK, no fault. The check makes each visible group member fetch a reference track through its own art proxy:
 

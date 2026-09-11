@@ -21,7 +21,7 @@ description from memory.
 A speaker did not answer, answered too slowly, or reported a group whose
 coordinator was missing. Choragus repairs these itself, substituting a
 reachable coordinator and re-reading the topology. Frequent entries usually
-mean Wi-Fi trouble for one speaker rather than a fault in the app — the
+mean Wi-Fi trouble for one speaker rather than a fault in the app; the
 Diagnostics → Network tab shows which one.
 
 ### Playback and queue — `PLAYBACK`, `QUEUE`, `QUEUELIB`
@@ -42,7 +42,7 @@ running; it is dropped rather than doubled.
 A UPnP/DLNA server was found, added, removed, or failed to answer. "Search
 unsupported or failed" means the server does not implement ContentDirectory
 Search; browsing still works. "Reachability check finished" lists the speakers
-(`unreachable`) that could not fetch from the server — usually a VLAN or
+(`unreachable`) that could not fetch from the server, usually a VLAN or
 firewall rule that lets your Mac reach the server but not the speaker. A
 speaker that never answered the probe is reported as offline rather than as
 unable to reach the server. Help → Media Servers covers the firewall rule.
@@ -127,6 +127,6 @@ entry is written to the on-disk diagnostics store at all. When you export,
 LAN addresses, speaker identifiers, home folder paths and service account
 names are removed as well before the file is written. The bundle is encrypted
 to the maintainer's key, so its contents are not readable by GitHub or by
-anyone else it passes through. A bundle also carries an `mcp` section — the
-Agent access state and request log described above; token secrets are never
+anyone else it passes through. A bundle also carries an `mcp` section (the
+Agent access state and request log described above); token secrets are never
 part of it.

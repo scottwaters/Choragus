@@ -69,7 +69,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.choragus-lin
 
 ## Example: keep a line-in selected
 
-A speaker with line-in Autoplay enabled drops the input after a stretch of silence and re-detects it when audio returns, clipping the start. The Sonos-side fix is to turn Autoplay off for that speaker in the Sonos app and select Line-In manually. To guard against the speaker forgetting the selection, a shortcut with a single **Select Input** action (the speaker's line-in, played in its own room) run hourly by the launchd agent above re-selects it.
+A speaker with line-in Autoplay enabled drops the input after a stretch of silence and re-detects it when audio returns, clipping the start. The Sonos-side fix is to turn Autoplay off for that speaker in the Sonos app and select Line-In manually. To guard against the speaker dropping the selection, a shortcut with a single **Select Input** action (the speaker's line-in, played in its own room) run hourly by the launchd agent above re-selects it.
 
 ## Troubleshooting
 

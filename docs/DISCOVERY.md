@@ -4,13 +4,13 @@ How Choragus finds Sonos speakers on the local network. As of v4.0 the app runs 
 
 ## The problem v4.0 solved
 
-Before v4.0 the app relied solely on SSDP M-SEARCH multicast to `239.255.255.250:1900`. SSDP works fine on flat networks where every device shares one broadcast domain, but it commonly does not cross VLAN boundaries — and IoT segmentation is increasingly common (UniFi's IoT VLAN, OPNsense, pfSense, Firewalla, AmpliFi, and most "smart home" guest networks).
+Before v4.0 the app relied solely on SSDP M-SEARCH multicast to `239.255.255.250:1900`. SSDP works fine on flat networks where every device shares one broadcast domain, but it commonly does not cross VLAN boundaries. IoT segmentation is increasingly common (UniFi's IoT VLAN, OPNsense, pfSense, Firewalla, AmpliFi, and most "smart home" guest networks).
 
-Symptom: plain TCP unicast to a speaker's IP on port 1400 worked fine (so playback would have worked once the speaker was found), but discovery returned zero speakers. The result was unusable.
+Symptom: plain TCP unicast to a speaker's IP on port 1400 worked fine (so playback would have worked once the speaker was found), but discovery returned zero speakers, so the app was unusable.
 
 ## The fix — Bonjour alongside SSDP
 
-Sonos speakers also advertise the `_sonos._tcp` Bonjour service. Bonjour (mDNS) is a different protocol on a different multicast group (`224.0.0.251:5353`), and most modern routers reflect mDNS across VLAN boundaries by default — many ship with a "mDNS reflector" or "Avahi reflector" enabled out of the box specifically because AirPlay, AirDrop, HomeKit, and Sonos all depend on it.
+Sonos speakers also advertise the `_sonos._tcp` Bonjour service. Bonjour (mDNS) is a different protocol on a different multicast group (`224.0.0.251:5353`), and most modern routers reflect mDNS across VLAN boundaries by default. Many ship with a "mDNS reflector" or "Avahi reflector" enabled out of the box because AirPlay, AirDrop, HomeKit, and Sonos all depend on it.
 
 The Bonjour TXT record carries the same `location` URL that SSDP returns in its M-SEARCH response, plus the household ID:
 
@@ -60,8 +60,8 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
 
 The socket's multicast hop limit is set to 4 (`IP_MULTICAST_TTL`) rather than
 the platform default of 1. A TTL of 1 is discarded by the first router it
-meets, so a speaker one hop away — on another VLAN or subnet — never receives
-the search even where the network is willing to forward it. Adjustable in **Settings → System → Discovery hop limit**, or with the
+meets, so a speaker one hop away (on another VLAN or subnet) never receives
+the search even where the network would forward it. Adjustable in **Settings → System → Discovery hop limit**, or with the
 `ssdp.multicastTTL` default; values are clamped to 16, and 0 or unset means 4.
 
 ```
@@ -70,7 +70,7 @@ defaults write com.choragus.app ssdp.multicastTTL -int 8
 
 The TTL governs only how far the datagram may travel. Where IGMP snooping, an
 access point that drops multicast, or a firewall rule blocks the traffic, no
-hop limit recovers it — use Bonjour or put the Mac on the speakers' VLAN.
+hop limit recovers it. Use Bonjour or put the Mac on the speakers' VLAN.
 
 Parses HTTP-like responses, extracts the `LOCATION` header, filters for "ZonePlayer" or "Sonos" so non-Sonos UPnP devices on the network are ignored. Receive loop on a background `DispatchQueue`. `rescan()` re-sends without recreating the socket.
 
@@ -99,8 +99,8 @@ With Bonjour, the household ID is already in the TXT record. `MDNSDiscovery` pop
 ## Seed addresses — when multicast is blocked outright
 
 The hop limit above only helps where the network *routes* multicast. Where it
-is blocked — IGMP snooping with no querier, an access point that drops
-multicast to save airtime, a firewall rule — no discovery protocol works, and
+is blocked (IGMP snooping with no querier, an access point that drops
+multicast to save airtime, a firewall rule), no discovery protocol works, and
 raising the TTL changes nothing.
 
 **Settings → System → Add speakers by address** takes a list of IP addresses,
@@ -116,10 +116,10 @@ Accepted forms: `192.168.1.51`, `192.168.1.51:1400`, a hostname, or a full
 description URL pasted from a browser. Probes time out after 3 seconds so an
 address that has moved does not hold up discovery.
 
-Two consequences worth knowing:
+Two consequences:
 
 - **The address must stay put.** A DHCP lease that rotates breaks the entry.
-  Reserve the address on the router rather than hoping.
+  Reserve the address on the router.
 - **Events still need a return path.** Seeded speakers are added to the event
   listener's accepted-peer set automatically, but the speaker must also be able
   to reach this Mac's callback port. Where it cannot, the app falls back to
@@ -150,11 +150,11 @@ If speakers don't show up in **Auto** mode, the most common causes (in order of 
 <string>Choragus uses your local network to find and control Sonos speakers.</string>
 ```
 
-`NSLocalNetworkUsageDescription` covers both SSDP and Bonjour — the user sees one prompt on first launch regardless of which transport is being exercised first.
+`NSLocalNetworkUsageDescription` covers both SSDP and Bonjour; the user sees one prompt on first launch regardless of which transport is being exercised first.
 
 ### Dedup by location URL
 
-The location URL is the canonical identity of a speaker as far as Choragus is concerned (same URL → same speaker, period). Both SSDP and Bonjour produce a location URL; `handleDiscoveredDevice` writes into the `devices` dictionary keyed by UUID (extracted from the device description), so a duplicate URL becomes a no-op or an equality-guarded write.
+The location URL is the canonical identity of a speaker as far as Choragus is concerned (same URL → same speaker). Both SSDP and Bonjour produce a location URL; `handleDiscoveredDevice` writes into the `devices` dictionary keyed by UUID (extracted from the device description), so a duplicate URL becomes a no-op or an equality-guarded write.
 
 ### `rescan()` cadence
 

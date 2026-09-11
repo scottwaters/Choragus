@@ -1,6 +1,6 @@
 # AI in Choragus
 
-Choragus is a Sonos controller first. Every part of it — browsing, queues, grouping, alarms, presets, listening history — works with no AI at all, no account and no key.
+Choragus is a Sonos controller first. Every part of it (browsing, queues, grouping, alarms, presets, listening history) works with no AI at all, no account and no key.
 
 On top of that sit four optional levels. Each one is a step further, and each is independent: you can stop at any of them, and you can turn any of them off again without losing anything.
 
@@ -9,7 +9,7 @@ On top of that sit four optional levels. Each one is a step further, and each is
 | **0. None** | The whole app | Nothing | — |
 | **1. Copy-and-paste playlists** | Describe a playlist, paste the reply back, Choragus finds the real tracks | Any chat AI you already use, in a browser or another app | [Level 1](#level-1--copy-and-paste-playlists) |
 | **2. Connected playlist building** | The same, without the copying: Choragus asks the model itself | An API key, or a model running on your own machine | [Level 2](#level-2--connected-playlist-building) |
-| **3. An assistant drives Choragus** | Ask an assistant on your Mac to play, group, queue, build, tidy — 116 tools | Claude Desktop, Claude Code, Cursor, Codex or similar | [Level 3](#level-3--an-assistant-drives-choragus-mcp) |
+| **3. An assistant drives Choragus** | Ask an assistant on your Mac to play, group, queue, build, tidy; 116 tools | Claude Desktop, Claude Code, Cursor, Codex or similar | [Level 3](#level-3--an-assistant-drives-choragus-mcp) |
 | **4. The same from your phone** | Those tools from anywhere, with nothing exposed to the internet | Level 3, plus Claude Code Remote Control or Codex | [Level 4](#level-4--the-same-from-your-phone) |
 
 <picture>
@@ -27,7 +27,7 @@ Nothing to set up. Settings → AI → AI playlist generation stays off, Agent a
 
 ## Level 1 — copy-and-paste playlists
 
-Choragus writes the request; you carry it to whatever chat AI you already have open — Claude, ChatGPT, Gemini, a local model, anything that answers in text — and carry the reply back. No key, no account, no charge beyond whatever you already pay that service.
+Choragus writes the request; you carry it to whatever chat AI you already have open (Claude, ChatGPT, Gemini, a local model, anything that answers in text) and carry the reply back. No key, no account, no charge beyond whatever you already pay that service.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="diagrams/level1-copy-paste-dark.png">
@@ -79,7 +79,7 @@ The same window, without the round trip: Choragus calls the model directly and t
    - **OpenAI** — an [OpenAI API key](https://platform.openai.com/api-keys).
    - **Custom (OpenAI-compatible)** — a base URL for DeepSeek, Ollama, LM Studio, vLLM or anything else that speaks the OpenAI chat API. A bare host gains `/v1` automatically.
 4. Paste the key. It goes straight into the macOS keychain and is only ever sent to that provider's own host.
-5. Pick a model — the list is fetched from the provider itself — and press **Test**.
+5. Pick a model (the list is fetched from the provider itself) and press **Test**.
 
 <img src="../screenshots/v5/ai/settings_ai_playlist_generation.png" alt="Settings → AI → AI playlist generation, with a service selected and its connection settings" width="560">
 
@@ -88,7 +88,7 @@ The same window, without the round trip: Choragus calls the model directly and t
 - Several services can be configured; the Build Playlist window's **Generate with** menu picks between them, and **Manual (copy prompt)** from Level 1 stays available.
 - A local model (Ollama, LM Studio) keeps the whole thing on your machine. Cleartext to a non-local address is refused.
 - The reply is treated as untrusted text end to end: typed decoding, control characters stripped, field and list caps.
-- Niche briefs make every model invent songs. Choragus tells the model to substitute anything it is unsure of, and the matcher only keeps tracks that really exist on the source you chose — so a wildly obscure request comes back with misses rather than fiction.
+- Niche briefs make every model invent songs. Choragus tells the model to substitute anything it is unsure of, and the matcher only keeps tracks that exist on the source you chose, so a wildly obscure request comes back with misses rather than fiction.
 
 **What leaves your Mac:** the brief you typed and the model's reply, to the provider you configured, with your key.
 
@@ -96,9 +96,9 @@ The same window, without the round trip: Choragus calls the model directly and t
 
 ## Level 3 — an assistant drives Choragus (MCP)
 
-Choragus runs a **local Model Context Protocol server** on `127.0.0.1`. An AI assistant on the same Mac connects to it and gets 116 tools over the same code the app itself uses — everything the app can do short of changing its own settings.
+Choragus runs a local Model Context Protocol server on `127.0.0.1`. An AI assistant on the same Mac connects to it and gets 116 tools over the same code the app itself uses: everything the app can do short of changing its own settings.
 
-Crucially, the assistant reaches **your local library and media servers** as well as the **cloud services signed in to Sonos**. "Play the Miles Davis from my own library, and use Apple Music only if I don't have it" is a request it can actually carry out.
+The assistant reaches your local library and media servers as well as the cloud services signed in to Sonos. "Play the Miles Davis from my own library, and use Apple Music only if I don't have it" is a request it can carry out.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="diagrams/level3-mcp-dark.png">
@@ -109,7 +109,7 @@ Crucially, the assistant reaches **your local library and media servers** as wel
 
 1. Settings (⌘+,) → **AI** → **AI Agent access (MCP)** → switch on **Enable MCP server**.
 2. Type a name for the assistant, pick its access level, and click **Add token**. The token is copied to the clipboard; paste it into the client now, because Settings shows only its first characters afterwards.
-   - **Read only** — rooms, now playing, queue, library, history. Look, don't touch.
+   - **Read only** — rooms, now playing, queue, library, history.
    - **Control** — read, plus playback, volume, queue, grouping, presets.
    - **Manage** — control, plus playlists, presets, alarms and the library index.
 3. Connect the client. Claude Code is one command:
@@ -119,7 +119,7 @@ Crucially, the assistant reaches **your local library and media servers** as wel
    ```
    Cursor and VS Code take the same endpoint directly; Claude Desktop and the OpenAI tools reach it through the `mcp-remote` bridge. [docs/MCP.md](MCP.md#connecting-a-client) has each configuration.
 4. Keep Choragus running: **Open Choragus at login** and **Prevent the Mac from sleeping** are in the same section.
-5. Ask the assistant *"what rooms do I have?"* — it should list your Sonos rooms.
+5. Ask the assistant *"what rooms do I have?"* and it should list your Sonos rooms.
 
 <img src="../screenshots/v5/ai/settings_agent_access.png" alt="Settings → AI → AI Agent access, with tokens and their access levels" width="560">
 
@@ -127,7 +127,7 @@ Crucially, the assistant reaches **your local library and media servers** as wel
 
 - *"What's playing in the kitchen?"*
 - *"Turn the office down to 20 and skip this track."*
-- *"Play Kind of Blue in the living room — from my library if you have it, otherwise Apple Music."*
+- *"Play Kind of Blue in the living room, from my library if you have it, otherwise Apple Music."*
 - *"Put the whole house on the kitchen, then put it back the way it was."*
 - *"Make me a 90s indie playlist from my own music and start it on the deck."*
 - *"Turn the bass up two in the master bedroom."*
@@ -136,13 +136,13 @@ Crucially, the assistant reaches **your local library and media servers** as wel
 
 **Watching it work**
 
-An **MCP** badge sits next to Settings in the toolbar whenever the server is on, with a light in its state — green running, orange failed, grey stopped. Clicking it opens Diagnostics → **AI Agent access**, which lists every request by token, action, outcome and duration, and shows the full arguments and result of whichever row you select.
+An **MCP** badge sits next to Settings in the toolbar whenever the server is on, with a light in its state: green running, orange failed, grey stopped. Clicking it opens Diagnostics → **AI Agent access**, which lists every request by token, action, outcome and duration, and shows the full arguments and result of whichever row you select.
 
 <img src="../screenshots/v5/ai/toolbar_mcp_badge.png" alt="The MCP badge in the toolbar" width="503">
 
 <img src="../screenshots/v5/ai/diagnostics_agent_access.png" alt="Diagnostics → AI Agent access, with a request selected" width="1000">
 
-**Safety, briefly** — the server is loopback-only unless you allow other devices, every request carries a token compared in constant time, tokens live in the keychain, web pages and unknown host names are refused, five wrong tokens lock an address out, each token is rate-limited, a volume limit and optional quiet hours cap what any assistant can do to the volume, and anything that removes what cannot be put back asks the assistant to confirm first. [docs/MCP.md](MCP.md#network-and-security) has the full account.
+**Safety, briefly:** the server is loopback-only unless you allow other devices, every request carries a token compared in constant time, tokens live in the keychain, web pages and unknown host names are refused, five wrong tokens lock an address out, each token is rate-limited, a volume limit and optional quiet hours cap what any assistant can do to the volume, and anything that removes what cannot be put back asks the assistant to confirm first. [docs/MCP.md](MCP.md#network-and-security) has the full account.
 
 ---
 
@@ -169,7 +169,7 @@ Requires a Pro, Max, Team or Enterprise plan, signed in with `/login` rather tha
 
 **With ChatGPT — Codex**
 
-Send the request to a Codex task backed by your Mac. Same shape: the phone is a remote control, the Mac makes the MCP call.
+Send the request to a Codex task backed by your Mac. The arrangement is the same: the phone is a remote control, the Mac makes the MCP call.
 
 <img src="../screenshots/v5/ai/phone_remote_session.png" alt="ChatGPT on the phone driving Codex on the Mac — the request goes out, the playlist comes back saved in Choragus" width="850">
 
@@ -193,7 +193,7 @@ A connector runs in the cloud, so Choragus would need a public HTTPS address. Cl
 
 ## Which level suits you
 
-- **You just want a controller.** Level 0.
+- **You only want a controller.** Level 0.
 - **You already chat with an AI and don't want another key.** Level 1.
 - **You build playlists often.** Level 2.
 - **You'd rather ask than click.** Level 3.
@@ -216,7 +216,7 @@ Choragus itself has no cloud, no account and no telemetry at any level.
 - **The assistant can't see the tools.** Tools load when a client session starts. Restart the client after adding the server. In Claude Code, `claude mcp get choragus` should say Connected.
 - **"Choragus is still starting".** The app was launched but has not finished discovery. Wait a moment, or open the main window once.
 - **A call is refused with an access level message.** The token is read only or control; raise it in Settings → AI → AI Agent access.
-- **A destructive call needs `confirm`.** By design. Turn on **Skip confirmations** for that token if you trust the assistant to act alone.
+- **A destructive call needs `confirm`.** That is by design. Turn on **Skip confirmations** for that token if you trust the assistant to act alone.
 - **Everything stops when the lid closes.** Prevent the Mac from sleeping, in the same section.
 - **You can't find the token.** Only its first characters are shown after creation. Copy it again from the row, or revoke it and add a new one.
 - **Something behaved oddly.** The MCP badge in the toolbar opens Diagnostics → AI Agent access, where every request and its full payload is listed.

@@ -10,9 +10,9 @@
 
 ## The Why
 
-Sonos shipped a macOS desktop controller for years, but it was an Intel-only (x86_64) binary that relied on Apple's Rosetta 2 translation layer. Apple is discontinuing Rosetta 2 support, which means the official Sonos desktop app will stop working on modern Macs — and Sonos provided no indications of a replacement at the time, plus there were many personal tweaks I wanted.
+Sonos shipped a macOS desktop controller for years, but it was an Intel-only (x86_64) binary that relied on Apple's Rosetta 2 translation layer. Apple is discontinuing Rosetta 2 support, which means the official Sonos desktop app will stop working on modern Macs. Sonos provided no indications of a replacement at the time, and there were many personal tweaks I wanted.
 
-This project was built from scratch by a Sonos fan who wanted to keep controlling their speakers from their Mac and add the functionality I wanted but was missing. It is not affiliated with, endorsed by, or derived from Sonos, Inc. in any way. No proprietary Sonos code, assets, or intellectual property were used. The app communicates with speakers using the open UPnP protocols that any device on your local network can see and use. All control happens locally — nothing is sent to the cloud.
+This project was built from scratch by a Sonos fan who wanted to keep controlling their speakers from their Mac and add the functionality I wanted but was missing. It is not affiliated with, endorsed by, or derived from Sonos, Inc. in any way. No proprietary Sonos code, assets, or intellectual property were used. The app communicates with speakers using the open UPnP protocols that any device on your local network can see and use. All control happens locally; nothing is sent to the cloud.
 
 Tested against a live Sonos system with 22 speakers across 15 zones and both S1 and S2 generations, a large local music library (45,000+ tracks), and multiple streaming services (Apple Music, Spotify, TuneIn, Calm Radio, Sonos Radio, etc).
 
@@ -24,7 +24,7 @@ Tested against a live Sonos system with 22 speakers across 15 zones and both S1 
 2. Drag `Choragus.app` into the Applications folder shown in the mounted window.
 3. Eject the disk image, then launch Choragus from `/Applications`.
 
-The DMG is signed with a Developer ID and notarized by Apple, so it launches cleanly with no Gatekeeper warning. On first launch macOS will ask for permission to access devices on your local network — grant it, or speaker discovery will not work.
+The DMG is signed with a Developer ID and notarized by Apple, so it launches cleanly with no Gatekeeper warning. On first launch macOS will ask for permission to access devices on your local network. Grant it, or speaker discovery will not work.
 
 ## Setting Up Music Services
 
@@ -35,13 +35,13 @@ Short version:
 - **TuneIn / Calm Radio / Sonos Radio / Apple Music search** — these services need to exist in your Sonos household first (radio services are usually pre-installed; Apple Music has to be added in the Sonos app). Then in Choragus open Settings (⌘+,), scroll to **Music**, tick the checkbox. If a service isn't set up in Sonos, the toggle is disabled with an inline hint.
 - **Spotify / Plex / Apple Music playback** — first add the service in the official Sonos app, then *(Spotify and Apple Music only)* play one song from it and save it as a Sonos Favorite, then come back to Choragus, open Settings (⌘+,), **Music → Connected Services → Connect**, and sign in via the browser.
 
-Why the favourited-song step? Sonos generates an internal account identifier the first time you save content from a service. Without it, no third-party app can authenticate playback through that service. It is a Sonos design constraint, not a Choragus limitation. The full explanation is in [Setupguide.md](Setupguide.md).
+The favourited-song step is needed because Sonos generates an internal account identifier the first time you save content from a service. Without it, no third-party app can authenticate playback through that service. It is a Sonos design constraint. The full explanation is in [Setupguide.md](Setupguide.md).
 
 ---
 
 ## What's new in v5.0
 
-AI playlist building, an assistant that can drive Choragus, media servers, alarms, and a queue that repairs itself.
+AI playlist building, an assistant that can drive Choragus, media servers, alarms, and automatic queue repair.
 
 AI is optional and comes in four levels, from copying a prompt into whatever chat AI you already use, through to asking for music from your phone. [docs/AI.md](docs/AI.md) is the guide.
 
@@ -50,12 +50,12 @@ AI is optional and comes in four levels, from copying a prompt into whatever cha
   <img src="docs/diagrams/ai-levels-light.png" alt="The four AI levels, from no AI to an assistant on your phone" width="500">
 </picture>
 
-- **Build a playlist from a sentence.** Describe what you want, Choragus asks Claude, OpenAI or any OpenAI-compatible service, matches the reply on Apple Music, a signed-in service, your library or a media server, and saves or plays the result. No AI key? Copy the prompt into any chat AI and paste the list back.
+- **Build a playlist from a sentence.** Describe what you want, Choragus asks Claude, OpenAI or any OpenAI-compatible service, matches the reply on Apple Music, a signed-in service, your library or a media server, and saves or plays the result. Without an AI key, copy the prompt into any chat AI and paste the list back.
 - **Let an assistant control your speakers.** Settings → AI → AI Agent access turns Choragus into a local MCP server: rooms, playback, volume, grouping, queue, playlists, alarms, history and playlist building, with per-token access levels, a volume limit for agents, quiet hours and an activity log. Setup for Claude, Codex, Cursor and VS Code is in [docs/MCP.md](docs/MCP.md).
 - **Play from your media server.** Plex, Synology, MinimServer and other DLNA/UPnP servers appear in Browse, found automatically or added by address. Plex plays show on the Plex dashboard and count toward play history.
 - **Alarms, in the app.** The alarm icon lists every Sonos alarm; add, edit and delete inline, with the chime or any favourite as the program.
-- **A queue that looks after itself.** Expired links and unreachable servers are found and repaired or flagged for removal; multi-select to move, copy or remove tracks; running time in the header, time left in the footer.
-- **Playlist Manager grows up.** Playlists open by folder in every menu, deleted playlists wait in Deleted Items for 30 days, tracks play straight from the window, and local tracks now carry their length.
+- **Automatic queue repair.** Expired links and unreachable servers are found and repaired or flagged for removal; multi-select to move, copy or remove tracks; running time in the header, time left in the footer.
+- **Playlist Manager improvements.** Playlists open by folder in every menu, deleted playlists wait in Deleted Items for 30 days, tracks play straight from the window, and local tracks now carry their length.
 - **Amazon Music works**, and Pandora leaves the blocked list. Amazon Music Prime plays albums, playlists and stations; single tracks need Amazon Music Unlimited.
 - **Smaller things.** Sidebar sections collapse and reorder, every list has a sort menu, a Select Input action for Shortcuts, Help regrouped in all 13 languages, and fixes for durations over an hour, media keys on a locked Mac, scroll-wheel direction and event subscriptions that went quiet.
 
@@ -98,13 +98,13 @@ The long-form reference, area by area, is in **[docs/FEATURES.md](docs/FEATURES.
 
 <img src="screenshots/v4.5/karaoke_popout.png" alt="The karaoke window" width="713">
 
-**Back of the Club** (`⌘J`) fills a screen with a wall of album art from your own history, tinted by the cover playing now, with what is coming next and the artist's story down one side. Leave it on a TV or a spare display and it looks after itself.
+**Back of the Club** (`⌘J`) fills a screen with a wall of album art from your own history, tinted by the cover playing now, with what is coming next and the artist's story down one side. Leave it on a TV or a spare display and it runs unattended.
 
 <img src="screenshots/v5/back_of_the_club.png" alt="Back of the Club — the wall, what is playing, what is next, and the artist" width="1000">
 
 ### Diagnostics
 
-The Diagnostics window (toolbar activity icon) has a tab for each thing that can go wrong. **Network** reads every speaker's link: band and channel, latency, interference and firmware, with a Check Wi-Fi flag on the weak one. **Log** and **Live Events** show what the app and the speakers are saying to each other, **Speakers** each player's model, role, address, firmware and event subscription, and **AI Agent access** every request an assistant made. Copy All puts the lot on the clipboard for a bug report.
+The Diagnostics window (toolbar activity icon) has a tab for each thing that can go wrong. **Network** reads every speaker's link: band and channel, latency, interference and firmware, with a Check Wi-Fi flag on the weak one. **Log** and **Live Events** show the traffic between the app and the speakers, **Speakers** each player's model, role, address, firmware and event subscription, and **AI Agent access** every request an assistant made. Copy All puts the lot on the clipboard for a bug report.
 
 <img src="screenshots/v5/diagnostics_network.png" alt="Diagnostics → Network — every speaker's band, channel, latency, interference and firmware, with a Check Wi-Fi flag on the weak one" width="1000">
 
@@ -112,7 +112,7 @@ The Diagnostics window (toolbar activity icon) has a tab for each thing that can
 
 Notes for v4.14 and earlier are in [CHANGELOG.md](CHANGELOG.md), which carries the full dated history; the [feature reference](docs/FEATURES.md) describes what those releases added as it stands today.
 
-> **Upgrading from SonosController?** v4.0 renamed the project and changed the bundle identifier, so existing SonosController installs don't auto-upgrade — download Choragus once from the releases page; from then on updates arrive in the app.
+> **Upgrading from SonosController?** v4.0 renamed the project and changed the bundle identifier, so existing SonosController installs don't auto-upgrade. Download Choragus once from the releases page; from then on updates arrive in the app.
 
 ---
 
@@ -121,7 +121,7 @@ Notes for v4.14 and earlier are in [CHANGELOG.md](CHANGELOG.md), which carries t
 - **No accounts, no cloud.** The app talks directly to your speakers on your LAN.
 - **No telemetry.** No analytics, no crash reporting, no usage tracking.
 - **Tokens stay in Keychain.** When you connect a service like Spotify, the auth tokens live in macOS Keychain, protected so they can't be copied to another device.
-- **App sandbox.** The app runs with minimal entitlements — network only. It can't read your files, contacts, or other apps.
+- **App sandbox.** The app runs with minimal entitlements (network only). It can't read your files, contacts, or other apps.
 - **All history stays on your Mac.** Listening history is a local SQLite file. You can clear it at any time from Settings.
 
 ---
@@ -155,7 +155,7 @@ A few features in the upstream binary depend on credentials and infrastructure t
 
 ## License
 
-PolyForm Noncommercial 1.0.0 — see [LICENSE](LICENSE). Copyright © 2024-2026 Choragus contributors. Free for personal, hobbyist, educational, charitable, and other noncommercial use; commercial use requires a separate agreement. These terms apply retroactively to every version of the software ever released under any name — including all releases previously distributed as **SonosController** (the project's former name). Any prior MIT-licensed SonosController or Choragus releases are superseded.
+PolyForm Noncommercial 1.0.0; see [LICENSE](LICENSE). Copyright © 2024-2026 Choragus contributors. Free for personal, hobbyist, educational, charitable, and other noncommercial use; commercial use requires a separate agreement. These terms apply retroactively to every version of the software ever released under any name, including all releases previously distributed as **SonosController** (the project's former name). Any prior MIT-licensed SonosController or Choragus releases are superseded.
 
 ## Disclaimer
 
