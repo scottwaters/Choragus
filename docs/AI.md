@@ -36,7 +36,7 @@ Choragus writes the request; you carry it to whatever chat AI you already have o
 
 **Setup**
 
-1. `⌘,` → **AI** → switch on **Enable AI playlist generation**.
+1. Settings (⌘+,) → **AI** → switch on **Enable AI playlist generation**.
 2. Browse → **Choragus Sources** → **Build Playlist with AI**.
 3. Under **Generate with**, choose **Manual (copy prompt)**.
 
@@ -72,7 +72,7 @@ The same window, without the round trip: Choragus calls the model directly and t
 
 **Setup**
 
-1. `⌘,` → **AI** → **AI playlist generation** → switch it on.
+1. Settings (⌘+,) → **AI** → **AI playlist generation** → switch it on.
 2. **Add** a service and name it, e.g. *Claude* or *Studio LM*.
 3. Choose the provider:
    - **Claude** — an [Anthropic API key](https://console.anthropic.com/).
@@ -107,7 +107,7 @@ Crucially, the assistant reaches **your local library and media servers** as wel
 
 **Setup**
 
-1. `⌘,` → **AI** → **AI Agent access (MCP)** → switch on **Enable MCP server**.
+1. Settings (⌘+,) → **AI** → **AI Agent access (MCP)** → switch on **Enable MCP server**.
 2. Type a name for the assistant, pick its access level, and click **Add token**. The token is copied to the clipboard; paste it into the client now, because Settings shows only its first characters afterwards.
    - **Read only** — rooms, now playing, queue, library, history. Look, don't touch.
    - **Control** — read, plus playback, volume, queue, grouping, presets.
