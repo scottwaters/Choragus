@@ -177,14 +177,14 @@ Send the request to a Codex task backed by your Mac. Same shape: the phone is a 
 
 <img src="../screenshots/v5/ai/playlist_result.png" alt="The result, back on the Mac — the saved playlist in the Playlist Manager, 46 real Apple Music tracks, ready to play in any room" width="605">
 
-**Why not just add Choragus as a connector in the phone app?**
+**Why not add Choragus as a connector in the phone app?**
 
-Because the phone never connects to your Mac in that design — the vendor's servers do. Both products require the MCP server to sit on a public HTTPS hostname, and Claude's custom connectors expect OAuth 2.1 for anything user-scoped, while ChatGPT's custom MCP support lives behind Developer Mode on business plans. That would mean a tunnel, a certificate, an OAuth server, and your speakers behind an internet-facing endpoint. The session-on-the-Mac route gets you the same result with none of it.
+A connector runs in the cloud, so Choragus would need a public HTTPS address. Claude connectors also expect OAuth 2.1, and ChatGPT custom MCP is limited to Developer Mode on business plans. That means a tunnel, a certificate, an OAuth server, and your speakers reachable from the internet. A session on the Mac gives the same result with none of that.
 
-**Two things to keep true**
+**Two settings**
 
-- Leave **Allow other devices on the network** off. It buys nothing here, and it is the one setting that puts a bearer token on your LAN in clear text.
-- Keep the Mac awake: **Prevent the Mac from sleeping** and **Open Choragus at login**, both in Settings → AI → AI Agent access. A sleeping Mac takes the session offline whichever vendor you use.
+- Leave **Allow other devices on the network** off. The phone route does not use it, and switching it on sends your token over the LAN unencrypted.
+- Keep the Mac awake: **Prevent the Mac from sleeping** and **Open Choragus at login**, both in Settings (⌘+,) → AI → AI Agent access. A sleeping Mac takes the session offline.
 
 <img src="../screenshots/v5/ai/settings_agent_access_options.png" alt="Settings → AI → AI Agent access — quiet hours, port, network access, the toolbar badge, sleep and login" width="560">
 
@@ -207,7 +207,7 @@ Because the phone never connects to your Mac in that design — the vendor's ser
 | 1 | Only what you paste yourself, into a service you chose |
 | 2 | The brief and the reply, to your configured provider, with your key |
 | 3 | Nothing to Choragus's own network; the assistant sees the room, track and playlist names it asks for |
-| 4 | As Level 3, plus your messages travelling through your assistant vendor as they already do |
+| 4 | As Level 3, plus your messages passing through the cloud on their way to the assistant, as they already do |
 
 Choragus itself has no cloud, no account and no telemetry at any level.
 
