@@ -9,7 +9,7 @@ On top of that sit four optional levels. Each one is a step further, and each is
 | **0. None** | The whole app | Nothing | — |
 | **1. Copy-and-paste playlists** | Describe a playlist, paste the reply back, Choragus finds the real tracks | Any chat AI you already use, in a browser or another app | [Level 1](#level-1--copy-and-paste-playlists) |
 | **2. Connected playlist building** | The same, without the copying: Choragus asks the model itself | An API key, or a model running on your own machine | [Level 2](#level-2--connected-playlist-building) |
-| **3. An assistant drives Choragus** | Ask an assistant on this Mac to play, group, queue, build, tidy — 116 tools | Claude Desktop, Claude Code, Cursor, Codex or similar | [Level 3](#level-3--an-assistant-drives-choragus-mcp) |
+| **3. An assistant drives Choragus** | Ask an assistant on your Mac to play, group, queue, build, tidy — 116 tools | Claude Desktop, Claude Code, Cursor, Codex or similar | [Level 3](#level-3--an-assistant-drives-choragus-mcp) |
 | **4. The same from your phone** | Those tools from anywhere, with nothing exposed to the internet | Level 3, plus Claude Code Remote Control or Codex | [Level 4](#level-4--the-same-from-your-phone) |
 
 <picture>
