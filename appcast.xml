@@ -13,7 +13,20 @@
       <sparkle:version>35</sparkle:version>
       <sparkle:shortVersionString>5.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://github.com/scottwaters/Choragus/releases/tag/v5.0</sparkle:releaseNotesLink>
+      <description><![CDATA[<style>:root{color-scheme:light dark}body{font:13px/1.45 -apple-system,Helvetica,Arial,sans-serif;margin:8px 10px;color:#1d1d1f}@media(prefers-color-scheme:dark){body{color:#f5f5f7}}ul{padding-left:20px;margin:8px 0}li{margin:6px 0}p{margin:8px 0}strong{font-weight:600}a{color:#0a84ff}</style>
+<p>Media servers, AI playlist building, and an assistant that can drive Choragus.</p>
+<ul>
+<li><strong>Play from your media server.</strong> Plex, Synology Media Server, MinimServer and any other UPnP/DLNA server appear in the sidebar. Choragus supplies the browse tree and the track URL; the speaker plays it. Servers are found automatically or added by address, and each one can be given a display name of your own.</li>
+<li><strong>Build a playlist from a sentence.</strong> Browse → Choragus Sources → Build Playlist describes a playlist to Claude, OpenAI or any OpenAI-compatible service, matches the reply on Apple Music, a signed-in service, the Sonos library or a media server, and sends the result to a Choragus playlist, the queue, play next or play now. Works with copy-and-paste from any chat AI when no service is configured.</li>
+<li><strong>Let an assistant control your speakers.</strong> Settings → AI → AI Agent access turns Choragus into an MCP server with 116 tools: rooms, playback, volume, grouping, queue, playlists, alarms, history and playlist building. Per-token access levels, a volume limit for agents, quiet hours and an activity log keep it on your terms. Setup for Claude Code, Claude Desktop, Codex, Cursor and VS Code is in docs/MCP.md; docs/AI.md walks through all four levels.</li>
+<li><strong>Alarms.</strong> A new Alarms window lists every alarm with time, days, room, music and volume. Add, edit and delete inline, with the Sonos chime or any favourite as the program.</li>
+<li><strong>A queue that looks after itself.</strong> Expired service links, dead media-server hosts and rows added without details are found after each track change and repaired in place or flagged for one-click removal. Multi-select with click, ⌘-click and ⇧-click; the header shows the running time and the footer the time remaining.</li>
+<li><strong>Queue Library.</strong> Deleted playlists go to Deleted Items for 30 days. Sortable columns, faster opening, and Play Now / Play Next / Add to Queue on any track.</li>
+<li><strong>Amazon Music and Pandora.</strong> Amazon Music connects and plays (thanks to cdietze for the patch, #88); Pandora leaves the blocked list.</li>
+<li><strong>Plex reports plays.</strong> Direct Plex playback shows on the Plex dashboard and counts toward play history, so smart playlists work (#85, #86).</li>
+<li><strong>Shortcuts.</strong> A Select Input action plays a speaker's line-in or TV input from Shortcuts, Siri or a scheduled run (#84).</li>
+<li><strong>Browse.</strong> One sort control, one right-click vocabulary and one theme accent across every list and service.</li>
+</ul>]]></description>
       <enclosure
         url="https://github.com/scottwaters/Choragus/releases/download/v5.0/Choragus.dmg"
         length="20960936"
