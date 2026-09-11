@@ -14,7 +14,7 @@ On top of that sit four optional levels. Each one is a step further, and each is
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="diagrams/ai-levels-dark.png">
-  <img src="diagrams/ai-levels-light.png" alt="The four AI levels, from no AI to an assistant on your phone" width="420">
+  <img src="diagrams/ai-levels-light.png" alt="The four AI levels, from no AI to an assistant on your phone" width="280">
 </picture>
 
 ---
@@ -31,7 +31,7 @@ Choragus writes the request; you carry it to whatever chat AI you already have o
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="diagrams/level1-copy-paste-dark.png">
-  <img src="diagrams/level1-copy-paste-light.png" alt="Level 1 — describe, copy the prompt, paste the reply back, match, save" width="420">
+  <img src="diagrams/level1-copy-paste-light.png" alt="Level 1 — describe, copy the prompt, paste the reply back, match, save" width="280">
 </picture>
 
 **Setup**
@@ -65,7 +65,7 @@ The same window, without the round trip: Choragus calls the model directly and t
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="diagrams/level2-connected-dark.png">
-  <img src="diagrams/level2-connected-light.png" alt="Level 2 — Choragus calls your AI service and matches the songs as they arrive" width="375">
+  <img src="diagrams/level2-connected-light.png" alt="Level 2 — Choragus calls your AI service and matches the songs as they arrive" width="250">
 </picture>
 
 <img src="../screenshots/v5/build_playlist.png" alt="Build Playlist with a connected service — the brief, songs streaming in and matching, and the Send to bar" width="1000">
@@ -102,7 +102,7 @@ Crucially, the assistant reaches **your local library and media servers** as wel
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="diagrams/level3-mcp-dark.png">
-  <img src="diagrams/level3-mcp-light.png" alt="Level 3 — an assistant on your Mac drives Choragus over MCP on 127.0.0.1" width="1045">
+  <img src="diagrams/level3-mcp-light.png" alt="Level 3 — an assistant on your Mac drives Choragus over MCP on 127.0.0.1" width="697">
 </picture>
 
 **Setup**
@@ -152,7 +152,7 @@ Nothing is published to the internet. Instead, your phone drives a session that 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="diagrams/level4-phone-dark.png">
-  <img src="diagrams/level4-phone-light.png" alt="Level 4 — your phone drives a session on the Mac, which talks to Choragus locally" width="367">
+  <img src="diagrams/level4-phone-light.png" alt="Level 4 — your phone drives a session on the Mac, which talks to Choragus locally" width="245">
 </picture>
 
 **With Claude — Remote Control**
