@@ -142,7 +142,7 @@ The phone never talks to your Mac, and nothing is published to the internet. Ins
 
 <img src="screenshots/v5/queue_panel.png" alt="The Queue panel — multi-select, health badges, and the footer" width="624">
 
-- **Track lengths for local music.** Sonos reports no length for library tracks; Choragus now remembers the length from the last time each one played, so the queue total, Queue Library and assistants see it.
+- **Track lengths for local music.** Sonos reports no length for library tracks; Choragus now remembers the length from the last time each one played, so the queue total, Playlist Manager and assistants see it.
 - **Playlist Manager grows up.** Playlists open by folder in every menu, deleted playlists wait in Deleted Items for 30 days, the window opens instantly, tracks can be played from it directly, and Build Playlist offers a fresh sample prompt each time.
 
 <img src="screenshots/v5/playlist_manager.png" alt="Playlist Manager — saved queues by source, folders, artwork grid, and the track detail pane" width="1000">
@@ -243,7 +243,7 @@ A few features in the upstream binary depend on credentials and infrastructure t
 ## Known Limitations
 
 - **Apple Music** — search works via the iTunes API; playback requires Apple Music connected in the Sonos app plus one favorited song.
-- **Sonos Radio** — search works anonymously; browsing categories requires DeviceLink auth (not yet supported).
+- **Sonos Radio** — search works anonymously; browsing categories requires DeviceLink, which Choragus does not implement.
 - **YouTube Music** — blocked (requires a native OAuth flow that isn't available to third-party apps).
 - **Amazon Music** — on an S1 system albums enqueue track by track; on any system an Amazon Music Prime account plays stations, albums and playlists but not single tracks (Amazon Music Unlimited does). Podcasts are browsable but untested for playback.
 - **Adding to Favorites** — requires the official Sonos app (the UPnP `CreateObject` action is not supported by Sonos firmware).
