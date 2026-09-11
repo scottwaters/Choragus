@@ -1,0 +1,9 @@
+flowchart TB
+    P["Claude or ChatGPT<br/>on your phone"] -.->|"vendor's cloud"| S["Your session<br/>running on your Mac"]
+    S -->|"http://127.0.0.1:52080/mcp"| C["Choragus<br/>on your Mac"]
+    C --> K["Sonos speakers"]
+
+    classDef local stroke:#22a06b,stroke-width:2px
+    classDef cloud stroke:#8b7bf7,stroke-width:2px,stroke-dasharray: 4 3
+    class S,C,K local
+    class P cloud

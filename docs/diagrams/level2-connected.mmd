@@ -1,0 +1,10 @@
+flowchart TB
+    A["Describe the playlist"] --> B["Choragus calls your<br/>AI service"]
+    B --> C["Songs stream in<br/>as the model writes"]
+    C --> D["Match to a source"]
+    D --> E["Save, queue,<br/>play next or play now"]
+
+    classDef local stroke:#22a06b,stroke-width:2px
+    classDef cloud stroke:#8b7bf7,stroke-width:2px,stroke-dasharray: 4 3
+    class A,C,D,E local
+    class B cloud

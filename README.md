@@ -45,20 +45,10 @@ AI playlist building, an assistant that can drive Choragus, media servers, alarm
 
 AI is optional and comes in four levels, from copying a prompt into whatever chat AI you already use, through to asking for music from your phone. [docs/AI.md](docs/AI.md) is the guide.
 
-```mermaid
-flowchart LR
-    L0["Level 0<br/>No AI - No Worries 😁"] --> L1["Level 1 (Chat)<br/>Copy and paste between Chat and choragus"]
-    L1 --> L2["Level 2 (Chat)<br/>Connected Automatic Playlist Building"]
-    L2 --> L3["Level 3 (MCP)<br/>Assistant on this Mac"]
-    L3 --> L4["Level 4 (MCP)<br/>Same from your phone"]
-
-    classDef none stroke:#8a8a8e,stroke-width:2px
-    classDef local stroke:#22a06b,stroke-width:2px
-    classDef cloud stroke:#8b7bf7,stroke-width:2px
-    class L0 none
-    class L1,L2 local
-    class L3,L4 cloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/ai-levels-dark.png">
+  <img src="docs/diagrams/ai-levels-light.png" alt="The four AI levels, from no AI to an assistant on your phone" width="420">
+</picture>
 
 - **Build a playlist from a sentence.** Describe what you want, Choragus asks Claude, OpenAI or any OpenAI-compatible service, matches the reply on Apple Music, a signed-in service, your library or a media server, and saves or plays the result. No AI key? Copy the prompt into any chat AI and paste the list back.
 - **Let an assistant control your speakers.** Settings → AI → AI Agent access turns Choragus into a local MCP server: rooms, playback, volume, grouping, queue, playlists, alarms, history and playlist building, with per-token access levels, a volume limit for agents, quiet hours and an activity log. Setup for Claude, Codex, Cursor and VS Code is in [docs/MCP.md](docs/MCP.md).

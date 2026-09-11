@@ -1,0 +1,12 @@
+flowchart TB
+    subgraph mac["Your Mac"]
+        A["Claude Desktop, Claude Code,<br/>Cursor, Codex…"] -->|"http://127.0.0.1:52080/mcp"| B["Choragus"]
+    end
+    B --> C["Sonos speakers<br/>on your network"]
+    B --> D["Your library,<br/>media servers"]
+    B --> E["Apple Music, Spotify,<br/>TuneIn, …"]
+
+    classDef local stroke:#22a06b,stroke-width:2px
+    classDef cloud stroke:#8b7bf7,stroke-width:2px,stroke-dasharray: 4 3
+    class A,B,C,D local
+    class E cloud

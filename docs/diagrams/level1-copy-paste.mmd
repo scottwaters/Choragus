@@ -1,0 +1,12 @@
+flowchart TB
+    A["Describe the playlist<br/>in Choragus"] --> B["Copy prompt"]
+    B --> C["Paste into any chat AI<br/>browser or app"]
+    C --> D["Copy the reply"]
+    D --> E["Paste list"]
+    E --> F["Match to a source<br/>library, Apple Music, Spotify,<br/>media server"]
+    F --> G["Save, queue,<br/>play next or play now"]
+
+    classDef local stroke:#22a06b,stroke-width:2px
+    classDef outside stroke:#8b7bf7,stroke-width:2px,stroke-dasharray: 4 3
+    class A,B,E,F,G local
+    class C,D outside

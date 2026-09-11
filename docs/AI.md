@@ -12,20 +12,10 @@ On top of that sit four optional levels. Each one is a step further, and each is
 | **3. An assistant drives Choragus** | Ask an assistant on this Mac to play, group, queue, build, tidy — 116 tools | Claude Desktop, Claude Code, Cursor, Codex or similar | [Level 3](#level-3--an-assistant-drives-choragus-mcp) |
 | **4. The same from your phone** | Those tools from anywhere, with nothing exposed to the internet | Level 3, plus Claude Code Remote Control or Codex | [Level 4](#level-4--the-same-from-your-phone) |
 
-```mermaid
-flowchart LR
-    L0["Level 0<br/>No AI - No Worries 😁"] --> L1["Level 1 (Chat)<br/>Copy and paste between Chat and choragus"]
-    L1 --> L2["Level 2 (Chat)<br/>Connected Automatic Playlist Building"]
-    L2 --> L3["Level 3 (MCP)<br/>Assistant on this Mac"]
-    L3 --> L4["Level 4 (MCP)<br/>Same from your phone"]
-
-    classDef none stroke:#8a8a8e,stroke-width:2px
-    classDef local stroke:#22a06b,stroke-width:2px
-    classDef cloud stroke:#8b7bf7,stroke-width:2px
-    class L0 none
-    class L1,L2 local
-    class L3,L4 cloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/ai-levels-dark.png">
+  <img src="diagrams/ai-levels-light.png" alt="The four AI levels, from no AI to an assistant on your phone" width="420">
+</picture>
 
 ---
 
@@ -39,20 +29,10 @@ Nothing to set up. Settings → AI → AI playlist generation stays off, Agent a
 
 Choragus writes the request; you carry it to whatever chat AI you already have open — Claude, ChatGPT, Gemini, a local model, anything that answers in text — and carry the reply back. No key, no account, no charge beyond whatever you already pay that service.
 
-```mermaid
-flowchart LR
-    A["Describe the playlist<br/>in Choragus"] --> B["Copy prompt"]
-    B --> C["Paste into any chat AI<br/>browser or app"]
-    C --> D["Copy the reply"]
-    D --> E["Paste list"]
-    E --> F["Match to a source<br/>library, Apple Music, Spotify,<br/>media server"]
-    F --> G["Save, queue,<br/>play next or play now"]
-
-    classDef local stroke:#22a06b,stroke-width:2px
-    classDef outside stroke:#8b7bf7,stroke-width:2px,stroke-dasharray: 4 3
-    class A,B,E,F,G local
-    class C,D outside
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/level1-copy-paste-dark.png">
+  <img src="diagrams/level1-copy-paste-light.png" alt="Level 1 — describe, copy the prompt, paste the reply back, match, save" width="420">
+</picture>
 
 **Setup**
 
@@ -83,18 +63,10 @@ flowchart LR
 
 The same window, without the round trip: Choragus calls the model directly and the songs stream into the table as it writes them.
 
-```mermaid
-flowchart LR
-    A["Describe the playlist"] --> B["Choragus calls your<br/>AI service"]
-    B --> C["Songs stream in<br/>as the model writes"]
-    C --> D["Match to a source"]
-    D --> E["Save, queue,<br/>play next or play now"]
-
-    classDef local stroke:#22a06b,stroke-width:2px
-    classDef cloud stroke:#8b7bf7,stroke-width:2px,stroke-dasharray: 4 3
-    class A,C,D,E local
-    class B cloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/level2-connected-dark.png">
+  <img src="diagrams/level2-connected-light.png" alt="Level 2 — Choragus calls your AI service and matches the songs as they arrive" width="375">
+</picture>
 
 <img src="../screenshots/v5/build_playlist.png" alt="Build Playlist with a connected service — the brief, songs streaming in and matching, and the Send to bar" width="1000">
 
@@ -128,20 +100,10 @@ Choragus runs a **local Model Context Protocol server** on `127.0.0.1`. An AI as
 
 Crucially, the assistant reaches **your local library and media servers** as well as the **cloud services signed in to Sonos**. "Play the Miles Davis from my own library, and use Apple Music only if I don't have it" is a request it can actually carry out.
 
-```mermaid
-flowchart LR
-    subgraph mac["Your Mac"]
-        A["Claude Desktop, Claude Code,<br/>Cursor, Codex…"] -->|"http://127.0.0.1:52080/mcp"| B["Choragus"]
-    end
-    B --> C["Sonos speakers<br/>on your network"]
-    B --> D["Your library,<br/>media servers"]
-    B --> E["Apple Music, Spotify,<br/>TuneIn, …"]
-
-    classDef local stroke:#22a06b,stroke-width:2px
-    classDef cloud stroke:#8b7bf7,stroke-width:2px,stroke-dasharray: 4 3
-    class A,B,C,D local
-    class E cloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/level3-mcp-dark.png">
+  <img src="diagrams/level3-mcp-light.png" alt="Level 3 — an assistant on your Mac drives Choragus over MCP on 127.0.0.1" width="1045">
+</picture>
 
 **Setup**
 
@@ -188,19 +150,10 @@ An **MCP** badge sits next to Settings in the toolbar whenever the server is on,
 
 Nothing is published to the internet. Instead, your phone drives a session that is *running on the Mac*, and that session makes the loopback call.
 
-```mermaid
-flowchart LR
-    P["Claude or ChatGPT<br/>on your phone"] -.->|"vendor's cloud"| S["Your session<br/>running on the Mac"]
-    subgraph mac["Your Mac"]
-        S -->|"http://127.0.0.1:52080/mcp"| C["Choragus"]
-    end
-    C --> K["Sonos speakers"]
-
-    classDef local stroke:#22a06b,stroke-width:2px
-    classDef cloud stroke:#8b7bf7,stroke-width:2px,stroke-dasharray: 4 3
-    class S,C,K local
-    class P cloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/level4-phone-dark.png">
+  <img src="diagrams/level4-phone-light.png" alt="Level 4 — your phone drives a session on the Mac, which talks to Choragus locally" width="367">
+</picture>
 
 **With Claude — Remote Control**
 
