@@ -47,7 +47,7 @@ AI is optional and comes in four levels, from copying a prompt into whatever cha
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/ai-levels-dark.png">
-  <img src="docs/diagrams/ai-levels-light.png" alt="The four AI levels, from no AI to an assistant on your phone" width="280">
+  <img src="docs/diagrams/ai-levels-light.png" alt="The four AI levels, from no AI to an assistant on your phone" width="500">
 </picture>
 
 - **Build a playlist from a sentence.** Describe what you want, Choragus asks Claude, OpenAI or any OpenAI-compatible service, matches the reply on Apple Music, a signed-in service, your library or a media server, and saves or plays the result. No AI key? Copy the prompt into any chat AI and paste the list back.

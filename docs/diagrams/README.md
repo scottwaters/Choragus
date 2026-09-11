@@ -12,4 +12,14 @@ for f in *.mmd; do n=${f%.mmd}
 done
 ```
 
-Renders are 3x; the docs display them at half the pixel width, the same rule as the screenshots.
+Renders are 3x. The GitHub mobile app ignores the `width` attribute and scales every image to the column, so the four vertical diagrams are padded to a 1500 px canvas after rendering; the diagram then takes about half the phone column instead of all of it. Pad after re-rendering:
+
+```bash
+for f in ai-levels level1-copy-paste level2-connected level4-phone; do
+  h=$(sips -g pixelHeight $f-light.png | awk '/pixel/{print $2}')
+  sips --padToHeightWidth $h 1500 --padColor FFFFFF $f-light.png
+  sips --padToHeightWidth $h 1500 --padColor 0D1117 $f-dark.png
+done
+```
+
+The docs display the padded diagrams at `width="500"` (a third of the canvas) and the wide Level 3 diagram at a third of its pixel width.
