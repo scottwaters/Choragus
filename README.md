@@ -1,4 +1,6 @@
-# Choragus
+# choragus
+
+Community now on Reddit: [r/choragus](https://www.reddit.com/r/choragus/)
 
 **Native macOS controller for Sonos speakers.** Built entirely in Swift and SwiftUI. Ships as a universal binary with native support for both Apple Silicon and Intel Macs.
 
